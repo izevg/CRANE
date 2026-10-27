@@ -80,10 +80,11 @@ function InlineRow({ row, withPath }: { row: DiffRow; withPath: boolean }) {
   if (row.kind === "change") {
     return (
       <tr>
-        <td className={SIGN_COLUMN}>
-          <span aria-hidden="true" className="flex flex-col">
-            <span className={TONE.remove}>{MARKER.remove.sign}</span>
-            <span className={TONE.add}>{MARKER.add.sign}</span>
+        {/* Каждый знак стоит напротив своей строки: у обеих тот же вертикальный отступ py-1, что у ячеек текста */}
+        <td className="w-8 p-0 align-top font-mono text-caption font-semibold">
+          <span aria-hidden="true" className="flex flex-col text-center">
+            <span className={cx("px-2 py-1", TONE.remove)}>{MARKER.remove.sign}</span>
+            <span className={cx("px-2 py-1", TONE.add)}>{MARKER.add.sign}</span>
           </span>
         </td>
         {withPath ? <PathCell row={row} /> : null}
@@ -121,9 +122,11 @@ function SplitRow({ row, withPath }: { row: DiffRow; withPath: boolean }) {
             {row.before}
           </span>
         </td>
-        <td aria-hidden="true" className={cx(CELL, TONE.add)}>
-          {MARKER.add.sign}
-          {row.after}
+        <td className={cx(CELL, TONE.add)}>
+          <span aria-hidden="true">
+            {MARKER.add.sign}
+            {row.after}
+          </span>
         </td>
       </tr>
     );

@@ -6,6 +6,8 @@ const ADDED = /clsx/;
 const REMOVED = /moment/;
 const CHANGED = /изменено: было "\^4\.17\.20", стало "\^4\.17\.21"/;
 
+const SIGN = /^[−+]$/;
+
 const meta = {
   title: "Данные/DiffViewer",
   component: DiffViewer,
@@ -33,7 +35,18 @@ export const Inline: Story = {
     await expect(added).toHaveTextContent("+");
     await expect(added).toHaveTextContent("добавлено");
     await expect(canvas.getByRole("row", { name: REMOVED })).toHaveTextContent("удалено");
-    await expect(canvas.getByRole("row", { name: CHANGED })).toBeVisible();
+    const changed = canvas.getByRole("row", { name: CHANGED });
+    await expect(changed).toBeVisible();
+    // Знаки «−» и «+» стоят на одной высоте со своими строками значений
+    const centerY = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return box.top + box.height / 2;
+    };
+    const signs = within(changed).getAllByText(SIGN);
+    const before = within(changed).getByText('"^4.17.20"');
+    const after = within(changed).getByText('"^4.17.21"');
+    await expect(Math.abs(centerY(signs[0] as Element) - centerY(before))).toBeLessThanOrEqual(1);
+    await expect(Math.abs(centerY(signs[1] as Element) - centerY(after))).toBeLessThanOrEqual(1);
   },
 };
 
