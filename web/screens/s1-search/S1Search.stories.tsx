@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useCallback, useId, useState } from "react";
 import { expect, within } from "storybook/test";
-import { SearchResultCard, similarTo } from "~/entities/package";
+import { SearchResultCard, similarToHref } from "~/entities/package";
 import { i18n } from "~/shared/lib/i18n";
 import { FacetList, FilterSelect, SegmentedControl } from "~/shared/ui/inputs";
 import { PageHeader } from "~/shared/ui/layout";
@@ -177,7 +177,7 @@ function ResultsList() {
           key={id}
           item={item}
           href={`/packages/${id}`}
-          {...routeOf(similarTo(item)?.apiHref)}
+          {...routeOf(similarToHref(item))}
         />
       ))}
     </section>

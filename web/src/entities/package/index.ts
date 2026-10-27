@@ -1,2 +1,2 @@
-export { similarTo } from "./lib/similarTo";
+export { similarToHref } from "./lib/similarToHref";
 export { SearchResultCard } from "./ui/SearchResultCard";

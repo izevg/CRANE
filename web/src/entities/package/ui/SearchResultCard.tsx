@@ -8,34 +8,26 @@ import {
   REPOSITORY_KIND,
   type SearchItem,
   type SearchRisk,
+  type Typosquat,
   VERSION_STATE,
 } from "~/shared/api";
 import { Badge, Callout, Link } from "~/shared/ui/primitives";
 import { RelativeTime, StatusBadge } from "~/shared/ui/status";
-import { type SimilarTo, similarTo } from "../lib/similarTo";
 
 type SearchResultCardProps = {
   item: SearchItem;
   /** Страница пакета (маршрут SPA): единственная ссылка карточки. `_links` API здесь не читается. */
   href: string;
   /**
-   * Страница настоящего пакета (маршрут SPA), которую страница строит из `similarTo(item).apiHref`. Ссылка
-   * рисуется, только если у элемента есть `crane:similar-to`: иначе настоящего пакета нет в видимых репозиториях,
-   * и имя с PURL показываются текстом.
+   * Страница настоящего пакета (маршрут SPA). Карточка `_links` не читает: страница строит маршрут из
+   * `similarToHref(item)` и не передаёт проп, если ссылки `crane:similar-to` нет. Нет пропа — имя и PURL текстом.
    */
   typosquatHref?: string;
 };
 
-function TyposquatNotice({
-  target,
-  distance,
-  href,
-}: {
-  target: SimilarTo;
-  distance: number;
-  href: string | undefined;
-}) {
+function TyposquatNotice({ typosquat, href }: { typosquat: Typosquat; href: string | undefined }) {
   const { t } = useLingui();
+  const { similar_to: name, similar_to_purl: purl, distance } = typosquat;
   return (
     <Callout
       tone="warning"
@@ -43,13 +35,13 @@ function TyposquatNotice({
     >
       <span>{t`Похоже на`}</span>
       {href === undefined ? (
-        <span className="wrap-anywhere">{target.name}</span>
+        <span className="wrap-anywhere">{name}</span>
       ) : (
         <Link href={href} className="underline wrap-anywhere">
-          {target.name}
+          {name}
         </Link>
       )}
-      <span className="wrap-anywhere text-muted-foreground">{`(${target.purl})`}</span>
+      <span className="wrap-anywhere text-muted-foreground">{`(${purl})`}</span>
       <span>
         {t`— отличается на ${plural(distance, {
           one: "# символ",
@@ -86,7 +78,6 @@ function RiskPill({ risk }: { risk: SearchRisk }) {
 export function SearchResultCard({ item, href, typosquatHref }: SearchResultCardProps) {
   const { t } = useLingui();
   const titleId = useId();
-  const target = similarTo(item);
   const { latest, downloads_30d: downloads, owner_team: team, last_release_at: released } = item;
   return (
     <article
@@ -94,12 +85,8 @@ export function SearchResultCard({ item, href, typosquatHref }: SearchResultCard
       className="flex min-w-0 flex-col gap-1.5 rounded-xl bg-card p-4 shadow-card"
     >
       {item.exact_match ? <p className="text-overline text-brand">{t`Точное совпадение`}</p> : null}
-      {target === null || item.typosquat == null ? null : (
-        <TyposquatNotice
-          target={target}
-          distance={item.typosquat.distance}
-          href={target.apiHref === undefined ? undefined : typosquatHref}
-        />
+      {item.typosquat == null ? null : (
+        <TyposquatNotice typosquat={item.typosquat} href={typosquatHref} />
       )}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <h3 id={titleId} className="min-w-0 text-h3 wrap-anywhere">

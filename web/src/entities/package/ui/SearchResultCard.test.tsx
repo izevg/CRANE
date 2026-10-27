@@ -145,14 +145,16 @@ describe("SearchResultCard", () => {
     expect(screen.getAllByRole("link")).toHaveLength(1);
   });
 
-  it("без ссылки crane:similar-to ссылки на пакет нет, даже если страница передала адрес", () => {
+  it("ссылка на настоящий пакет есть ровно тогда, когда страница передала typosquatHref", () => {
     // Arrange
     // Act
     card({ typosquat: SQUAT_TARGET }, "/packages/real-acme-ui");
 
     // Assert
-    expect(screen.getByText(SQUAT)).toBeVisible();
-    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/packages/real-acme-ui",
+      "/packages/acme-ui",
+    ]);
   });
 
   it("PURL настоящего пакета виден текстом в предупреждении", () => {
