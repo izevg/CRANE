@@ -64,8 +64,8 @@ impl MemoryFetchLeases {
                 return Err(rx);
             }
         }
-        // Токены с 1: 0 остаётся «никем не выданным».
-        let token = self.next_token.fetch_add(1, Ordering::Relaxed) + 1;
+        // Нужна только уникальность токена.
+        let token = self.next_token.fetch_add(1, Ordering::Relaxed);
         let previous = holders.insert(
             key.clone(),
             Holder {

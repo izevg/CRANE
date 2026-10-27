@@ -177,7 +177,7 @@ const V4_NON_PUBLIC: [(Ipv4Addr, u8); 5] = [
 
 /// Диапазоны IPv6 вне `std`-предикатов. Источник: IANA IPv6 Special-Purpose Address Registry.
 const V6_NON_PUBLIC: [(Ipv6Addr, u8); 6] = [
-    // IPv4-compatible (устарел, RFC 4291 §2.5.5.1), в том числе ::/128 и ::1/128; ::ffff:0:0/96 разворачивает `to_canonical`
+    // IPv4-compatible (устарел, RFC 4291 §2.5.5.1), в том числе ::/128 и ::1/128; покрывает и `::`, и `::1`; ::ffff:0:0/96 разворачивает `to_canonical`
     (Ipv6Addr::UNSPECIFIED, 96),
     (Ipv6Addr::new(0xfec0, 0, 0, 0, 0, 0, 0, 0), 10), // site-local (устарел)
     (Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0), 32), // documentation
@@ -210,11 +210,7 @@ fn is_public_v4(ip: Ipv4Addr) -> bool {
 }
 
 fn is_public_v6(ip: Ipv6Addr) -> bool {
-    let std_non_public = ip.is_unspecified()
-        || ip.is_loopback()
-        || ip.is_multicast()
-        || ip.is_unique_local()
-        || ip.is_unicast_link_local();
+    let std_non_public = ip.is_multicast() || ip.is_unique_local() || ip.is_unicast_link_local();
     if std_non_public
         || V6_NON_PUBLIC
             .iter()
