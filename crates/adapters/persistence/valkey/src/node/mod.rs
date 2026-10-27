@@ -222,7 +222,14 @@ impl Valkey {
 async fn hold_connection(client: Client) {
     let mut lost = client.error_rx();
     let mut restored = client.reconnect_rx();
-    let mut link = Link::Unavailable;
+    // Состояние читаем после подписок: событие между ними не потеряется, а повтор
+    // `step` проглатывает. Сейчас клиент ещё не подключён (`init` не вызывали), но не
+    // полагаемся на порядок запуска.
+    let mut link = if client.is_connected() {
+        Link::Available
+    } else {
+        Link::Unavailable
+    };
     loop {
         let mut connection = inbox::connect(&client).await;
         loop {
