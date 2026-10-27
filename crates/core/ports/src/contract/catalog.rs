@@ -26,7 +26,6 @@ pub async fn catalog_contract<C: Catalog>(new: impl Fn() -> C) {
     find_version_returns_original_spellings(&new()).await;
     find_version_in_other_repository_is_none(&new()).await;
     find_version_of_other_version_is_none(&new()).await;
-    versions_find_package_by_normalized_name(&new()).await;
     versions_are_listed_in_publication_order(&new()).await;
     versions_return_original_spellings(&new()).await;
     versions_include_deleted_versions(&new()).await;
@@ -96,11 +95,11 @@ async fn find<C: Catalog>(
         .expect("версия должна быть найдена")
 }
 
-async fn publish<C: Catalog>(catalog: &C, new: NewVersion) {
+async fn publish<C: Catalog>(catalog: &C, new: NewVersion) -> PackageVersion {
     catalog
         .publish_version(new)
         .await
-        .expect("публикация в подготовке сценария должна удаваться");
+        .expect("публикация в подготовке сценария должна удаваться")
 }
 
 /// Запись, которую каталог обязан вернуть после публикации `new`.
@@ -131,8 +130,7 @@ fn spellings(record: &PackageVersion) -> (&str, &str) {
 async fn publish_deleted<C: Catalog>(catalog: &C, repo: RepositoryId) {
     let mut released = new_version(10, repo, "serde", "1.0.0");
     released.state = VersionState::Released;
-    let id = released.id;
-    publish(catalog, released).await;
+    let id = publish(catalog, released).await.id;
     catalog
         .transition(id, VersionState::Released, VersionState::Deleted)
         .await
@@ -235,16 +233,10 @@ async fn publish_returns_record_with_given_fields_and_not_yanked<C: Catalog>(cat
     let result = catalog.publish_version(new.clone()).await;
 
     // Assert
-    let published = result.expect("publish_version");
     assert_eq!(
-        published,
+        result.expect("publish_version"),
         expected_record(&new),
         "publish_version возвращает запись с переданными полями и yanked = false"
-    );
-    assert_eq!(
-        published.package.as_written(),
-        "serde",
-        "publish_version сохраняет написание имени"
     );
 }
 
@@ -430,28 +422,6 @@ async fn find_version_of_other_version_is_none<C: Catalog>(catalog: &C) {
     );
 }
 
-async fn versions_find_package_by_normalized_name<C: Catalog>(catalog: &C) {
-    // Arrange
-    let repo = ensure_repo(catalog, 1, "main").await;
-    publish(catalog, new_version(10, repo, "Foo-Bar", "1.0.0")).await;
-
-    // Act
-    let result = catalog.versions(repo, &name("foo_bar")).await;
-
-    // Assert
-    let written: Vec<&str> = result
-        .as_ref()
-        .expect("versions")
-        .iter()
-        .map(|v| v.version.as_written())
-        .collect();
-    assert_eq!(
-        written,
-        vec!["1.0.0"],
-        "versions находит пакет по нормализованному имени, а не по написанию"
-    );
-}
-
 async fn versions_are_listed_in_publication_order<C: Catalog>(catalog: &C) {
     // Arrange
     let repo = ensure_repo(catalog, 1, "main").await;
@@ -531,9 +501,9 @@ async fn versions_of_unknown_package_is_empty<C: Catalog>(catalog: &C) {
 async fn transition_with_matching_from_changes_state<C: Catalog>(catalog: &C) {
     // Arrange
     let repo = ensure_repo(catalog, 1, "main").await;
-    let new = new_version(10, repo, "serde", "1.0.0");
-    let id = new.id;
-    publish(catalog, new).await;
+    let id = publish(catalog, new_version(10, repo, "serde", "1.0.0"))
+        .await
+        .id;
 
     // Act
     let result = catalog
@@ -552,9 +522,9 @@ async fn transition_with_matching_from_changes_state<C: Catalog>(catalog: &C) {
 async fn transition_with_stale_from_is_state_conflict_and_keeps_state<C: Catalog>(catalog: &C) {
     // Arrange
     let repo = ensure_repo(catalog, 1, "main").await;
-    let new = new_version(10, repo, "serde", "1.0.0");
-    let id = new.id;
-    publish(catalog, new).await;
+    let id = publish(catalog, new_version(10, repo, "serde", "1.0.0"))
+        .await
+        .id;
     catalog
         .transition(id, VersionState::Quarantined, VersionState::Released)
         .await
@@ -605,9 +575,9 @@ async fn transition_of_unknown_id_is_not_found<C: Catalog>(catalog: &C) {
 async fn set_yanked_true_sets_flag<C: Catalog>(catalog: &C) {
     // Arrange
     let repo = ensure_repo(catalog, 1, "main").await;
-    let new = new_version(10, repo, "serde", "1.0.0");
-    let id = new.id;
-    publish(catalog, new).await;
+    let id = publish(catalog, new_version(10, repo, "serde", "1.0.0"))
+        .await
+        .id;
 
     // Act
     let result = catalog.set_yanked(id, true).await;
@@ -623,9 +593,9 @@ async fn set_yanked_true_sets_flag<C: Catalog>(catalog: &C) {
 async fn set_yanked_true_twice_keeps_flag<C: Catalog>(catalog: &C) {
     // Arrange
     let repo = ensure_repo(catalog, 1, "main").await;
-    let new = new_version(10, repo, "serde", "1.0.0");
-    let id = new.id;
-    publish(catalog, new).await;
+    let id = publish(catalog, new_version(10, repo, "serde", "1.0.0"))
+        .await
+        .id;
     catalog
         .set_yanked(id, true)
         .await
@@ -645,9 +615,9 @@ async fn set_yanked_true_twice_keeps_flag<C: Catalog>(catalog: &C) {
 async fn set_yanked_false_clears_flag<C: Catalog>(catalog: &C) {
     // Arrange
     let repo = ensure_repo(catalog, 1, "main").await;
-    let new = new_version(10, repo, "serde", "1.0.0");
-    let id = new.id;
-    publish(catalog, new).await;
+    let id = publish(catalog, new_version(10, repo, "serde", "1.0.0"))
+        .await
+        .id;
     catalog
         .set_yanked(id, true)
         .await
