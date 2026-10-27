@@ -21,6 +21,7 @@ node_modules
 .env.*
 !.env.example
 !.env.dist
+/secrets/
 *.pem
 *.key
 *.p12
