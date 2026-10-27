@@ -31,7 +31,7 @@ function Body({ option }: { option: PaletteOption }): ReactNode {
         <span className={LABEL}>{name}</span>
         <Badge variant="outline">{format}</Badge>
         {latest === undefined ? null : (
-          <span className={cx(CAPTION, "tabular-nums")}>{latest}</span>
+          <span className={cx(CAPTION, "font-mono tabular-nums")}>{latest}</span>
         )}
       </>
     );

@@ -106,6 +106,15 @@ export const Dark: Story = {
   globals: { theme: "dark" },
 };
 
+/** Версия пакета в строке результата — машинное значение: моно JetBrains, а не шрифт текста. */
+export const VersionInMono: Story = {
+  name: "Версия пакета в моно",
+  play: async () => {
+    const version = await within(document.body).findByText("1.4.2");
+    await expect(getComputedStyle(version).fontFamily).toContain("JetBrains Mono");
+  },
+};
+
 const INSTANT_MAX_SECONDS = 0.1;
 
 function seconds(value: string): number {
