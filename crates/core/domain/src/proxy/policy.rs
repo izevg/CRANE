@@ -70,17 +70,27 @@ pub enum Freshness {
 }
 
 impl MetadataPolicy {
-    /// Адаптивный TTL: `ttl · 2^min(unchanged / adaptive_after, 3)`, потолок ×8 (11.1).
+    /// Срок свежести: адаптивный TTL `ttl · 2^min(unchanged / adaptive_after, 3)` (потолок ×8, 11.1),
+    /// который подсказка upstream `max_age` может продлить, но не сократить и не поднять выше потолка.
     #[must_use]
-    pub fn effective_ttl(&self, unchanged: u32) -> Duration {
+    pub fn effective_ttl(&self, unchanged: u32, max_age: Option<Duration>) -> Duration {
         let doublings = (unchanged / self.adaptive_after.get()).min(ADAPTIVE_MAX_DOUBLINGS);
-        self.ttl.saturating_mul(1 << doublings)
+        let adaptive = self.ttl.saturating_mul(1 << doublings);
+        let ceiling = self.ttl.saturating_mul(1 << ADAPTIVE_MAX_DOUBLINGS);
+        // Подсказка upstream продлевает срок, но не сокращает его и не выходит за адаптивный потолок (11.1).
+        max_age.map_or(adaptive, |hint| adaptive.max(hint.min(ceiling)))
     }
 
     /// Зоны по возрасту записи. Границы целочисленные (без f64): `eff − eff/10` (последние 10% TTL) и `eff`.
     #[must_use]
-    pub fn assess(&self, unchanged: u32, fetched_at: SystemTime, now: SystemTime) -> Freshness {
-        let effective = self.effective_ttl(unchanged);
+    pub fn assess(
+        &self,
+        unchanged: u32,
+        max_age: Option<Duration>,
+        fetched_at: SystemTime,
+        now: SystemTime,
+    ) -> Freshness {
+        let effective = self.effective_ttl(unchanged, max_age);
         let age = age(fetched_at, now);
         if age < effective.saturating_sub(effective / 10) {
             Freshness::Fresh
@@ -95,17 +105,23 @@ impl MetadataPolicy {
 
     /// Запись ещё годится при сбое upstream.
     #[must_use]
-    pub fn usable_on_error(&self, unchanged: u32, fetched_at: SystemTime, now: SystemTime) -> bool {
+    pub fn usable_on_error(
+        &self,
+        unchanged: u32,
+        max_age: Option<Duration>,
+        fetched_at: SystemTime,
+        now: SystemTime,
+    ) -> bool {
         age(fetched_at, now)
             < self
-                .effective_ttl(unchanged)
+                .effective_ttl(unchanged, max_age)
                 .saturating_add(self.stale_if_error)
     }
 
     /// Сколько хранить запись (TTL ключа L2): пока она может понадобиться как stale или как резерв при сбое.
     #[must_use]
-    pub fn keep_for(&self, unchanged: u32) -> Duration {
-        self.effective_ttl(unchanged)
+    pub fn keep_for(&self, unchanged: u32, max_age: Option<Duration>) -> Duration {
+        self.effective_ttl(unchanged, max_age)
             .saturating_add(self.revalidate_window.max(self.stale_if_error))
     }
 }
@@ -157,7 +173,7 @@ mod tests {
         ];
 
         // Act
-        let ttls = cases.map(|(unchanged, _)| policy.effective_ttl(unchanged));
+        let ttls = cases.map(|(unchanged, _)| policy.effective_ttl(unchanged, None));
 
         // Assert
         assert_eq!(ttls, cases.map(|(_, factor)| policy.ttl * factor));
@@ -170,7 +186,7 @@ mod tests {
         policy.ttl = Duration::MAX;
 
         // Act
-        let ttl = policy.effective_ttl(100);
+        let ttl = policy.effective_ttl(100, None);
 
         // Assert
         assert_eq!(ttl, Duration::MAX);
@@ -195,7 +211,7 @@ mod tests {
         ];
 
         // Act
-        let zones = cases.map(|(age, _)| policy.assess(0, fetched(), fetched() + age));
+        let zones = cases.map(|(age, _)| policy.assess(0, None, fetched(), fetched() + age));
 
         // Assert
         assert_eq!(zones, cases.map(|(_, zone)| zone));
@@ -216,7 +232,8 @@ mod tests {
         ];
 
         // Act
-        let zones = cases.map(|(age, _)| policy.assess(unchanged, fetched(), fetched() + age));
+        let zones =
+            cases.map(|(age, _)| policy.assess(unchanged, None, fetched(), fetched() + age));
 
         // Assert
         assert_eq!(zones, cases.map(|(_, zone)| zone));
@@ -230,8 +247,8 @@ mod tests {
 
         // Act
         let (before_ttl, at_ttl) = (
-            policy.assess(0, fetched(), fetched() + policy.ttl - MS),
-            policy.assess(0, fetched(), fetched() + policy.ttl),
+            policy.assess(0, None, fetched(), fetched() + policy.ttl - MS),
+            policy.assess(0, None, fetched(), fetched() + policy.ttl),
         );
 
         // Assert
@@ -249,7 +266,10 @@ mod tests {
         let from_future = now + Duration::from_secs(60);
 
         // Act
-        let (zone, measured) = (policy.assess(0, from_future, now), age(from_future, now));
+        let (zone, measured) = (
+            policy.assess(0, None, from_future, now),
+            age(from_future, now),
+        );
 
         // Assert
         assert_eq!((zone, measured), (Freshness::Fresh, Duration::ZERO));
@@ -275,8 +295,8 @@ mod tests {
 
         // Act
         let (before, at) = (
-            policy.usable_on_error(0, fetched(), fetched() + limit - MS),
-            policy.usable_on_error(0, fetched(), fetched() + limit),
+            policy.usable_on_error(0, None, fetched(), fetched() + limit - MS),
+            policy.usable_on_error(0, None, fetched(), fetched() + limit),
         );
 
         // Assert
@@ -291,8 +311,8 @@ mod tests {
 
         // Act
         let (adaptive, base) = (
-            policy.usable_on_error(3, fetched(), fetched() + age),
-            policy.usable_on_error(0, fetched(), fetched() + age),
+            policy.usable_on_error(3, None, fetched(), fetched() + age),
+            policy.usable_on_error(0, None, fetched(), fetched() + age),
         );
 
         // Assert
@@ -308,9 +328,9 @@ mod tests {
 
         // Act
         let (with_stale, with_window, adaptive) = (
-            long_stale.keep_for(0),
-            long_window.keep_for(0),
-            long_stale.keep_for(3),
+            long_stale.keep_for(0, None),
+            long_window.keep_for(0, None),
+            long_stale.keep_for(3, None),
         );
 
         // Assert
@@ -321,6 +341,47 @@ mod tests {
                 Duration::from_mins(85),
                 Duration::from_mins(20)
             )
+        );
+    }
+
+    #[test]
+    fn effective_ttl_lets_upstream_hint_extend_but_not_shorten_or_exceed_ceiling() {
+        // Arrange
+        let policy = policy(); // ttl 100 с, потолок 800 с
+        let secs = Duration::from_secs;
+        let cases = [
+            (0, None, 100),
+            (0, Some(secs(50)), 100),
+            (0, Some(secs(300)), 300),
+            (0, Some(secs(800)), 800),
+            (0, Some(secs(5000)), 800),
+            (3, Some(secs(150)), 200),
+        ];
+
+        // Act
+        let ttls = cases.map(|(unchanged, hint, _)| policy.effective_ttl(unchanged, hint));
+
+        // Assert
+        assert_eq!(ttls, cases.map(|(_, _, expected)| secs(expected)));
+    }
+
+    #[test]
+    fn assess_counts_upstream_hint_toward_freshness() {
+        // Arrange
+        let mut policy = policy();
+        policy.ttl = Duration::from_mins(5);
+        let age = Duration::from_mins(7);
+
+        // Act
+        let (with_hint, without_hint) = (
+            policy.assess(0, Some(Duration::from_mins(10)), fetched(), fetched() + age),
+            policy.assess(0, None, fetched(), fetched() + age),
+        );
+
+        // Assert
+        assert_eq!(
+            (with_hint, without_hint),
+            (Freshness::Fresh, Freshness::Expired)
         );
     }
 

@@ -43,6 +43,11 @@ const DIR_MODE = 0o700;
 const ENV_LINE = /^([A-Z][A-Z0-9_]*)=(.*)$/;
 const OVERLAP = /Pool overlaps|invalid pool request/;
 const ENV_DIST = ".env.dist";
+/**
+ * Имя proxy-репозитория crates.io для цели cargo с номером `index`: `/cargo/<имя>/`. Ключ кэша включает
+ * репозиторий, поэтому у каждой цели свой кэш и первый прогон каждой честно идёт мимо кэша.
+ */
+export const proxyRepo = (index: number): string => `crates-io-${index + 1}`;
 
 const hex = (bytes: number): string => randomBytes(bytes).toString("hex");
 
@@ -54,7 +59,7 @@ function randomSubnet(): string {
 }
 
 /** Описание стенда без побочных эффектов: имена, секреты, команды. Запуск и уборка — снаружи. */
-export function describeStand(root: string): Stand {
+export function describeStand(root: string, proxyRepos: string[]): Stand {
   const id = hex(HEX_BYTES_ID);
   const project = `crane-dogfood-${id}`;
   const image = `crane-dogfood:${id}`;
@@ -92,7 +97,7 @@ export function describeStand(root: string): Stand {
       writeSecrets(tmp, { token, postgresPassword, databaseUrl });
       log(`стенд ${project}: сборка образа ${image}`);
       docker(["build", "-t", image, root], { timeoutMs: BUILD_TIMEOUT_MS });
-      startCompose(tmp, overrides, id, principal, composeRun);
+      startCompose(tmp, overrides, { id, principal, proxyRepos }, composeRun);
     },
     craneLogs: () => logs(["crane"]),
     allLogs: () => logs([]),
@@ -153,8 +158,7 @@ function writeSecrets(
 function startCompose(
   tmp: string,
   overrides: string,
-  id: string,
-  principal: string,
+  settings: { id: string; principal: string; proxyRepos: string[] },
   composeRun: (args: string[]) => string,
 ): void {
   for (let attempt = 1; ; attempt += 1) {
@@ -162,11 +166,12 @@ function startCompose(
     // Только отличия от .env.dist. Порты caddy: loopback и свободный порт хоста ("127.0.0.1::80").
     const lines = [
       "CRANE_IMAGE=crane-dogfood",
-      `CRANE_VERSION=${id}`,
+      `CRANE_VERSION=${settings.id}`,
       `CRANE_TOKEN_SECRET=${join(tmp, "crane_token")}`,
       `POSTGRES_PASSWORD_SECRET=${join(tmp, "postgres_password")}`,
       `CRANE_DATABASE_URL_SECRET=${join(tmp, "database_url")}`,
-      `CRANE_TOKEN_PRINCIPAL=${principal}`,
+      `CRANE_TOKEN_PRINCIPAL=${settings.principal}`,
+      `CRANE_CARGO_PROXY_REPOS=${settings.proxyRepos.join(",")}`,
       `CRANE_EDGE_SUBNET=${subnet}`,
       "CADDY_HTTP_PORT=127.0.0.1:",
       "CADDY_HTTPS_PORT=127.0.0.1:",

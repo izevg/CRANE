@@ -470,12 +470,14 @@ dependencies = [
  "axum",
  "crane-app",
  "crane-domain",
+ "crane-format-cargo",
  "crane-http",
  "crane-memory",
  "crane-objstore",
  "crane-pg",
  "crane-ports",
  "crane-siem",
+ "crane-upstream",
  "futures-util",
  "http-body-util",
  "serde_json",
@@ -512,6 +514,14 @@ version = "0.1.0"
 [[package]]
 name = "crane-upstream"
 version = "0.1.0"
+dependencies = [
+ "crane-domain",
+ "crane-ports",
+ "futures-util",
+ "reqwest",
+ "thiserror",
+ "tokio",
+]
 
 [[package]]
 name = "crane-valkey"

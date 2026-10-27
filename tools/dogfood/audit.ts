@@ -40,6 +40,16 @@ interface Line {
   "src_endpoint.ip"?: unknown;
   "metadata.correlation_uid"?: unknown;
   "http_request.user_agent"?: unknown;
+  cache?: unknown;
+  upstream_failure?: unknown;
+}
+
+/** Строка `crane::access`: откуда пришёл ответ proxy (`cache`) и почему upstream отказал. */
+export interface Access {
+  path: string;
+  status: number;
+  cache: string | undefined;
+  failure: string | undefined;
 }
 
 const API_ACTIVITY = 6003;
@@ -168,6 +178,19 @@ function checkAuthFailures(agent: string, failures: Line[], required: boolean): 
     }
   }
   return found;
+}
+
+/** Строки access-журнала по порядку; строки без пути или статуса пропускаются. */
+export function accessLines(craneNdjson: string): Access[] {
+  return parse(craneNdjson, []).flatMap((line) => {
+    const path = text(line.path);
+    if (line.target !== "crane::access" || path === undefined || typeof line.status !== "number") {
+      return [];
+    }
+    return [
+      { path, status: line.status, cache: text(line.cache), failure: text(line.upstream_failure) },
+    ];
+  });
 }
 
 /** Сверяет журнал crane (NDJSON) с ожиданиями сценария. Пустой результат — всё сошлось. */

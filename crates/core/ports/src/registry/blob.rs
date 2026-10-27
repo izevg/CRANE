@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use bytes::Bytes;
 use crane_domain::registry::Sha256;
@@ -86,4 +87,20 @@ pub trait BlobStore: Send + Sync {
 
     /// Открывает закоммиченный blob. Staged-объекты недоступны: `NotFound`.
     fn open(&self, sha256: &Sha256) -> impl Future<Output = Result<ByteStream, BlobError>> + Send;
+}
+
+// Registry и ProxyEngine обязаны делить один CAS, а `Clone` у хранилища молча скопировал бы
+// состояние memory-CAS вместо разделения: общий доступ выражаем явно через `Arc`.
+impl<T: BlobStore + ?Sized> BlobStore for Arc<T> {
+    fn stage(&self, body: ByteStream) -> impl Future<Output = Result<Staged, BlobError>> + Send {
+        (**self).stage(body)
+    }
+
+    fn commit(&self, staged: Staged) -> impl Future<Output = Result<Digests, BlobError>> + Send {
+        (**self).commit(staged)
+    }
+
+    fn open(&self, sha256: &Sha256) -> impl Future<Output = Result<ByteStream, BlobError>> + Send {
+        (**self).open(sha256)
+    }
 }

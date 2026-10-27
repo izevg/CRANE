@@ -11,7 +11,7 @@ export interface CargoClient extends Client {
   version: string;
 }
 
-const ROOT_CERT = "/caddy/caddy/pki/authorities/local/root.crt";
+export const ROOT_CERT = "/caddy/caddy/pki/authorities/local/root.crt";
 const INDEX = "https://localhost/cargo/internal/index/";
 const READY_SECONDS = 60;
 const YANKED = /yanked/i;

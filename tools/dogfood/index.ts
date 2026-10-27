@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { type Expected, leaks, verify } from "./audit.ts";
 import { scenario, startCargo } from "./cargo.ts";
 import { docker, log, MS_PER_SECOND, warn } from "./exec.ts";
-import { describeStand, type Stand } from "./stand.ts";
+import { proxyScenario } from "./proxy.ts";
+import { describeStand, proxyRepo, type Stand } from "./stand.ts";
 import { parseCargo } from "./versions.ts";
 
 const ROOT = join(fileURLToPath(import.meta.url), "..", "..", "..");
@@ -49,13 +50,15 @@ function resolveTargets(which: Which[]): Target[] {
 function exercise(stand: Stand, targets: Target[]): number {
   const expected: Expected[] = [];
   const versions: string[] = [];
-  for (const target of targets) {
+  for (const [index, target] of targets.entries()) {
     const client = startCargo(stand, target.image);
     try {
       log(`${target.image}: cargo ${client.version}`);
       versions.push(client.version);
       expected.push(...scenario(stand, client, target.minor));
       log(`${target.image}: сценарий пройден`);
+      proxyScenario(stand, client, target.minor, proxyRepo(index));
+      log(`${target.image}: proxy crates.io пройден`);
     } finally {
       client.stop();
     }
@@ -83,7 +86,10 @@ const logPath = (stand: Stand): string => join(ROOT, "out", "dogfood", `${stand.
 function main(): number {
   const started = Date.now();
   const targets = resolveTargets(parseArgs(process.argv.slice(2)));
-  const stand = describeStand(ROOT);
+  const stand = describeStand(
+    ROOT,
+    targets.map((_, index) => proxyRepo(index)),
+  );
   let problems = 1;
   let leftovers: string[] = [];
   try {

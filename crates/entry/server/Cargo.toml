@@ -17,6 +17,7 @@ path = "src/main.rs"
 [dependencies]
 crane-app = { path = "../../core/app" }
 crane-domain = { path = "../../core/domain" }
+crane-format-cargo = { path = "../../formats/cargo" }
 crane-http = { path = "../http" }
 crane-memory = { path = "../../adapters/persistence/memory" }
 # Постоянные хранилища: каталог в PostgreSQL и blob в объектном хранилище.
@@ -24,6 +25,7 @@ crane-objstore = { path = "../../adapters/persistence/objstore" }
 crane-pg = { path = "../../adapters/persistence/pg" }
 crane-ports = { path = "../../core/ports" }
 crane-siem = { path = "../../adapters/external/siem" }
+crane-upstream = { path = "../../adapters/external/upstream" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 # Пул соединений и разбор параметров подключения: PgCatalog принимает готовый PgPool.
 # Версия и фичи те же, что у crane-pg, чтобы в lock остался один sqlx.

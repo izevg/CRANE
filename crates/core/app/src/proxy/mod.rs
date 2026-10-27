@@ -371,14 +371,19 @@ where
                     fetched_at,
                     state:
                         CachedState::Document {
-                            body, unchanged, ..
+                            body,
+                            unchanged,
+                            max_age,
+                            ..
                         },
-                }) if policy.usable_on_error(*unchanged, *fetched_at, now) => Ok(Served {
-                    body: body.clone(),
-                    result: CacheResult::StaleOnError(reason),
-                    age: age(*fetched_at, now),
-                    revalidation: None,
-                }),
+                }) if policy.usable_on_error(*unchanged, *max_age, *fetched_at, now) => {
+                    Ok(Served {
+                        body: body.clone(),
+                        result: CacheResult::StaleOnError(reason),
+                        age: age(*fetched_at, now),
+                        revalidation: None,
+                    })
+                }
                 _ => Err(ProxyError::Upstream(reason)),
             },
             Err(other) => Err(other),

@@ -21,7 +21,7 @@ use crane_ports::proxy::{
     CacheError, Cached, Claim, ETag, FetchLeases, Lease, LeaseError, ProxyCache, Upstream,
     UpstreamError, UpstreamRequest, UpstreamResponse,
 };
-use crane_ports::registry::{BlobError, BlobStore, ByteStream, Staged};
+use crane_ports::registry::ByteStream;
 use crane_ports::system::IdGen;
 use futures_channel::oneshot;
 use futures_util::stream;
@@ -84,7 +84,11 @@ pub(crate) const fn negative() -> NegativePolicy {
 #[derive(Debug, Clone)]
 pub(crate) enum Step {
     NotModified,
+    /// 304 с обновлённым `Cache-Control: max-age`.
+    NotModifiedWithMaxAge(Duration),
     Found(&'static [u8], Option<&'static str>),
+    /// 200 с объявленным `Cache-Control: max-age`.
+    FoundWithMaxAge(&'static [u8], Option<&'static str>, Duration),
     NotFound,
     Refused(EgressRefusal),
     Unavailable,
@@ -163,16 +167,26 @@ impl Upstream for FakeUpstream {
         }
         let step = locked(&self.0.script).pop_front();
         match step {
-            Some(Step::NotModified) => Ok(UpstreamResponse::NotModified),
+            Some(Step::NotModified) => Ok(UpstreamResponse::NotModified { max_age: None }),
+            Some(Step::NotModifiedWithMaxAge(max_age)) => Ok(UpstreamResponse::NotModified {
+                max_age: Some(max_age),
+            }),
             Some(Step::Found(body, etag)) => Ok(UpstreamResponse::Found {
                 body: stream_of(vec![Ok(Bytes::from_static(body))]),
                 etag: etag.map(|etag| ETag::new(etag.to_owned())),
+                max_age: None,
+            }),
+            Some(Step::FoundWithMaxAge(body, etag, max_age)) => Ok(UpstreamResponse::Found {
+                body: stream_of(vec![Ok(Bytes::from_static(body))]),
+                etag: etag.map(|etag| ETag::new(etag.to_owned())),
+                max_age: Some(max_age),
             }),
             Some(Step::NotFound) => Ok(UpstreamResponse::NotFound),
             Some(Step::Refused(refusal)) => Err(UpstreamError::Refused(refusal)),
             Some(Step::BrokenBody) => Ok(UpstreamResponse::Found {
                 body: stream_of(vec![Err(io::Error::other("обрыв"))]),
                 etag: None,
+                max_age: None,
             }),
             Some(Step::Unavailable) | None => {
                 Err(UpstreamError::Unavailable("upstream лежит".into()))
@@ -267,26 +281,8 @@ impl FetchLeases for SharedLeases {
     }
 }
 
-/// Общее blob-хранилище.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct SharedBlobs(pub(crate) Arc<MemoryBlobStore>);
-
-impl BlobStore for SharedBlobs {
-    fn stage(&self, body: ByteStream) -> impl Future<Output = Result<Staged, BlobError>> + Send {
-        self.0.stage(body)
-    }
-
-    fn commit(
-        &self,
-        staged: Staged,
-    ) -> impl Future<Output = Result<crane_ports::registry::Digests, BlobError>> + Send {
-        self.0.commit(staged)
-    }
-
-    fn open(&self, sha256: &Sha256) -> impl Future<Output = Result<ByteStream, BlobError>> + Send {
-        self.0.open(sha256)
-    }
-}
+/// Общее blob-хранилище: Registry и движок делят один CAS через `Arc`.
+pub(crate) type SharedBlobs = Arc<MemoryBlobStore>;
 
 pub(crate) type Engine = ProxyEngine<FakeUpstream, SharedCache, SharedLeases, SharedBlobs>;
 

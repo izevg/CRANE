@@ -9,3 +9,19 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+crane-domain = { path = "../../../core/domain" }
+crane-ports = { path = "../../../core/ports" }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# Единственный HTTP-клиент: rustls уже в графе через object_store (второго TLS-стека нет), http2 для upstream с h2,
+# stream отдаёт тело потоком (большие .crate не буферизуются). Без `system-proxy`: HTTP(S)_PROXY из окружения
+# увёл бы резолв за пределы SSRF guard.
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "stream"] }
+thiserror = "2"
+# Только `lookup_host` для DNS-резолвера с проверкой адресов.
+tokio = { version = "1", default-features = false, features = ["net"] }
+
+[dev-dependencies]
+# Локальный TcpListener с рукописным HTTP-ответом для сетевых тестов.
+tokio = { version = "1", features = ["rt", "macros", "net", "io-util"] }

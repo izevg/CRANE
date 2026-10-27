@@ -1,6 +1,7 @@
 //! Роли процесса: запуск HTTP-серверов и миграции.
 
 mod health;
+mod proxy;
 
 use std::future::IntoFuture;
 use std::net::SocketAddr;
@@ -88,6 +89,20 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
             })
             .await?;
     }
+    let cargo = CargoSettings {
+        public_url: settings.public_url,
+        max_publish_bytes: settings.max_publish_bytes,
+    };
+    // Registry и движок делят один CAS: скачанные архивы лежат там же, где опубликованные.
+    let blobs = Arc::new(blobs);
+    let proxy_repos = proxy::cargo_proxies(
+        &catalog,
+        ids.as_ref(),
+        Arc::clone(&blobs),
+        &settings.cargo_proxy_repos,
+        &cargo,
+    )
+    .await?;
     // Один приёмник на use cases и на слой auth; в v0.4.0 действия записи уйдут в журнал PG.
     let audit = Arc::new(OcsfLogSink::new(Arc::new(SystemClock), ids.clone()));
     let registry = Arc::new(Registry::new(
@@ -103,13 +118,11 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     drop(settings.token);
     let api = api_router(
         registry,
-        CargoSettings {
-            public_url: settings.public_url,
-            max_publish_bytes: settings.max_publish_bytes,
-        },
+        cargo,
         token,
         settings.trusted_proxies,
         audit,
+        proxy_repos,
     );
     Ok((api, admin))
 }
@@ -117,6 +130,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
 async fn serve_async(settings: Settings) -> Result<(), RunError> {
     let (http_port, admin_port) = (settings.http_port, settings.admin_port);
     let repos = settings.cargo_repos.clone();
+    let proxy_repos = settings.cargo_proxy_repos.clone();
     let (api, admin) = routers(settings).await?;
 
     let api_listener = bind(http_port).await?;
@@ -125,6 +139,7 @@ async fn serve_async(settings: Settings) -> Result<(), RunError> {
         http_port,
         admin_port,
         repos = ?repos,
+        proxy_repos = ?proxy_repos,
         "сервер запущен"
     );
 
