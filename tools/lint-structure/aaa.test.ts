@@ -204,10 +204,9 @@ const compliant = [
 for (const c of compliant) {
   it(`допустимая форма: ${c.name}`, () => {
     // Arrange
-    const { src, path } = c;
 
     // Act
-    const actual = checkAaaSource(src, path);
+    const actual = checkAaaSource(c.src, c.path);
 
     // Assert
     assert.deepEqual(actual, []);
@@ -257,7 +256,7 @@ const violating = [
     name: "два оператора в Act",
     path: RS,
     src: rustTest(twoActs),
-    expected: [`${RS}:2 sample — в Act 2 оператора`],
+    expected: [`${RS}:2 sample — в Act операторов: 2`],
   },
   {
     name: "пустой Act",
@@ -318,7 +317,7 @@ const violating = [
       ...twoActs,
       "}",
     ),
-    expected: [`${RS}:4 first — в Act 2 оператора`],
+    expected: [`${RS}:4 first — в Act операторов: 2`],
   },
   {
     name: "привязка с лишним оператором перестаёт быть привязкой",
@@ -336,7 +335,7 @@ const violating = [
     name: "обёртка-раннер: два оператора в Act",
     path: RS,
     src: rustTest(wrapped(twoActs.flatMap((l) => l.split("\n")))),
-    expected: [`${RS}:2 sample — в Act 2 оператора`],
+    expected: [`${RS}:2 sample — в Act операторов: 2`],
   },
   {
     name: "маркеры на разных уровнях",
@@ -356,7 +355,7 @@ const violating = [
     src: tsTest(
       GOOD_TS.map((l) => (l === "  const y = f(x);" ? "  const a = f(x);\n  const y = g(a);" : l)),
     ),
-    expected: [`${TS}:1 sample — в Act 2 оператора`],
+    expected: [`${TS}:1 sample — в Act операторов: 2`],
   },
   {
     name: "TS: expect до Assert",
@@ -369,10 +368,9 @@ const violating = [
 for (const c of violating) {
   it(`нарушение: ${c.name}`, () => {
     // Arrange
-    const { src, path } = c;
 
     // Act
-    const actual = checkAaaSource(src, path).map(head);
+    const actual = checkAaaSource(c.src, c.path).map(head);
 
     // Assert
     assert.deepEqual(actual, c.expected);
@@ -388,7 +386,7 @@ it("сообщение: путь:строка имя — правило — чт
 
   // Assert
   assert.deepEqual(actual, [
-    "crates/core/app/tests/yank.rs:2 sample — в Act 2 оператора — оставьте в Act одно действие, подготовку перенесите в Arrange",
+    "crates/core/app/tests/yank.rs:2 sample — в Act операторов: 2 — оставьте в Act одно действие, подготовку перенесите в Arrange",
   ]);
 });
 

@@ -46,10 +46,9 @@ const kept = [
 for (const c of kept) {
   it(`worktree не удаляется: ${c.name}`, () => {
     // Arrange
-    const { prs } = c;
 
     // Act
-    const decision = decide(c.wt, prs, c.ctx);
+    const decision = decide(c.wt, c.prs, c.ctx);
 
     // Assert
     assert.equal(decision.remove, false);

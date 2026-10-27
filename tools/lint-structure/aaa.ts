@@ -42,7 +42,6 @@ const LEADING_WS = /^\s*/;
 const CONTINUATION = /^(\s|\/\/|[)\]}.?])/;
 const TS_FILE = /\.tsx?$/;
 const UNKNOWN = "<тест>";
-const PLURAL_FEW_MAX = 4;
 
 const report = (path: string, line: number, name: string, rule: string, todo: string): string =>
   `${path}:${line} ${name} — ${rule} — ${todo}`;
@@ -226,40 +225,44 @@ const startsStatement = (line: string, indent: string): boolean => {
 const countStatements = (lines: string[], indent: string): number =>
   lines.filter((l) => startsStatement(l, indent)).length;
 
-// Числа 5+ в Act редкость: достаточно различать «2–4 оператора» и «операторов».
-const plural = (n: number): string => (n <= PLURAL_FEW_MAX ? "оператора" : "операторов");
+interface Markers {
+  /** Нарушения расстановки; при непустом списке позиции не используются. */
+  problems: string[];
+  act: number;
+  assertAt: number;
+}
 
-function markerViolations(t: TestFn, fail: (rule: string, todo: string) => string): string[] {
+function findMarkers(t: TestFn, fail: (rule: string, todo: string) => string): Markers {
   const positions = MARKERS.map((m) => t.body.flatMap((l, i) => (l.trim() === m ? [i] : [])));
+  const broken = (rule: string, todo: string): Markers => ({
+    problems: [fail(rule, todo)],
+    act: -1,
+    assertAt: -1,
+  });
   const wrong = MARKERS.flatMap((m, k) =>
     positions[k]?.length === 1 ? [] : [`${m} ×${positions[k]?.length ?? 0}`],
   );
   if (wrong.length > 0) {
-    return [
-      fail(
-        `маркеры: ${wrong.join(", ")}`,
-        `каждый из ${MARKERS.join(", ")} должен стоять в теле ровно один раз отдельной строкой`,
-      ),
-    ];
+    return broken(
+      `маркеры: ${wrong.join(", ")}`,
+      `каждый из ${MARKERS.join(", ")} должен стоять в теле ровно один раз отдельной строкой`,
+    );
   }
   const [a = -1, b = -1, c = -1] = positions.map((x) => x[0] ?? -1);
   if (!(a < b && b < c)) {
-    return [
-      fail(
-        "маркеры не по порядку",
-        `расставьте ${ARRANGE}, ${ACT}, ${ASSERT} именно в этом порядке`,
-      ),
-    ];
+    return broken(
+      "маркеры не по порядку",
+      `расставьте ${ARRANGE}, ${ACT}, ${ASSERT} именно в этом порядке`,
+    );
   }
   const levels = new Set([a, b, c].map((i) => indentOf(t.body[i] ?? "")));
-  return levels.size === 1
-    ? []
-    : [
-        fail(
-          "маркеры на разных уровнях",
-          `поставьте ${ARRANGE}, ${ACT}, ${ASSERT} на одном уровне вложенности`,
-        ),
-      ];
+  if (levels.size !== 1) {
+    return broken(
+      "маркеры на разных уровнях",
+      `поставьте ${ARRANGE}, ${ACT}, ${ASSERT} на одном уровне вложенности`,
+    );
+  }
+  return { problems: [], act: b, assertAt: c };
 }
 
 /** Нарушения одного теста; пусто — тест в форме AAA. */
@@ -276,12 +279,11 @@ export function checkAaa(t: TestFn): string[] {
   if (isBinding) {
     return [];
   }
-  const found = markerViolations(t, fail);
-  if (found.length > 0) {
-    return found;
+  const { problems, act, assertAt } = findMarkers(t, fail);
+  if (problems.length > 0) {
+    return problems;
   }
-  const idx = (m: string): number => t.body.findIndex((l) => l.trim() === m);
-  const [act, assertAt] = [idx(ACT), idx(ASSERT)];
+  const found: string[] = [];
   // Секции могут лежать глубже тела (обёртка-раннер): считаем на уровне маркера Act.
   const actIndent = indentOf(t.body[act] ?? "");
   const actStatements = countStatements(t.body.slice(act + 1, assertAt), actIndent);
@@ -290,7 +292,7 @@ export function checkAaa(t: TestFn): string[] {
       actStatements === 0
         ? fail("в Act нет оператора", "поместите в Act вызов проверяемого поведения")
         : fail(
-            `в Act ${actStatements} ${plural(actStatements)}`,
+            `в Act операторов: ${actStatements}`,
             "оставьте в Act одно действие, подготовку перенесите в Arrange",
           ),
     );
