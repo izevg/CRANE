@@ -17,6 +17,7 @@ use crane_app::proxy::ProxyLimits;
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::registry::Format;
 use crane_http::TrustedProxies;
+use crane_objstore::S3Key;
 pub(crate) use file::layered;
 use sqlx::postgres::PgConnectOptions;
 use url::Url;
@@ -46,6 +47,12 @@ const MAX_PUBLISH_BYTES: &str = "CRANE_MAX_PUBLISH_BYTES";
 const TOKEN_PRINCIPAL: &str = "CRANE_TOKEN_PRINCIPAL";
 const TRUSTED_PROXIES: &str = "CRANE_TRUSTED_PROXIES";
 const CARGO_PROXY_REPOS: &str = "CRANE_CARGO_PROXY_REPOS";
+// Ключи S3 читает object_store из окружения сам; здесь только пара `*_FILE`, которой он не знает.
+// В VARS не входят: AWS_* не ключи TOML.
+const S3_KEY_ID: &str = "AWS_ACCESS_KEY_ID";
+const S3_KEY_ID_FILE: &str = "AWS_ACCESS_KEY_ID_FILE";
+const S3_SECRET: &str = "AWS_SECRET_ACCESS_KEY";
+const S3_SECRET_FILE: &str = "AWS_SECRET_ACCESS_KEY_FILE";
 const CACHE: &str = "CRANE_CACHE";
 const CACHE_FILE: &str = "CRANE_CACHE_FILE";
 const PROXY_MAX_ARTIFACT_BYTES: &str = "CRANE_PROXY_MAX_ARTIFACT_BYTES";
@@ -160,6 +167,8 @@ pub(crate) enum ConfigError {
     },
     /// Каталог в PostgreSQL над blob в памяти после рестарта ссылался бы на потерянные blob.
     MixedStorage,
+    /// Ключ S3 из файлов при `memory`: мёртвая конфигурация хуже ошибки.
+    S3KeyWithMemory,
     UnknownKey {
         key: String,
     },
@@ -205,6 +214,10 @@ impl fmt::Display for ConfigError {
                 f,
                 "{DATABASE_URL} и {BLOBS}: memory нельзя смешивать с постоянным хранилищем"
             ),
+            Self::S3KeyWithMemory => write!(
+                f,
+                "{S3_KEY_ID_FILE} и {S3_SECRET_FILE}: ключ S3 не нужен при memory"
+            ),
             Self::UnknownKey { key } => write!(f, "неизвестный ключ `{key}` в файле конфигурации"),
             Self::FileValue { key, reason } => {
                 write!(
@@ -231,7 +244,12 @@ pub(crate) enum Storage {
     /// Данные теряются при рестарте; только оба хранилища вместе.
     Memory,
     /// Каталог и CAS переживают рестарт одинаково, иначе каталог ссылался бы на потерянные blob.
-    Durable { database: Database, blobs: Url },
+    Durable {
+        database: Database,
+        blobs: Url,
+        /// Ключ из `AWS_*_FILE`; без файлов `None`, учётные данные берёт сам `object_store`.
+        s3_key: Option<S3Key>,
+    },
 }
 
 impl Storage {
@@ -243,11 +261,14 @@ impl Storage {
     ) -> Result<Self, ConfigError> {
         let database = secret(var, read_file, DATABASE_URL, DATABASE_URL_FILE)?;
         let blobs = required(var, BLOBS)?;
+        let s3_key = s3_key(var, read_file)?;
         match (database.expose() == MEMORY, blobs == MEMORY) {
+            (true, true) if s3_key.is_some() => Err(ConfigError::S3KeyWithMemory),
             (true, true) => Ok(Self::Memory),
             (false, false) => Ok(Self::Durable {
                 database: Database::parse(&database)?,
                 blobs: blobs_url(&blobs)?,
+                s3_key,
             }),
             _ => Err(ConfigError::MixedStorage),
         }
@@ -474,6 +495,24 @@ fn public_url(var: &impl Fn(&str) -> Option<String>) -> Result<String, ConfigErr
         });
     }
     Ok(raw.trim_end_matches('/').to_owned())
+}
+
+/// Статический ключ S3 из файлов. Без `*_FILE` это `None`: плоские `AWS_*` и роли читает сам
+/// `object_store`. Если задан хоть один файл, нужна вся пара; полноту и конфликт «переменная +
+/// файл» проверяет `secret`.
+fn s3_key(
+    var: &impl Fn(&str) -> Option<String>,
+    read_file: &impl Fn(&Path) -> io::Result<String>,
+) -> Result<Option<S3Key>, ConfigError> {
+    if var(S3_KEY_ID_FILE).is_none() && var(S3_SECRET_FILE).is_none() {
+        return Ok(None);
+    }
+    let id = secret(var, read_file, S3_KEY_ID, S3_KEY_ID_FILE)?;
+    let secret = secret(var, read_file, S3_SECRET, S3_SECRET_FILE)?;
+    Ok(Some(S3Key::new(
+        id.expose().to_owned(),
+        secret.expose().to_owned(),
+    )))
 }
 
 /// Секрет из `name` или из файла `file_name` (Docker/Kubernetes secrets). Ровно один из двух.
@@ -1223,7 +1262,9 @@ mod tests {
     fn shape(result: Result<Storage, ConfigError>) -> String {
         match result {
             Ok(Storage::Memory) => "memory".to_owned(),
-            Ok(Storage::Durable { database, blobs }) => {
+            Ok(Storage::Durable {
+                database, blobs, ..
+            }) => {
                 format!(
                     "durable {}/{} {}",
                     database.options().get_host(),
@@ -1310,6 +1351,89 @@ mod tests {
                 rejected("foo"),
             ]
         );
+    }
+
+    /// Читает «файлы секретов» из памяти: путь `/s/<имя>` отдаёт `<имя>`-значение.
+    fn s3_files(path: &Path) -> io::Result<String> {
+        match path.to_str() {
+            Some("/s/id") => Ok("AKID\n".to_owned()),
+            Some("/s/secret") => Ok("SKEY\n".to_owned()),
+            _ => Err(io::Error::from(io::ErrorKind::NotFound)),
+        }
+    }
+
+    /// Наблюдаемый факт без значения ключа: есть ли он и какая ошибка.
+    fn key_state(pairs: &[(&str, &str)]) -> String {
+        let base = [
+            (DATABASE_URL, "postgres://u:pw@h/db"),
+            (BLOBS, "s3://b?endpoint=http://s3:8333"),
+        ];
+        let all: Vec<_> = base.iter().chain(pairs).copied().collect();
+        match Storage::from_env(&env(&all), &s3_files) {
+            Ok(Storage::Durable { s3_key, .. }) => format!("key={}", s3_key.is_some()),
+            Ok(Storage::Memory) => "memory".to_owned(),
+            Err(error) => format!("error {error}"),
+        }
+    }
+
+    #[test]
+    fn s3_key_comes_only_from_a_complete_pair_of_files() {
+        // Arrange
+        let both = [(S3_KEY_ID_FILE, "/s/id"), (S3_SECRET_FILE, "/s/secret")];
+        let only_id = [(S3_KEY_ID_FILE, "/s/id")];
+        let only_secret = [(S3_SECRET_FILE, "/s/secret")];
+        let id_twice = [
+            (S3_KEY_ID, "x"),
+            (S3_KEY_ID_FILE, "/s/id"),
+            (S3_SECRET_FILE, "/s/secret"),
+        ];
+        let flat = [(S3_KEY_ID, "x"), (S3_SECRET, "y")];
+
+        // Act
+        let states = [
+            key_state(&[]),
+            key_state(&flat),
+            key_state(&both),
+            key_state(&only_id),
+            key_state(&only_secret),
+            key_state(&id_twice),
+        ];
+
+        // Assert
+        assert_eq!(
+            states,
+            [
+                "key=false".to_owned(),
+                "key=false".to_owned(),
+                "key=true".to_owned(),
+                format!("error {}", ConfigError::Missing { var: S3_SECRET }),
+                format!("error {}", ConfigError::Missing { var: S3_KEY_ID }),
+                format!(
+                    "error {}",
+                    ConfigError::Conflict {
+                        first: S3_KEY_ID,
+                        second: S3_KEY_ID_FILE
+                    }
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn s3_key_files_with_memory_storage_are_rejected() {
+        // Arrange
+        let source = env(&[
+            (DATABASE_URL, "memory"),
+            (BLOBS, "memory"),
+            (S3_KEY_ID_FILE, "/s/id"),
+            (S3_SECRET_FILE, "/s/secret"),
+        ]);
+
+        // Act
+        let error = Storage::from_env(&source, &s3_files).err();
+
+        // Assert
+        assert_eq!(error, Some(ConfigError::S3KeyWithMemory));
     }
 
     #[test]

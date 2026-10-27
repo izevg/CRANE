@@ -43,8 +43,8 @@ pub(crate) fn serve(settings: Settings) -> Result<(), RunError> {
 
 /// Собирает роутеры API и admin над хранилищами из настроек. Отдельно от `serve`,
 /// чтобы сборку (выбор хранилищ, подключение, репозитории) проверяли тесты без сокетов.
-pub(crate) async fn routers(settings: Settings) -> Result<(Router, Router), RunError> {
-    match &settings.storage {
+pub(crate) async fn routers(mut settings: Settings) -> Result<(Router, Router), RunError> {
+    match &mut settings.storage {
         Storage::Memory => {
             assemble(
                 MemoryCatalog::default(),
@@ -53,10 +53,14 @@ pub(crate) async fn routers(settings: Settings) -> Result<(Router, Router), RunE
             )
             .await
         }
-        Storage::Durable { database, blobs } => {
+        Storage::Durable {
+            database,
+            blobs,
+            s3_key,
+        } => {
             // Подключаемся сразу: недоступная БД валит старт, а не первый запрос.
             let pool = connect(database).await?;
-            let store = ObjectBlobStore::from_url(blobs)
+            let store = ObjectBlobStore::from_url(blobs, s3_key.take())
                 .map_err(|error| format!("не удалось открыть CRANE_BLOBS: {error}"))?;
             assemble(PgCatalog::new(pool), store, settings).await
         }

@@ -1,4 +1,4 @@
-// Создаёт недостающие файлы секретов для compose: токен, пароль PostgreSQL, URL каталога.
+// Создаёт недостающие файлы секретов для compose: токен, пароль PostgreSQL, URL каталога, ключ S3.
 // Идемпотентно: существующие файлы не перезаписываются. Значения нигде не печатаются.
 // Использование: task secrets:init (пути и имена берутся из .env).
 import { randomBytes } from "node:crypto";
@@ -18,6 +18,9 @@ const REQUIRED = [
   "POSTGRES_USER",
   "POSTGRES_DB",
 ];
+// Секреты S3-режима: нужны только docker-compose.s3.yaml и профилю s3 в dev, поэтому не обязательны.
+// Политику (identities SeaweedFS) файлом не храним: файл не перезаписывается, и правка политики не дошла бы до установок.
+const S3_SECRETS = ["S3_ACCESS_KEY_ID_SECRET", "S3_SECRET_ACCESS_KEY_SECRET"];
 const randomHex = (): string => randomBytes(SECRET_BYTES).toString("hex");
 
 /** Возвращает пути созданных файлов (без значений). */
@@ -52,6 +55,10 @@ export function initSecrets(env: Env, root: string, random = randomHex): string[
     "CRANE_DATABASE_URL_SECRET",
     () => `postgres://${value("POSTGRES_USER")}:${password}@postgres:5432/${value("POSTGRES_DB")}`,
   );
+  if (S3_SECRETS.every((name) => env[name])) {
+    ensure("S3_ACCESS_KEY_ID_SECRET", random);
+    ensure("S3_SECRET_ACCESS_KEY_SECRET", random);
+  }
   return created;
 }
 
