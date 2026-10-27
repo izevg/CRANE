@@ -1,65 +1,30 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { minorOf, parseCargoVersion, previousMinor } from "./versions.ts";
+import { parseCargo } from "./versions.ts";
 
 const NOT_PARSED = /не разобрать/;
 
-describe("previousMinor", () => {
-  it("returns the previous minor line of a stable release", () => {
-    // Arrange
-    const version = "1.99.0";
-
-    // Act
-    const previous = previousMinor(version);
-
-    // Assert
-    assert.equal(previous, "1.98");
-  });
-
-  it("ignores the patch component", () => {
-    // Arrange
-    const version = "1.90.3";
-
-    // Act
-    const previous = previousMinor(version);
-
-    // Assert
-    assert.equal(previous, "1.89");
-  });
-
-  it("rejects strings that are not a Rust release", () => {
-    // Arrange
-    const garbage = "latest";
-
-    // Act
-    const call = () => previousMinor(garbage);
-
-    // Assert
-    assert.throws(call, NOT_PARSED);
-  });
-
-  it("rejects the first minor line, which has no predecessor", () => {
-    // Arrange
-    const version = "1.0.0";
-
-    // Act
-    const call = () => previousMinor(version);
-
-    // Assert
-    assert.throws(call, NOT_PARSED);
-  });
-});
-
-describe("parseCargoVersion", () => {
-  it("extracts the release from cargo --version output", () => {
+describe("parseCargo", () => {
+  it("extracts the version and minor line from cargo --version output", () => {
     // Arrange
     const output = "cargo 1.99.0 (abc123def 2026-10-01)\n";
 
     // Act
-    const version = parseCargoVersion(output);
+    const parsed = parseCargo(output);
 
     // Assert
-    assert.equal(version, "1.99.0");
+    assert.deepEqual(parsed, { version: "1.99.0", minor: 99 });
+  });
+
+  it("keeps the patch in the version but not in the minor", () => {
+    // Arrange
+    const output = "cargo 1.90.3 (abc 2026-01-01)";
+
+    // Act
+    const parsed = parseCargo(output);
+
+    // Assert
+    assert.deepEqual(parsed, { version: "1.90.3", minor: 90 });
   });
 
   it("rejects output of another program", () => {
@@ -67,22 +32,20 @@ describe("parseCargoVersion", () => {
     const output = "rustc 1.99.0 (abc 2026-10-01)";
 
     // Act
-    const call = () => parseCargoVersion(output);
+    const call = () => parseCargo(output);
 
     // Assert
     assert.throws(call, NOT_PARSED);
   });
-});
 
-describe("minorOf", () => {
-  it("drops the patch component", () => {
+  it("rejects an empty output", () => {
     // Arrange
-    const version = "1.99.2";
+    const output = "";
 
     // Act
-    const minor = minorOf(version);
+    const call = () => parseCargo(output);
 
     // Assert
-    assert.equal(minor, "1.99");
+    assert.throws(call, NOT_PARSED);
   });
 });

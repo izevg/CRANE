@@ -3,21 +3,20 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Expected, leaks, verify } from "./audit.ts";
-import { scenario, startClient } from "./cargo.ts";
+import { scenario, startCargo } from "./cargo.ts";
 import { docker, log, MS_PER_SECOND, warn } from "./exec.ts";
-import { type Stand, up } from "./stand.ts";
-import { minorOf, parseCargoVersion, previousMinor } from "./versions.ts";
+import { describeStand, type Stand } from "./stand.ts";
+import { parseCargo } from "./versions.ts";
 
 const ROOT = join(fileURLToPath(import.meta.url), "..", "..", "..");
 // Клиент делит сетевое пространство имён с Caddy и ходит на localhost: сервер увидит loopback.
 const LOOPBACK = ["127.0.0.1", "::1"];
-const MINOR_PREFIX_LENGTH = "1.".length;
 
 type Which = "latest" | "previous";
 
 interface Target {
   image: string;
-  minor: string;
+  minor: number;
 }
 
 function parseArgs(argv: string[]): Which[] {
@@ -36,17 +35,13 @@ function parseArgs(argv: string[]): Which[] {
 /** Образы rust:1.M-bookworm и rust:1.(M-1)-bookworm по самой свежей стабильной версии. */
 function resolveTargets(which: Which[]): Target[] {
   docker(["pull", "-q", "rust:1-bookworm"]);
-  const latest = parseCargoVersion(
-    docker(["run", "--rm", "rust:1-bookworm", "cargo", "--version"]),
-  );
-  const minors: Record<Which, string> = {
-    latest: minorOf(latest),
-    previous: previousMinor(latest),
-  };
+  const latest = parseCargo(docker(["run", "--rm", "rust:1-bookworm", "cargo", "--version"])).minor;
+  const minors: Record<Which, number> = { latest, previous: latest - 1 };
   return which.map((w) => {
-    const image = `rust:${minors[w]}-bookworm`;
+    const minor = minors[w];
+    const image = `rust:1.${minor}-bookworm`;
     docker(["pull", "-q", image]);
-    return { image, minor: minors[w].slice(MINOR_PREFIX_LENGTH) };
+    return { image, minor };
   });
 }
 
@@ -55,7 +50,7 @@ function exercise(stand: Stand, targets: Target[]): number {
   const expected: Expected[] = [];
   const versions: string[] = [];
   for (const target of targets) {
-    const client = startClient(stand, target.image);
+    const client = startCargo(stand, target.image);
     try {
       log(`${target.image}: cargo ${client.version}`);
       versions.push(client.version);
@@ -65,7 +60,7 @@ function exercise(stand: Stand, targets: Target[]): number {
       client.stop();
     }
   }
-  const mismatches = verify(stand.cratesLogs(), expected, {
+  const mismatches = verify(stand.craneLogs(), expected, {
     principal: stand.principal,
     loopback: LOOPBACK,
   });
@@ -88,23 +83,20 @@ const logPath = (stand: Stand): string => join(ROOT, "out", "dogfood", `${stand.
 function main(): number {
   const started = Date.now();
   const targets = resolveTargets(parseArgs(process.argv.slice(2)));
-  const stand = up(ROOT);
-  let problems = 0;
+  const stand = describeStand(ROOT);
+  let problems = 1;
+  let leftovers: string[] = [];
   try {
+    stand.start();
     problems = exercise(stand, targets);
   } catch (error) {
-    problems = 1;
     warn(error instanceof Error ? error.message : String(error));
-  }
-  if (problems > 0) {
-    try {
-      stand.saveLogs(logPath(stand));
-      warn(`журналы сохранены: ${logPath(stand)}`);
-    } catch {
-      // журналы недоступны: стенд уже сломан
+  } finally {
+    if (problems > 0) {
+      saveLogs(stand);
     }
+    leftovers = stand.down();
   }
-  const leftovers = stand.down();
   for (const item of leftovers) {
     warn(`после down осталось: ${item}`);
   }
@@ -114,7 +106,16 @@ function main(): number {
   return ok ? 0 : 1;
 }
 
-// Сигналы не прерывают процесс: очистка стенда выполняется только после сценария.
+function saveLogs(stand: Stand): void {
+  try {
+    stand.saveLogs(logPath(stand));
+    warn(`журналы сохранены: ${logPath(stand)}`);
+  } catch {
+    // журналов может не быть: стенд мог не успеть подняться
+  }
+}
+
+// Сигналы не прерывают процесс: очистка стенда выполняется только в finally.
 process.on("SIGINT", () => undefined);
 process.on("SIGTERM", () => undefined);
 process.exitCode = main();

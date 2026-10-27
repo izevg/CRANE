@@ -5,7 +5,8 @@ export type Operation = "publish" | "yank" | "unyank";
 
 export type Expected =
   | { kind: "api"; agent: string; operation: Operation; purl: string }
-  | { kind: "authFailure"; agent: string; min: number };
+  /** Не меньше одного отказа аутентификации от этого клиента (число попыток cargo не детерминировано). */
+  | { kind: "authFailure"; agent: string };
 
 export interface Mismatch {
   check: string;
@@ -149,13 +150,13 @@ function checkApiEvent(line: Line, access: Map<string, Line>, options: Options):
   return found;
 }
 
-function checkAuthFailures(agent: string, failures: Line[], min: number): Mismatch[] {
+function checkAuthFailures(agent: string, failures: Line[], required: boolean): Mismatch[] {
   const check = `3002 ${agent}`;
   const found: Mismatch[] = [];
-  if (failures.length < min) {
+  if (required && failures.length === 0) {
     found.push({
       check,
-      detail: `ожидалось не меньше ${min} отказов аутентификации, в журнале ${failures.length}`,
+      detail: "ожидался хотя бы один отказ аутентификации, в журнале ни одного",
     });
   }
   for (const line of failures) {
@@ -202,11 +203,8 @@ export function verify(craneNdjson: string, expected: Expected[], options: Optio
     for (const line of mine) {
       mismatches.push(...checkApiEvent(line, access, options));
     }
-    const min = expected.reduce(
-      (sum, e) => (e.kind === "authFailure" && e.agent === agent ? sum + e.min : sum),
-      0,
-    );
-    mismatches.push(...checkAuthFailures(agent, auth.filter(ownedBy(agent)), min));
+    const required = expected.some((e) => e.kind === "authFailure" && e.agent === agent);
+    mismatches.push(...checkAuthFailures(agent, auth.filter(ownedBy(agent)), required));
   }
   return mismatches;
 }

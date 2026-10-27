@@ -1,33 +1,21 @@
-// Чистые помощники выбора версий cargo.
+// Разбор вывода `cargo --version`.
 
-const RELEASE = /^1\.(\d+)\.\d+$/;
-const CARGO_OUTPUT = /^cargo (1\.\d+\.\d+)\b/;
-const MINOR_LINE = /^(1\.\d+)\.\d+$/;
+const CARGO_OUTPUT = /^cargo (1\.(\d+)\.\d+)\b/;
 
-/** "1.99.0" -> "1.98": предыдущая минорная линия стабильного Rust. */
-export function previousMinor(version: string): string {
-  const match = RELEASE.exec(version);
-  const minor = Number(match?.[1]);
-  if (!Number.isInteger(minor) || minor < 1) {
-    throw new Error(`не разобрать версию Rust: ${version}`);
-  }
-  return `1.${minor - 1}`;
+export interface CargoVersion {
+  /** Полная версия 1.M.p: из неё строится user agent `cargo/1.M.p`. */
+  version: string;
+  /** M: из него строятся тег образа rust:1.M-bookworm и предыдущая линия M-1. */
+  minor: number;
 }
 
-/** "cargo 1.99.0 (abc123 2026-10-01)" -> "1.99.0". */
-export function parseCargoVersion(output: string): string {
+/** "cargo 1.99.0 (abc 2026-10-01)" -> { version: "1.99.0", minor: 99 }. */
+export function parseCargo(output: string): CargoVersion {
   const match = CARGO_OUTPUT.exec(output.trim());
-  if (match?.[1] === undefined) {
+  const version = match?.[1];
+  const minor = Number(match?.[2]);
+  if (version === undefined || !Number.isInteger(minor)) {
     throw new Error(`не разобрать вывод cargo --version: ${output.trim()}`);
   }
-  return match[1];
-}
-
-/** "1.99.0" -> "1.99". */
-export function minorOf(version: string): string {
-  const match = MINOR_LINE.exec(version);
-  if (match?.[1] === undefined) {
-    throw new Error(`не разобрать версию Rust: ${version}`);
-  }
-  return match[1];
+  return { version, minor };
 }

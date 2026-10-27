@@ -62,7 +62,7 @@ const authFailure = (agent = `${AGENT} (abc)`): string =>
 const API_EXPECTED: Expected[] = [
   { kind: "api", agent: AGENT, operation: "publish", purl: A_010 },
   { kind: "api", agent: AGENT, operation: "yank", purl: A_011 },
-  { kind: "authFailure", agent: AGENT, min: 1 },
+  { kind: "authFailure", agent: AGENT },
 ];
 
 const goodLog = (): string[] => [

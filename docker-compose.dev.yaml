@@ -2,7 +2,7 @@
 # Значения берутся из .env (cp .env.dist .env); порты публикуются на ${DEV_BIND}.
 # Пароль PostgreSQL лежит в файле POSTGRES_PASSWORD_SECRET и в окружение не попадает.
 #   docker compose -f docker-compose.dev.yaml up -d
-#   export CRANE_DATABASE_URL="postgres://crane:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:5432/crane"
+#   export CRANE_DATABASE_URL="postgres://${POSTGRES_USER}:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
 name: crane-dev
 
 services:

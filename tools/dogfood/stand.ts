@@ -1,26 +1,29 @@
 // Одноразовый стенд: тот же docker-compose.yaml, что у оператора, с отдельным проектом, секретами,
 // подсетью и портами. Всё, что создано, снимается в down(), в том числе после сбоя.
 import { randomBytes } from "node:crypto";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { docker, log, MS_PER_SECOND, run, runOk, SECONDS_PER_MINUTE, warn } from "./exec.ts";
+import { docker, log, MS_PER_SECOND, run, SECONDS_PER_MINUTE, warn } from "./exec.ts";
 
 export interface Stand {
+  /** Случайный идентификатор прогона: суффикс имён проекта, образа и крейтов. */
   id: string;
   project: string;
-  image: string;
-  caddyId: string;
+  /** Детерминированное имя контейнера Caddy в compose: `<проект>-caddy-1`. */
+  caddy: string;
   principal: string;
   token: string;
   wrongToken: string;
   /** Секреты стенда для проверки утечек и редактирования сохранённых журналов. */
   secrets: { name: string; value: string }[];
+  /** Секреты, сборка образа, compose up. Побочные эффекты начинаются здесь. */
+  start(): void;
   /** Журнал сервиса crane (NDJSON) без префиксов compose. */
-  cratesLogs(): string;
+  craneLogs(): string;
   allLogs(): string;
   saveLogs(path: string): void;
-  /** Идемпотентно, не бросает; возвращает ресурсы стенда, которые остались. */
+  /** Идемпотентно, не бросает, безопасно после частичного start; возвращает оставшиеся ресурсы. */
   down(): string[];
 }
 
@@ -49,11 +52,12 @@ function randomSubnet(): string {
   return `10.${second}.${third}.0/24`;
 }
 
-export function up(root: string): Stand {
+/** Описание стенда без побочных эффектов: имена, секреты, команды. Запуск и уборка — снаружи. */
+export function describeStand(root: string): Stand {
   const id = hex(HEX_BYTES_ID);
   const project = `crane-dogfood-${id}`;
   const image = `crane-dogfood:${id}`;
-  const tmp = mkdtempSync(join(tmpdir(), `${project}-`));
+  const tmp = join(tmpdir(), project);
   const token = hex(HEX_BYTES_SECRET);
   const wrongToken = hex(HEX_BYTES_SECRET);
   const postgresPassword = hex(HEX_BYTES_SECRET);
@@ -78,77 +82,61 @@ export function up(root: string): Stand {
     overrides,
   ];
   const composeRun = (args: string[]): string => docker([...compose, ...args], { cwd: root });
-
-  const down = (): string[] => {
-    const step = (what: string, action: () => void): void => {
-      try {
-        action();
-      } catch (error) {
-        warn(`down: ${what}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    };
-    step("клиентские контейнеры", () => {
-      const ids = docker(["ps", "-aq", "--filter", `label=crane-dogfood=${project}`]).split("\n");
-      const present = ids.filter((line) => line.trim() !== "");
-      if (present.length > 0) {
-        docker(["rm", "-f", ...present]);
-      }
-    });
-    step("compose down", () => {
-      composeRun(["down", "-v", "--remove-orphans", "--timeout", String(DOWN_TIMEOUT_SECONDS)]);
-    });
-    step("образ", () => {
-      run("docker", ["image", "rm", image]);
-    });
-    step("временный каталог", () => {
-      rmSync(tmp, { recursive: true, force: true });
-    });
-    return leftovers(project, image);
-  };
-
   const logs = (services: string[]): string =>
     composeRun(["logs", "--no-log-prefix", "--no-color", ...services]);
-  const stand: Stand = {
+
+  return {
     id,
     project,
-    image,
-    caddyId: "",
+    caddy: `${project}-caddy-1`,
     principal,
     token,
     wrongToken,
     secrets,
-    cratesLogs: () => logs(["crane"]),
+    start() {
+      mkdirSync(tmp, { mode: DIR_MODE });
+      writeSecrets(tmp, { token, postgresPassword, databaseUrl });
+      log(`стенд ${project}: сборка образа ${image}`);
+      docker(["build", "-t", image, root], { timeoutMs: BUILD_TIMEOUT_MS });
+      startCompose(tmp, overrides, id, principal, composeRun);
+    },
+    craneLogs: () => logs(["crane"]),
     allLogs: () => logs([]),
     saveLogs(path) {
       let content = logs([]);
       for (const secret of secrets) {
         content = content.split(secret.value).join(`<${secret.name}>`);
       }
-      runOk("mkdir", ["-p", dirname(path)]);
+      mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, content);
     },
-    down,
+    down() {
+      const attempt = (what: string, action: () => void): void => {
+        try {
+          action();
+        } catch (error) {
+          warn(`down: ${what}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      };
+      attempt("клиентские контейнеры", () => {
+        const ids = docker(["ps", "-aq", "--filter", `label=crane-dogfood=${project}`]).split("\n");
+        const present = ids.filter((line) => line.trim() !== "");
+        if (present.length > 0) {
+          docker(["rm", "-f", ...present]);
+        }
+      });
+      attempt("compose down", () => {
+        composeRun(["down", "-v", "--remove-orphans", "--timeout", String(DOWN_TIMEOUT_SECONDS)]);
+      });
+      attempt("образ", () => {
+        run("docker", ["image", "rm", image]);
+      });
+      attempt("временный каталог", () => {
+        rmSync(tmp, { recursive: true, force: true });
+      });
+      return leftovers(project, image);
+    },
   };
-
-  try {
-    writeSecrets(tmp, { token, postgresPassword, databaseUrl });
-    log(`стенд ${project}: сборка образа ${image}`);
-    docker(["build", "-t", image, root], { timeoutMs: BUILD_TIMEOUT_MS });
-    startCompose(tmp, overrides, id, principal, composeRun);
-    stand.caddyId = composeRun(["ps", "-q", "caddy"]).trim();
-    if (stand.caddyId === "") {
-      throw new Error("контейнер caddy не найден");
-    }
-    return stand;
-  } catch (error) {
-    try {
-      stand.saveLogs(join(root, "out", "dogfood", `${project}.log`));
-    } catch {
-      // журналов может не быть, если упала сборка образа
-    }
-    down();
-    throw error;
-  }
 }
 
 /** Файлы 0644 в каталоге 0700: на Linux bind-монтируемый секрет читает uid 65532, а не владелец хоста. */
@@ -163,7 +151,7 @@ function writeSecrets(
     ["database_url", values.databaseUrl],
   ];
   for (const [name, value] of files) {
-    writeFileSync(join(tmp, name), value, { mode: SECRET_MODE });
+    writeFileSync(join(tmp, name), value);
     chmodSync(join(tmp, name), SECRET_MODE);
   }
 }
