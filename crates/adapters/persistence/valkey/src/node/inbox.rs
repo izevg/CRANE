@@ -13,12 +13,6 @@ use super::{AbortOnDrop, INVALIDATION_CHANNEL, Local};
 /// Пауза между повторами, когда подключение или подписка не удались.
 const RETRY_DELAY: Duration = Duration::from_secs(5);
 
-/// Что делать после выхода из цикла приёма сообщений.
-enum Next {
-    Resubscribe,
-    Stop,
-}
-
 /// Подключает клиента, повторяя попытки: Valkey может быть недоступен при старте.
 /// В лог попадает только вид ошибки: текст может цитировать адрес.
 pub(super) async fn connect<C: ClientLike>(
@@ -38,6 +32,18 @@ pub(super) async fn connect<C: ClientLike>(
     }
 }
 
+/// Пауза после завершения задачи соединения; в лог идёт только вид ошибки.
+pub(super) async fn connection_lost(
+    outcome: Result<Result<(), fred::error::Error>, tokio::task::JoinError>,
+) {
+    let kind = match outcome {
+        Ok(Err(error)) => error.kind().to_str(),
+        Ok(Ok(())) | Err(_) => "closed",
+    };
+    warn!(kind, "Valkey: соединение потеряно, переподключение");
+    tokio::time::sleep(RETRY_DELAY).await;
+}
+
 /// Подписывается на `inv` и применяет сообщения к локальному состоянию, пока жив клиент.
 ///
 /// После каждого (пере)подключения подписка ставится заново, а L1 сбрасывается: за время
@@ -45,7 +51,7 @@ pub(super) async fn connect<C: ClientLike>(
 pub(super) async fn run(local: Arc<Local>, subscriber: SubscriberClient) {
     let mut messages = subscriber.message_rx();
     let mut reconnects = subscriber.reconnect_rx();
-    let _connection = connect(&subscriber).await;
+    let mut connection = connect(&subscriber).await;
     loop {
         while let Err(error) = subscriber.subscribe(INVALIDATION_CHANNEL).await {
             warn!(
@@ -56,30 +62,26 @@ pub(super) async fn run(local: Arc<Local>, subscriber: SubscriberClient) {
         }
         local.forget_all();
         loop {
-            let next = tokio::select! {
+            tokio::select! {
                 message = messages.recv() => match message {
-                    Ok(message) => {
-                        if let Some(name) = message.value.as_string() {
-                            local.invalidate(&name);
-                        } else {
-                            local.forget_all();
-                        }
-                        continue;
-                    }
-                    Err(RecvError::Lagged(_)) => {
-                        local.forget_all();
-                        continue;
-                    }
-                    Err(RecvError::Closed) => Next::Stop,
+                    Ok(message) => match message.value.as_string() {
+                        Some(name) => local.invalidate(&name),
+                        None => local.forget_all(),
+                    },
+                    Err(RecvError::Lagged(_)) => local.forget_all(),
+                    Err(RecvError::Closed) => return,
                 },
                 event = reconnects.recv() => match event {
-                    Ok(_) | Err(RecvError::Lagged(_)) => Next::Resubscribe,
-                    Err(RecvError::Closed) => Next::Stop,
+                    Ok(_) | Err(RecvError::Lagged(_)) => break,
+                    Err(RecvError::Closed) => return,
                 },
-            };
-            match next {
-                Next::Resubscribe => break,
-                Next::Stop => return,
+                // Задача соединения завершилась: после повторного подключения подписка
+                // ставится заново, а L1 сбрасывается (внешний цикл).
+                outcome = &mut connection.0 => {
+                    connection_lost(outcome).await;
+                    connection = connect(&subscriber).await;
+                    break;
+                }
             }
         }
     }

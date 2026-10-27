@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use crane_domain::proxy::ProxyKey;
@@ -7,11 +9,11 @@ use fred::interfaces::{ClientLike, KeysInterface};
 use fred::types::SetOptions;
 use fred::types::{ClusterHash, CustomCommand};
 use futures_util::FutureExt;
-use futures_util::future::Shared;
+use futures_util::future::{BoxFuture, Shared};
 use uuid::Uuid;
 
 use super::{entry_key, expiration, lease_key};
-use crate::node::{CommandError, INVALIDATION_CHANNEL, Node, Releasing, Valkey};
+use crate::node::{CommandError, INVALIDATION_CHANNEL, Node, Valkey};
 
 /// Снимает lease, только если в нём ещё наш токен (фенсинг), и будит ждущих на всех репликах.
 /// Чужой или истёкший токен - no-op без `PUBLISH`. Один ключ: подходит и для Cluster.
@@ -27,16 +29,43 @@ fn backend(error: CommandError) -> LeaseError {
     LeaseError::Backend(Box::new(error))
 }
 
+/// Снятие lease, ещё не завершённое в этом процессе; общий результат для всех ждущих.
+pub(crate) type Releasing = Shared<BoxFuture<'static, Result<(), CommandError>>>;
+
+/// Незавершённые снятия этого процесса по имени записи: барьер для следующего `claim`.
+#[derive(Default)]
+pub(crate) struct Releases(Mutex<HashMap<String, Releasing>>);
+
+impl Releases {
+    // Замок берётся только в синхронных функциях: guard не живёт через await.
+    fn lock(&self) -> MutexGuard<'_, HashMap<String, Releasing>> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn pending(&self, name: &str) -> Option<Releasing> {
+        self.lock().get(name).cloned()
+    }
+
+    fn start(&self, name: String, release: Releasing) {
+        self.lock().insert(name, release);
+    }
+
+    /// Убирает запись, только если она всё ещё наша: за это время могло начаться новое снятие.
+    fn finish(&self, name: &str, release: &Releasing) {
+        let mut pending = self.lock();
+        if pending
+            .get(name)
+            .is_some_and(|stored| Shared::ptr_eq(stored, release))
+        {
+            pending.remove(name);
+        }
+    }
+}
+
 /// Ждёт собственное незавершённое снятие того же ключа. Без снятия не ждёт вовсе, поэтому
 /// регистрация и `SET` в `claim` не откладываются на лишний опрос.
 async fn await_own_release(node: &Node, name: &str) {
-    let pending = node
-        .releasing
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .get(name)
-        .cloned();
-    if let Some(pending) = pending {
+    if let Some(pending) = node.releases.pending(name) {
         // Ошибку снятия получает тот, кто его запросил.
         let _ = pending.await;
     }
@@ -106,26 +135,14 @@ impl FetchLeases for Valkey {
         )
         .boxed()
         .shared();
-        node.releasing
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(name.clone(), release.clone());
+        node.releases.start(name.clone(), release.clone());
         // Снятие идёт в фоне уже сейчас: брошенный (неопрошенный) future не отменяет его,
         // а следующий `claim` этого ключа ждёт его завершения.
-        let map = std::sync::Arc::clone(&node.releasing);
+        let releases = Arc::clone(&node.releases);
         let running = release.clone();
         tokio::spawn(async move {
             let _ = running.clone().await;
-            let mut map = map
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            // Запись могла уже смениться более новым снятием: чужую не трогаем.
-            if map
-                .get(&name)
-                .is_some_and(|stored| Shared::ptr_eq(stored, &running))
-            {
-                map.remove(&name);
-            }
+            releases.finish(&name, &running);
         });
         async move { release.await.map_err(backend) }
     }

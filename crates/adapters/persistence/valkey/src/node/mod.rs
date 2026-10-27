@@ -2,24 +2,25 @@ mod endpoint;
 mod inbox;
 mod waiters;
 
-use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crane_ports::proxy::Cached;
+use crane_ports::proxy::{Cached, CachedState};
 use fred::clients::{Client, SubscriberClient, WithOptions};
 use fred::interfaces::ClientLike;
 use fred::types::config::{ConnectionConfig, Options, ReconnectPolicy};
-use futures_util::future::{BoxFuture, Shared};
 use moka::sync::Cache;
 use tokio::task::JoinHandle;
 
 pub use endpoint::{Endpoint, EndpointError};
 pub(crate) use waiters::Waiters;
 
-use crate::proxy::weight;
+use crate::proxy::Releases;
+
+/// Условные накладные расходы записи сверх тела: ключ, счётчики, метки времени.
+const ENTRY_OVERHEAD_BYTES: u32 = 64;
 
 /// Канал инвалидации: payload — имя ключа записи кэша.
 pub(crate) const INVALIDATION_CHANNEL: &str = "inv";
@@ -39,9 +40,6 @@ const RECONNECT_MIN_MS: u32 = 100;
 const RECONNECT_MAX_MS: u32 = 5_000;
 const RECONNECT_BASE: u32 = 2;
 
-/// Снятие lease, ещё не завершённое в этом процессе; общий результат для всех ждущих.
-pub(crate) type Releasing = Shared<BoxFuture<'static, Result<(), CommandError>>>;
-
 /// Ошибка команды Valkey. Несёт только вид ошибки клиента: её текст может цитировать адрес.
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("команда Valkey не выполнена: {0}")]
@@ -60,6 +58,18 @@ impl<T> Drop for AbortOnDrop<T> {
     fn drop(&mut self) {
         self.0.abort();
     }
+}
+
+fn weight(entry: &Cached) -> u32 {
+    let payload = match &entry.state {
+        CachedState::Document { body, etag, .. } => body
+            .len()
+            .saturating_add(etag.as_ref().map_or(0, |etag| etag.as_str().len())),
+        CachedState::Blob(_) | CachedState::Missing { .. } => 0,
+    };
+    u32::try_from(payload).map_or(u32::MAX, |payload| {
+        ENTRY_OVERHEAD_BYTES.saturating_add(payload)
+    })
 }
 
 /// Состояние процесса, которое трогает диспетчер `inv`: L1, поколение и ждущие.
@@ -118,7 +128,7 @@ pub(crate) struct Node {
     /// Один клиент (одно соединение): порядок команд процесса сохраняется, на нём держатся
     /// гарантии `claim`/`release`. Быстрый отказ без соединения и потолок времени команды.
     pub(crate) commands: WithOptions<Client>,
-    pub(crate) releasing: Arc<Mutex<HashMap<String, Releasing>>>,
+    pub(crate) releases: Arc<Releases>,
     _tasks: [AbortOnDrop<()>; 2],
 }
 
@@ -170,22 +180,24 @@ impl Valkey {
         Self(Arc::new(Node {
             local,
             commands: commands.with_options(&options),
-            releasing: Arc::default(),
+            releases: Arc::default(),
             _tasks: tasks,
         }))
     }
 }
 
-/// Держит соединение командного клиента, пока жив узел.
+/// Держит соединение командного клиента, пока жив узел: когда задача соединения fred
+/// завершилась (политика сдалась, отказ аутентификации), подключает клиента заново.
 async fn hold_connection(client: Client) {
-    let _connection = inbox::connect(&client).await;
-    std::future::pending::<()>().await;
+    loop {
+        let mut connection = inbox::connect(&client).await;
+        inbox::connection_lost((&mut connection.0).await).await;
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crane_ports::proxy::CachedState;
     use std::time::SystemTime;
 
     const NAME: &str = "px:name";
