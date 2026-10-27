@@ -380,22 +380,4 @@ mod tests {
             "отсутствующий blob при записи каталога — 500, не AssetNotFound: {mapped:?}"
         );
     }
-
-    #[test]
-    fn unreachable_storage_errors_keep_their_kind() {
-        // Arrange
-        let catalog = CatalogError::Unreachable("нет связи".into());
-        let blob = BlobError::Unreachable("нет связи".into());
-
-        // Act
-        let mapped = [RegistryError::from(catalog), RegistryError::from(blob)];
-
-        // Assert
-        assert!(
-            mapped
-                .iter()
-                .all(|error| matches!(error, RegistryError::Unreachable(_))),
-            "недоступность хранилища — 503, а не 500: {mapped:?}"
-        );
-    }
 }

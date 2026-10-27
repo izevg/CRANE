@@ -12,7 +12,7 @@ use common::Seed;
 use common::faults::{DownCatalog, OpenFailsBlobs};
 use crane_app::registry::RegistryError;
 use crane_domain::registry::{Format, Sha256};
-use crane_ports::registry::BlobError;
+use crane_ports::registry::{BlobError, CatalogError};
 use futures_executor::block_on;
 
 #[test]
@@ -107,4 +107,22 @@ fn unknown_repository_is_not_found_and_known_one_is_returned() {
 
     // Assert
     assert_eq!(results, [Err(true), Ok(common::HOSTED.to_owned())]);
+}
+
+#[test]
+fn unreachable_storage_errors_keep_their_kind() {
+    // Arrange
+    let catalog = CatalogError::Unreachable("нет связи".into());
+    let blob = BlobError::Unreachable("нет связи".into());
+
+    // Act
+    let mapped = [RegistryError::from(catalog), RegistryError::from(blob)];
+
+    // Assert
+    assert!(
+        mapped
+            .iter()
+            .all(|error| matches!(error, RegistryError::Unreachable(_))),
+        "недоступность хранилища — 503, а не 500: {mapped:?}"
+    );
 }

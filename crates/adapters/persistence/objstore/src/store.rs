@@ -155,7 +155,8 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use object_store::aws::AmazonS3Builder;
+    use object_store::ClientConfigKey;
+    use object_store::aws::{AmazonS3Builder, AmazonS3ConfigKey};
     use object_store::{BackoffConfig, RetryConfig};
 
     use super::*;
@@ -201,6 +202,16 @@ mod tests {
             .with_region("us-east-1")
             .with_access_key_id("test")
             .with_secret_access_key("test")
+            // Тест не зависит от HTTP_PROXY окружения: loopback идёт напрямую, иначе прокси
+            // подменил бы обрыв соединения своим 503 и ветки Connect/Request остались бы непроверенными.
+            .with_config(
+                AmazonS3ConfigKey::Client(ClientConfigKey::ProxyUrl),
+                "http://127.0.0.1:9",
+            )
+            .with_config(
+                AmazonS3ConfigKey::Client(ClientConfigKey::ProxyExcludes),
+                "127.0.0.1",
+            )
             // Без повторов: тест проверяет классификацию, а не бюджет ретраев.
             .with_retry(RetryConfig {
                 max_retries: 0,
