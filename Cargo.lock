@@ -3,5 +3,97 @@
 version = 4
 
 [[package]]
+name = "crane-access"
+version = "0.0.0"
+
+[[package]]
+name = "crane-analyzer"
+version = "0.0.0"
+
+[[package]]
+name = "crane-app"
+version = "0.0.0"
+
+[[package]]
 name = "crane-domain"
+version = "0.0.0"
+
+[[package]]
+name = "crane-feeds"
+version = "0.0.0"
+
+[[package]]
+name = "crane-format-cargo"
+version = "0.0.0"
+
+[[package]]
+name = "crane-format-maven"
+version = "0.0.0"
+
+[[package]]
+name = "crane-format-npm"
+version = "0.0.0"
+
+[[package]]
+name = "crane-format-nuget"
+version = "0.0.0"
+
+[[package]]
+name = "crane-format-pypi"
+version = "0.0.0"
+
+[[package]]
+name = "crane-gitlab"
+version = "0.0.0"
+
+[[package]]
+name = "crane-http"
+version = "0.0.0"
+
+[[package]]
+name = "crane-keycloak"
+version = "0.0.0"
+
+[[package]]
+name = "crane-llm"
+version = "0.0.0"
+
+[[package]]
+name = "crane-objstore"
+version = "0.0.0"
+
+[[package]]
+name = "crane-pg"
+version = "0.0.0"
+
+[[package]]
+name = "crane-ports"
+version = "0.0.0"
+
+[[package]]
+name = "crane-server"
+version = "0.0.0"
+
+[[package]]
+name = "crane-siem"
+version = "0.0.0"
+
+[[package]]
+name = "crane-systemone"
+version = "0.0.0"
+
+[[package]]
+name = "crane-trivy"
+version = "0.0.0"
+
+[[package]]
+name = "crane-upstream"
+version = "0.0.0"
+
+[[package]]
+name = "crane-valkey"
+version = "0.0.0"
+
+[[package]]
+name = "crane-worker"
 version = "0.0.0"

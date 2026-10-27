@@ -1,0 +1,11 @@
+[package]
+name = "crane-ports"
+description = "Порты ядра: трейты, через которые use cases обращаются к внешнему миру."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
