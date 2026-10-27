@@ -105,7 +105,7 @@ fn exchange(id_token):
     return issue("crci_", scopes, ttl, provenance = {project, commit, pipeline, job})
 ```
 
-Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Эти claims пишутся и как evidence (`predicate_type = urn:crane:publish-claims:v1`, `kind = jwt`, `trust = crane`, `facts` = project, commit, pipeline, job), поэтому gate provenance и правило регрессии (10.6.1) читают один источник и для hosted. Это закрывает требование связи публикации с project, commit, pipeline и job.
+Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Эти claims пишутся и как evidence (`predicate_type = urn:crane:publish-claims:v1`, `kind = jwt`, `trust = crane`, `signer_issuer` = `iss` токена, `signer_san` = `project_path` без ref (ref законно меняется от версии к версии), `facts` = `repo` (тот же `project_path`), commit, pipeline, job), поэтому gate provenance и правило регрессии (10.6.1) читают один источник и для hosted. Это закрывает требование связи публикации с project, commit, pipeline и job.
 
 ## 10.6 Promotion и gates
 
