@@ -3,9 +3,9 @@ import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ComponentProps } from "react";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
+import { StepUpDialog } from "~/features/step-up";
 import { i18n } from "~/shared/lib/i18n";
 import { showToast } from "~/shared/lib/state";
-import { ConfirmDialog } from "~/shared/ui/dialogs";
 import { EmptyState, ProblemState } from "~/shared/ui/status";
 import type { Banner } from "~/widgets/app-shell";
 import { CommandPaletteView } from "~/widgets/command-palette";
@@ -414,7 +414,6 @@ export const NotificationsMobile = phone(notifications);
 
 // ── 8. Step-up ──────────────────────────────────────────────────────────────
 
-// Спека волны 2: §21 — features/step-up StepUpDialog (редирект в Keycloak, сохранение формы в sessionStorage).
 const stepUp: Story = {
   name: "8 Step-up: подтвердите вход",
   render: (args) => (
@@ -422,19 +421,12 @@ const stepUp: Story = {
       <Frame {...args}>
         <PackagesBackdrop />
       </Frame>
-      <ConfirmDialog
+      <StepUpDialog
         open
         onOpenChange={fn()}
-        title={i18n._(msg`Подтвердите вход`)}
-        description={i18n._(
-          msg`Действие «Раскрыть данные события» требует подтверждения вторым фактором`,
-        )}
-        confirm={{ label: i18n._(msg`Продолжить в Keycloak`), run: { onSelect: fn() } }}
-      >
-        <p className="text-caption text-muted-foreground">
-          {i18n._(msg`После подтверждения вы вернётесь к действию, данные формы сохранятся`)}
-        </p>
-      </ConfirmDialog>
+        actionLabel={i18n._(msg`Раскрыть данные события`)}
+        onContinue={fn()}
+      />
     </>
   ),
   play: async () => {

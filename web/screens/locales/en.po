@@ -297,9 +297,6 @@ msgstr "Deduplication saved 4.2 TB"
 msgid "Действие"
 msgstr "Action"
 
-msgid "Действие «Раскрыть данные события» требует подтверждения вторым фактором"
-msgstr "The \"Reveal event data\" action needs second-factor confirmation"
-
 msgid "Динамика скачиваний"
 msgstr "Download trend"
 
@@ -374,9 +371,6 @@ msgstr "Link verified, anchor 14:00"
 
 msgid "Иванов И."
 msgstr "Ivanov I."
-
-msgid "из"
-msgstr "of"
 
 msgid "из OIDC CI"
 msgstr "from OIDC CI"
@@ -731,9 +725,6 @@ msgstr "Retry"
 msgid "Повторить {0}"
 msgstr "Retry {0}"
 
-msgid "Подтвердите вход"
-msgstr "Confirm sign-in"
-
 msgid "Поиск"
 msgstr "Search"
 
@@ -771,9 +762,6 @@ msgstr "attempts {0} · Last error: {1}"
 
 msgid "порог 30 с"
 msgstr "threshold 30 s"
-
-msgid "После подтверждения вы вернётесь к действию, данные формы сохранятся"
-msgstr "After confirming, you return to the action and your form data is kept"
 
 msgid "Последнее использование"
 msgstr "Last used"
@@ -879,9 +867,6 @@ msgstr "Warm the cache from a lockfile"
 msgid "Продвижение в release заблокировано: 2 причины"
 msgstr "Promotion to release is blocked: 2 reasons"
 
-msgid "Продолжить в Keycloak"
-msgstr "Continue in Keycloak"
-
 msgid "Происхождение последней версии"
 msgstr "Provenance of the latest version"
 
@@ -932,6 +917,9 @@ msgstr "Reveal"
 
 msgid "Раскрыть данные"
 msgstr "Reveal data"
+
+msgid "Раскрыть данные события"
+msgstr "Reveal event data"
 
 msgid "Раскрыть данные события?"
 msgstr "Reveal event data?"
@@ -998,9 +986,6 @@ msgstr "Session · 12 h"
 
 msgid "Сессия"
 msgstr "Session"
-
-msgid "символов. Раскрытие будет записано в журнал"
-msgstr "characters. The reveal will be recorded in the log"
 
 msgid "Скан: найдена 1 уязвимость"
 msgstr "Scan: 1 vulnerability found"

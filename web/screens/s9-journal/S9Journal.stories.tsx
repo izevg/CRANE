@@ -1,13 +1,20 @@
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { type ChangeEvent, useCallback, useId, useState } from "react";
+import { useCallback, useState } from "react";
 import { expect, within } from "storybook/test";
+import { useStepUpDraft } from "~/features/step-up";
 import { i18n } from "~/shared/lib/i18n";
 import { type Action, CopyableId } from "~/shared/ui/actions";
 import { columnHelper, DataTable, JsonViewer, KeyValueList } from "~/shared/ui/data-display";
 import { ConfirmDialog } from "~/shared/ui/dialogs";
-import { FilterSelect, SegmentedControl } from "~/shared/ui/inputs";
+import {
+  FilterSelect,
+  JUSTIFICATION_MIN,
+  JustificationField,
+  justificationStatus,
+  SegmentedControl,
+} from "~/shared/ui/inputs";
 import { DetailPanel, PageHeader } from "~/shared/ui/layout";
 import { MetricTile } from "~/shared/ui/metrics";
 import {
@@ -15,15 +22,11 @@ import {
   Button,
   Callout,
   CalloutDescription,
-  Field,
-  FieldDescription,
-  FieldLabel,
   Input,
   Link,
   Tabs,
   TabsList,
   TabsTrigger,
-  Textarea,
 } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { AUDIT_EVENTS, type AuditEvent, EVENT_HASH, PREV_HASH } from "../data/audit";
@@ -54,7 +57,7 @@ function headerActions(): readonly [Action, Action] {
   ];
 }
 
-const MIN_JUSTIFICATION = 20;
+const MIN_JUSTIFICATION = JUSTIFICATION_MIN;
 const noop = () => undefined;
 
 const helper = columnHelper<AuditEvent>();
@@ -462,7 +465,9 @@ function EventPanel({
   );
 }
 
-// Спека волны 2: patterns §20 — будущий feature `RevealDialog` (форма обоснования + step-up §21).
+const isText = (value: unknown): value is string => typeof value === "string";
+
+/** Раскрытие данных (patterns §20): ConfirmDialog с обоснованием; введённое переживает редирект step-up. */
 function RevealDialog({
   open,
   onOpenChange,
@@ -471,11 +476,14 @@ function RevealDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useLingui();
-  const [text, setText] = useState("");
-  const counterId = useId();
+  const [draft, saveDraft, clearDraft] = useStepUpDraft("reveal-event", isText);
+  const [text, setText] = useState(draft ?? "");
   const change = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => setText(event.target.value),
-    [],
+    (next: string) => {
+      setText(next);
+      saveDraft(next);
+    },
+    [saveDraft],
   );
   return (
     <ConfirmDialog
@@ -486,9 +494,9 @@ function RevealDialog({
       consequences={[t`Раскрытие запишется в журнал`, t`Данные видны только в этой панели`]}
       confirm={{
         label: t`Раскрыть`,
-        run: { onSelect: noop },
+        run: { onSelect: clearDraft },
         stepUp: true,
-        ...(text.trim().length < MIN_JUSTIFICATION
+        ...(justificationStatus(text) === "short"
           ? { disabledReason: t`Обоснование: минимум ${MIN_JUSTIFICATION} символов` }
           : {}),
       }}
@@ -496,14 +504,7 @@ function RevealDialog({
       <Callout tone="info">
         <CalloutDescription>{t`Потребуется подтверждение входа (MFA)`}</CalloutDescription>
       </Callout>
-      <Field>
-        <FieldLabel>{t`Обоснование`}</FieldLabel>
-        <Textarea value={text} onChange={change} aria-describedby={counterId} />
-        <FieldDescription id={counterId}>
-          {text.trim().length} {t`из`} {MIN_JUSTIFICATION}{" "}
-          {t`символов. Раскрытие будет записано в журнал`}
-        </FieldDescription>
-      </Field>
+      <JustificationField label={t`Обоснование`} value={text} onChange={change} />
     </ConfirmDialog>
   );
 }
