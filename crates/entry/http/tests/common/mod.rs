@@ -12,7 +12,7 @@ pub(crate) mod proxy;
 use std::cell::RefCell;
 use std::io;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex, Once, PoisonError};
+use std::sync::{Arc, Once};
 use std::time::SystemTime;
 
 use axum::Router;
@@ -256,34 +256,20 @@ pub(crate) fn request(
     request
 }
 
-/// Буфер журнала одного перехвата.
-#[derive(Clone, Default)]
-struct SharedBuf(Arc<Mutex<Vec<u8>>>);
-
-impl SharedBuf {
-    fn text(&self) -> String {
-        let bytes = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        String::from_utf8(bytes.clone()).unwrap()
-    }
-}
-
 thread_local! {
-    /// Куда писать журнал событий, испущенных на этом потоке; `None` — вне перехвата.
-    static CAPTURE: RefCell<Option<SharedBuf>> = const { RefCell::new(None) };
+    /// Журнал текущего перехвата на этом потоке; `None` — вне перехвата.
+    static CAPTURE: RefCell<Option<Vec<u8>>> = const { RefCell::new(None) };
 }
 
-/// Писатель глобального subscriber'а: маршрутизирует строку в буфер перехвата текущего потока.
+/// Писатель глобального subscriber'а: дописывает строку в буфер перехвата текущего потока.
 #[derive(Clone, Copy)]
 struct RoutedWriter;
 
 impl io::Write for RoutedWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         CAPTURE.with(|slot| {
-            if let Some(sink) = slot.borrow().as_ref() {
-                sink.0
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .extend_from_slice(buf);
+            if let Some(sink) = slot.borrow_mut().as_mut() {
+                sink.extend_from_slice(buf);
             }
         });
         Ok(buf.len())
@@ -320,6 +306,10 @@ impl Drop for CaptureGuard {
 /// `Interest::never`, и событие пропадает у всех. С постоянным глобальным subscriber'ом
 /// интерес не зависит от потока, а изоляция тестов обеспечивается маршрутом по потоку:
 /// запрос исполняется на `current_thread` runtime в том же потоке, что и перехват.
+///
+/// Граница: события фоновых задач (например, spawn ревалидации), которые `run` не дождался,
+/// в этот перехват не попадают; они могут попасть в следующий перехват того же потока
+/// или потеряться.
 pub(crate) fn capture_logs<R>(run: impl FnOnce() -> R) -> (R, String) {
     static INSTALL: Once = Once::new();
     INSTALL.call_once(|| {
@@ -330,12 +320,14 @@ pub(crate) fn capture_logs<R>(run: impl FnOnce() -> R) -> (R, String) {
             .finish();
         tracing::subscriber::set_global_default(subscriber).unwrap();
     });
-    let buffer = SharedBuf::default();
-    CAPTURE.with(|slot| *slot.borrow_mut() = Some(buffer.clone()));
+    CAPTURE.with(|slot| *slot.borrow_mut() = Some(Vec::new()));
     let guard = CaptureGuard;
     let result = run();
+    let bytes = CAPTURE
+        .with(|slot| slot.borrow_mut().take())
+        .unwrap_or_default();
     drop(guard);
-    (result, buffer.text())
+    (result, String::from_utf8(bytes).unwrap())
 }
 
 /// Раскладка индекса для коротких тестовых имён длиной >= 4.
