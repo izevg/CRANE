@@ -1,12 +1,9 @@
-// biome-ignore-all lint/style/noMagicNumbers: граничные оценки и уверенности — произвольные числа из 0..1
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ScoreBar } from "~/shared/ui/metrics";
 
-const INDICATOR = "[data-tone]";
 const LABEL = "Релевантность эксплуатации";
-const LOW_NOTE = "низкая уверенность, не влияет на политику";
-const SHADOW_NOTE = "не влияет на решения";
+const INDICATOR = "[data-tone]";
 
 describe("ScoreBar", () => {
   it("это meter с именем, значением и текстом значения с уверенностью", () => {
@@ -15,7 +12,7 @@ describe("ScoreBar", () => {
     const confidence = 0.92;
 
     // Act
-    render(<ScoreBar label={LABEL} value={value} confidence={confidence} />);
+    render(<ScoreBar label={LABEL} value={value} confidence={confidence} tone="error" />);
 
     // Assert
     const meter = screen.getByRole("meter", { name: LABEL });
@@ -28,7 +25,7 @@ describe("ScoreBar", () => {
     const value = 0.5;
 
     // Act
-    render(<ScoreBar label={LABEL} value={value} />);
+    render(<ScoreBar label={LABEL} value={value} tone="warning" />);
 
     // Assert
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuetext", "0,50");
@@ -39,77 +36,90 @@ describe("ScoreBar", () => {
     const value = 1.7;
 
     // Act
-    render(<ScoreBar label={LABEL} value={value} />);
+    render(<ScoreBar label={LABEL} value={value} tone="error" />);
 
     // Assert
     expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "1");
   });
 
-  it("при уверенности 0,4 показывает подпись о низкой уверенности", () => {
+  it("тон info, пришедший снаружи, попадает в data-tone полосы", () => {
     // Arrange
-    const confidence = 0.4;
+    const value = 0.6;
 
     // Act
-    render(<ScoreBar label={LABEL} value={0.9} confidence={confidence} />);
+    const { container } = render(<ScoreBar label={LABEL} value={value} tone="info" />);
 
     // Assert
-    expect(screen.getByText(LOW_NOTE)).toBeInTheDocument();
+    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "info");
   });
 
-  it("на границе 0,5 уверенность ещё достаточна: подписи нет", () => {
+  it("тон warning, пришедший снаружи, попадает в data-tone полосы", () => {
     // Arrange
-    const confidence = 0.5;
+    const value = 0.6;
 
     // Act
-    render(<ScoreBar label={LABEL} value={0.9} confidence={confidence} />);
+    const { container } = render(<ScoreBar label={LABEL} value={value} tone="warning" />);
 
     // Assert
-    expect(screen.queryByText(LOW_NOTE)).toBeNull();
+    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "warning");
   });
 
-  it("при уверенности 0,49 подпись о низкой уверенности есть", () => {
+  it("тон error, пришедший снаружи, попадает в data-tone полосы", () => {
     // Arrange
-    const confidence = 0.49;
+    const value = 0.6;
 
     // Act
-    render(<ScoreBar label={LABEL} value={0.9} confidence={confidence} />);
+    const { container } = render(<ScoreBar label={LABEL} value={value} tone="error" />);
 
     // Assert
-    expect(screen.getByText(LOW_NOTE)).toBeInTheDocument();
+    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "error");
   });
 
-  it("при уверенности 0,6 подписи о низкой уверенности нет", () => {
+  it("тон neutral, пришедший снаружи, попадает в data-tone полосы", () => {
     // Arrange
-    const confidence = 0.6;
+    const value = 0.6;
 
     // Act
-    render(<ScoreBar label={LABEL} value={0.9} confidence={confidence} />);
+    const { container } = render(<ScoreBar label={LABEL} value={value} tone="neutral" />);
 
     // Assert
-    expect(screen.queryByText(LOW_NOTE)).toBeNull();
+    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "neutral");
   });
 
-  it("shadow-оценка помечена бейджем и подписью «не влияет на решения»", () => {
+  it("пояснения рендерятся текстом", () => {
     // Arrange
-    const shadow = true;
+    const notes = ["низкая уверенность, не влияет на политику", "не влияет на решения"];
 
     // Act
-    render(<ScoreBar label={LABEL} value={0.7} shadow={shadow} />);
+    render(<ScoreBar label={LABEL} value={0.9} tone="neutral" notes={notes} />);
 
     // Assert
-    expect(screen.getByText("shadow")).toBeInTheDocument();
-    expect(screen.getByText(SHADOW_NOTE)).toBeInTheDocument();
+    for (const note of notes) {
+      expect(screen.getByText(note)).toBeInTheDocument();
+    }
   });
 
-  it("обычная оценка не помечается как shadow", () => {
+  it("без пояснений и бейджа лишнего текста нет", () => {
     // Arrange
     const value = 0.7;
 
     // Act
-    render(<ScoreBar label={LABEL} value={value} />);
+    render(<ScoreBar label={LABEL} value={value} tone="warning" />);
 
     // Assert
-    expect(screen.queryByText(SHADOW_NOTE)).toBeNull();
+    expect(screen.queryByText("shadow")).toBeNull();
+    expect(screen.queryByText("не влияет на решения")).toBeNull();
+  });
+
+  it("бейдж выводится рядом с моделью", () => {
+    // Arrange
+    const badge = "shadow";
+
+    // Act
+    render(<ScoreBar label={LABEL} value={0.7} tone="neutral" badge={badge} secondary />);
+
+    // Assert
+    expect(screen.getByText(badge)).toBeInTheDocument();
   });
 
   it("показывает факторы, модель и уверенность", () => {
@@ -121,6 +131,7 @@ describe("ScoreBar", () => {
       <ScoreBar
         label={LABEL}
         value={0.8}
+        tone="error"
         confidence={0.92}
         factors={factors}
         model="systemone v3.1"
@@ -131,43 +142,5 @@ describe("ScoreBar", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(factors.length);
     expect(screen.getByText("модель systemone v3.1")).toBeInTheDocument();
     expect(screen.getByText("уверенность 0,92")).toBeInTheDocument();
-  });
-
-  it.each([
-    [0.49, "info"],
-    [0.5, "warning"],
-    [0.79, "warning"],
-    [0.8, "error"],
-  ])("оценка %s даёт тон полосы %s", (value, expected) => {
-    // Arrange
-    const confidence = 0.9;
-
-    // Act
-    const { container } = render(<ScoreBar label={LABEL} value={value} confidence={confidence} />);
-
-    // Assert
-    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", expected);
-  });
-
-  it("при низкой уверенности полоса приглушена независимо от оценки", () => {
-    // Arrange
-    const confidence = 0.4;
-
-    // Act
-    const { container } = render(<ScoreBar label={LABEL} value={0.9} confidence={confidence} />);
-
-    // Assert
-    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "neutral");
-  });
-
-  it("у shadow-оценки полоса приглушена", () => {
-    // Arrange
-    const shadow = true;
-
-    // Act
-    const { container } = render(<ScoreBar label={LABEL} value={0.9} shadow={shadow} />);
-
-    // Assert
-    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "neutral");
   });
 });

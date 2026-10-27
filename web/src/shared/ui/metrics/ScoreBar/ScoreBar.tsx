@@ -14,19 +14,15 @@ type ScoreBarProps = WithClassName<{
   factors?: readonly string[];
   /** Модель-источник: «systemone v3.1». */
   model?: string;
-  /** Теневая модель: оценка не влияет на решения. */
-  shadow?: boolean;
+  /** Тон полосы: решает вызывающий (пороги и смысл оценки — не забота компонента). */
+  tone: Tone;
+  /** Пояснения под полосой: «низкая уверенность, не влияет на политику». */
+  notes?: readonly string[];
+  /** Визуально вторичная оценка (например, теневая модель): значение приглушено. */
+  secondary?: boolean;
+  /** Бейдж рядом с моделью: «shadow». */
+  badge?: string;
 }>;
-
-/**
- * Пороги тона полосы (общие для кита): ниже LOW — info, ниже HIGH — warning, иначе error.
- * У оценок systemone высокое значение — больший риск, поэтому success не используется вообще:
- * зелёный сказал бы «безопасно» там, где модель этого не утверждает.
- */
-const LOW_THRESHOLD = 0.5;
-const HIGH_THRESHOLD = 0.8;
-/** Ниже этой уверенности оценка не участвует в политике (разд. 11.6). */
-const MIN_CONFIDENCE = LOW_THRESHOLD;
 
 const MIN = 0;
 const MAX = 1;
@@ -34,12 +30,7 @@ const FRACTION_DIGITS = 2;
 
 const CONFIDENCE_PREFIX = "уверенность ";
 const MODEL_PREFIX = "модель ";
-const SHADOW = "shadow";
-const SHADOW_NOTE = "не влияет на решения";
-const LOW_CONFIDENCE_NOTE = "низкая уверенность, не влияет на политику";
 const VALUE_TEXT_SEPARATOR = ", ";
-
-type BarTone = Extract<Tone, "info" | "warning" | "error" | "neutral">;
 
 function format(value: number): string {
   return formatNumber(value, {
@@ -52,17 +43,10 @@ function clamp(value: number): number {
   return Number.isFinite(value) ? Math.min(Math.max(value, MIN), MAX) : MIN;
 }
 
-function scoreTone(value: number): BarTone {
-  if (value < LOW_THRESHOLD) {
-    return "info";
-  }
-  return value < HIGH_THRESHOLD ? "warning" : "error";
-}
-
 /**
  * Оценка модели 0..1 на Base UI `Meter` (роль `meter`, `aria-valuetext` «0,88, уверенность 0,92»).
- * Полоса одного тона, без градиентов. Низкая уверенность и shadow-модель делают полосу приглушённой:
- * такая оценка не влияет на решения, и цвет не должен намекать на вердикт.
+ * Полоса одного тона, без градиентов. Компонент ничего не знает о доменных порогах: тон, пояснения
+ * и признак вторичности приходят готовыми.
  */
 export function ScoreBar({
   label,
@@ -70,12 +54,13 @@ export function ScoreBar({
   confidence,
   factors = [],
   model,
-  shadow = false,
+  tone,
+  notes = [],
+  secondary = false,
+  badge,
   className,
 }: ScoreBarProps) {
   const score = clamp(value);
-  const lowConfidence = confidence !== undefined && confidence < MIN_CONFIDENCE;
-  const tone: BarTone = lowConfidence || shadow ? "neutral" : scoreTone(score);
   const shown = format(score);
   const confidenceText = confidence === undefined ? null : format(clamp(confidence));
   const valueText =
@@ -86,7 +71,7 @@ export function ScoreBar({
   return (
     <div
       data-slot="score-bar"
-      data-shadow={shadow || undefined}
+      data-secondary={secondary || undefined}
       className={cx("flex flex-col gap-1.5", className)}
     >
       <Meter.Root
@@ -102,7 +87,7 @@ export function ScoreBar({
             aria-hidden="true"
             className={cx(
               "text-body font-semibold tabular-nums",
-              shadow ? "text-muted-foreground" : "text-foreground",
+              secondary ? "text-muted-foreground" : "text-foreground",
             )}
           >
             {shown}
@@ -137,13 +122,10 @@ export function ScoreBar({
             {model}
           </span>
         )}
-        {shadow ? (
-          <>
-            <Badge variant="outline">{SHADOW}</Badge>
-            <span>{SHADOW_NOTE}</span>
-          </>
-        ) : null}
-        {lowConfidence ? <span>{LOW_CONFIDENCE_NOTE}</span> : null}
+        {badge === undefined ? null : <Badge variant="outline">{badge}</Badge>}
+        {notes.map((note) => (
+          <span key={note}>{note}</span>
+        ))}
       </div>
     </div>
   );
