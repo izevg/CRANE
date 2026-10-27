@@ -1,0 +1,5 @@
+# Локальная обвязка Claude Code: .claude/ вне git, Orca копирует её из основного каталога.
+.claude/settings.json
+.claude/helpers
+.claude/skills
+.claude/CLAUDE.md

@@ -27,8 +27,8 @@ Until all features are fully released (the P0–P3 scope of [ROADMAP.md](ROADMAP
 
 All work is done in separate git worktrees, not in the main working directory:
 
-- One feature branch, one worktree. The main directory stays on `main`: nobody commits or switches branches in it.
-- The location and the way of creating a worktree are defined by the settings of your IDE or agent environment; paths are not hardcoded in the repository (Claude Code uses `.claude/worktrees/`, others use their own directories; worktree roots are in `.gitignore`).
+- One feature branch, one worktree. The main directory is read-only: nobody commits in it. It stays on `main`; while a milestone is in progress it tracks the current `release/vX.Y.Z` branch (updated with `git pull --ff-only` after each merge) and returns to `main` after the release, because Orca reads `.worktreeinclude`, `worktree.sharedDirectories` and their sources from the main directory.
+- Worktrees are created with Orca (`orca worktree create`): `orca.yaml` builds the code graphs and links `node_modules` from the main directory, `.worktreeinclude` copies the local `.claude/` setup. Other environments use their own directories; worktree roots are in `.gitignore`.
 - After creating a worktree, run `task install` (every worktree has its own `node_modules` and lefthook hooks).
 - Do not use the shared `git stash` (the stack is shared by all worktrees); set work aside with a WIP commit.
 - **Automatic cleanup.** Before starting any task, and again whenever a PR you opened has been merged, remove the worktrees whose branch was merged through a PR into `main` or a `release/*` branch:
