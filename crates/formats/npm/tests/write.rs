@@ -419,6 +419,8 @@ fn classify_deprecate_emits_only_real_changes_to_known_versions() {
     let cases = [
         // Поля нет: без изменений (в том числе для версии, отсутствующей в теле).
         deprecate_body(&json!({"1.0.0": {"name": "left-pad"}})),
+        // Поля нет у уже устаревшей версии: устаревание не снимается.
+        deprecate_body(&json!({"1.1.0": {"name": "left-pad"}})),
         // Пустая строка у неустаревшей: без изменений; у устаревшей: снятие.
         deprecate_body(&json!({"1.0.0": {"deprecated": ""}})),
         deprecate_body(&json!({"1.1.0": {"deprecated": ""}})),
@@ -437,6 +439,7 @@ fn classify_deprecate_emits_only_real_changes_to_known_versions() {
     assert_eq!(
         actual,
         [
+            Ok(Write::Deprecate(vec![])),
             Ok(Write::Deprecate(vec![])),
             Ok(Write::Deprecate(vec![])),
             Ok(Write::Deprecate(vec![(version("1.1.0"), None)])),
