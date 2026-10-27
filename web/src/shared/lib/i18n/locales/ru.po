@@ -13,6 +13,9 @@ msgstr " (откроется в новой вкладке)"
 msgid ", требуется подтверждение входа"
 msgstr ", требуется подтверждение входа"
 
+msgid "{count, plural, one {{priority} · # находка} few {{priority} · # находки} many {{priority} · # находок} other {{priority} · # находки}}"
+msgstr "{count, plural, one {{priority} · # находка} few {{priority} · # находки} many {{priority} · # находок} other {{priority} · # находки}}"
+
 msgid "{count, plural, one {# непрочитанное} few {# непрочитанных} many {# непрочитанных} other {# непрочитанных}}"
 msgstr "{count, plural, one {# непрочитанное} few {# непрочитанных} many {# непрочитанных} other {# непрочитанных}}"
 
@@ -21,6 +24,12 @@ msgstr "{count, plural, one {Выбрана # строка} few {Выбрано 
 
 msgid "{count} из {minLength}"
 msgstr "{count} из {minLength}"
+
+msgid "{distance, plural, one {Похоже на {similarTo} — # символ (возможный typosquat).} few {Похоже на {similarTo} — # символа (возможный typosquat).} many {Похоже на {similarTo} — # символов (возможный typosquat).} other {Похоже на {similarTo} — # символа (возможный typosquat).}}"
+msgstr "{distance, plural, one {Похоже на {similarTo} — # символ (возможный typosquat).} few {Похоже на {similarTo} — # символа (возможный typosquat).} many {Похоже на {similarTo} — # символов (возможный typosquat).} other {Похоже на {similarTo} — # символа (возможный typosquat).}}"
+
+msgid "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
+msgstr "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
 
 msgid "{label}: {shown}"
 msgstr "{label}: {shown}"
@@ -46,11 +55,32 @@ msgstr "{total, plural, one {Результатов: #} few {Результат�
 msgid "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
 msgstr "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
 
+msgid "Cargo"
+msgstr "Cargo"
+
 msgid "CRANE, Реестр артефактов: на главную"
 msgstr "CRANE, Реестр артефактов: на главную"
 
 msgid "EOL"
 msgstr "EOL"
+
+msgid "hosted"
+msgstr "hosted"
+
+msgid "Maven"
+msgstr "Maven"
+
+msgid "npm"
+msgstr "npm"
+
+msgid "NuGet"
+msgstr "NuGet"
+
+msgid "proxy"
+msgstr "proxy"
+
+msgid "PyPI"
+msgstr "PyPI"
 
 msgid "Активен"
 msgstr "Активен"
@@ -81,6 +111,9 @@ msgstr "Выполняется…"
 
 msgid "Выпущена"
 msgstr "Выпущена"
+
+msgid "Высокий"
+msgstr "Высокий"
 
 msgid "Главное меню"
 msgstr "Главное меню"
@@ -181,6 +214,9 @@ msgstr "Копировать токен"
 msgid "корень"
 msgstr "корень"
 
+msgid "Критично"
+msgstr "Критично"
+
 msgid "Личное и справка"
 msgstr "Личное и справка"
 
@@ -222,6 +258,9 @@ msgstr "Нет данных"
 
 msgid "Нет соединения"
 msgstr "Нет соединения"
+
+msgid "Низкий"
+msgstr "Низкий"
 
 msgid "Ничего не найдено"
 msgstr "Ничего не найдено"
@@ -295,6 +334,9 @@ msgstr "Поле"
 msgid "После подтверждения вы вернётесь к действию, данные формы сохранятся"
 msgstr "После подтверждения вы вернётесь к действию, данные формы сохранятся"
 
+msgid "Последняя"
+msgstr "Последняя"
+
 msgid "Правило: {ruleId}"
 msgstr "Правило: {ruleId}"
 
@@ -367,6 +409,9 @@ msgstr "Сохраните сейчас — больше мы его не пок
 msgid "Справка"
 msgstr "Справка"
 
+msgid "Средний"
+msgstr "Средний"
+
 msgid "Стало"
 msgstr "Стало"
 
@@ -381,6 +426,9 @@ msgstr "Тёмная"
 
 msgid "Токен не показывается: используйте cctl или переменную окружения."
 msgstr "Токен не показывается: используйте cctl или переменную окружения."
+
+msgid "Точное совпадение"
+msgstr "Точное совпадение"
 
 msgid "Уведомления"
 msgstr "Уведомления"
@@ -402,6 +450,9 @@ msgstr "Устарел"
 
 msgid "Файл {path}"
 msgstr "Файл {path}"
+
+msgid "Чрезвычайный"
+msgstr "Чрезвычайный"
 
 msgid "Шаг 1. Однократная настройка"
 msgstr "Шаг 1. Однократная настройка"

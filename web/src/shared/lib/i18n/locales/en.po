@@ -13,6 +13,9 @@ msgstr " (opens in a new tab)"
 msgid ", требуется подтверждение входа"
 msgstr ", sign-in confirmation required"
 
+msgid "{count, plural, one {{priority} · # находка} few {{priority} · # находки} many {{priority} · # находок} other {{priority} · # находки}}"
+msgstr "{count, plural, one {{priority} · # finding} other {{priority} · # findings}}"
+
 msgid "{count, plural, one {# непрочитанное} few {# непрочитанных} many {# непрочитанных} other {# непрочитанных}}"
 msgstr "{count, plural, one {# unread} other {# unread}}"
 
@@ -21,6 +24,12 @@ msgstr "{count, plural, one {# row selected} other {# rows selected}}"
 
 msgid "{count} из {minLength}"
 msgstr "{count} of {minLength}"
+
+msgid "{distance, plural, one {Похоже на {similarTo} — # символ (возможный typosquat).} few {Похоже на {similarTo} — # символа (возможный typosquat).} many {Похоже на {similarTo} — # символов (возможный typosquat).} other {Похоже на {similarTo} — # символа (возможный typosquat).}}"
+msgstr "{distance, plural, one {Similar to {similarTo}: # character off (possible typosquat).} other {Similar to {similarTo}: # characters off (possible typosquat).}}"
+
+msgid "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
+msgstr "{downloads, plural, one {# download in 30 d} other {# downloads in 30 d}}"
 
 msgid "{label}: {shown}"
 msgstr "{label}: {shown}"
@@ -46,11 +55,32 @@ msgstr "{total, plural, other {Results: #}}"
 msgid "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
 msgstr "{unread, plural, one {Notifications, # unread} other {Notifications, # unread}}"
 
+msgid "Cargo"
+msgstr "Cargo"
+
 msgid "CRANE, Реестр артефактов: на главную"
 msgstr "CRANE, Artifact registry: go to home"
 
 msgid "EOL"
 msgstr "EOL"
+
+msgid "hosted"
+msgstr "hosted"
+
+msgid "Maven"
+msgstr "Maven"
+
+msgid "npm"
+msgstr "npm"
+
+msgid "NuGet"
+msgstr "NuGet"
+
+msgid "proxy"
+msgstr "proxy"
+
+msgid "PyPI"
+msgstr "PyPI"
 
 msgid "Активен"
 msgstr "Active"
@@ -81,6 +111,9 @@ msgstr "In progress…"
 
 msgid "Выпущена"
 msgstr "Released"
+
+msgid "Высокий"
+msgstr "High"
 
 msgid "Главное меню"
 msgstr "Main menu"
@@ -181,6 +214,9 @@ msgstr "Copy token"
 msgid "корень"
 msgstr "root"
 
+msgid "Критично"
+msgstr "Critical"
+
 msgid "Личное и справка"
 msgstr "Personal and help"
 
@@ -222,6 +258,9 @@ msgstr "No data"
 
 msgid "Нет соединения"
 msgstr "No connection"
+
+msgid "Низкий"
+msgstr "Low"
 
 msgid "Ничего не найдено"
 msgstr "Nothing found"
@@ -295,6 +334,9 @@ msgstr "Field"
 msgid "После подтверждения вы вернётесь к действию, данные формы сохранятся"
 msgstr "After confirming, you return to the action and your form data is kept"
 
+msgid "Последняя"
+msgstr "Latest"
+
 msgid "Правило: {ruleId}"
 msgstr "Rule: {ruleId}"
 
@@ -367,6 +409,9 @@ msgstr "Save it now — we won't show it again"
 msgid "Справка"
 msgstr "Help"
 
+msgid "Средний"
+msgstr "Medium"
+
 msgid "Стало"
 msgstr "After"
 
@@ -381,6 +426,9 @@ msgstr "Dark"
 
 msgid "Токен не показывается: используйте cctl или переменную окружения."
 msgstr "The token is not shown: use cctl or an environment variable."
+
+msgid "Точное совпадение"
+msgstr "Exact match"
 
 msgid "Уведомления"
 msgstr "Notifications"
@@ -402,6 +450,9 @@ msgstr "Deprecated"
 
 msgid "Файл {path}"
 msgstr "File {path}"
+
+msgid "Чрезвычайный"
+msgstr "Extreme"
 
 msgid "Шаг 1. Однократная настройка"
 msgstr "Step 1. One-time setup"
