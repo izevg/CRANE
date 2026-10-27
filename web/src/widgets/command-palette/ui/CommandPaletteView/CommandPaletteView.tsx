@@ -174,7 +174,7 @@ export function CommandPaletteView({
           <Autocomplete.Input
             aria-label={INPUT_LABEL}
             placeholder={PLACEHOLDER}
-            className="h-12 w-full border-b border-border bg-transparent px-4 text-body text-foreground outline-hidden placeholder:text-hint"
+            className="h-12 w-full border-b border-border bg-transparent px-4 text-body text-foreground placeholder:text-hint focus-visible:-outline-offset-2"
           />
           <Autocomplete.Status className="sr-only">{statusText}</Autocomplete.Status>
           <Groups onPick={handlePick} />
