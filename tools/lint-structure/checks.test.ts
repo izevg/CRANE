@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test as it } from "node:test";
 import { type CargoMetadata, checkRustLayers, checkStructure, type Rules } from "./checks.ts";
+
+const MAX_DIRS = 8;
 
 const rules: Rules = {
   scope: ["src"],
-  limits: { files: 4, dirs: 8 },
+  limits: { files: 4, dirs: MAX_DIRS },
   ignoredDirs: ["node_modules"],
   unlimitedDirs: ["tests"],
   serviceFiles: ["Cargo.toml"],
@@ -19,8 +21,9 @@ const rules: Rules = {
 const tree = (spec: Record<string, 0 | 1>): string => {
   const root = mkdtempSync(join(tmpdir(), "ls-"));
   for (const [path, isDir] of Object.entries(spec)) {
-    if (isDir) mkdirSync(join(root, path), { recursive: true });
-    else {
+    if (isDir) {
+      mkdirSync(join(root, path), { recursive: true });
+    } else {
       mkdirSync(join(root, path, ".."), { recursive: true });
       writeFileSync(join(root, path), "");
     }
@@ -28,27 +31,27 @@ const tree = (spec: Record<string, 0 | 1>): string => {
   return root;
 };
 
-test("4 файла в папке допустимы, 5 — нарушение", () => {
+it("4 файла в папке допустимы, 5 — нарушение", () => {
   const ok = tree({ "src/a.ts": 0, "src/b.ts": 0, "src/c.ts": 0, "src/d.ts": 0 });
   assert.deepEqual(checkStructure(ok, rules), []);
   const bad = tree({ "src/a.ts": 0, "src/b.ts": 0, "src/c.ts": 0, "src/d.ts": 0, "src/e.ts": 0 });
   assert.equal(checkStructure(bad, rules).length, 1);
 });
 
-test("8 подпапок допустимы, 9 — нарушение", () => {
+it("8 подпапок допустимы, 9 — нарушение", () => {
   const dirs = (n: number): Record<string, 0 | 1> =>
     Object.fromEntries(Array.from({ length: n }, (_, i) => [`src/d${i}`, 1]));
-  assert.deepEqual(checkStructure(tree(dirs(8)), rules), []);
-  assert.equal(checkStructure(tree(dirs(9)), rules).length, 1);
+  assert.deepEqual(checkStructure(tree(dirs(MAX_DIRS)), rules), []);
+  assert.equal(checkStructure(tree(dirs(MAX_DIRS + 1)), rules).length, 1);
 });
 
-test("смешанное наполнение запрещено, файл-вход и тесты — нет", () => {
+it("смешанное наполнение запрещено, файл-вход и тесты — нет", () => {
   assert.equal(checkStructure(tree({ "src/a.ts": 0, "src/d": 1 }), rules).length, 1);
   assert.deepEqual(checkStructure(tree({ "src/index.ts": 0, "src/d": 1 }), rules), []);
   assert.deepEqual(checkStructure(tree({ "src/a.test.ts": 0, "src/d": 1 }), rules), []);
 });
 
-test("служебные файлы и tests/ не считаются", () => {
+it("служебные файлы и tests/ не считаются", () => {
   const files = Object.fromEntries(["a", "b", "c", "d"].map((n) => [`src/${n}.ts`, 0]));
   const root = tree({ ...files, "src/Cargo.toml": 0, "src/tests/x.ts": 0 });
   assert.deepEqual(checkStructure(root, rules), []);
@@ -62,7 +65,7 @@ const meta = (root: string, pkgs: [string, string, string[]][]): CargoMetadata =
   })),
 });
 
-test("domain не зависит от ports, adapters зависит от ports", () => {
+it("domain не зависит от ports, adapters зависит от ports", () => {
   const root = "/r";
   const bad = meta(root, [
     ["d", "core/domain", ["p"]],

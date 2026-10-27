@@ -1,6 +1,11 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.6.3/schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true, "root": "." },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true,
+    "root": "."
+  },
   "files": {
     "includes": [
       "**",
@@ -14,20 +19,86 @@
       "!**/*.yml"
     ]
   },
-  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
   "linter": {
+    "domains": {
+      "react": "all",
+      "test": "all",
+      "project": "all",
+      "types": "all"
+    },
     "rules": {
       "preset": "recommended",
-      "style": { "noNonNullAssertion": "error", "useImportType": "error" },
-      "suspicious": { "noExplicitAny": "error", "noConsole": "error" },
-      "correctness": { "noUnusedImports": "error", "noUnusedVariables": "error" },
+      "style": {
+        "noNonNullAssertion": "error",
+        "useImportType": "error",
+        "useBlockStatements": "error",
+        "noParameterAssign": "error",
+        "noUselessElse": "error",
+        "useConst": "error",
+        "useImportsFirst": "error",
+        "useThrowOnlyError": "error",
+        "useConsistentTestIt": "error",
+        "useDomQuerySelector": "error",
+        "useUnifiedTypeSignatures": "error",
+        "noInferrableTypes": "error",
+        "noMagicNumbers": "error",
+        "noJsxLiterals": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": "error",
+        "noEvolvingTypes": "error",
+        "noSkippedTests": "error",
+        "noFocusedTests": "error"
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "noUnusedFunctionParameters": "error",
+        "noUnusedPrivateClassMembers": "error",
+        "noUndeclaredDependencies": "error",
+        "noUnresolvedImports": "off"
+      },
+      "performance": {
+        "useTopLevelRegex": "error",
+        "noAwaitInLoops": "error",
+        "noAccumulatingSpread": "error"
+      },
       "complexity": {
         "noExcessiveCognitiveComplexity": {
           "level": "error",
-          "options": { "maxAllowedComplexity": 15 }
-        }
+          "options": {
+            "maxAllowedComplexity": 15
+          }
+        },
+        "noForEach": "error",
+        "useSimplifiedLogicExpression": "error",
+        "noExcessiveNestedTestSuites": "error"
       }
     }
   },
-  "assist": { "actions": { "source": { "organizeImports": "on" } } }
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["web/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useImportExtensions": "off"
+          }
+        }
+      }
+    }
+  ]
 }

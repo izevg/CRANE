@@ -1,3 +1,5 @@
+const TITLE = "CRANE";
+
 export function App() {
-  return <h1>CRANE</h1>;
+  return <h1>{TITLE}</h1>;
 }

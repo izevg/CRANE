@@ -46,7 +46,7 @@ The single entry point is the [Taskfile](Taskfile.yml) (`task --list`).
 | Dependencies and hooks | `task install` (Node ≥ 24, see `.nvmrc`) |
 | All fast checks | `task check` |
 | Rust: fmt, clippy, test, deny | `task rust:check` |
-| Web: types, ESLint + SonarJS, Biome, Steiger, knip, depcruise | `task web:check` · unit tests: `task web:test` |
+| Web: types, Biome, Steiger, knip, depcruise | `task web:check` · unit tests: `task web:test` |
 | File structure and crate layers | `task structure` |
 | Full gate before a PR to `release/*` | `task gate` (unit tests + cargo-mutants and Stryker mutations + Playwright) |
 | Prune worktrees of merged branches | `task worktrees:prune` (dry-run) · `task worktrees:prune -- --apply` |
@@ -74,7 +74,7 @@ Not counted: manifests and configs (`Cargo.toml`, `package.json`, `tsconfig*.jso
 - **Rust:** "boring Rust" (section 3): no procedural macros and no type-level magic. Lints live in `[workspace.lints]` in `Cargo.toml` (`unsafe_code = forbid`; `unwrap`, `panic`, `todo`, `dbg!`, `println!` are forbidden); `rustfmt.toml`, `clippy.toml`. Errors: `thiserror` in `domain` and `app`, `problem+json` at the HTTP boundary.
 - **TypeScript wherever possible:** scripts, configs and tools are written in `.ts` (Node 24 runs them directly, erasable syntax only: no `enum` and no `namespace`). `.mjs` files are forbidden in the repository; `.js`/`.cjs` only where a tool does not support TS.
 - **TypeScript:** strict, Biome (format and lint), no `any`, no `console`, no `!`. The `~/` alias points to `src/`.
-- **No warnings.** Every lint rule is an error: ESLint runs with `--max-warnings 0` and the config raises every level to `error` (see `web/eslint.config.ts`), Biome with `--error-on-warnings`. SonarJS (`task web:lint`) is mandatory in the pre-commit hook for staged `web/` files.
+- **No warnings, strict lint.** Biome runs with `--error-on-warnings`, all active rules are errors (`biome.json`): `noMagicNumbers`, `noJsxLiterals`, `useBlockStatements`, `useTopLevelRegex`, type-aware domains (`types`, `project`, `react`, `test`) and cognitive complexity ≤ 15. There is no second linter (ESLint/SonarJS were deliberately rejected). Biome has no magic-strings rule, so name repeated string literals yourself. `knip` fails on unused files, exports, dependencies and stale config hints; `dependency-cruiser` also fails on unresolved imports and imports missing from `package.json`. Do not weaken a rule to make code pass: fix the code, or discuss the rule change in its own PR.
 - Dependencies: permissive licenses only (`cargo deny`); a new dependency is justified in the PR. In `web`, `knip` catches unused code and dependencies.
 - Comments explain "why", not "what". The language of comments and documentation is Russian.
 
