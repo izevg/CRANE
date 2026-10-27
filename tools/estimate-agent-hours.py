@@ -6,6 +6,7 @@
 Запуск: python3 tools/estimate-agent-hours.py [--start ГГГГ-ММ-ДД] [--holidays ГГГГ-ММ-ДД ...] [--gantt]
 С --start печатает календарь релизов по трём сценариям (рабочие дни пн–пт, нерабочие даты задаются --holidays).
 С --gantt дополнительно печатает диаграмму Ганта (Mermaid) для базового сценария.
+Работы «после v1» считаются в итоге, но в календарь и диаграмму не попадают.
 """
 
 import argparse
@@ -25,6 +26,10 @@ REF = {
 REF_AGENT_H = sum(REF["agent_wall_h"]) / 2 * REF["parallel"]            # ≈ 165 агент-ч
 RATE = REF_AGENT_H / REF["product_kloc"]                               # агент-ч на KLOC кода продукта, полный цикл
 OPERATOR_RATIO = REF["operator_h"] / REF_AGENT_H                       # ≈ 0.12
+
+# Нагрузка и пентест требуют опубликованного проекта и реальной нагрузки (решение владельца 27.10.2026):
+# часы входят в итог, но в календарь и релизы не ставятся.
+POST_V1 = "после v1"
 
 # ---------- CRANE: модули ----------
 # (модуль, этап, KLOC кода продукта, язык, сложность относительно эталона)
@@ -77,15 +82,17 @@ LANG = {"rust": {"low": 1.3, "base": 1.6, "high": 2.0}, "ts": {"low": 1.0, "base
 EXTRA = [
     ("Матрица реальных клиентов: npm, pnpm, yarn, pip, uv, poetry, Maven, Gradle, dotnet, nuget, cargo", "P0", 44),
     ("Интеграция с реальными Keycloak, GitLab, Trivy, S3 на стенде", "P1", 30),
-    ("Нагрузочный стенд и оптимизация горячего пути", "P0", 25),
+    ("Нагрузочный стенд профиля L и оптимизация горячего пути", POST_V1, 25),
+    # регрессия, а не ёмкость: ёмкость требует целевого железа и реальных VU, поэтому идёт после v1
+    ("Локальная проверка регрессии производительности: criterion, oha-смоук", "P0", 8),
     ("Безопасность релизов CRANE: SLSA provenance, cosign, SBOM, CSAF/VEX", "P0", 12),
-    ("Исправление замечаний security review", "P2", 30),
+    ("Исправление замечаний пентеста", POST_V1, 30),
     ("Подключение SIEM и SOAR на стенде", "P2", 15),
 ]
 # этапы календаря, которые не ускоряются агентами (рабочие дни)
 CALENDAR = [
-    ("Нагрузочный PoC на целевом железе", "P0", 3),
-    ("Security review и пентест", "P2", 7),
+    ("Нагрузочный PoC на целевом железе", POST_V1, 3),
+    ("Пентест (Strix) на реальном корпоративном реестре", POST_V1, 7),
     ("Release candidate: стабилизация и обратная связь", "P1", 5),  # допущение, уточняется по ходу
 ]
 SCENARIO_COMPLEXITY = {"low": 0.9, "base": 1.0, "high": 1.25}
@@ -114,8 +121,8 @@ RELEASES = [
      [("Протоколы:", 0.6)]),
     ("v0.4.0", "P0", "Доступ, наблюдаемость, базовый UI, CLI",
      [("Доступ:", 1), ("Наблюдаемость:", 1), ("SPA: каркас", 1), ("CLI: login", 1), ("Аудит скачиваний", 1)]),
-    ("v0.5.0", "P0", "Полное ядро: матрица клиентов, нагрузка, поставка",
-     [("Матрица реальных клиентов", 1), ("Нагрузочный стенд", 1),
+    ("v0.5.0", "P0", "Полное ядро: матрица клиентов, поставка",
+     [("Матрица реальных клиентов", 1), ("Локальная проверка регрессии", 1),
       ("Ядро:", 0.65), ("CAS", 0.97), ("Протоколы:", 0.17), ("Профиль hardened", 1), ("Безопасность релизов", 1)]),
     ("v0.6.0", "P1", "Удобство: GitLab, диагностика, классы хранения, импорт из других реестров",
      [("GitLab", 1), ("Evidence: таблица", 1), ("Диагностика", 1), ("Импорт", 1), ("Классы", 1), ("CLI: diag", 1),
@@ -123,7 +130,7 @@ RELEASES = [
     ("v1.1.0", "P2", "Безопасность цепочки поставки",
      [("Evidence, SBOM", 1), ("Attestations", 1), ("Лицензии", 1), ("Promotion", 1), ("Уязвимости", 1), ("Скоринг", 1),
       ("События безопасности", 1), ("Журнал действий", 1), ("SPA: рабочие столы AppSec", 1),
-      ("Исправление замечаний", 1), ("Подключение SIEM", 1), ("Выгрузка пакета", 1), ("Матрица ответственности", 1)]),
+      ("Подключение SIEM", 1), ("Выгрузка пакета", 1), ("Матрица ответственности", 1)]),
     ("v1.2.0", "P3", "Развитие: граф, поиск и LLM, A2A",
      [("Граф", 1), ("Поиск", 1), ("A2A", 1), ("SPA: AI", 1)]),
 ]
@@ -149,12 +156,15 @@ def main():
     print(f"CRANE: Rust {rust:g} KLOC, TypeScript {ts} KLOC")
     for scn in ("low", "base", "high"):
         st = estimate(scn); total = sum(st.values())
-        cal = {s: d for _, s, d in CALENDAR}
-        print(f"\n[{scn}] всего {total:.0f} агент-ч, оператор {total * OPERATOR_RATIO * OPERATOR_FACTOR:.0f} ч")
-        for s in ("P0", "P1", "P2", "P3"):
+        print(f"\n[{scn}] всего {total:.0f} агент-ч (из них {POST_V1}: {st[POST_V1]:.0f}), "
+              f"оператор {total * OPERATOR_RATIO * OPERATOR_FACTOR:.0f} ч")
+        for s in ("P0", "P1", "P2", "P3", POST_V1):
             dev_days = st[s] / (PARALLEL * AGENT_H_PER_DAY)
+            tail = ""
+            if s == POST_V1:
+                tail = f", календарь {sum(d for _, cs, d in CALENDAR if cs == s)} раб. дн., вне графика"
             print(f"  {s}: {st[s]:5.0f} агент-ч, разработка {dev_days:4.1f} раб. дн., "
-                  f"оператор {st[s] * OPERATOR_RATIO * OPERATOR_FACTOR:4.0f} ч")
+                  f"оператор {st[s] * OPERATOR_RATIO * OPERATOR_FACTOR:4.0f} ч{tail}")
     st = estimate("base")
     print("\nМодули (base):")
     for name, stage, kloc, lang, k in MODULES:
@@ -173,6 +183,7 @@ def work_hours(scn):
 
 def release_hours(scn):
     hours = work_hours(scn)
+    post_v1 = {n for n, stage, *_ in MODULES + EXTRA if stage == POST_V1}
     used = {name: 0.0 for name in hours}
     result = []
     for version, stage, title, parts in RELEASES:
@@ -183,8 +194,10 @@ def release_hours(scn):
             total += hours[matches[0]] * share
             used[matches[0]] += share
         result.append((version, stage, title, total))
-    unassigned = [n for n, u in used.items() if abs(u - 1) > 1e-9]
+    unassigned = [n for n, u in used.items() if n not in post_v1 and abs(u - 1) > 1e-9]
     assert not unassigned, f"модули не распределены по релизам ровно один раз: {unassigned}"
+    in_release = [n for n in post_v1 if used[n]]
+    assert not in_release, f"работы «{POST_V1}» не должны входить в релизы: {in_release}"
     return result
 
 
@@ -222,18 +235,17 @@ def schedule(scn, start):
             continue
         title, h, b, t = dev(v, t)
         row(v, title, h, b, t)
-    title, h, b, e = dev("v0.5.0", t)
-    t = max(e, b + cal["Нагрузочный PoC на целевом железе"])
-    row("v0.5.0", title, h, b, t, "нагрузочный PoC на железе идёт параллельно")
+    title, h, b, t = dev("v0.5.0", t)
+    row("v0.5.0", title, h, b, t)
     title, h, b, p1 = dev("v0.6.0", t)
     row("v0.6.0", title, h, b, p1)
     ga = math.ceil(p1) + cal["Release candidate: стабилизация и обратная связь"]
     row("v1.0.0", "Релиз 1.0 (P0 + P1)", 0, p1, ga, "release candidate")
     title, h, b, p2 = dev("v1.1.0", p1)
-    sec = max(math.ceil(p2) + cal["Security review и пентест"], ga)
-    row("v1.1.0", title, h, b, sec, "security review и пентест")
+    end = max(p2, ga)  # 1.1.0 выходит не раньше 1.0.0: порядок версий
+    row("v1.1.0", title, h, b, end)
     title, h, b, p3 = dev("v1.2.0", p2)
-    row("v1.2.0", title, h, b, max(p3, sec))
+    row("v1.2.0", title, h, b, max(p3, end))
     return rows
 
 

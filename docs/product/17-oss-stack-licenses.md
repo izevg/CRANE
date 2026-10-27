@@ -28,7 +28,9 @@
 | Trivy, Syft | Apache-2.0 | Сканирование и SBOM (часто уже развёрнут) |
 | VictoriaMetrics, VictoriaLogs, Jaeger, Perses | Apache-2.0 | Метрики, логи, трейсы, дашборды |
 | KEDA, External Secrets Operator | Apache-2.0 | Автомасштабирование по очереди, секреты |
-| oha, Gatling | MIT / Apache-2.0 | Нагрузочное тестирование |
+| oha, Gatling | MIT / Apache-2.0 | Нагрузочное тестирование и смоук регрессии |
+| criterion | MIT / Apache-2.0 | Микробенчмарки горячего пути |
+| Strix | Apache-2.0 | Пентест после v1 (AI-агент, не входит в поставку) |
 | React, Vite, TanStack, Base UI, Tailwind | MIT | Frontend |
 | Keycloak | Apache-2.0 | IdP по умолчанию; любой OIDC-провайдер подключается так же |
 
