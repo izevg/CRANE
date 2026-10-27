@@ -81,3 +81,46 @@ export const MonoWithoutLigatures: Story = {
     await expect(style.fontFeatureSettings).toContain('"liga" 0');
   },
 };
+
+const LONG =
+  "pnpm add @acme/ui@1.4.2 --registry=https://crane.acme.example/npm/ --config.strict-ssl=true --config.fetch-retries=3 --config.fetch-timeout=60000 --config.audit-level=high";
+
+/** Текст не заходит под кнопку копирования: правый край области кода левее левого края кнопки. */
+async function expectNoOverlap(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const region = canvas.getByRole("region", { name: "Команда установки" });
+  const button = canvas.getByRole("button", { name: "Копировать команду установки" });
+  await expect(region.getBoundingClientRect().right).toBeLessThanOrEqual(
+    button.getBoundingClientRect().left,
+  );
+  await expect(
+    button.parentElement ? getComputedStyle(button.parentElement).backgroundColor : "",
+  ).not.toBe("rgba(0, 0, 0, 0)");
+}
+
+const narrow = [
+  (Story: () => React.JSX.Element) => (
+    <div className="w-[360px]">
+      <Story />
+    </div>
+  ),
+];
+
+export const NoOverlapLight: Story = {
+  name: "Длинная строка не заходит под кнопку",
+  args: { code: LONG, label: "Команда установки" },
+  decorators: narrow,
+  play: async ({ canvasElement }) => {
+    await expectNoOverlap(canvasElement);
+  },
+};
+
+export const NoOverlapDark: Story = {
+  name: "Длинная строка не заходит под кнопку, тёмная тема",
+  args: { code: LONG, label: "Команда установки" },
+  decorators: narrow,
+  globals: { theme: "dark" },
+  play: async ({ canvasElement }) => {
+    await expectNoOverlap(canvasElement);
+  },
+};

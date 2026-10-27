@@ -46,20 +46,21 @@ export function CodeBlock({
     observer.observe(pre);
     return () => observer.disconnect();
   }, [code, wrap]);
+  // Кнопка стоит рядом с областью кода, а не поверх неё: прямоугольники не пересекаются по построению,
+  // длинная строка прокручивается внутри своей области. В разметке кнопка идёт первой (первый фокус в диалоге),
+  // визуально справа (`order-last`).
   return (
-    <div className="relative">
-      <CopyButton
-        value={code}
-        label={copyLabel}
-        className="absolute top-1 right-1 z-[1] bg-(--code-bg)"
-      />
+    <div className="flex items-start gap-2 rounded-lg bg-(--code-bg) p-2">
+      <span className="order-last shrink-0 rounded-md border border-border bg-card">
+        <CopyButton value={code} label={copyLabel} />
+      </span>
       {/* biome-ignore lint/a11y/useSemanticElements: у <pre> нет подходящей роли с именем, нужен именованный регион */}
       <pre
         ref={ref}
         role="region"
         aria-label={label}
         className={cx(
-          "max-h-64 overflow-auto rounded-lg bg-(--code-bg) p-3 pr-12 font-mono text-caption text-foreground",
+          "m-0 max-h-64 min-w-0 flex-1 overflow-auto p-1 font-mono text-caption text-foreground",
           wrap ? "whitespace-pre-wrap wrap-anywhere" : "whitespace-pre",
         )}
       >
