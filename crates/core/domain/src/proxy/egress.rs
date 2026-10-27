@@ -82,14 +82,8 @@ impl EgressPolicy {
     }
 
     /// Каждый redirect-hop: redirect не должен вести на хост вне allowlist или на небезопасную схему.
-    pub fn check_target(
-        &self,
-        scheme: &str,
-        host: &str,
-        port: Option<u16>,
-    ) -> Result<(), EgressRefusal> {
-        // Порт не участвует в allowlist: ограничение хоста и адреса достаточно, порты upstream бывают нестандартные.
-        let _ = port;
+    /// Порт не участвует в allowlist: порты upstream бывают нестандартные, хост и адрес проверяются отдельно.
+    pub fn check_target(&self, scheme: &str, host: &str) -> Result<(), EgressRefusal> {
         self.check_scheme(scheme)?;
         self.check_host(host)
     }
@@ -197,7 +191,9 @@ const V4_NON_PUBLIC: [(Ipv4Addr, u8); 5] = [
 ];
 
 /// Диапазоны IPv6 вне `std`-предикатов. Источник: IANA IPv6 Special-Purpose Address Registry.
-const V6_NON_PUBLIC: [(Ipv6Addr, u8); 5] = [
+const V6_NON_PUBLIC: [(Ipv6Addr, u8); 6] = [
+    // IPv4-compatible (устарел, RFC 4291 §2.5.5.1), в том числе ::/128 и ::1/128; ::ffff:0:0/96 разворачивает `to_canonical`
+    (Ipv6Addr::UNSPECIFIED, 96),
     (Ipv6Addr::new(0xfec0, 0, 0, 0, 0, 0, 0, 0), 10), // site-local (устарел)
     (Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0), 32), // documentation
     (Ipv6Addr::new(0x100, 0, 0, 0, 0, 0, 0, 0), 64),  // discard-only
@@ -329,6 +325,8 @@ mod tests {
             "100::1",
             "2001::1",
             "64:ff9b:1::1",
+            "::7f00:1",
+            "::a00:1",
             "::ffff:127.0.0.1",
             "::ffff:10.0.0.1",
             "::ffff:169.254.169.254",
@@ -385,7 +383,7 @@ mod tests {
         let policy = policy();
 
         // Act
-        let result = policy.check_target("https", "index.crates.io", None);
+        let result = policy.check_target("https", "index.crates.io");
 
         // Assert
         assert_eq!(result, Ok(()));
@@ -402,7 +400,7 @@ mod tests {
         ];
 
         // Act
-        let results = cases.map(|(scheme, host)| policy.check_target(scheme, host, Some(443)));
+        let results = cases.map(|(scheme, host)| policy.check_target(scheme, host));
 
         // Assert
         assert_eq!(results, [Ok(()), Ok(()), Ok(())]);
@@ -414,7 +412,7 @@ mod tests {
         let policy = EgressPolicy::new(["Index.Crates.IO."], false);
 
         // Act
-        let result = policy.check_target("https", "index.crates.io", None);
+        let result = policy.check_target("https", "index.crates.io");
 
         // Assert
         assert_eq!(result, Ok(()));
@@ -428,9 +426,9 @@ mod tests {
 
         // Act
         let (refused, refused_upper, allowed) = (
-            strict.check_target("http", "mirror.local.example", None),
-            strict.check_target("HTTP", "mirror.local.example", None),
-            lax.check_target("HTTP", "mirror.local.example", None),
+            strict.check_target("http", "mirror.local.example"),
+            strict.check_target("HTTP", "mirror.local.example"),
+            lax.check_target("HTTP", "mirror.local.example"),
         );
 
         // Assert
@@ -450,7 +448,7 @@ mod tests {
         let policy = policy();
 
         // Act
-        let result = policy.check_target("ftp", "index.crates.io", None);
+        let result = policy.check_target("ftp", "index.crates.io");
 
         // Assert
         assert_eq!(
@@ -472,7 +470,7 @@ mod tests {
         ];
 
         // Act
-        let results = cases.map(|host| policy.check_target("https", host, None));
+        let results = cases.map(|host| policy.check_target("https", host));
 
         // Assert
         assert_eq!(
@@ -488,9 +486,9 @@ mod tests {
 
         // Act
         let (private_v4, loopback_v6, public_v4) = (
-            policy.check_target("https", "10.0.0.1", None),
-            policy.check_target("https", "[::1]", None),
-            policy.check_target("https", "8.8.8.8", None),
+            policy.check_target("https", "10.0.0.1"),
+            policy.check_target("https", "[::1]"),
+            policy.check_target("https", "8.8.8.8"),
         );
 
         // Assert
@@ -510,7 +508,7 @@ mod tests {
         let policy = policy();
 
         // Act
-        let result = policy.check_target("https", "[::1]", None);
+        let result = policy.check_target("https", "[::1]");
 
         // Assert
         assert_eq!(result, Err(EgressRefusal::HostNotAllowed("::1".to_owned())));
