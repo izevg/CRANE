@@ -24,7 +24,7 @@
 | Vulnerability intel | Синхронизация фидов, нормализация и дедупликация advisory, сопоставление с инвентарём по PURL, приоритет P0–P4, VEX, экстренный режим, SLA. | Модель только повышает приоритет; P0 не зависит от доступности модели |
 | Risk scoring | Сбор признаков, запрос оценок `exploit_relevance`, `blast_radius`, `license_virality` у systemone, хранение оценки как evidence с версией модели. | Оценка воспроизводима: модель, версия и хэш признаков сохраняются |
 | Security events | Формирование событий OCSF из аудита и доменных событий, доставка в SIEM с курсором на приёмник, приём ответных действий SOAR. | At-least-once, событие не теряется при недоступности SIEM |
-| Evidence | Хранение SBOM, сканов, provenance, quality gate; findings; исключения с TTL. | Отчёт привязан к digest, версии сканера и базы |
+| Evidence | Единая модель доказательств по `predicate_type`: SBOM, сканы, attestations, подписи, quality gate; проверка Sigstore/PGP и trust root; findings; исключения с TTL. | Отчёт привязан к digest, версии сканера и базы |
 | License | Разбор SPDX expressions, определение лицензии из нескольких источников, оценка по политике с учётом контекста. | Unknown означает review required |
 | Promotion | Publish → Quarantine → Checks → Approval → Release, повторная оценка при новых рисках. | Promotion не меняет байты |
 | Usage graph | Рёбра зависимостей из SBOM и lockfile, evidence использования с уровнем достоверности, impact analysis. | Уровни достоверности не смешиваются |

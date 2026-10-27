@@ -111,9 +111,11 @@ fn exchange(id_token):
 
 ```rust
 fn evaluate(version, target_stage):
-    gates = policy.gates_for(version.repo, target_stage)  // cve, license, provenance, quality
-    results = gates.map(|g| match evidence.latest(version.digest, g.kind):
+    gates = policy.gates_for(version.repo, target_stage)  // cve, license, provenance, quality, attestation
+    results = gates.map(|g| match evidence.latest(version.id, g.predicate_types):
         None                      => Missing             // «проверка отсутствует»
+        Some(e) if e.invalid      => Deny                // подпись или subject не сошлись
+        Some(e) if e.unverifiable => g.on_unverifiable   // нет trust root, нет сети: как Missing или по политике gate
         Some(e) if e.failed       => AnalysisError       // «ошибка анализа»
         Some(e) if stale(e, g)    => Stale
         Some(e)                   => g.judge(e, exceptions.active(version)))
@@ -123,7 +125,44 @@ fn evaluate(version, target_stage):
     return verdict                   // всегда с перечнем причин для UI
 ```
 
+Gate не знает видов доказательств: он объявляет, какие `predicate_types` читает (раздел 9). Provenance читает SLSA Provenance; cve читает vulns и VEX; license читает CycloneDX и SPDX; quality читает quality gate SonarQube. Отдельный gate «без валидной attestation не продвигать» настраивается по репозиторию и стадии: версия без `valid` attestation нужного типа не уходит дальше quarantine.
+
 Promotion меняет только строку в БД: digest и байты те же. Повторная оценка запускается событиями «новое evidence», «новая версия базы уязвимостей», «истекло исключение», «изменилась политика».
+
+### 10.6.1 Проверка upstream attestations (proxy)
+
+Задача `attestation.verify` ставится после commit CAS и идёт вне горячего пути: скачивание клиенту не ждёт проверки; состояние версии до результата определяет политика репозитория (quarantine новых версий из upstream, 14.2). Источник зависит от формата:
+
+| Формат | Где брать | Что приходит |
+| --- | --- | --- |
+| npm | `dist.attestations` в packument; `GET /-/npm/v1/attestations/<name>@<version>` | SLSA provenance и publish attestation в Sigstore bundle |
+| PyPI | Integrity API: `GET /integrity/<project>/<version>/<filename>/provenance` | PEP 740: in-toto Statement в DSSE, издатель Trusted Publishing |
+| Maven Central | `.asc` (PGP) и `.sigstore.json` рядом с файлом, где опубликован | Подпись файла; Sigstore bundle опционален, PGP обязателен |
+
+NuGet и Cargo в v1.1.0 не проверяются.
+
+Проверка одинакова для всех источников:
+
+1. `subject` digest в attestation равен SHA-256 blob; иначе `invalid`.
+2. Цепочка сертификата Fulcio и его SAN и issuer; они кладутся в `signer_*` и в `facts` (builder, repo, commit, run).
+3. Inclusion proof и signed entry timestamp Rekor берутся из самого bundle, без обращения к журналу: проверка работает офлайн.
+4. Trust root — `trusted_root.json` Sigstore, обновляется через TUF; версия корня пишется в `verify_detail`.
+
+Ошибка самой проверки (нет trust root, upstream недоступен, незнакомый формат bundle) даёт `unverifiable`, а не `invalid`: иначе сбой инфраструктуры блокировал бы чужие релизы.
+
+```rust
+on attestation_verified(new_version, e):                  // attestation.verify → правило регрессии
+    prev = evidence.latest_valid(previous_versions(new_version.package), SLSA_PROVENANCE)
+    regressed = prev.is_some() and (e.is_none() or e.invalid
+                or prev.facts.repo != e.facts.repo or prev.signer_san != e.signer_san)
+    if regressed:
+        hold(new_version, quarantine | blocked)           // по политике репозитория
+        siem(SupplyChainSignal(new_version, prev, e))     // сигнал захвата аккаунта maintainer'а
+```
+
+Регрессия — главный практический сигнал: у прошлых версий была валидная attestation, а у новой её нет, она `invalid` или сменились издатель и репозиторий. Так может выглядеть публикация с украденным токеном мимо CI. Карточка версии показывает «собрано в <CI> из <repo>@<commit>» из `facts`.
+
+**Attestations из своего CI (hosted).** CI прикладывает in-toto/SLSA provenance и другие attestations к версии рядом с SBOM. Их проверяет тот же верификатор; они ложатся в evidence с `trust = publisher`, а `subject` сверяется с blob при приёме. Цель — SLSA Build L2 (hosted build platform, подписанная provenance); L3 при hardened builders остаётся документированной целью, а не гарантией.
 
 ## 10.7 Уязвимости: сопоставление, воздействие и приоритет
 
@@ -136,7 +175,7 @@ on advisory_changed(adv):                                 // advisory.sync → a
         if format(adv.ecosystem).in_ranges(v.version, adv.ranges):
             upsert_finding(adv, v, fixed = adv.nearest_fix(v.version))
 on trivy_db_updated(new_db):                              // раз в несколько часов
-    for sbom in evidence.sboms_by_recency(): enqueue(scan.sbom(sbom, new_db))
+    for sbom in evidence.by_types([CYCLONEDX, SPDX]): enqueue(scan.sbom(sbom, new_db))   // по recency
 on finding_new_or_changed(f):
     impact = graph.upstream_closure(f.purl)               // рекурсивный CTE ниже
     scores = scorer.score_all(f, impact).ok()             // systemone; None → только правила

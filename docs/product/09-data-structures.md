@@ -127,7 +127,44 @@ CREATE TABLE risk_score (
   shadow boolean NOT NULL DEFAULT false,   -- теневой режим новой версии модели
   created_at timestamptz NOT NULL,
   PRIMARY KEY (subject_id, kind, model_version));
+
+CREATE TABLE evidence (
+  id uuid PRIMARY KEY,               -- UUIDv7
+  version_id uuid NOT NULL REFERENCES package_version,
+  subject_sha256 bytea NOT NULL,     -- digest файла версии, о котором утверждение; при приёме сверяется с blob
+  kind text NOT NULL,                -- attestation | signature | report
+  predicate_type text,               -- URI типа содержимого; NULL только у kind = signature
+  trust text NOT NULL,               -- upstream | publisher | integration | crane: откуда пришло
+  signer_issuer text, signer_subject text, signer_san text,  -- кто подписал; NULL у неподписанного report
+  facts jsonb NOT NULL DEFAULT '{}', -- извлечённое для gates и карточки: builder, repo, commit, run; для скана — версия сканера и базы
+  verify_result text NOT NULL,       -- valid | invalid | unverifiable | unsigned
+  verify_detail jsonb,               -- причина отказа, версия trust root
+  verified_at timestamptz,
+  tlog jsonb,                        -- запись Rekor: log id, index, integrated time; NULL без журнала
+  object_key text NOT NULL,          -- исходный документ в S3 как есть: bundle, SBOM, отчёт
+  media_type text NOT NULL,
+  created_at timestamptz NOT NULL,
+  CHECK ((kind = 'signature') = (predicate_type IS NULL)));
+CREATE INDEX evidence_by_type ON evidence (version_id, predicate_type, created_at DESC);  -- evidence.latest(version, types)
 ```
+
+Evidence расширяется строками, а не колонками. Новый вид доказательства означает новую строку с новым URI в `predicate_type`; ни колонка, ни enum не добавляются. Gates и UI читают evidence по `predicate_type`. Подписанное и неподписанное лежат в одной модели и различаются `kind` и `trust`: отчёт Trivy и SLSA provenance из npm одинаково доходят до gate, а политика решает, чему доверять.
+
+Известные predicate type:
+
+| Вид содержимого | `predicate_type` | `kind` | Кто производит |
+| --- | --- | --- | --- |
+| SLSA Provenance | `https://slsa.dev/provenance/v1` | attestation | npm provenance, PyPI, свой CI |
+| PyPI Publish | `https://docs.pypi.org/attestations/publish/v1` | attestation | PyPI (Trusted Publishing) |
+| SBOM CycloneDX | `https://cyclonedx.org/bom` | attestation | свой CI, upstream |
+| SBOM SPDX 2.x и 3 | `https://spdx.dev/Document`, `https://spdx.dev/Document/v3` | attestation | свой CI, upstream |
+| Скан уязвимостей | `https://in-toto.io/attestation/vulns/v0.2` | report | Trivy в CRANE (без подписи) |
+| VEX | `https://openvex.dev/ns/v0.2.0` | attestation | издатель пакета, security |
+| Quality gate SonarQube | `urn:crane:quality-gate:v1` (внутренний URI CRANE) | report | SonarQube через интеграцию |
+| Подпись PGP (Maven `.asc`) | NULL | signature | издатель Maven |
+| Подпись Sigstore без предиката (`.sigstore.json`, messageSignature) | NULL | signature | издатель Maven, upstream |
+
+Требование действует с P0: таблицы пока нет, но когда она появится (v1.1.0, см. «Отложено»), она сразу в этой форме. Менять тип колонок после накопления evidence дороже, чем зафиксировать форму сейчас.
 
 Порядок версий в схеме не хранится: `sort_key` убран из таблицы. Порядко-сохраняющее кодирование для Maven и PEP 440 — отдельная задача на появление потребителя; индекс Cargo упорядочен по публикации `(published_at, id)`.
 
@@ -178,6 +215,7 @@ CREATE TABLE asset (
 | `purl`, `sort_key`, `mutable`, `published_by`, `source` | Появление потребителя (граф, сортировка, аудит публикаций) |
 | `sha512`, `sha1`, `md5`, `media_type` | Форматы, которым нужны эти дайджесты и типы |
 | таблица `blob_store` | Второе физическое хранилище; пока `store_id` — текст без FK |
+| таблица `evidence` | v1.1.0; форма зафиксирована сейчас (см. выше), чтобы SBOM, сканы и attestations не потребовали переделки |
 
 ## Масштаб L: каталог
 
@@ -318,8 +356,7 @@ stateDiagram-v2
 ```
 blobs/sha256/9f/86/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 staging/0192c1a4-7d2e-7c3b-9a51-6f0d3e4b8a11                (lifecycle: удалить через 24 ч)
-evidence/sbom/9f86.../0192c1b0-....cdx.json.zst
-evidence/scan/9f86.../trivy-0.6x-db-2026102512.json.zst
+evidence/9f86.../0192c1b0-....json.zst                      (subject digest / id evidence; вид — в строке БД, не в пути)
 backup/pg/...  backup/manifests/...
 ```
 
