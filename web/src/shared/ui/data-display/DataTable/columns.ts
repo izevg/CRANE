@@ -67,8 +67,25 @@ export const PIN_RIGHT = "sticky right-0 z-[1] bg-inherit";
 export const HEAD_PIN_LEFT = "sticky left-0 z-[2] bg-card";
 export const HEAD_PIN_LEFT_AFTER_CHECKBOX = "sticky left-10 z-[2] bg-card";
 export const HEAD_PIN_RIGHT = "sticky right-0 z-[2] bg-card";
-export const SELECTED_BAR =
+// Обводка фокуса строки рисуется внутренними тенями ячеек, а не outline строки: закреплённые ячейки
+// (`sticky`, свой слой) перекрывают контур `<tr>`, и на них он был бы тоньше. Толщина и цвет у всех ячеек одни (2px --ring),
+// боковые рёбра — только у крайних ячеек. Классы записаны целиком: Tailwind находит их по тексту исходников. `!` нужен, чтобы кольцо перекрыло полосу выбранной строки.
+const SELECTED_BAR_SHADOW =
   "group-aria-selected/row:shadow-[inset_2px_0_0_var(--row-selected-bar)]";
+const FOCUS_MID =
+  "group-focus-visible/row:shadow-[inset_0_2px_0_0_var(--ring),inset_0_-2px_0_0_var(--ring)]!";
+const FOCUS_FIRST =
+  "group-focus-visible/row:shadow-[inset_2px_0_0_0_var(--ring),inset_0_2px_0_0_var(--ring),inset_0_-2px_0_0_var(--ring)]!";
+const FOCUS_LAST =
+  "group-focus-visible/row:shadow-[inset_-2px_0_0_0_var(--ring),inset_0_2px_0_0_var(--ring),inset_0_-2px_0_0_var(--ring)]!";
+
+/** Тени ячейки по её месту в строке: крайняя слева несёт и полосу выбора. */
+export function edgeClass(slot: number, total: number): string {
+  if (slot === 0) {
+    return `${SELECTED_BAR_SHADOW} ${FOCUS_FIRST}`;
+  }
+  return slot === total - 1 ? FOCUS_LAST : FOCUS_MID;
+}
 
 export const CELL = "h-11 px-3 py-0 text-left align-middle whitespace-nowrap";
 export const HEAD =

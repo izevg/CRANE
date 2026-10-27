@@ -9,6 +9,7 @@ import {
   CELL,
   CHECKBOX_COLUMN,
   columnClass,
+  edgeClass,
   type features,
   HEAD,
   HEAD_PIN_LEFT,
@@ -17,7 +18,6 @@ import {
   PIN_LEFT,
   PIN_LEFT_AFTER_CHECKBOX,
   PIN_RIGHT,
-  SELECTED_BAR,
 } from "./columns";
 
 const LOADING = "Загрузка";
@@ -188,7 +188,10 @@ export function DataRow<TData extends RowData>({
     }
   };
   const handleFocus = () => onFocusRow(row.id);
-  const pinFirst = checkbox ? PIN_LEFT_AFTER_CHECKBOX : cx(PIN_LEFT, SELECTED_BAR);
+  const pinFirst = checkbox ? PIN_LEFT_AFTER_CHECKBOX : PIN_LEFT;
+  const dataCells = row.getAllCells();
+  const offset = checkbox ? 1 : 0;
+  const total = offset + dataCells.length + (actions ? 1 : 0);
   return (
     <tr
       data-row-id={row.id}
@@ -199,12 +202,12 @@ export function DataRow<TData extends RowData>({
       onClick={focusable ? handleClick : undefined}
       onKeyDown={focusable ? handleKeyDown : undefined}
       className={cx(
-        "group/row h-11 border-b bg-card transition-[background-color] duration-(--dur-instant) ease-(--ease-out) hover:bg-(--row-hover-bg) aria-selected:bg-(--row-selected-bg) focus-visible:-outline-offset-2 forced-colors:aria-selected:outline-2 forced-colors:aria-selected:-outline-offset-2 forced-colors:aria-selected:outline-[Highlight]",
+        "group/row h-11 border-b bg-card transition-[background-color] duration-(--dur-instant) ease-(--ease-out) hover:bg-(--row-hover-bg) aria-selected:bg-(--row-selected-bg) focus-visible:outline-hidden forced-colors:focus-visible:outline-2 forced-colors:focus-visible:-outline-offset-2 forced-colors:aria-selected:outline-2 forced-colors:aria-selected:-outline-offset-2 forced-colors:aria-selected:outline-[Highlight]",
         focusable && "cursor-pointer",
       )}
     >
       {checkbox ? (
-        <td className={cx(CELL, CHECKBOX_COLUMN, PIN_LEFT, SELECTED_BAR)}>
+        <td className={cx(CELL, CHECKBOX_COLUMN, PIN_LEFT, edgeClass(0, total))}>
           <Checkbox
             checked={checkbox.checked}
             onCheckedChange={checkbox.onChange}
@@ -212,20 +215,21 @@ export function DataRow<TData extends RowData>({
           />
         </td>
       ) : null}
-      {row.getAllCells().map((cell, position) => (
+      {dataCells.map((cell, position) => (
         <td
           key={cell.id}
           className={cx(
             CELL,
             columnClass(cell.column.columnDef.meta, compact),
             position === 0 && pinFirst,
+            edgeClass(offset + position, total),
           )}
         >
           <FlexRender cell={cell} />
         </td>
       ))}
       {actions ? (
-        <td className={cx(CELL, PIN_RIGHT)}>
+        <td className={cx(CELL, PIN_RIGHT, edgeClass(total - 1, total))}>
           <ActionMenu actions={actions} />
         </td>
       ) : null}
