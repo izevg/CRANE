@@ -1,17 +1,17 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react/macro";
 import { SearchIcon } from "lucide-react";
 import { Kbd } from "~/shared/ui/status";
 
-const LABEL = "Поиск и переходы Ctrl K";
-const VISIBLE = "Поиск и переходы";
 const SHORTCUT = "Ctrl K";
 
 /** Открывает палитру команд (сама палитра приходит из другого виджета). Видимый текст входит в доступное имя. */
 export function SearchButton({ onOpen }: { onOpen: () => void }) {
+  const { t } = useLingui();
+  const visible = t`Поиск и переходы`;
   return (
     <button
       type="button"
-      aria-label={LABEL}
+      aria-label={`${visible} ${SHORTCUT}`}
       aria-keyshortcuts="Control+K Meta+K"
       aria-haspopup="dialog"
       onClick={onOpen}
@@ -19,7 +19,7 @@ export function SearchButton({ onOpen }: { onOpen: () => void }) {
     >
       <SearchIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
       <span className="hidden min-w-0 flex-1 truncate text-body text-muted-foreground sm:inline">
-        {VISIBLE}
+        {visible}
       </span>{" "}
       <Kbd aria-hidden="true" className="hidden sm:inline-flex">
         {SHORTCUT}

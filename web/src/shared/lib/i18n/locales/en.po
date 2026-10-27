@@ -25,6 +25,9 @@ msgstr "{total, plural, other {Results: #}}"
 msgid "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
 msgstr "{unread, plural, one {Notifications, # unread} other {Notifications, # unread}}"
 
+msgid "CRANE, Реестр артефактов: на главную"
+msgstr "CRANE, Artifact registry: go to home"
+
 msgid "Безопасность"
 msgstr "Security"
 
@@ -34,11 +37,17 @@ msgstr "All"
 msgid "выбор"
 msgstr "select"
 
+msgid "Главное меню"
+msgstr "Main menu"
+
 msgid "Действия"
 msgstr "Actions"
 
 msgid "Доступ"
 msgstr "Access"
+
+msgid "Ещё {hidden}"
+msgstr "{hidden} more"
 
 msgid "закрыть"
 msgstr "close"
@@ -46,11 +55,20 @@ msgstr "close"
 msgid "Ищем пакеты…"
 msgstr "Searching packages…"
 
+msgid "К содержимому"
+msgstr "Skip to content"
+
 msgid "Командная палитра"
 msgstr "Command palette"
 
+msgid "Личное и справка"
+msgstr "Personal and help"
+
 msgid "Массовые действия"
 msgstr "Bulk actions"
+
+msgid "Навигация по разделам реестра"
+msgstr "Navigate the registry sections"
 
 msgid "Не удалось скопировать — выделите текст вручную"
 msgstr "Could not copy. Select the text and copy it manually"
@@ -63,6 +81,9 @@ msgstr "Nothing found"
 
 msgid "Новых уведомлений нет"
 msgstr "No new notifications"
+
+msgid "Основное меню"
+msgstr "Primary menu"
 
 msgid "открыть"
 msgstr "open"
@@ -82,14 +103,47 @@ msgstr "Go to, find a package or an action…"
 msgid "Платформа"
 msgstr "Platform"
 
+msgid "Поиск и переходы"
+msgstr "Search and navigate"
+
 msgid "Прочитать все"
 msgstr "Mark all as read"
+
+msgid "Реестр артефактов"
+msgstr "Artifact registry"
+
+msgid "Свернуть"
+msgstr "Collapse"
+
+msgid "Свернуть: {text}"
+msgstr "Collapse: {text}"
+
+msgid "Светлая"
+msgstr "Light"
+
+msgid "Системная"
+msgstr "System"
 
 msgid "Скопировано"
 msgstr "Copied"
 
+msgid "Скрыть остальные"
+msgstr "Hide the rest"
+
 msgid "Снять выделение"
 msgstr "Clear selection"
+
+msgid "Справка"
+msgstr "Help"
+
+msgid "Тема оформления"
+msgstr "Appearance"
+
+msgid "Тема: {modeLabel}"
+msgstr "Theme: {modeLabel}"
+
+msgid "Тёмная"
+msgstr "Dark"
 
 msgid "Уведомления"
 msgstr "Notifications"

@@ -1,16 +1,14 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react/macro";
 import { type MouseEvent, type ReactNode, useCallback, useRef, useState } from "react";
-import { cx, useBreakpoint } from "~/shared/lib/core";
+import { cx } from "~/shared/lib/core";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "~/shared/ui/primitives";
+import { useSidebarMode } from "../../lib/shell";
 import { type Banner, BannerStack } from "../banners/BannerStack";
 import { Sidebar, type SidebarProps } from "../sidebar/Sidebar";
-import { type SidebarMode, SidebarToggle } from "../sidebar/SidebarToggle";
+import { SidebarToggle } from "../sidebar/SidebarToggle";
 import { Topbar, type TopbarProps } from "../topbar/Topbar";
 
-const SKIP_LABEL = "К содержимому";
 const MAIN_ID = "main-content";
-const MENU_TITLE = "Главное меню";
-const MENU_DESCRIPTION = "Навигация по разделам реестра";
 
 type AppShellProps = {
   sidebar: SidebarProps;
@@ -22,20 +20,6 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-/**
- * ≥ lg — колонка 248 px (или рельса 64 px по выбору пользователя), md–lg — рельса принудительно,
- * ниже md — Sheet. Режим зависит от ширины, поэтому он меняет структуру DOM, а не только CSS.
- */
-function useSidebarMode(collapsed: boolean): { mode: SidebarMode; canToggle: boolean } {
-  const wide = useBreakpoint("lg");
-  const medium = useBreakpoint("md");
-  if (!medium) {
-    return { mode: "sheet", canToggle: true };
-  }
-  // На md–lg рельса принудительная: кнопки свёртки нет, развернуть некуда.
-  return { mode: wide && !collapsed ? "full" : "rail", canToggle: wide };
-}
-
 /** Корень всех страниц: skip-link, сайдбар, topbar, зона баннеров и контент с `@container/page`. */
 export function AppShell({
   sidebar,
@@ -44,6 +28,7 @@ export function AppShell({
   onCollapseBanner,
   children,
 }: AppShellProps) {
+  const { t } = useLingui();
   const [collapsed, setCollapsed] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const { mode, canToggle } = useSidebarMode(collapsed);
@@ -70,13 +55,13 @@ export function AppShell({
         onClick={skipToMain}
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-card focus:px-4 focus:py-2 focus:text-body focus:text-foreground focus:shadow-card"
       >
-        {SKIP_LABEL}
+        {t`К содержимому`}
       </a>
       {mode === "sheet" ? (
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent side="left" className="gap-0 p-0">
-            <SheetTitle className="sr-only">{MENU_TITLE}</SheetTitle>
-            <SheetDescription className="sr-only">{MENU_DESCRIPTION}</SheetDescription>
+            <SheetTitle className="sr-only">{t`Главное меню`}</SheetTitle>
+            <SheetDescription className="sr-only">{t`Навигация по разделам реестра`}</SheetDescription>
             <Sidebar {...sidebar} collapsed={false} onNavigate={closeSheet} />
           </SheetContent>
         </Sheet>

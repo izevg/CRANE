@@ -1,14 +1,12 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react/macro";
 import { CircleHelpIcon, DotIcon, type LucideIcon } from "lucide-react";
 import { useId } from "react";
 import { cx } from "~/shared/lib/core";
 import { Link, Tooltip, TooltipContent, TooltipTrigger } from "~/shared/ui/primitives";
+import { initialsOf } from "../../lib/sidebar";
 import { Logo } from "./Logo";
 import { ThemeMenu } from "./ThemeMenu";
 
-const MAIN_NAV = "Основное меню";
-const SERVICE_NAV = "Личное и справка";
-const HELP = "Справка";
 const DEFAULT_HOME = "/";
 
 type NavItem = {
@@ -110,20 +108,6 @@ function NavGroupList({
   );
 }
 
-const INITIALS_COUNT = 2;
-const WHITESPACE = /\s+/;
-
-/** Инициалы для аватара: первые буквы первых двух слов имени («Иванов И.» → «ИИ»). */
-function initialsOf(name: string): string {
-  return name
-    .split(WHITESPACE)
-    .filter((word) => word !== "")
-    .slice(0, INITIALS_COUNT)
-    .map((word) => Array.from(word)[0] ?? "")
-    .join("")
-    .toLocaleUpperCase();
-}
-
 /**
  * Блок пользователя. Длинные имя и роль обрезаются многоточием (полный текст в `title`), блок не шире сайдбара.
  * В рельсе остаётся только аватар: его доступное имя содержит и имя, и роль.
@@ -180,7 +164,8 @@ export function Sidebar({
   collapsed,
   onNavigate,
 }: ContentProps) {
-  const help: NavItem = { id: "help", label: HELP, href: helpHref, icon: CircleHelpIcon };
+  const { t } = useLingui();
+  const help: NavItem = { id: "help", label: t`Справка`, href: helpHref, icon: CircleHelpIcon };
   return (
     <div
       data-slot="sidebar"
@@ -194,7 +179,7 @@ export function Sidebar({
       >
         <Logo href={homeHref} collapsed={collapsed} />
       </div>
-      <nav aria-label={MAIN_NAV} className="min-h-0 flex-1 overflow-y-auto p-3">
+      <nav aria-label={t`Основное меню`} className="min-h-0 flex-1 overflow-y-auto p-3">
         {groups.map((group) => (
           <NavGroupList
             key={group.id}
@@ -205,7 +190,7 @@ export function Sidebar({
         ))}
       </nav>
       <div className="flex shrink-0 flex-col gap-1 border-t border-sidebar-border p-3">
-        <nav aria-label={SERVICE_NAV}>
+        <nav aria-label={t`Личное и справка`}>
           <ul className="flex flex-col gap-0.5">
             {[...footerItems, help].map((item) => (
               <NavLinkItem

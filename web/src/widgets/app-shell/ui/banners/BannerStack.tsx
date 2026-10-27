@@ -1,15 +1,9 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { announce } from "~/shared/lib/a11y";
 import { type Action, ActionButton } from "~/shared/ui/actions";
 import { Button, Callout } from "~/shared/ui/primitives";
-
-/** Больше двух баннеров одновременно — шум в глобальной зоне (patterns §25). */
-const MAX_VISIBLE = 2;
-const COLLAPSE = "Свернуть";
-const MORE_PREFIX = "Ещё";
-const TEXT_SEPARATOR = ". ";
-const HIDE_REST = "Скрыть остальные";
+import { announcementFor, hiddenCount, visibleBanners } from "../../lib/banners";
 
 export type Banner = {
   id: string;
@@ -36,11 +30,12 @@ function CollapseButton({
   banner: Banner;
   onCollapse: (id: string) => void;
 }) {
+  const { t } = useLingui();
   const { id, text } = banner;
   const handleClick = useCallback(() => onCollapse(id), [id, onCollapse]);
   return (
-    <Button variant="ghost" size="sm" aria-label={`${COLLAPSE}: ${text}`} onClick={handleClick}>
-      {COLLAPSE}
+    <Button variant="ghost" size="sm" aria-label={t`Свернуть: ${text}`} onClick={handleClick}>
+      {t`Свернуть`}
     </Button>
   );
 }
@@ -70,25 +65,25 @@ function BannerItem({ banner, onCollapse }: { banner: Banner; onCollapse: Props[
 function useAnnounceNew(banners: readonly Banner[]) {
   const seen = useRef(new Set<string>());
   useEffect(() => {
-    const fresh = banners.filter((banner) => !seen.current.has(banner.id));
-    seen.current = new Set(banners.map((banner) => banner.id));
-    const texts = fresh.filter((banner) => banner.urgent !== true).map((banner) => banner.text);
-    if (texts.length > 0) {
-      announce(texts.join(TEXT_SEPARATOR));
+    const next = announcementFor(banners, seen.current);
+    seen.current = next.seen;
+    if (next.text !== null) {
+      announce(next.text);
     }
   }, [banners]);
 }
 
 /** Глобальные баннеры под topbar: видно не больше двух, остальные раскрываются кнопкой «Ещё N». */
 export function BannerStack({ banners, onCollapse }: Props) {
+  const { t } = useLingui();
   const [expanded, setExpanded] = useState(false);
   useAnnounceNew(banners);
   const toggle = useCallback(() => setExpanded((value) => !value), []);
   if (banners.length === 0) {
     return null;
   }
-  const hidden = banners.length - MAX_VISIBLE;
-  const shown = expanded ? banners : banners.slice(0, MAX_VISIBLE);
+  const hidden = hiddenCount(banners.length);
+  const shown = visibleBanners(banners, expanded);
   return (
     <div data-slot="banner-stack" className="flex flex-col gap-2 px-4 pt-4 lg:px-6 2xl:px-8">
       {shown.map((banner) => (
@@ -102,7 +97,7 @@ export function BannerStack({ banners, onCollapse }: Props) {
           className="self-start"
           onClick={toggle}
         >
-          {expanded ? HIDE_REST : `${MORE_PREFIX} ${hidden}`}
+          {expanded ? t`Скрыть остальные` : t`Ещё ${hidden}`}
         </Button>
       ) : null}
     </div>
