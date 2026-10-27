@@ -22,7 +22,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "node"],
     "paths": { "~/*": ["./src/*"], "~test/*": ["./test/*"], "~brand/*": ["../brand/*"] }
   },
   "include": ["src", "test", ".storybook", "*.config.ts"]
