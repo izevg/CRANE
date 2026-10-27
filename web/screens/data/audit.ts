@@ -103,3 +103,5 @@ export const AUDIT_EVENTS: readonly AuditEvent[] = Array.from({ length: 50 }, (_
 
 export const PREV_HASH = "e41c07a95b3d28f60c1a9d47e8b5f03a62d91c7e4b08a5f3d26c19e7b40a8d52";
 export const EVENT_HASH = "7b02f9d6a1e4c85307bd92f1ae60c4d8153e7a9b02c6f48d1e57a3b09c2d6f81";
+
+export const SPARK = [310, 332, 298, 405, 388, 421, 377, 450, 436, 468, 441, 492] as const;
