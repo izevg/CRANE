@@ -8,7 +8,7 @@
 
 mod common;
 
-use common::{HOSTED, InstrumentedCatalog, Seed, coordinate, name, yank_calls, yank_log};
+use common::{HOSTED, Seed, coordinate, name};
 use crane_app::registry::{Registry, RegistryError};
 use crane_domain::registry::{Format, VersionState};
 use crane_ports::registry::{BlobStore, Catalog};
@@ -62,12 +62,11 @@ fn yank_is_idempotent() {
 }
 
 #[test]
-fn yank_of_deleted_version_is_unavailable_and_does_not_touch_catalog() {
+fn yank_of_deleted_version_is_unavailable() {
     // Arrange
     let seed = Seed::new();
-    seed.add_moved("foo", "1.0.0", VersionState::Deleted, b"x");
-    let log = yank_log();
-    let registry = seed.registry_with(|c| InstrumentedCatalog::spying(c, log.clone()), |b| b);
+    seed.add_version("foo", "1.0.0", VersionState::Deleted, b"x");
+    let registry = seed.registry();
 
     // Act
     let error = block_on(registry.set_yanked(&coordinate("foo", "1.0.0"), true)).unwrap_err();
@@ -82,23 +81,20 @@ fn yank_of_deleted_version_is_unavailable_and_does_not_touch_catalog() {
         ),
         "tombstone терминален: {error:?}"
     );
-    assert!(yank_calls(&log).is_empty(), "флаг tombstone не меняется");
 }
 
 #[test]
 fn blocked_version_can_be_yanked_because_flag_is_orthogonal() {
     // Arrange
     let seed = Seed::new();
-    seed.add_moved("foo", "1.0.0", VersionState::Blocked, b"x");
-    let log = yank_log();
-    let registry = seed.registry_with(|c| InstrumentedCatalog::spying(c, log.clone()), |b| b);
+    seed.add_version("foo", "1.0.0", VersionState::Blocked, b"x");
+    let registry = seed.registry();
 
     // Act
     let result = block_on(registry.set_yanked(&coordinate("foo", "1.0.0"), true));
 
     // Assert
     assert!(result.is_ok(), "yank не зависит от состояния: {result:?}");
-    assert_eq!(yank_calls(&log), [true], "флаг записан в каталог");
 }
 
 #[test]

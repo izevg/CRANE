@@ -37,12 +37,7 @@ fn fetch_serves_yanked_version() {
     // Arrange
     let seed = Seed::new();
     let stored = seed.add_version("foo", "1.0.0", VersionState::Released, b"payload");
-    block_on(crane_ports::registry::Catalog::set_yanked(
-        &seed.catalog,
-        stored.id,
-        true,
-    ))
-    .unwrap();
+    seed.yank(&stored);
     let registry = seed.registry();
 
     // Act
@@ -61,8 +56,8 @@ fn fetch_serves_yanked_version() {
 fn fetch_hides_deleted_blocked_and_quarantined_versions() {
     // Arrange
     let seed = Seed::new();
-    seed.add_moved("del", "1.0.0", VersionState::Deleted, b"x");
-    seed.add_moved("blk", "1.0.0", VersionState::Blocked, b"x");
+    seed.add_version("del", "1.0.0", VersionState::Deleted, b"x");
+    seed.add_version("blk", "1.0.0", VersionState::Blocked, b"x");
     seed.add_version("qrn", "1.0.0", VersionState::Quarantined, b"x");
     let registry = seed.registry();
 
@@ -158,16 +153,11 @@ fn versions_lists_only_released_in_publication_order_including_yanked() {
     let seed = Seed::new();
     seed.add_version("foo", "1.0.0", VersionState::Released, b"1");
     let yanked = seed.add_version("foo", "1.1.0", VersionState::Released, b"2");
-    seed.add_moved("foo", "1.2.0", VersionState::Deleted, b"3");
-    seed.add_moved("foo", "1.3.0", VersionState::Blocked, b"4");
+    seed.add_version("foo", "1.2.0", VersionState::Deleted, b"3");
+    seed.add_version("foo", "1.3.0", VersionState::Blocked, b"4");
     seed.add_version("foo", "1.4.0", VersionState::Quarantined, b"5");
     seed.add_version("foo", "2.0.0", VersionState::Released, b"6");
-    block_on(crane_ports::registry::Catalog::set_yanked(
-        &seed.catalog,
-        yanked.id,
-        true,
-    ))
-    .unwrap();
+    seed.yank(&yanked);
     let registry = seed.registry();
 
     // Act

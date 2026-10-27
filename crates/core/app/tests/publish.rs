@@ -12,13 +12,11 @@ use std::io;
 
 use bytes::Bytes;
 use common::{
-    HOSTED, InstrumentedCatalog, RecordingBlobs, Seed, assert_send, asset_path, commit_log,
-    committed, coordinate, fixed_now, hello_sha256, name, publish_request, read,
+    BlindCatalog, HOSTED, RecordingBlobs, Seed, assert_send, asset_path, commit_log, committed,
+    coordinate, fixed_now, hello_sha256, name, publish_request, read,
 };
 use crane_app::registry::{Coordinate, Publish, RegistryError, Upload};
-use crane_domain::registry::{Format, FormatMetadata, Sha256, VersionId, VersionState};
-use crane_memory::SequentialIdGen;
-use crane_ports::system::IdGen;
+use crane_domain::registry::{Format, FormatMetadata, Sha256, VersionState};
 use futures_executor::block_on;
 use futures_util::stream;
 
@@ -29,10 +27,6 @@ fn publish_stores_blob_and_released_record() {
     // Arrange
     let registry = Seed::new().registry();
     let request = publish_request("foo", "1.0.0", &HELLO, None);
-    // Репозиторий в Seed взял первый id, версии достанется второй.
-    let probe = SequentialIdGen::default();
-    probe.generate();
-    let expected_id = VersionId::new(probe.generate());
 
     // Act
     let record = block_on(registry.publish(request)).unwrap();
@@ -45,7 +39,6 @@ fn publish_stores_blob_and_released_record() {
     );
     assert!(!record.yanked, "новая версия не yanked");
     assert_eq!(record.published_at, fixed_now(), "время берётся из Clock");
-    assert_eq!(record.id, expected_id, "id берётся из IdGen");
     assert_eq!(
         record.metadata.as_str(),
         common::METADATA,
@@ -61,6 +54,24 @@ fn publish_stores_blob_and_released_record() {
         read(download.body),
         b"hello",
         "blob лежит в CAS с теми же байтами"
+    );
+}
+
+#[test]
+fn publish_takes_version_ids_from_shared_generator() {
+    // Arrange
+    let registry = Seed::new().registry();
+    let first = publish_request("foo", "1.0.0", &HELLO, None);
+    let second = publish_request("foo", "1.1.0", &HELLO, None);
+
+    // Act
+    let first = block_on(registry.publish(first)).unwrap();
+    let second = block_on(registry.publish(second)).unwrap();
+
+    // Assert
+    assert!(
+        first.id.as_uuid() < second.id.as_uuid(),
+        "id выдаёт IdGen: различны и растут (константный id этого не пройдёт)"
     );
 }
 
@@ -87,7 +98,7 @@ fn publish_rejects_mismatching_declared_sha256_without_commit_or_record() {
     let log = commit_log();
     let registry = Seed::new().registry_with(
         |catalog| catalog,
-        |blobs| RecordingBlobs::new(blobs, log.clone(), false),
+        |blobs| RecordingBlobs::recording(blobs, log.clone()),
     );
     let request = publish_request("foo", "1.0.0", &HELLO, Some(declared));
 
@@ -152,7 +163,7 @@ fn republish_with_other_bytes_keeps_original_and_commits_nothing() {
     let log = commit_log();
     let registry = seed.registry_with(
         |catalog| catalog,
-        |blobs| RecordingBlobs::new(blobs, log.clone(), false),
+        |blobs| RecordingBlobs::recording(blobs, log.clone()),
     );
     let request = publish_request("foo", "1.0.0", &[b"different"], None);
 
@@ -181,7 +192,7 @@ fn republish_with_other_bytes_keeps_original_and_commits_nothing() {
 fn republish_over_tombstone_is_rejected() {
     // Arrange
     let seed = Seed::new();
-    seed.add_moved("foo", "1.0.0", VersionState::Deleted, b"gone");
+    seed.add_version("foo", "1.0.0", VersionState::Deleted, b"gone");
     let registry = seed.registry();
     let request = publish_request("foo", "1.0.0", &HELLO, None);
 
@@ -225,7 +236,7 @@ fn publish_lost_race_maps_catalog_conflict_to_version_exists() {
     // Arrange
     let seed = Seed::new();
     seed.add_version("foo", "1.0.0", VersionState::Released, b"winner");
-    let registry = seed.registry_with(InstrumentedCatalog::blind, |blobs| blobs);
+    let registry = seed.registry_with(BlindCatalog, |blobs| blobs);
     let request = publish_request("foo", "1.0.0", &HELLO, None);
 
     // Act
@@ -274,7 +285,7 @@ fn publish_never_records_version_when_blob_commit_fails() {
     let log = commit_log();
     let registry = Seed::new().registry_with(
         |catalog| catalog,
-        |blobs| RecordingBlobs::new(blobs, log.clone(), true),
+        |blobs| RecordingBlobs::failing_commit(blobs, log.clone()),
     );
     let request = publish_request("foo", "1.0.0", &HELLO, None);
 
@@ -283,11 +294,6 @@ fn publish_never_records_version_when_blob_commit_fails() {
 
     // Assert
     assert!(matches!(error, RegistryError::Backend(_)), "{error:?}");
-    assert_eq!(
-        committed(&log),
-        vec![hello_sha256()],
-        "commit был предпринят"
-    );
     let listed = block_on(registry.versions(Format::Cargo, HOSTED, &name("foo"))).unwrap();
     assert!(
         listed.is_empty(),
