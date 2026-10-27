@@ -40,9 +40,12 @@ impl Target {
     /// Запись другого вида (документ под ключом артефакта и наоборот) или blob с чужим дайджестом — `Expired`.
     pub(super) fn freshness(&self, entry: &Cached, now: SystemTime) -> Freshness {
         match (&entry.state, self) {
-            (CachedState::Document { unchanged, .. }, Self::Document { policy }) => {
-                policy.assess(*unchanged, entry.fetched_at, now)
-            }
+            (
+                CachedState::Document {
+                    unchanged, max_age, ..
+                },
+                Self::Document { policy },
+            ) => policy.assess(*unchanged, *max_age, entry.fetched_at, now),
             (CachedState::Blob(digests), Self::Artifact { expected, .. })
                 if expected.is_none_or(|expected| expected == digests.sha256) =>
             {
@@ -193,20 +196,21 @@ async fn fetch<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
     // Время берём после ответа: `fetched_at` отсчитывает свежесть от момента получения, а не запроса.
     let fetched_at = inner.clock.now();
     let (state, keep_for) = match (response, job.target) {
-        (UpstreamResponse::NotModified, Target::Document { policy }) => {
+        (UpstreamResponse::NotModified { max_age }, Target::Document { policy }) => {
             // 304 без прежнего документа — сбой протокола upstream: отдавать нечего.
             let prev = prev_document(job).ok_or(UpstreamFailure::Unavailable)?;
             let unchanged = prev.unchanged.saturating_add(1);
-            // У 304 своего срока в порте нет: действует последний объявленный upstream.
+            // Свежий срок из 304 важнее (RFC 9111 §4.3.4); без него действует последний объявленный.
+            let max_age = max_age.or(prev.max_age);
             let state = CachedState::Document {
                 body: prev.body.clone(),
                 etag: prev.etag.cloned(),
                 unchanged,
-                max_age: prev.max_age,
+                max_age,
             };
-            (state, policy.keep_for(unchanged))
+            (state, policy.keep_for(unchanged, max_age))
         }
-        (UpstreamResponse::NotModified, Target::Artifact { .. }) => {
+        (UpstreamResponse::NotModified { .. }, Target::Artifact { .. }) => {
             return Err(UpstreamFailure::Unavailable.into());
         }
         (
@@ -228,7 +232,7 @@ async fn fetch<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
                 unchanged,
                 max_age,
             };
-            (state, policy.keep_for(unchanged))
+            (state, policy.keep_for(unchanged, max_age))
         }
         (UpstreamResponse::Found { body, .. }, Target::Artifact { .. }) => {
             let staged = inner.blobs.stage(body).await.map_err(|error| match error {

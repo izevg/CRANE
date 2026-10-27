@@ -21,7 +21,10 @@ pub struct UpstreamRequest<'a> {
 }
 
 pub enum UpstreamResponse {
-    NotModified,
+    /// RFC 9111 §4.3.4: 304 обновляет срок свежести, поэтому он может нести новый `max_age`.
+    NotModified {
+        max_age: Option<Duration>,
+    },
     Found {
         body: ByteStream,
         etag: Option<ETag>,
@@ -35,7 +38,10 @@ pub enum UpstreamResponse {
 impl fmt::Debug for UpstreamResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NotModified => f.write_str("NotModified"),
+            Self::NotModified { max_age } => f
+                .debug_struct("NotModified")
+                .field("max_age", max_age)
+                .finish(),
             Self::Found { etag, max_age, .. } => f
                 .debug_struct("Found")
                 .field("etag", etag)
