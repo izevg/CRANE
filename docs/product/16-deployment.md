@@ -71,7 +71,7 @@ services:
 | `CRANE_PACKAGES_URL` | пусто | origin пакетов для протоколов (`/cargo`, `/npm`, `/pypi`, `/maven`, `/nuget`) и presigned-ссылок. Если задан, консоль на `CRANE_PUBLIC_URL` не отдаёт протоколы, а origin пакетов не отдаёт консоль и `/api`; `config.json` cargo и `cctl setup` берут адрес отсюда. Лучше отдельный регистрируемый домен; поддомен допустим: cookie сессии host-only (`__Host-`), мутации требуют CSRF-токена и Origin |
 | `CRANE_TOKEN` или `CRANE_TOKEN_FILE` | одна из двух | временный статический токен до v0.4.0; файл читается без завершающего перевода строки |
 | `CRANE_TOKEN_PRINCIPAL` | `crane` | имя личности токена (тип «робот»): попадает в журнал аудита, `access`-журнал и ответ cargo `owners` |
-| `CRANE_TRUSTED_PROXIES` | пусто | IP-адреса и CIDR (IPv4, IPv6) через запятую, чьим `X-Forwarded-For` и `X-Request-Id` верить; compose обязан указать сеть Caddy, иначе во всех событиях будет адрес прокси |
+| `CRANE_TRUSTED_PROXIES` | пусто | IP-адреса и CIDR (IPv4, IPv6) через запятую, чьим `X-Forwarded-For` и `X-Request-Id` верить; compose обязан указать сеть Caddy, иначе во всех событиях будет адрес прокси. Каждый прокси из списка обязан перезаписывать или удалять присланный клиентом `X-Request-Id` и дописывать адрес своего пира в конец `X-Forwarded-For` (сервер разбирает его справа налево, левые записи клиента не влияют) |
 | `CRANE_HTTP_PORT` | `8080` | порт API |
 | `CRANE_ADMIN_PORT` | `9464` | порт проб `/healthz/live` и `/healthz/ready` |
 | `CRANE_CARGO_REPOS` | `internal` | hosted cargo-репозитории через запятую |
@@ -89,7 +89,7 @@ services:
 
 **S3-режим.** Вместо тома `blobs` CAS можно держать в S3 (в поставке SeaweedFS). Режим целиком описан override-файлом `docker-compose.s3.yaml`, а не профилем: он меняет настройку самого crane. Включение: строка `COMPOSE_FILE=docker-compose.yaml:docker-compose.s3.yaml` в `.env` (или `-f` в команде), `CRANE_BLOBS=s3://<S3_BUCKET>?endpoint=http://seaweedfs:8333&allow_http=true` и два файла секретов: `S3_ACCESS_KEY_ID_SECRET` и `S3_SECRET_ACCESS_KEY_SECRET` (ключ crane; их создаёт `task secrets:init`). SeaweedFS собирает из них identities при старте (политика доступа живёт в compose, а не в файле, который не перезаписывается). Одноразовый сервис `seaweedfs-init` создаёт бакет `S3_BUCKET` до старта crane, потому что `/healthz/ready` проверяет бакет и без него crane не станет готов. SeaweedFS живёт в отдельной сети `s3` (`internal`), в которой только он и crane; анонимного доступа нет, ключи лежат в файлах и в окружение не попадают. Без override-файла single-node не меняется и новых секретов не требует.
 
-**Секреты и сети в compose.** Токен, пароль PostgreSQL и URL каталога (с паролем) лежат в файлах, пути к которым задают `CRANE_TOKEN_SECRET`, `POSTGRES_PASSWORD_SECRET` и `CRANE_DATABASE_URL_SECRET`; compose монтирует их в `/run/secrets`, а сервер читает через `CRANE_TOKEN_FILE` и `CRANE_DATABASE_URL_FILE`. Ни в переменных окружения, ни в compose-файле, ни в `.env` значений секретов нет. Сеть `edge` с фиксированной подсетью `CRANE_EDGE_SUBNET` соединяет только caddy и crane; та же подсеть передаётся как `CRANE_TRUSTED_PROXIES`, поэтому в аудите виден адрес клиента, а не Caddy. PostgreSQL в `edge` не входит, порт admin наружу не публикуется. Любой обратный прокси обязан удалять клиентский `X-Request-Id` (Caddy: `header_up -X-Request-Id`), иначе клиент выбирает свой идентификатор корреляции (14.9).
+**Секреты и сети в compose.** Токен, пароль PostgreSQL и URL каталога (с паролем) лежат в файлах, пути к которым задают `CRANE_TOKEN_SECRET`, `POSTGRES_PASSWORD_SECRET` и `CRANE_DATABASE_URL_SECRET`; compose монтирует их в `/run/secrets`, а сервер читает через `CRANE_TOKEN_FILE` и `CRANE_DATABASE_URL_FILE`. Ни в переменных окружения, ни в compose-файле, ни в `.env` значений секретов нет. Сеть `edge` с фиксированной подсетью `CRANE_EDGE_SUBNET` соединяет только caddy и crane; та же подсеть передаётся как `CRANE_TRUSTED_PROXIES`, поэтому в аудите виден адрес клиента, а не Caddy. PostgreSQL в `edge` не входит, порт admin наружу не публикуется. Эталонный Caddy удаляет клиентский `X-Request-Id` (`header_up -X-Request-Id`) и выставляет адрес своего пира в `X-Forwarded-For`.
 
 ## 16.2 Kubernetes (Helm chart)
 
@@ -125,6 +125,8 @@ flowchart TB
 ```
 
 *Рис. 16.2. Kubernetes. Все stateful-компоненты могут быть внешними управляемыми сервисами организации.*
+
+**Доверенные прокси и Ingress.** По умолчанию чарт `CRANE_TRUSTED_PROXIES` не задаёт, поэтому `X-Request-Id` и `X-Forwarded-For` от ingress игнорируются, а адрес клиента в событиях равен адресу ingress-контроллера. Если ingress-контроллер включён в `CRANE_TRUSTED_PROXIES`, он должен выполнять требование из строки этой переменной в таблице конфигурации (раздел 16.1).
 
 ## 16.3 Размеры по профилям
 

@@ -44,6 +44,7 @@ service:
   type: ClusterIP
   port: 80
 
+# Ingress, которому доверяют (CRANE_TRUSTED_PROXIES), обязан перезаписывать X-Request-Id: docs/product/16-deployment.md, раздел 16.2.
 ingress:
   enabled: false
   className: ""
