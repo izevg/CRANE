@@ -456,7 +456,6 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "moka",
- "sha2 0.10.9",
  "uuid",
 ]
 
@@ -469,7 +468,6 @@ dependencies = [
  "crane-ports",
  "futures-util",
  "object_store",
- "sha2 0.10.9",
  "tokio",
  "url",
  "uuid",
@@ -496,6 +494,8 @@ dependencies = [
  "crane-domain",
  "futures-core",
  "futures-util",
+ "sha1 0.10.7",
+ "sha2 0.10.9",
  "thiserror",
  "uuid",
 ]

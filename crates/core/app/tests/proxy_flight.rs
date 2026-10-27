@@ -15,7 +15,7 @@ use common::hello_sha256;
 use common::proxy::{FakeUpstream, Step, World, bytes_of, key, path, policy, poll_once, secs};
 use crane_app::proxy::{CacheResult, ProxyError, UpstreamFailure};
 use crane_domain::proxy::NegativePolicy;
-use crane_domain::registry::Sha256;
+use crane_domain::registry::{Checksum, Sha256};
 use crane_ports::proxy::{Cached, CachedState, Claim, FetchLeases, ProxyCache};
 use futures_executor::block_on;
 use futures_util::future::join;
@@ -218,7 +218,7 @@ fn joiner_with_foreign_expected_digest_is_rejected_by_shared_flight() {
     let (upstream, gate) = FakeUpstream::gated([Step::Found(b"hello", None)]);
     let world = World::without_leases(upstream);
     let (blob, negative) = (path("crates/a.crate"), NegativePolicy::ARTIFACT);
-    let foreign = Sha256::from([0xab; 32]);
+    let foreign = Checksum::Sha256(Sha256::from([0xab; 32]));
     let mut leader = pin!(world.engine.artifact(&world.origin, &blob, None, &negative));
     let mut joiner = pin!(
         world
@@ -236,7 +236,7 @@ fn joiner_with_foreign_expected_digest_is_rejected_by_shared_flight() {
     assert_eq!(leader.unwrap().body.digests.sha256, hello_sha256());
     assert!(matches!(
         joiner,
-        Err(ProxyError::DigestMismatch { expected, actual }) if expected == foreign && actual == hello_sha256()
+        Err(ProxyError::DigestMismatch { expected, actual }) if expected == foreign && actual == Checksum::Sha256(hello_sha256())
     ));
     assert_eq!(world.upstream.call_count(), 1);
 }
@@ -250,8 +250,12 @@ fn follower_serves_the_artifact_stored_by_the_leader() {
     let replica = world.replica(upstream_b.clone());
     let (blob, negative) = (path("crates/a.crate"), NegativePolicy::ARTIFACT);
     let mut leader = pin!(world.engine.artifact(&world.origin, &blob, None, &negative));
-    let mut follower =
-        pin!(replica.artifact(&world.origin, &blob, Some(hello_sha256()), &negative));
+    let mut follower = pin!(replica.artifact(
+        &world.origin,
+        &blob,
+        Some(Checksum::Sha256(hello_sha256())),
+        &negative
+    ));
     let _ = poll_once(leader.as_mut());
     let _ = poll_once(follower.as_mut());
     gate.open();
@@ -274,7 +278,7 @@ fn follower_with_foreign_expected_digest_ignores_the_leaders_entry() {
     let upstream_b = FakeUpstream::new([Step::Found(b"hello", None)]);
     let replica = world.replica(upstream_b.clone());
     let (blob, negative) = (path("crates/a.crate"), NegativePolicy::ARTIFACT);
-    let foreign = Sha256::from([0xab; 32]);
+    let foreign = Checksum::Sha256(Sha256::from([0xab; 32]));
     let mut leader = pin!(world.engine.artifact(&world.origin, &blob, None, &negative));
     let mut follower = pin!(replica.artifact(&world.origin, &blob, Some(foreign), &negative));
     let _ = poll_once(leader.as_mut());

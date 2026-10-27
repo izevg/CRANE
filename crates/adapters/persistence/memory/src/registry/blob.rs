@@ -5,9 +5,10 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use bytes::{Bytes, BytesMut};
 use crane_domain::registry::Sha256;
-use crane_ports::registry::{BlobError, BlobStore, ByteStream, Digests, Staged, StagingKey};
+use crane_ports::registry::{
+    BlobError, BlobStore, ByteStream, Digester, Digests, Staged, StagingKey,
+};
 use futures_util::{StreamExt, stream};
-use sha2::Digest;
 
 /// Blob-хранилище в памяти.
 #[derive(Debug, Default)]
@@ -59,17 +60,14 @@ impl MemoryBlobStore {
 
 impl BlobStore for MemoryBlobStore {
     async fn stage(&self, mut body: ByteStream) -> Result<Staged, BlobError> {
-        let mut hasher = sha2::Sha256::new();
+        let mut digester = Digester::default();
         let mut data = BytesMut::new();
         while let Some(chunk) = body.next().await {
             let chunk = chunk.map_err(BlobError::Body)?;
-            hasher.update(&chunk);
+            digester.update(&chunk);
             data.extend_from_slice(&chunk);
         }
-        let digests = Digests {
-            sha256: Sha256::from(<[u8; 32]>::from(hasher.finalize())),
-            size: data.len() as u64,
-        };
+        let digests = digester.finish();
         let key = self.put_staged(data.freeze());
         Ok(Staged::new(StagingKey::new(key), digests))
     }

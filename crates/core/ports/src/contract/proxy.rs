@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
 use crane_domain::proxy::{ProxyKey, UpstreamPath};
-use crane_domain::registry::{RepositoryId, Sha256};
+use crane_domain::registry::{RepositoryId, Sha1, Sha256, Sha512};
 use futures_util::task::noop_waker_ref;
 use uuid::Uuid;
 
@@ -188,6 +188,8 @@ async fn blob_entry_survives_round_trip<C: ProxyCache>(cache: &C) {
         fetched_at: at(3_000),
         state: CachedState::Blob(Digests {
             sha256: Sha256::from([0x5a; 32]),
+            sha512: Sha512::from([0x5b; 64]),
+            sha1: Sha1::from([0x5c; 20]),
             size: 42,
         }),
     };

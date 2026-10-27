@@ -11,7 +11,7 @@ use axum_extra::headers::IfNoneMatch;
 use crane_app::proxy::Fetched;
 use crane_app::registry::RegistryError;
 use crane_domain::proxy::NegativePolicy;
-use crane_domain::registry::{Format, PackageName};
+use crane_domain::registry::{Checksum, Format, PackageName};
 use crane_format_cargo::{archive, parse_index_path, render_config};
 use crane_ports::proxy::{FetchLeases, ProxyCache, Upstream};
 use crane_ports::registry::BlobStore;
@@ -83,7 +83,7 @@ where
         .artifact(
             &shared.origins.dl,
             &archive.path,
-            Some(archive.sha256),
+            Some(Checksum::Sha256(archive.sha256)),
             &NegativePolicy::ARTIFACT,
         )
         .await;

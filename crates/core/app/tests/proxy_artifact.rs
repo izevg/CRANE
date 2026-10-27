@@ -14,10 +14,10 @@ use common::proxy::{
     FakeUpstream, SharedBlobs, SharedCache, SharedLeases, Step, World, bytes_of, epoch,
     just_before, key, origin, path, secs,
 };
-use common::{OpenFailsBlobs, hello_sha256};
+use common::{OpenFailsBlobs, hello_sha1, hello_sha256, hello_sha512};
 use crane_app::proxy::{CacheResult, ProxyEngine, ProxyError, ProxyLimits, UpstreamFailure};
 use crane_domain::proxy::{EgressRefusal, NegativePolicy};
-use crane_domain::registry::Sha256;
+use crane_domain::registry::{Checksum, Sha256, Sha512};
 use crane_memory::{ManualClock, MemoryBlobStore};
 use crane_ports::proxy::{Cached, CachedState, ProxyCache};
 use crane_ports::registry::{BlobError, BlobStore, Digests};
@@ -63,7 +63,9 @@ fn matching_expected_digest_is_accepted() {
     let world = World::new([Step::Found(b"hello", None)]);
 
     // Act
-    let served = world.artifact(CRATE, Some(hello_sha256())).unwrap();
+    let served = world
+        .artifact(CRATE, Some(Checksum::Sha256(hello_sha256())))
+        .unwrap();
 
     // Assert
     assert_eq!(served.result, CacheResult::Miss);
@@ -73,7 +75,7 @@ fn matching_expected_digest_is_accepted() {
 fn digest_mismatch_is_rejected() {
     // Arrange
     let world = World::new([Step::Found(b"hello", None)]);
-    let expected = Sha256::from([0xab; 32]);
+    let expected = Checksum::Sha256(Sha256::from([0xab; 32]));
 
     // Act
     let outcome = world.artifact(CRATE, Some(expected));
@@ -81,7 +83,7 @@ fn digest_mismatch_is_rejected() {
     // Assert
     assert!(matches!(
         outcome,
-        Err(ProxyError::DigestMismatch { expected: e, actual }) if e == expected && actual == hello_sha256()
+        Err(ProxyError::DigestMismatch { expected: e, actual }) if e == expected && actual == Checksum::Sha256(hello_sha256())
     ));
 }
 
@@ -89,7 +91,7 @@ fn digest_mismatch_is_rejected() {
 fn digest_mismatch_commits_nothing_to_cas() {
     // Arrange
     let world = World::new([Step::Found(b"hello", None)]);
-    let _ = world.artifact(CRATE, Some(Sha256::from([0xab; 32])));
+    let _ = world.artifact(CRATE, Some(Checksum::Sha256(Sha256::from([0xab; 32]))));
 
     // Act
     let opened = block_on(world.blobs.open(&hello_sha256()));
@@ -102,7 +104,7 @@ fn digest_mismatch_commits_nothing_to_cas() {
 fn digest_mismatch_leaves_no_cache_entry() {
     // Arrange
     let world = World::new([Step::Found(b"hello", None)]);
-    let _ = world.artifact(CRATE, Some(Sha256::from([0xab; 32])));
+    let _ = world.artifact(CRATE, Some(Checksum::Sha256(Sha256::from([0xab; 32]))));
 
     // Act
     let entry = block_on(world.cache.get(&key(CRATE))).unwrap();
@@ -230,6 +232,8 @@ fn cas_backend_failure_on_hit_is_a_backend_error() {
         fetched_at: epoch(),
         state: CachedState::Blob(Digests {
             sha256: hello_sha256(),
+            sha512: hello_sha512(),
+            sha1: hello_sha1(),
             size: 5,
         }),
     };
@@ -261,14 +265,14 @@ fn cached_blob_with_other_digest_is_not_served_and_fresh_bytes_win() {
     // Arrange
     let world = World::new([Step::Found(b"hello", None), Step::Found(b"world", None)]);
     world.artifact(CRATE, None).unwrap();
-    let expected = Sha256::from_hex(WORLD_SHA256).unwrap();
+    let expected = Checksum::Sha256(Sha256::from_hex(WORLD_SHA256).unwrap());
 
     // Act
     let served = world.artifact(CRATE, Some(expected)).unwrap();
 
     // Assert
     assert_eq!(served.result, CacheResult::Miss);
-    assert_eq!(served.body.digests.sha256, expected);
+    assert_eq!(Checksum::Sha256(served.body.digests.sha256), expected);
     assert_eq!(bytes_of(served.body), b"world");
     assert_eq!(world.upstream.call_count(), 2);
 }
@@ -278,7 +282,7 @@ fn cached_blob_with_other_digest_is_refetched_and_mismatch_reported() {
     // Arrange
     let world = World::new([Step::Found(b"hello", None), Step::Found(b"hello", None)]);
     world.artifact(CRATE, None).unwrap();
-    let expected = Sha256::from_hex(WORLD_SHA256).unwrap();
+    let expected = Checksum::Sha256(Sha256::from_hex(WORLD_SHA256).unwrap());
 
     // Act
     let outcome = world.artifact(CRATE, Some(expected));
@@ -286,9 +290,63 @@ fn cached_blob_with_other_digest_is_refetched_and_mismatch_reported() {
     // Assert
     assert!(matches!(
         outcome,
-        Err(ProxyError::DigestMismatch { expected: e, actual }) if e == expected && actual == hello_sha256()
+        Err(ProxyError::DigestMismatch { expected: e, actual }) if e == expected && actual == Checksum::Sha256(hello_sha256())
     ));
     assert_eq!(world.upstream.call_count(), 2);
+}
+
+const WORLD_SHA512: &str = "11853df40f4b2b919d3815f64792e58d08663767a494bcbb38c0b2389d9140bbb170281b4a847be7757bde12c9cd0054ce3652d0ad3a1a0c92babb69798246ee";
+
+#[test]
+fn cached_blob_with_matching_sha512_is_served_without_upstream_call() {
+    // Arrange
+    let world = World::new([Step::Found(b"hello", None)]);
+    world.artifact(CRATE, None).unwrap();
+
+    // Act
+    let served = world
+        .artifact(CRATE, Some(Checksum::Sha512(hello_sha512())))
+        .unwrap();
+
+    // Assert
+    assert_eq!(served.result, CacheResult::Hit);
+    assert_eq!(world.upstream.call_count(), 1);
+}
+
+#[test]
+fn cached_blob_with_other_sha512_is_refetched_and_fresh_bytes_win() {
+    // Arrange
+    let world = World::new([Step::Found(b"hello", None), Step::Found(b"world", None)]);
+    world.artifact(CRATE, None).unwrap();
+    let expected = Checksum::Sha512(Sha512::from_hex(WORLD_SHA512).unwrap());
+
+    // Act
+    let served = world.artifact(CRATE, Some(expected)).unwrap();
+
+    // Assert
+    assert_eq!(served.result, CacheResult::Miss);
+    assert_eq!(world.upstream.call_count(), 2);
+}
+
+#[test]
+fn miss_with_wrong_sha512_reports_mismatch_and_commits_nothing() {
+    // Arrange
+    let world = World::new([Step::Found(b"hello", None)]);
+    let expected = Checksum::Sha512(Sha512::from([0xab; 64]));
+
+    // Act
+    let outcome = world.artifact(CRATE, Some(expected));
+
+    // Assert
+    assert!(matches!(
+        outcome,
+        Err(ProxyError::DigestMismatch { expected: e, actual })
+            if e == expected && actual == Checksum::Sha512(hello_sha512())
+    ));
+    assert!(matches!(
+        block_on(world.blobs.open(&hello_sha256())),
+        Err(BlobError::NotFound(_))
+    ));
 }
 
 const SIX_BYTES_SHA256: &str = "ce06092fb948d9ffac7d1a376e404b26b7575bcc11ee05a4615fef4fec3a308b";

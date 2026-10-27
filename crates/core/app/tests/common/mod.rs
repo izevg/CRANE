@@ -19,7 +19,7 @@ use crane_app::registry::{Coordinate, Publish, Registry, Upload};
 use crane_domain::access::{Caller, Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::registry::{
     Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, RepositoryId,
-    RepositoryKind, Sha256, Version, VersionId, VersionState,
+    RepositoryKind, Sha1, Sha256, Sha512, Version, VersionId, VersionState,
 };
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::registry::{
@@ -34,6 +34,9 @@ pub(crate) const HOSTED: &str = "crates";
 pub(crate) const PROXY: &str = "mirror";
 /// sha256 от байт `hello`.
 const HELLO_SHA256: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+/// sha512 и sha1 от байт `hello`.
+const HELLO_SHA512: &str = "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043";
+const HELLO_SHA1: &str = "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d";
 pub(crate) const METADATA: &str = r#"{"deps":[]}"#;
 
 pub(crate) fn fixed_now() -> SystemTime {
@@ -65,6 +68,14 @@ pub(crate) fn caller() -> Caller {
 
 pub(crate) fn hello_sha256() -> Sha256 {
     Sha256::from_hex(HELLO_SHA256).unwrap()
+}
+
+pub(crate) fn hello_sha512() -> Sha512 {
+    Sha512::from_hex(HELLO_SHA512).unwrap()
+}
+
+pub(crate) fn hello_sha1() -> Sha1 {
+    Sha1::from_hex(HELLO_SHA1).unwrap()
 }
 
 pub(crate) fn name(raw: &str) -> PackageName {

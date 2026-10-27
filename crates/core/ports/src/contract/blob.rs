@@ -1,13 +1,15 @@
 use std::io;
 
 use bytes::Bytes;
-use crane_domain::registry::Sha256;
+use crane_domain::registry::{Sha1, Sha256, Sha512};
 use futures_util::{StreamExt, stream};
 
 use crate::registry::{BlobError, BlobStore, ByteStream, Digests, Staged, StagingKey};
 
-/// SHA-256 от `hello`; константа, чтобы не тянуть хеш-библиотеку в порты.
+/// Дайджесты `hello` как константы, чтобы контракт не зависел от хеш-библиотеки.
 const HELLO_SHA256: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+const HELLO_SHA512: &str = "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043";
+const HELLO_SHA1: &str = "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d";
 
 /// Проверяет реализацию `BlobStore`; `new` создаёт чистое хранилище для каждого сценария.
 pub async fn blob_store_contract<B: BlobStore>(new: impl Fn() -> B) {
@@ -30,6 +32,8 @@ fn world() -> ByteStream {
 fn hello_digests() -> Digests {
     Digests {
         sha256: hello_sha256(),
+        sha512: Sha512::from_hex(HELLO_SHA512).expect("константа HELLO_SHA512 — валидный hex"),
+        sha1: Sha1::from_hex(HELLO_SHA1).expect("константа HELLO_SHA1 — валидный hex"),
         size: 5,
     }
 }
@@ -69,7 +73,7 @@ async fn stage_computes_sha256_and_size_over_all_chunks<B: BlobStore>(store: &B)
     assert_eq!(
         *staged.digests(),
         hello_digests(),
-        "stage считает SHA-256 и размер по всем чанкам потока"
+        "stage считает SHA-256, SHA-512, SHA-1 и размер по всем чанкам потока"
     );
 }
 
@@ -128,6 +132,8 @@ async fn commit_of_missing_staged_object_fails<B: BlobStore>(store: &B) {
         StagingKey::new("missing".to_owned()),
         Digests {
             sha256: missing,
+            sha512: Sha512::from([0; 64]),
+            sha1: Sha1::from([0; 20]),
             size: 1,
         },
     );

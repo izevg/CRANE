@@ -176,7 +176,7 @@ mod tests {
 
     use crane_app::proxy::UpstreamFailure;
     use crane_domain::proxy::EgressRefusal;
-    use crane_domain::registry::Sha256;
+    use crane_domain::registry::{Checksum, Sha256};
 
     use super::*;
 
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn proxy_errors_map_to_status_and_hide_upstream_details() {
         // Arrange
-        let sum = Sha256::from([1; 32]);
+        let sum = Checksum::Sha256(Sha256::from([1; 32]));
         let cases = [
             ProxyError::NotFound,
             ProxyError::Upstream(UpstreamFailure::Unavailable),

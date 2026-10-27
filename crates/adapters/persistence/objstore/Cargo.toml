@@ -16,7 +16,6 @@ crane-domain = { path = "../../../core/domain" }
 crane-ports = { path = "../../../core/ports" }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 object_store = { version = "0.14", features = ["aws"] }
-sha2 = "0.10"
 # Только AsyncWriteExt::shutdown для BufWriter: другого способа завершить загрузку у него нет.
 tokio = { version = "1", default-features = false, features = ["io-util"] }
 url = "2"
