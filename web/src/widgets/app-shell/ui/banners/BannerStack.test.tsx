@@ -76,14 +76,16 @@ describe("BannerStack", () => {
     expect(screen.queryByText("Сообщение c")).not.toBeInTheDocument();
   });
 
-  it("обычный баннер объявляется как status, срочный (P0) как alert", () => {
+  it("роль alert только у срочного (P0) баннера, обычные без роли", () => {
     // Arrange
+    const banners = [banner("p0", { tone: "error", urgent: true }), banner("w")];
+
     // Act
-    render(<BannerStack banners={[banner("p0", { tone: "error", urgent: true }), banner("w")]} />);
+    render(<BannerStack banners={banners} />);
 
     // Assert
     expect(screen.getByRole("alert")).toHaveTextContent("Сообщение p0");
-    expect(screen.getByRole("status")).toHaveTextContent("Сообщение w");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("действие баннера рендерится ссылкой только когда передано", () => {

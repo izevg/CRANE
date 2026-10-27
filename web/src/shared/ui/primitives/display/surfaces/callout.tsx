@@ -4,20 +4,27 @@ import { TONE_SURFACE, type Tone, toneGlyph } from "../tone/tone";
 
 type CalloutTone = Exclude<Tone, "neutral">;
 
+type LiveMode = "polite" | "alert";
+
+const LIVE_ROLE = { polite: "status", alert: "alert" } satisfies Record<LiveMode, string>;
+
 type CalloutProps = Omit<React.ComponentProps<"div">, "role"> & {
   tone: CalloutTone;
-  /** `alert` — срочное, прерывает чтение; по умолчанию `status` (вежливое объявление). */
-  urgent?: boolean;
+  /**
+   * Явное объявление скринридеру: `alert` — срочное, `polite` — вежливое (`role="status"`).
+   * По умолчанию callout — обычный блок в потоке страницы без роли (patterns §26).
+   */
+  live?: LiveMode;
 };
 
 /** Встроенное сообщение в потоке страницы (inline-callout, основа баннера). */
-export function Callout({ tone, urgent = false, className, children, ...props }: CalloutProps) {
+export function Callout({ tone, live, className, children, ...props }: CalloutProps) {
   const Icon = toneGlyph(tone);
   return (
     <div
       data-slot="callout"
       data-tone={tone}
-      role={urgent ? "alert" : "status"}
+      role={live === undefined ? undefined : LIVE_ROLE[live]}
       className={cx(
         "flex w-full gap-2 rounded-md px-3 py-2 text-left text-body",
         TONE_SURFACE[tone],

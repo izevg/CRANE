@@ -73,16 +73,45 @@ describe("Callout", () => {
     render(<Callout tone={tone}>{text}</Callout>);
 
     // Assert
-    expect(screen.getByRole("status").querySelector("svg")).not.toBeNull();
+    expect(
+      screen.getByText(text).closest('[data-slot="callout"]')?.querySelector("svg"),
+    ).not.toBeNull();
   });
 
-  it("срочный callout получает роль alert", () => {
+  it("без live у callout нет роли: это обычный блок в потоке", () => {
+    // Arrange
+    const text = "Данные обновлены";
+
+    // Act
+    render(<Callout tone="info">{text}</Callout>);
+
+    // Assert
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it('live="polite" даёт роль status', () => {
+    // Arrange
+    const text = "Данные обновлены";
+
+    // Act
+    render(
+      <Callout tone="info" live="polite">
+        {text}
+      </Callout>,
+    );
+
+    // Assert
+    expect(screen.getByRole("status")).toHaveTextContent(text);
+  });
+
+  it('live="alert" даёт роль alert', () => {
     // Arrange
     const title = "Только чтение";
 
     // Act
     render(
-      <Callout tone="error" urgent>
+      <Callout tone="error" live="alert">
         <CalloutTitle>{title}</CalloutTitle>
         <CalloutDescription>{"Запись отключена администратором"}</CalloutDescription>
       </Callout>,

@@ -44,7 +44,7 @@ function CollapseButton({
 
 function BannerItem({ banner, onCollapse }: { banner: Banner; onCollapse: Props["onCollapse"] }) {
   return (
-    <Callout tone={banner.tone} urgent={banner.urgent === true}>
+    <Callout tone={banner.tone} {...(banner.urgent === true ? { live: "alert" as const } : {})}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <span className="min-w-0 flex-1">{banner.text}</span>
         <div className="flex items-center gap-2">
