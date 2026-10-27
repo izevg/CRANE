@@ -8,4 +8,4 @@ mod rows;
 mod schema;
 
 pub use catalog::PgCatalog;
-pub use schema::migrate;
+pub use schema::{SchemaError, migrate};

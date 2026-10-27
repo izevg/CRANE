@@ -40,6 +40,7 @@ pub(crate) struct TestServer {
     options: PgConnectOptions,
     template: String,
     created: Mutex<Vec<String>>,
+    roles: Mutex<Vec<String>>,
 }
 
 /// Выполняет `body` на свежем сервере; без `CRANE_TEST_DATABASE_URL` пропускает тест,
@@ -96,6 +97,7 @@ impl TestServer {
             options,
             template,
             created: Mutex::new(Vec::new()),
+            roles: Mutex::new(Vec::new()),
         }
     }
 
@@ -109,15 +111,50 @@ impl TestServer {
         self.pool_from(None).await
     }
 
+    /// Пустая БД и два пула к ней: администратор и роль без права создавать расширения
+    /// (только LOGIN, CONNECT, USAGE и CREATE на схеме `public`).
+    pub(crate) async fn empty_pool_with_limited_role(&self) -> (PgPool, PgPool) {
+        let database = self.new_database(None).await;
+        let admin_pool = connect(&self.options, &database).await;
+        let role = unique_name("crane_role");
+        // Пароль случайный и нигде не печатается.
+        let password = Uuid::new_v4().simple().to_string();
+        execute(
+            &self.admin,
+            format!("CREATE ROLE {role} LOGIN PASSWORD '{password}'"),
+        )
+        .await;
+        self.roles.lock().expect("список ролей").push(role.clone());
+        execute(
+            &self.admin,
+            format!("GRANT CONNECT ON DATABASE {database} TO {role}"),
+        )
+        .await;
+        // Схема public принадлежит БД, поэтому право на неё выдаётся внутри этой БД.
+        execute(
+            &admin_pool,
+            format!("GRANT USAGE, CREATE ON SCHEMA public TO {role}"),
+        )
+        .await;
+        let options = self.options.clone().username(&role).password(&password);
+        let role_pool = connect(&options, &database).await;
+        (admin_pool, role_pool)
+    }
+
     pub(crate) async fn fresh_catalog(&self) -> PgCatalog {
         PgCatalog::new(self.fresh_pool().await)
     }
 
     async fn pool_from(&self, template: Option<&str>) -> PgPool {
+        let name = self.new_database(template).await;
+        connect(&self.options, &name).await
+    }
+
+    async fn new_database(&self, template: Option<&str>) -> String {
         let name = unique_name("crane_test");
         create_database(&self.admin, &name, template).await;
         self.created.lock().expect("список БД").push(name.clone());
-        connect(&self.options, &name).await
+        name
     }
 
     async fn shutdown(self) {
@@ -130,8 +167,20 @@ impl TestServer {
             .await
             .expect("удаление БД");
         }
+        // Роли удаляются после БД: пока БД жива, на неё ссылаются выданные права.
+        for role in self.roles.into_inner().expect("список ролей") {
+            execute(&self.admin, format!("DROP ROLE IF EXISTS {role}")).await;
+        }
         self.admin.close().await;
     }
+}
+
+/// Выполняет DDL, собранный из uuid-идентификаторов (параметром их не передать).
+async fn execute(pool: &PgPool, sql: String) {
+    sqlx::query(AssertSqlSafe(sql))
+        .execute(pool)
+        .await
+        .expect("выполнение DDL тестового окружения");
 }
 
 async fn create_database(admin: &PgPool, name: &str, template: Option<&str>) {
