@@ -16,6 +16,7 @@ pub async fn catalog_contract<C: Catalog>(new: impl Fn() -> C) {
     deleted_version_stays_reserved(&new()).await;
     package_keeps_first_written_name(&new()).await;
     names_differing_only_in_spelling_collide(&new()).await;
+    stored_spelling_survives_lookups(&new()).await;
     repositories_are_isolated(&new()).await;
     transition_is_compare_and_set(&new()).await;
     set_yanked_is_idempotent(&new()).await;
@@ -40,15 +41,15 @@ fn repository(id: u128, name: &str) -> Repository {
     }
 }
 
-fn new_version(id: u128, repo: RepositoryId, package: &str, raw: &str) -> NewVersion {
+fn new_version(seq: u64, repo: RepositoryId, package: &str, raw: &str) -> NewVersion {
     NewVersion {
-        id: VersionId::new(Uuid::from_u128(id)),
+        id: VersionId::new(Uuid::from_u128(seq.into())),
         repository: repo,
         package: name(package),
         version: version(raw),
         state: VersionState::Quarantined,
-        // Разные секунды у разных id, чтобы порядок публикации не зависел от равенства времён.
-        published_at: SystemTime::UNIX_EPOCH + Duration::from_secs(u64::try_from(id).unwrap_or(0)),
+        // Разные секунды у разных seq, чтобы порядок публикации не зависел от равенства времён.
+        published_at: SystemTime::UNIX_EPOCH + Duration::from_secs(seq),
         assets: vec![Asset {
             path: format!("{package}-{raw}.crate"),
             sha256: Sha256::from([7; 32]),
@@ -66,18 +67,17 @@ async fn ensure_repo<C: Catalog>(catalog: &C, id: u128, repo_name: &str) -> Repo
         .id
 }
 
-async fn state_of<C: Catalog>(
+async fn find<C: Catalog>(
     catalog: &C,
     repo: RepositoryId,
     package: &str,
     raw: &str,
-) -> VersionState {
+) -> PackageVersion {
     catalog
         .find_version(repo, &name(package), &version(raw))
         .await
         .expect("find_version не должен падать")
         .expect("версия должна быть найдена")
-        .state
 }
 
 async fn ensure_repository_is_idempotent<C: Catalog>(catalog: &C) {
@@ -259,6 +259,35 @@ async fn names_differing_only_in_spelling_collide<C: Catalog>(catalog: &C) {
     );
 }
 
+async fn stored_spelling_survives_lookups<C: Catalog>(catalog: &C) {
+    let repo = ensure_repo(catalog, 1, "main").await;
+    catalog
+        .publish_version(new_version(10, repo, "Serde-Json", "1.0.0+build.5"))
+        .await
+        .expect("публикация");
+
+    // `Eq` у имени и версии семантический, поэтому написание сравнивается явно.
+    let found = find(catalog, repo, "serde_json", "1.0.0").await;
+    let listed = catalog
+        .versions(repo, &name("serde_json"))
+        .await
+        .expect("versions");
+
+    assert_eq!(
+        (found.package.as_written(), found.version.as_written()),
+        ("Serde-Json", "1.0.0+build.5"),
+        "find_version отдаёт исходные написания имени и версии, а не нормализованные"
+    );
+    assert_eq!(
+        listed
+            .iter()
+            .map(|v| (v.package.as_written(), v.version.as_written()))
+            .collect::<Vec<_>>(),
+        vec![("Serde-Json", "1.0.0+build.5")],
+        "versions отдаёт исходные написания имени и версии, а не нормализованные"
+    );
+}
+
 async fn repositories_are_isolated<C: Catalog>(catalog: &C) {
     let first = ensure_repo(catalog, 1, "main").await;
     let second = ensure_repo(catalog, 2, "mirror").await;
@@ -291,7 +320,7 @@ async fn transition_is_compare_and_set<C: Catalog>(catalog: &C) {
         .await
         .expect("transition с верным from");
     assert_eq!(
-        state_of(catalog, repo, "serde", "1.0.0").await,
+        find(catalog, repo, "serde", "1.0.0").await.state,
         VersionState::Released,
         "transition с верным from меняет состояние"
     );
@@ -309,7 +338,7 @@ async fn transition_is_compare_and_set<C: Catalog>(catalog: &C) {
         "CAS: устаревший from даёт StateConflict с фактическим состоянием, получили {stale:?}"
     );
     assert_eq!(
-        state_of(catalog, repo, "serde", "1.0.0").await,
+        find(catalog, repo, "serde", "1.0.0").await.state,
         VersionState::Released,
         "CAS: при конфликте состояние не меняется"
     );
@@ -332,30 +361,31 @@ async fn set_yanked_is_idempotent<C: Catalog>(catalog: &C) {
     let new = new_version(10, repo, "serde", "1.0.0");
     let id = new.id;
     catalog.publish_version(new).await.expect("публикация");
-    let yanked = |expected: bool, rule: &'static str| async move {
-        let found = catalog
-            .find_version(repo, &name("serde"), &version("1.0.0"))
-            .await
-            .expect("find_version")
-            .expect("версия найдена");
-        assert_eq!(found.yanked, expected, "{rule}");
-    };
 
     catalog
         .set_yanked(id, true)
         .await
         .expect("set_yanked(true)");
-    yanked(true, "set_yanked(true) ставит флаг").await;
+    assert!(
+        find(catalog, repo, "serde", "1.0.0").await.yanked,
+        "set_yanked(true) ставит флаг"
+    );
     catalog
         .set_yanked(id, true)
         .await
         .expect("повторный set_yanked(true)");
-    yanked(true, "set_yanked идемпотентен: повтор не меняет результат").await;
+    assert!(
+        find(catalog, repo, "serde", "1.0.0").await.yanked,
+        "set_yanked идемпотентен: повтор не меняет результат"
+    );
     catalog
         .set_yanked(id, false)
         .await
         .expect("set_yanked(false)");
-    yanked(false, "set_yanked(false) снимает флаг").await;
+    assert!(
+        !find(catalog, repo, "serde", "1.0.0").await.yanked,
+        "set_yanked(false) снимает флаг"
+    );
 
     let unknown = catalog
         .set_yanked(VersionId::new(Uuid::from_u128(999)), true)

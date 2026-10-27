@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::future::ready;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
@@ -13,101 +12,17 @@ pub struct MemoryCatalog {
     state: Mutex<State>,
 }
 
-/// Версии лежат в порядке публикации, как того требует контракт `versions`.
 #[derive(Debug, Default)]
 struct State {
     repositories: Vec<Repository>,
-    versions: Vec<Stored>,
-    /// Первое написание имени пакета: ключ — `(репозиторий, нормализованное имя)`.
-    written_names: HashMap<(RepositoryId, String), PackageName>,
-}
-
-#[derive(Debug)]
-struct Stored {
-    record: PackageVersion,
-    canonical: String,
+    /// В порядке публикации, как того требует контракт `versions`.
+    versions: Vec<PackageVersion>,
 }
 
 impl MemoryCatalog {
-    // Замок берётся только в синхронных функциях: guard не должен жить через await.
     fn lock(&self) -> MutexGuard<'_, State> {
+        // Отравление замка не портит данные: каждая операция атомарна внутри замка.
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    fn ensure_repository_sync(&self, repository: Repository) -> Repository {
-        let mut state = self.lock();
-        let existing = state
-            .repositories
-            .iter()
-            .find(|r| r.format == repository.format && r.name == repository.name);
-        if let Some(existing) = existing {
-            return existing.clone();
-        }
-        state.repositories.push(repository.clone());
-        repository
-    }
-
-    fn find_repository_sync(&self, format: Format, name: &str) -> Option<Repository> {
-        let state = self.lock();
-        state
-            .repositories
-            .iter()
-            .find(|r| r.format == format && r.name == name)
-            .cloned()
-    }
-
-    fn publish_sync(&self, new: NewVersion) -> Result<PackageVersion, CatalogError> {
-        let mut state = self.lock();
-        if !state.repositories.iter().any(|r| r.id == new.repository) {
-            return Err(CatalogError::NotFound);
-        }
-        let canonical = new.version.canonical();
-        let taken = state.versions.iter().any(|s| {
-            s.record.repository == new.repository
-                && s.record.package.normalized() == new.package.normalized()
-                && s.canonical == canonical
-        });
-        if taken {
-            return Err(CatalogError::VersionExists);
-        }
-        let package = state
-            .written_names
-            .entry((new.repository, new.package.normalized().to_owned()))
-            .or_insert(new.package)
-            .clone();
-        let record = PackageVersion {
-            id: new.id,
-            repository: new.repository,
-            package,
-            version: new.version,
-            state: new.state,
-            yanked: false,
-            published_at: new.published_at,
-            assets: new.assets,
-            metadata: new.metadata,
-        };
-        state.versions.push(Stored {
-            record: record.clone(),
-            canonical,
-        });
-        Ok(record)
-    }
-
-    fn versions_sync(
-        &self,
-        repository: RepositoryId,
-        package: &PackageName,
-    ) -> Vec<PackageVersion> {
-        let state = self.lock();
-        state
-            .versions
-            .iter()
-            .filter(|s| {
-                s.record.repository == repository
-                    && s.record.package.normalized() == package.normalized()
-            })
-            .map(|s| s.record.clone())
-            .collect()
     }
 
     fn update(
@@ -116,13 +31,17 @@ impl MemoryCatalog {
         change: impl FnOnce(&mut PackageVersion) -> Result<(), CatalogError>,
     ) -> Result<(), CatalogError> {
         let mut state = self.lock();
-        let stored = state
+        let record = state
             .versions
             .iter_mut()
-            .find(|s| s.record.id == id)
+            .find(|v| v.id == id)
             .ok_or(CatalogError::NotFound)?;
-        change(&mut stored.record)
+        change(record)
     }
+}
+
+fn same_package(v: &PackageVersion, repository: RepositoryId, package: &PackageName) -> bool {
+    v.repository == repository && v.package == *package
 }
 
 // Внутри нет `.await`, а `async fn` без него не проходит `clippy::unused_async`,
@@ -132,7 +51,17 @@ impl Catalog for MemoryCatalog {
         &self,
         repository: Repository,
     ) -> impl Future<Output = Result<Repository, CatalogError>> + Send {
-        ready(Ok(self.ensure_repository_sync(repository)))
+        let mut state = self.lock();
+        let existing = state
+            .repositories
+            .iter()
+            .find(|r| r.format == repository.format && r.name == repository.name)
+            .cloned();
+        let stored = existing.unwrap_or_else(|| {
+            state.repositories.push(repository.clone());
+            repository
+        });
+        ready(Ok(stored))
     }
 
     fn find_repository(
@@ -140,14 +69,53 @@ impl Catalog for MemoryCatalog {
         format: Format,
         name: &str,
     ) -> impl Future<Output = Result<Option<Repository>, CatalogError>> + Send {
-        ready(Ok(self.find_repository_sync(format, name)))
+        let found = self
+            .lock()
+            .repositories
+            .iter()
+            .find(|r| r.format == format && r.name == name)
+            .cloned();
+        ready(Ok(found))
     }
 
     fn publish_version(
         &self,
         version: NewVersion,
     ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
-        ready(self.publish_sync(version))
+        let mut state = self.lock();
+        if !state
+            .repositories
+            .iter()
+            .any(|r| r.id == version.repository)
+        {
+            return ready(Err(CatalogError::NotFound));
+        }
+        let siblings = || {
+            state
+                .versions
+                .iter()
+                .filter(|v| same_package(v, version.repository, &version.package))
+        };
+        if siblings().any(|v| v.version == version.version) {
+            return ready(Err(CatalogError::VersionExists));
+        }
+        // Пакет хранит первое написание имени: берём его у любой уже опубликованной версии.
+        let package = siblings()
+            .next()
+            .map_or(version.package.clone(), |v| v.package.clone());
+        let record = PackageVersion {
+            id: version.id,
+            repository: version.repository,
+            package,
+            version: version.version,
+            state: version.state,
+            yanked: false,
+            published_at: version.published_at,
+            assets: version.assets,
+            metadata: version.metadata,
+        };
+        state.versions.push(record.clone());
+        ready(Ok(record))
     }
 
     fn versions(
@@ -155,7 +123,14 @@ impl Catalog for MemoryCatalog {
         repository: RepositoryId,
         package: &PackageName,
     ) -> impl Future<Output = Result<Vec<PackageVersion>, CatalogError>> + Send {
-        ready(Ok(self.versions_sync(repository, package)))
+        let found = self
+            .lock()
+            .versions
+            .iter()
+            .filter(|v| same_package(v, repository, package))
+            .cloned()
+            .collect();
+        ready(Ok(found))
     }
 
     fn find_version(
@@ -165,9 +140,11 @@ impl Catalog for MemoryCatalog {
         version: &Version,
     ) -> impl Future<Output = Result<Option<PackageVersion>, CatalogError>> + Send {
         let found = self
-            .versions_sync(repository, package)
-            .into_iter()
-            .find(|v| v.version == *version);
+            .lock()
+            .versions
+            .iter()
+            .find(|v| same_package(v, repository, package) && v.version == *version)
+            .cloned();
         ready(Ok(found))
     }
 
