@@ -205,6 +205,21 @@ mod tests {
     }
 
     #[test]
+    fn rejection_names_the_offending_entry_for_the_operator() {
+        // Arrange
+        let raw = "10.0.0.1, 10.0.0.0/33";
+
+        // Act
+        let message = TrustedProxies::parse(raw).map_err(|error| error.to_string());
+
+        // Assert
+        assert_eq!(
+            message,
+            Err("`10.0.0.0/33` не IP-адрес и не CIDR".to_owned())
+        );
+    }
+
+    #[test]
     fn invalid_entries_are_rejected() {
         // Arrange
         let cases = [
