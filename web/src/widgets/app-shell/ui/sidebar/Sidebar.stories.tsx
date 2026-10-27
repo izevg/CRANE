@@ -28,6 +28,10 @@ const meta = {
   args: {
     collapsed: false,
     helpHref: "/help",
+    account: {
+      name: "Анна Смирнова-Остроградская",
+      role: "владелец библиотеки @acme/ui и сопровождающий",
+    },
     groups: [
       {
         id: "registry",
@@ -84,6 +88,54 @@ export const Rail: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole("link", { name: "Пакеты" })).toBeVisible();
     await expect(canvas.getByRole("link", { name: "Справка" })).toBeVisible();
+  },
+};
+
+function rightEdge(element: Element): number {
+  return element.getBoundingClientRect().right;
+}
+
+export const LongUserBlock: Story = {
+  name: "Блок пользователя: длинные имя и роль не выходят за 248 px",
+  play: async ({ canvasElement }) => {
+    const block = canvasElement.querySelector("[data-slot=sidebar-user]");
+    const sidebar = canvasElement.querySelector("[data-slot=sidebar]");
+    await expect(block).not.toBeNull();
+    await expect(sidebar).not.toBeNull();
+    if (block === null || sidebar === null) {
+      return;
+    }
+    await expect(rightEdge(block)).toBeLessThanOrEqual(rightEdge(sidebar) + 0.5);
+    const name = within(block as HTMLElement).getByText("Анна Смирнова-Остроградская");
+    // обрезка многоточием: текст шире видимой области, полный текст — в title
+    await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+    await expect(name).toHaveAttribute("title", "Анна Смирнова-Остроградская");
+    await expect(getComputedStyle(name).textOverflow).toBe("ellipsis");
+  },
+};
+
+export const UserBlockRail: Story = {
+  name: "Блок пользователя в рельсе 64 px: только аватар",
+  args: { collapsed: true },
+  decorators: [
+    (Story) => (
+      <div className="h-svh w-16">
+        <Story />
+      </div>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const block = canvasElement.querySelector("[data-slot=sidebar-user]");
+    const sidebar = canvasElement.querySelector("[data-slot=sidebar]");
+    if (block === null || sidebar === null) {
+      throw new Error("нет блока пользователя или сайдбара");
+    }
+    await expect(rightEdge(block)).toBeLessThanOrEqual(rightEdge(sidebar) + 0.5);
+    await expect(
+      within(canvasElement).getByRole("img", {
+        name: "Анна Смирнова-Остроградская, владелец библиотеки @acme/ui и сопровождающий",
+      }),
+    ).toBeVisible();
   },
 };
 

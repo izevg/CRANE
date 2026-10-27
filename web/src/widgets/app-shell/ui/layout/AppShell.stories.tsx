@@ -96,11 +96,7 @@ const meta = {
         { id: "settings", label: "Настройки", href: "/settings", icon: SettingsIcon },
       ],
       helpHref: "/help",
-      account: (
-        <Button variant="ghost" className="w-full justify-start">
-          Анна Смирнова · владелец библиотеки
-        </Button>
-      ),
+      account: { name: "Анна Смирнова", role: "владелец библиотеки" },
     },
     topbar: {
       breadcrumbs: { trail: [{ label: "Поиск", href: "/search" }], current: "Результаты" },

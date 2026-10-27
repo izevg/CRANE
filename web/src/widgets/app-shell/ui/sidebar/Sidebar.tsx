@@ -1,6 +1,6 @@
 // i18n: не мигрирован
 import { CircleHelpIcon, DotIcon, type LucideIcon } from "lucide-react";
-import { type ReactNode, useId } from "react";
+import { useId } from "react";
 import { cx } from "~/shared/lib/core";
 import { Link, Tooltip, TooltipContent, TooltipTrigger } from "~/shared/ui/primitives";
 import { Logo } from "./Logo";
@@ -33,7 +33,8 @@ export type SidebarProps = {
   /** Справка всегда стоит в одном месте нижнего блока (WCAG 3.2.6), поэтому ссылка обязательна. */
   helpHref: string;
   homeHref?: string;
-  account?: ReactNode;
+  /** Текущий пользователь: две строки в развёрнутом сайдбаре, только аватар в рельсе. */
+  account?: { name: string; role: string };
 };
 
 type ContentProps = SidebarProps & {
@@ -109,6 +110,66 @@ function NavGroupList({
   );
 }
 
+const INITIALS_COUNT = 2;
+const WHITESPACE = /\s+/;
+
+/** Инициалы для аватара: первые буквы первых двух слов имени («Иванов И.» → «ИИ»). */
+function initialsOf(name: string): string {
+  return name
+    .split(WHITESPACE)
+    .filter((word) => word !== "")
+    .slice(0, INITIALS_COUNT)
+    .map((word) => Array.from(word)[0] ?? "")
+    .join("")
+    .toLocaleUpperCase();
+}
+
+/**
+ * Блок пользователя. Длинные имя и роль обрезаются многоточием (полный текст в `title`), блок не шире сайдбара.
+ * В рельсе остаётся только аватар: его доступное имя содержит и имя, и роль.
+ */
+function SidebarUser({
+  name,
+  role,
+  collapsed,
+}: {
+  name: string;
+  role: string;
+  collapsed: boolean;
+}) {
+  const avatar = (
+    <span
+      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-container text-caption font-semibold text-brand"
+      {...(collapsed
+        ? { role: "img", "aria-label": `${name}, ${role}`, title: `${name}, ${role}` }
+        : { "aria-hidden": true })}
+    >
+      {initialsOf(name)}
+    </span>
+  );
+  return (
+    <div
+      data-slot="sidebar-user"
+      className={cx(
+        "flex min-w-0 items-center gap-3 px-2.5 py-2",
+        collapsed && "justify-center px-0",
+      )}
+    >
+      {avatar}
+      {collapsed ? null : (
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span title={name} className="truncate text-body font-semibold">
+            {name}
+          </span>
+          <span title={role} className="truncate text-caption text-muted-foreground">
+            {role}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Содержимое сайдбара: общее для боковой колонки (248/64 px) и для Sheet на узком экране. */
 export function Sidebar({
   groups,
@@ -121,7 +182,10 @@ export function Sidebar({
 }: ContentProps) {
   const help: NavItem = { id: "help", label: HELP, href: helpHref, icon: CircleHelpIcon };
   return (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+    <div
+      data-slot="sidebar"
+      className="flex h-full flex-col overflow-x-hidden bg-sidebar text-sidebar-foreground"
+    >
       <div
         className={cx(
           "flex h-(--topbar-height) shrink-0 items-center border-b border-sidebar-border",
@@ -154,7 +218,7 @@ export function Sidebar({
           </ul>
         </nav>
         <ThemeMenu collapsed={collapsed} />
-        {account}
+        {account ? <SidebarUser {...account} collapsed={collapsed} /> : null}
       </div>
     </div>
   );

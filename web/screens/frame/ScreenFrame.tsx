@@ -23,7 +23,6 @@ import { CURRENT_USER, WORKSPACES } from "../data/common";
 const UNREAD = 3;
 const WORKSPACE = `Workspace: ${WORKSPACES[0]}`;
 const ACCOUNT_LABEL = `${CURRENT_USER.initials}, аккаунт: ${CURRENT_USER.name}`;
-const ACCOUNT_BLOCK = `${CURRENT_USER.name}, ${CURRENT_USER.role}`;
 
 /** Группы строятся снаружи из `_links` ответа `GET /me`, а не из названий ролей. */
 const GROUPS = [
@@ -87,11 +86,7 @@ function sidebarFor(active: string): SidebarProps {
     })),
     footerItems: FOOTER.map((item) => ({ ...item, active: item.id === active })),
     helpHref: "/help",
-    account: (
-      <Button variant="ghost" className="w-full justify-start">
-        {ACCOUNT_BLOCK}
-      </Button>
-    ),
+    account: { name: CURRENT_USER.name, role: CURRENT_USER.role },
   };
 }
 
