@@ -21,12 +21,17 @@ const INDEX_TYPE: &str = "text/plain; charset=utf-8";
 
 pub(super) async fn config<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
+    Extension(caller): Extension<Caller>,
     Path(repo): Path<String>,
-) -> Response {
-    // Существование репозитория здесь не проверяется: use case «репозиторий есть?» нет,
-    // неизвестный репозиторий проявится 404 на остальных маршрутах.
+) -> Result<Response, CargoError> {
+    // Клиент по 404 на config.json понимает, что адрес реестра неверен, а не получает
+    // рабочий конфиг для репозитория, которого нет.
+    shared
+        .registry
+        .repository(&caller, Format::Cargo, &repo)
+        .await?;
     let base = format!("{}{CARGO_PREFIX}/{repo}", shared.settings.public_url);
-    ([(header::CONTENT_TYPE, JSON)], render_config(&base)).into_response()
+    Ok(([(header::CONTENT_TYPE, JSON)], render_config(&base)).into_response())
 }
 
 pub(super) async fn sparse<C: Catalog + 'static, B: BlobStore + 'static>(

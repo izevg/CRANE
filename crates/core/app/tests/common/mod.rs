@@ -306,6 +306,96 @@ impl Catalog for BlindCatalog {
     }
 }
 
+/// Каталог, который не отвечает на `find_repository`; остальное делегируется.
+/// Моделирует недоступную БД для пробы готовности.
+#[derive(Debug)]
+pub(crate) struct DownCatalog(pub MemoryCatalog);
+
+impl Catalog for DownCatalog {
+    fn ensure_repository(
+        &self,
+        repository: Repository,
+    ) -> impl Future<Output = Result<Repository, CatalogError>> + Send {
+        self.0.ensure_repository(repository)
+    }
+
+    fn find_repository(
+        &self,
+        _format: Format,
+        _name: &str,
+    ) -> impl Future<Output = Result<Option<Repository>, CatalogError>> + Send {
+        ready(Err(CatalogError::Backend("БД недоступна".into())))
+    }
+
+    fn publish_version(
+        &self,
+        version: NewVersion,
+    ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
+        self.0.publish_version(version)
+    }
+
+    fn versions(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+    ) -> impl Future<Output = Result<Vec<PackageVersion>, CatalogError>> + Send {
+        self.0.versions(repository, package)
+    }
+
+    fn find_version(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+        version: &Version,
+    ) -> impl Future<Output = Result<Option<PackageVersion>, CatalogError>> + Send {
+        self.0.find_version(repository, package, version)
+    }
+
+    fn set_yanked(
+        &self,
+        id: VersionId,
+        yanked: bool,
+    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
+        self.0.set_yanked(id, yanked)
+    }
+
+    fn transition(
+        &self,
+        id: VersionId,
+        from: VersionState,
+        to: VersionState,
+    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
+        self.0.transition(id, from, to)
+    }
+}
+
+/// Blob-хранилище, у которого `open` отвечает заданной ошибкой; остальное делегируется.
+#[derive(Debug)]
+pub(crate) struct OpenFailsBlobs {
+    inner: MemoryBlobStore,
+    error: fn() -> BlobError,
+}
+
+impl OpenFailsBlobs {
+    pub(crate) fn new(inner: MemoryBlobStore, error: fn() -> BlobError) -> Self {
+        Self { inner, error }
+    }
+}
+
+impl BlobStore for OpenFailsBlobs {
+    fn stage(&self, body: ByteStream) -> impl Future<Output = Result<Staged, BlobError>> + Send {
+        self.inner.stage(body)
+    }
+
+    fn commit(&self, staged: Staged) -> impl Future<Output = Result<Digests, BlobError>> + Send {
+        self.inner.commit(staged)
+    }
+
+    fn open(&self, _sha256: &Sha256) -> impl Future<Output = Result<ByteStream, BlobError>> + Send {
+        ready(Err((self.error)()))
+    }
+}
+
 /// Журнал попыток commit, общий с тестом.
 pub(crate) type CommitLog = Arc<Mutex<Vec<Sha256>>>;
 

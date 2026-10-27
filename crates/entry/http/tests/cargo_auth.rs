@@ -217,3 +217,33 @@ fn etag_changes_when_the_index_changes() {
     // Assert
     assert_ne!(after.header("etag"), before);
 }
+
+#[test]
+fn config_of_unknown_repository_is_cargo_shaped_not_found() {
+    // Arrange
+    let api = Api::new();
+
+    // Act
+    let reply = api.get("/cargo/nope/index/config.json");
+
+    // Assert
+    assert_eq!(reply.status, StatusCode::NOT_FOUND);
+    assert_eq!(reply.header("content-type"), "application/json");
+    assert_eq!(reply.detail(), "репозиторий не найден");
+}
+
+#[test]
+fn config_of_known_repository_points_to_its_own_base() {
+    // Arrange
+    let api = Api::new();
+
+    // Act
+    let reply = api.get(CONFIG_URL);
+
+    // Assert
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(
+        reply.json()["dl"],
+        format!("{PUBLIC_URL}/cargo/internal/api/v1/crates")
+    );
+}

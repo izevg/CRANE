@@ -104,15 +104,15 @@ impl Api {
                 }))
                 .unwrap();
         }
-        let registry = Registry::new(
+        let registry = Arc::new(Registry::new(
             catalog,
             MemoryBlobStore::default(),
             Arc::new(FixedClock::new(SystemTime::UNIX_EPOCH)),
             ids,
             sink.clone(),
-        );
+        ));
         let router = api_router(
-            Arc::new(registry),
+            registry.clone(),
             CargoSettings {
                 public_url: PUBLIC_URL.to_owned(),
                 max_publish_bytes: MAX_PUBLISH_BYTES,
@@ -130,7 +130,7 @@ impl Api {
         Self {
             runtime,
             router,
-            admin: admin_router(),
+            admin: admin_router(registry),
             audit,
         }
     }

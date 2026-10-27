@@ -27,7 +27,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             metadata,
         } = request;
         let repository = self
-            .repository(coordinate.format, &coordinate.repository)
+            .find_repository(coordinate.format, &coordinate.repository)
             .await?;
         if repository.kind != RepositoryKind::Hosted {
             return Err(RegistryError::NotHosted);

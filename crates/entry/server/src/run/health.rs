@@ -56,10 +56,26 @@ fn is_healthy(status_line: &str) -> bool {
     reason = "в тестах падение unwrap — это падение теста"
 )]
 mod tests {
+    use std::sync::Arc;
+
+    use crane_app::registry::Registry;
     use crane_http::admin_router;
+    use crane_memory::{MemoryAudit, MemoryBlobStore, MemoryCatalog};
     use tokio::net::TcpListener;
 
     use super::*;
+    use crate::system::{SystemClock, UuidV7Ids};
+
+    /// Админ-роутер над хранилищами в памяти: проба готовности отвечает 200.
+    fn admin() -> axum::Router {
+        admin_router(Arc::new(Registry::new(
+            MemoryCatalog::default(),
+            MemoryBlobStore::default(),
+            Arc::new(SystemClock),
+            Arc::new(UuidV7Ids),
+            Arc::new(MemoryAudit::default()),
+        )))
+    }
 
     #[test]
     fn only_exact_200_over_http_1_is_healthy() {
@@ -97,7 +113,7 @@ mod tests {
         let result = runtime.block_on(async {
             let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
             let port = listener.local_addr().unwrap().port();
-            tokio::spawn(async move { axum::serve(listener, admin_router()).await });
+            tokio::spawn(async move { axum::serve(listener, admin()).await });
             probe(port).await
         });
 

@@ -85,6 +85,15 @@ impl Problem {
     }
 }
 
+impl Problem {
+    pub(crate) const fn storage_unavailable() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            detail: "хранилище недоступно",
+        }
+    }
+}
+
 impl IntoResponse for Problem {
     fn into_response(self) -> Response {
         let mut response = self.status.into_response();

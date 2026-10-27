@@ -14,6 +14,7 @@ use std::path::Path;
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_http::TrustedProxies;
 pub(crate) use file::layered;
+use url::Url;
 
 const DEFAULT_HTTP_PORT: u16 = 8080;
 const DEFAULT_ADMIN_PORT: u16 = 9464;
@@ -26,6 +27,7 @@ const MEMORY: &str = "memory";
 const NO_SCHEME: &str = "(нет схемы)";
 
 const DATABASE_URL: &str = "CRANE_DATABASE_URL";
+const DATABASE_URL_FILE: &str = "CRANE_DATABASE_URL_FILE";
 const BLOBS: &str = "CRANE_BLOBS";
 const HTTP_PORT: &str = "CRANE_HTTP_PORT";
 const ADMIN_PORT: &str = "CRANE_ADMIN_PORT";
@@ -39,7 +41,7 @@ const TRUSTED_PROXIES: &str = "CRANE_TRUSTED_PROXIES";
 
 /// Единственный список имён переменных. Ключи файла выводятся из него (`file::variable`),
 /// отдельного перечня в файле нет. `CRANE_CONFIG` сюда не входит намеренно.
-pub(super) const VARS: [&str; 11] = [
+pub(super) const VARS: [&str; 12] = [
     HTTP_PORT,
     ADMIN_PORT,
     PUBLIC_URL,
@@ -50,6 +52,7 @@ pub(super) const VARS: [&str; 11] = [
     CARGO_REPOS,
     MAX_PUBLISH_BYTES,
     DATABASE_URL,
+    DATABASE_URL_FILE,
     BLOBS,
 ];
 
@@ -72,9 +75,17 @@ pub(crate) enum ConfigError {
         var: &'static str,
         scheme: String,
     },
-    TokenFile {
+    /// `var` — имя переменной `*_FILE`; причина ввода-вывода не содержит содержимого файла.
+    SecretFile {
+        var: &'static str,
         reason: String,
     },
+    /// Имя ключа запроса `CRANE_BLOBS` с учётными данными; значение в ошибку не попадает.
+    BlobsCredential {
+        key: String,
+    },
+    /// Каталог в PostgreSQL над blob в памяти после рестарта ссылался бы на потерянные blob.
+    MixedStorage,
     UnknownKey {
         key: String,
     },
@@ -108,9 +119,17 @@ impl fmt::Display for ConfigError {
                     "{var}: значение со схемой `{scheme}` пока не поддерживается"
                 )
             }
-            Self::TokenFile { reason } => {
-                write!(f, "не удалось прочитать {TOKEN_FILE}: {reason}")
+            Self::SecretFile { var, reason } => {
+                write!(f, "не удалось прочитать {var}: {reason}")
             }
+            Self::BlobsCredential { key } => write!(
+                f,
+                "{BLOBS}: ключ `{key}`: учётные данные S3 передаются только через переменные AWS_*"
+            ),
+            Self::MixedStorage => write!(
+                f,
+                "{DATABASE_URL} и {BLOBS}: memory нельзя смешивать с постоянным хранилищем"
+            ),
             Self::UnknownKey { key } => write!(f, "неизвестный ключ `{key}` в файле конфигурации"),
             Self::FileValue { key, reason } => {
                 write!(
@@ -131,45 +150,92 @@ impl fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Catalogs {
+/// Выбор хранилищ. Один режим на оба, а не два независимых выбора: смешанная пара
+/// непредставима. Новый бэкенд blob (GCS, Azure) этот тип не меняет: схему разбирает `from_url`.
+pub(crate) enum Storage {
+    /// Данные теряются при рестарте; только оба хранилища вместе.
     Memory,
+    /// Каталог и CAS переживают рестарт одинаково, иначе каталог ссылался бы на потерянные blob.
+    Durable { database: Secret, blobs: Url },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Blobs {
+/// Режим одной переменной до сверки пары; `T` — разобранное значение постоянного режима.
+enum Mode<T> {
     Memory,
-}
-
-/// Выбор хранилищ. Новый бэкенд — новый вариант enum и новая ветка match в `run`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Storage {
-    pub(crate) catalog: Catalogs,
-    pub(crate) blobs: Blobs,
+    Durable(T),
 }
 
 impl Storage {
     /// Оба значения обязательны, а `memory` пишется явно: молчаливое хранилище в памяти
     /// в продакшене потеряло бы данные при рестарте.
-    pub(crate) fn from_env(var: &impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
-        let catalog = match required(var, DATABASE_URL)?.as_str() {
-            MEMORY => Catalogs::Memory,
-            other => return Err(unsupported(DATABASE_URL, other)),
-        };
-        let blobs = match required(var, BLOBS)?.as_str() {
-            MEMORY => Blobs::Memory,
-            other => return Err(unsupported(BLOBS, other)),
-        };
-        Ok(Self { catalog, blobs })
+    pub(crate) fn from_env(
+        var: &impl Fn(&str) -> Option<String>,
+        read_file: &impl Fn(&Path) -> io::Result<String>,
+    ) -> Result<Self, ConfigError> {
+        let database = secret(var, read_file, DATABASE_URL, DATABASE_URL_FILE)?;
+        let database_mode = database_mode(database.expose())?;
+        let blobs_mode = blobs_mode(&required(var, BLOBS)?)?;
+        match (database_mode, blobs_mode) {
+            (Mode::Memory, Mode::Memory) => Ok(Self::Memory),
+            (Mode::Durable(()), Mode::Durable(blobs)) => Ok(Self::Durable { database, blobs }),
+            _ => Err(ConfigError::MixedStorage),
+        }
     }
 }
 
-/// Сырой токен. Без `Debug` и `Display`: случайно попасть в журнал он не может.
+fn database_mode(value: &str) -> Result<Mode<()>, ConfigError> {
+    if value == MEMORY {
+        Ok(Mode::Memory)
+    } else if value.starts_with("postgres://") || value.starts_with("postgresql://") {
+        Ok(Mode::Durable(()))
+    } else {
+        Err(unsupported(DATABASE_URL, value))
+    }
+}
+
+fn blobs_mode(value: &str) -> Result<Mode<Url>, ConfigError> {
+    if value == MEMORY {
+        return Ok(Mode::Memory);
+    }
+    // Ошибка разбора и сам URL не выводятся: в запросе `s3://` бывают ключи доступа.
+    let url = Url::parse(value).map_err(|_| ConfigError::Invalid {
+        var: BLOBS,
+        reason: "ожидалось memory, file:///абсолютный/путь или s3://бакет",
+    })?;
+    // Учётных данных в запросе нет (отвергаются здесь), поэтому URL не секрет,
+    // а текст ошибки `from_url` не может их процитировать.
+    if let Some(key) = url
+        .query_pairs()
+        .map(|(key, _)| key)
+        .find(|key| is_credential_key(key))
+    {
+        return Err(ConfigError::BlobsCredential {
+            key: key.into_owned(),
+        });
+    }
+    match url.scheme() {
+        "file" | "s3" => Ok(Mode::Durable(url)),
+        scheme => Err(ConfigError::Unsupported {
+            var: BLOBS,
+            scheme: scheme.to_owned(),
+        }),
+    }
+}
+
+fn is_credential_key(key: &str) -> bool {
+    let key = key.to_ascii_lowercase();
+    ["secret", "token", "password"]
+        .iter()
+        .any(|word| key.contains(word))
+        || key == "aws_access_key_id"
+}
+
+/// Секрет (токен, URL базы). Без `Debug` и `Display`: случайно попасть в журнал он не может.
 pub(crate) struct Secret(String);
 
 impl Secret {
-    pub(crate) fn expose(&self) -> &[u8] {
-        self.0.as_bytes()
+    pub(crate) fn expose(&self) -> &str {
+        &self.0
     }
 }
 
@@ -197,10 +263,10 @@ impl Settings {
             http_port: number(var, HTTP_PORT, DEFAULT_HTTP_PORT)?,
             admin_port: admin_port(var)?,
             public_url: public_url(var)?,
-            token: token(var, read_file)?,
+            token: secret(var, read_file, TOKEN, TOKEN_FILE)?,
             cargo_repos: repos(var)?,
             max_publish_bytes: max_publish_bytes(var)?,
-            storage: Storage::from_env(var)?,
+            storage: Storage::from_env(var, read_file)?,
         })
     }
 }
@@ -264,30 +330,34 @@ fn public_url(var: &impl Fn(&str) -> Option<String>) -> Result<String, ConfigErr
     Ok(raw.trim_end_matches('/').to_owned())
 }
 
-fn token(
+/// Секрет из `name` или из файла `file_name` (Docker/Kubernetes secrets). Ровно один из двух.
+fn secret(
     var: &impl Fn(&str) -> Option<String>,
     read_file: &impl Fn(&Path) -> io::Result<String>,
+    name: &'static str,
+    file_name: &'static str,
 ) -> Result<Secret, ConfigError> {
-    let value = match (var(TOKEN), var(TOKEN_FILE)) {
+    let value = match (var(name), var(file_name)) {
         (Some(_), Some(_)) => {
             return Err(ConfigError::Conflict {
-                first: TOKEN,
-                second: TOKEN_FILE,
+                first: name,
+                second: file_name,
             });
         }
         (Some(value), None) => value,
-        // Перевод строки в конце файла секрета ставит редактор или `echo`, токеном он не является.
+        // Перевод строки в конце файла секрета ставит редактор или `echo`, секретом он не является.
         (None, Some(path)) => read_file(Path::new(&path))
             .map(|content| content.trim_end_matches(['\r', '\n']).to_owned())
-            .map_err(|error| ConfigError::TokenFile {
+            .map_err(|error| ConfigError::SecretFile {
+                var: file_name,
                 reason: error.to_string(),
             })?,
-        (None, None) => return Err(ConfigError::Missing { var: TOKEN }),
+        (None, None) => return Err(ConfigError::Missing { var: name }),
     };
     if value.is_empty() {
         return Err(ConfigError::Invalid {
-            var: TOKEN,
-            reason: "токен пуст",
+            var: name,
+            reason: "значение пусто",
         });
     }
     Ok(Secret(value))
@@ -421,14 +491,8 @@ mod tests {
         assert_eq!(settings.cargo_repos, ["internal"]);
         assert_eq!(settings.max_publish_bytes, 10 * 1024 * 1024);
         assert_eq!(settings.public_url, "https://crane.example");
-        assert_eq!(settings.token.expose(), b"t");
-        assert_eq!(
-            settings.storage,
-            Storage {
-                catalog: Catalogs::Memory,
-                blobs: Blobs::Memory
-            }
-        );
+        assert_eq!(settings.token.expose(), "t");
+        assert!(matches!(settings.storage, Storage::Memory));
     }
 
     #[test]
@@ -571,7 +635,7 @@ mod tests {
         let settings = Settings::from_env(&env(&pairs), &read).unwrap();
 
         // Assert
-        assert_eq!(settings.token.expose(), b"file-token");
+        assert_eq!(settings.token.expose(), "file-token");
     }
 
     #[test]
@@ -587,7 +651,7 @@ mod tests {
         let settings = Settings::from_env(&env(&pairs), &read).unwrap();
 
         // Assert
-        assert_eq!(settings.token.expose(), b" a b ");
+        assert_eq!(settings.token.expose(), " a b ");
     }
 
     #[test]
@@ -637,7 +701,7 @@ mod tests {
         // Assert
         let empty = || ConfigError::Invalid {
             var: TOKEN,
-            reason: "токен пуст",
+            reason: "значение пусто",
         };
         assert_eq!(errors, [empty(), empty()]);
     }
@@ -654,7 +718,13 @@ mod tests {
         let error = error_of(&pairs);
 
         // Assert
-        assert!(matches!(error, ConfigError::TokenFile { .. }));
+        assert!(matches!(
+            error,
+            ConfigError::SecretFile {
+                var: TOKEN_FILE,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -687,9 +757,9 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_storage_names_scheme_but_never_the_secret() {
+    fn unsupported_database_names_scheme_but_never_the_secret() {
         // Arrange
-        let pairs = with(&[(DATABASE_URL, "postgres://u:SECRET@h/db")]);
+        let pairs = with(&[(DATABASE_URL, "mysql://u:SECRET@h/db")]);
 
         // Act
         let error = error_of(&pairs);
@@ -700,15 +770,28 @@ mod tests {
             error,
             ConfigError::Unsupported {
                 var: DATABASE_URL,
-                scheme: "postgres".to_owned()
+                scheme: "mysql".to_owned()
             }
         );
-        assert!(message.contains("postgres"), "{message}");
+        assert!(message.contains("mysql"), "{message}");
         assert!(!message.contains("SECRET"), "{message}");
     }
 
     #[test]
-    fn unsupported_blobs_value_without_scheme_is_not_echoed() {
+    fn unsupported_blobs_scheme_is_named_without_the_rest_of_the_value() {
+        // Arrange
+        let pairs = with(&[(BLOBS, "gcs://SECRETbucket?key=SECRETkey")]);
+
+        // Act
+        let message = error_of(&pairs).to_string();
+
+        // Assert
+        assert!(message.contains("gcs"), "{message}");
+        assert!(!message.contains("SECRET"), "{message}");
+    }
+
+    #[test]
+    fn invalid_blobs_value_is_rejected_without_echoing_it() {
         // Arrange
         let pairs = with(&[(BLOBS, "SECRETvalue")]);
 
@@ -720,17 +803,139 @@ mod tests {
         assert!(!message.contains("SECRET"), "{message}");
     }
 
+    /// Форма результата для таблицы: сравнивать `Storage` целиком нельзя, секрет не `PartialEq`.
+    fn shape(result: Result<Storage, ConfigError>) -> String {
+        match result {
+            Ok(Storage::Memory) => "memory".to_owned(),
+            Ok(Storage::Durable { database, blobs }) => {
+                format!("durable {} {}", database.expose(), blobs.scheme())
+            }
+            Err(error) => format!("error {error}"),
+        }
+    }
+
+    #[test]
+    fn storage_mode_follows_the_pair_of_database_and_blobs() {
+        // Arrange
+        let cases = [
+            ("memory", "memory"),
+            ("postgres://u:pw@h/db", "file:///data/blobs"),
+            (
+                "postgresql://u:pw@h/db",
+                "s3://bucket/p?endpoint=http://s3:8333",
+            ),
+            ("memory", "file:///data/blobs"),
+            ("postgres://u:pw@h/db", "memory"),
+        ];
+
+        // Act
+        let shapes = cases.map(|(database, blobs)| {
+            shape(Storage::from_env(
+                &env(&[(DATABASE_URL, database), (BLOBS, blobs)]),
+                &no_files,
+            ))
+        });
+
+        // Assert
+        let mixed = "error CRANE_DATABASE_URL и CRANE_BLOBS: memory нельзя смешивать с постоянным хранилищем";
+        assert_eq!(
+            shapes,
+            [
+                "memory",
+                "durable postgres://u:pw@h/db file",
+                "durable postgresql://u:pw@h/db s3",
+                mixed,
+                mixed
+            ]
+        );
+    }
+
+    #[test]
+    fn blobs_query_with_credentials_is_rejected_naming_only_the_key() {
+        // Arrange
+        let cases = [
+            "s3://b?endpoint=http://x:8333&aws_allow_http=true",
+            "s3://b?aws_secret_access_key=SECRETKEY",
+            "s3://b?AWS_SESSION_TOKEN=SECRETKEY",
+            "s3://b?aws_access_key_id=SECRETKEY",
+        ];
+
+        // Act
+        let results = cases.map(|blobs| {
+            blobs_mode(blobs)
+                .err()
+                .map_or_else(|| "принято".to_owned(), |error| error.to_string())
+        });
+
+        // Assert
+        let rejected = |key: &str| {
+            format!(
+                "CRANE_BLOBS: ключ `{key}`: учётные данные S3 передаются только через переменные AWS_*"
+            )
+        };
+        assert_eq!(
+            results,
+            [
+                "принято".to_owned(),
+                rejected("aws_secret_access_key"),
+                rejected("AWS_SESSION_TOKEN"),
+                rejected("aws_access_key_id"),
+            ]
+        );
+    }
+
+    #[test]
+    fn database_url_file_is_read_without_trailing_newline() {
+        // Arrange
+        let source = env(&[
+            (DATABASE_URL_FILE, "/run/secrets/db"),
+            (BLOBS, "file:///data/blobs"),
+        ]);
+        let read = |path: &Path| {
+            (path == Path::new("/run/secrets/db"))
+                .then(|| "postgres://u:pw@h/db\r\n".to_owned())
+                .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))
+        };
+
+        // Act
+        let storage = Storage::from_env(&source, &read);
+
+        // Assert
+        assert_eq!(shape(storage), "durable postgres://u:pw@h/db file");
+    }
+
+    #[test]
+    fn database_url_and_its_file_together_conflict() {
+        // Arrange
+        let source = env(&[
+            (DATABASE_URL, "memory"),
+            (DATABASE_URL_FILE, "/db"),
+            (BLOBS, "memory"),
+        ]);
+
+        // Act
+        let error = Storage::from_env(&source, &no_files).err().unwrap();
+
+        // Assert
+        assert_eq!(
+            error,
+            ConfigError::Conflict {
+                first: DATABASE_URL,
+                second: DATABASE_URL_FILE
+            }
+        );
+    }
+
     #[test]
     fn storage_from_env_does_not_need_token_or_public_url() {
         // Arrange
         let source = env(&[(DATABASE_URL, "memory"), (BLOBS, "memory")]);
 
         // Act
-        let storage = Storage::from_env(&source).unwrap();
+        let storage = Storage::from_env(&source, &no_files).unwrap();
 
         // Assert
-        assert_eq!(storage.catalog, Catalogs::Memory);
-        assert_eq!(storage.blobs, Blobs::Memory);
+        assert!(matches!(storage, Storage::Memory));
     }
 
     #[test]

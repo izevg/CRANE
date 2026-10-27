@@ -62,7 +62,7 @@ fn execute(role: &Role) -> Result<(), run::RunError> {
     match role {
         Role::Serve => run::serve(Settings::from_env(&var, &read_file)?),
         // Миграциям токен и публичный адрес не нужны.
-        Role::Migrate => run::migrate(Storage::from_env(&var)?),
+        Role::Migrate => run::migrate(Storage::from_env(&var, &read_file)?),
         // Только порт admin: токен, адрес и хранилище пробе не нужны.
         Role::Healthcheck => run::healthcheck(config::admin_port(&var)?),
     }

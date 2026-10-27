@@ -142,6 +142,35 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         }
     }
 
+    /// Репозиторий по формату и имени. Чтение, аудита нет.
+    pub async fn repository(
+        &self,
+        // Чтение пока не авторизуется; в v0.4 Cedar решает и для чтений.
+        _caller: &Caller,
+        format: Format,
+        name: &str,
+    ) -> Result<Repository, RegistryError> {
+        self.find_repository(format, name).await
+    }
+
+    /// Готовность хранилищ для пробы оркестратора: вызывающего и аудита нет.
+    ///
+    /// Вопрос задаётся через существующие контракты портов, портам не нужен отдельный `ping`.
+    /// Каталогу: `find_repository` для имени, которого не бывает. Любой `Ok` означает, что
+    /// бэкенд ответил. Blob-хранилищу: `open` нулевого дайджеста. Такого blob в CAS нет, поэтому
+    /// `NotFound` тоже означает «бэкенд ответил»; готовность ломает только другая ошибка.
+    ///
+    /// # Errors
+    ///
+    /// `Backend`, если каталог или blob-хранилище не ответили.
+    pub async fn ready(&self) -> Result<(), RegistryError> {
+        self.catalog.find_repository(Format::Cargo, "").await?;
+        match self.blobs.open(&Sha256::from([0; 32])).await {
+            Ok(_) | Err(BlobError::NotFound(_)) => Ok(()),
+            Err(error) => Err(RegistryError::Backend(Box::new(error))),
+        }
+    }
+
     /// Единственная точка эмиссии аудита: ровно одно событие на мутирующий use case.
     fn audited<T>(&self, caller: &Caller, action: AuditAction, result: &Result<T, RegistryError>) {
         let outcome = match result {
@@ -159,7 +188,11 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         });
     }
 
-    async fn repository(&self, format: Format, name: &str) -> Result<Repository, RegistryError> {
+    async fn find_repository(
+        &self,
+        format: Format,
+        name: &str,
+    ) -> Result<Repository, RegistryError> {
         self.catalog
             .find_repository(format, name)
             .await?
@@ -168,7 +201,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
 
     async fn find(&self, coordinate: &Coordinate) -> Result<PackageVersion, RegistryError> {
         let repository = self
-            .repository(coordinate.format, &coordinate.repository)
+            .find_repository(coordinate.format, &coordinate.repository)
             .await?;
         self.catalog
             .find_version(repository.id, &coordinate.package, &coordinate.version)
@@ -208,6 +241,8 @@ fn use_case_futures_are_send<C: Catalog, B: BlobStore>(
     send(registry.fetch(caller, coordinate, ""));
     send(registry.versions(caller, Format::Cargo, "", package));
     send(registry.set_yanked(caller, coordinate, true));
+    send(registry.repository(caller, Format::Cargo, ""));
+    send(registry.ready());
 }
 
 #[cfg(test)]

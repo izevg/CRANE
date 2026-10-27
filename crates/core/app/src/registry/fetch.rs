@@ -35,7 +35,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         repository: &str,
         package: &PackageName,
     ) -> Result<Vec<PackageVersion>, RegistryError> {
-        let repository = self.repository(format, repository).await?;
+        let repository = self.find_repository(format, repository).await?;
         let all = self.catalog.versions(repository.id, package).await?;
         Ok(all
             .into_iter()

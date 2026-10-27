@@ -49,8 +49,10 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
         body.map_err(|rejection| CargoError::new(rejection.status(), rejection.body_text()))?;
     let request = parse_publish(body).map_err(|e| CargoError::bad_request(chain(&e)))?;
 
-    // crates.io тоже отвергает смену написания: иначе строки индекса
-    // одного файла несли бы разные имена.
+    // crates.io тоже отвергает смену написания, и мы отказываем явной ошибкой. Каталог при этом
+    // сам держит инвариант: первое записанное написание побеждает даже в гонке (`name_display`
+    // не перезаписывается), поэтому проигравший гонку получит версию под первым написанием,
+    // а не строки индекса с разными именами. Проверка нужна только ради понятного отказа.
     let existing = shared
         .registry
         .versions(&caller, Format::Cargo, &repo, &request.name)
