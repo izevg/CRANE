@@ -113,6 +113,7 @@ describe("SecretOnceDialog", () => {
 
     // Assert
     expect(screen.queryByText(SECRET)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(SECRET);
   });
 
