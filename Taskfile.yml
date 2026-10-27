@@ -1,6 +1,9 @@
 # Единая точка входа: `task --list`. Требуется go-task (https://taskfile.dev).
 version: "3"
 
+# Переменные подключения к PostgreSQL для rust:test:pg (cp .env.dist .env).
+dotenv: [".env"]
+
 tasks:
   default:
     desc: Список задач
@@ -48,6 +51,13 @@ tasks:
   rust:deny:
     desc: Лицензии и advisories
     cmds: [cargo deny check]
+  rust:test:pg:
+    desc: "Тесты адаптера PostgreSQL на живой БД (нужны Docker и .env из .env.dist)"
+    cmds:
+      - docker compose -f docker-compose.dev.yaml up -d --wait postgres
+      - >-
+        CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
+        cargo test -p crane-pg
   rust:check:
     desc: fmt, clippy, test, deny
     cmds:
@@ -77,6 +87,7 @@ tasks:
       BASE: '{{.BASE | default "origin/main"}}'
     cmds:
       - task: check
+      - task: rust:test:pg
       - mkdir -p out
       - git diff {{.BASE}}...HEAD > out/gate.diff
       - "[ ! -s out/gate.diff ] || cargo mutants --workspace --in-diff out/gate.diff"
