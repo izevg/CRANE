@@ -1,6 +1,6 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
-import { matcher, type Rules } from "./checks.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { matcher, type Rules, sourceFiles } from "./checks.ts";
 
 type Lang = "rust" | "ts";
 
@@ -326,24 +326,11 @@ export function checkAaaSource(src: string, path: string): string[] {
 export function checkAaaTree(root: string, rules: Rules): string[] {
   const isTest = matcher(rules.testFiles);
   const skipped = new Set([...rules.ignoredDirs, ...rules.aaa.exemptDirs]);
-  const isTarget = (name: string): boolean =>
-    name.endsWith(".rs") || (TS_FILE.test(name) && isTest(name));
-  const walk = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true })
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .flatMap((entry) => {
-        const full = join(dir, entry.name);
-        if (entry.isDirectory()) {
-          return skipped.has(entry.name) || entry.name.startsWith(".") ? [] : walk(full);
-        }
-        if (!isTarget(entry.name)) {
-          return [];
-        }
-        const rel = relative(root, full).split(sep).join("/");
-        return checkAaaSource(readFileSync(full, "utf8"), rel);
-      });
-  return rules.aaa.roots
-    .map((r) => join(root, r))
-    .filter((start) => existsSync(start))
-    .flatMap(walk);
+  const isTarget = (path: string): boolean => {
+    const name = path.slice(path.lastIndexOf("/") + 1);
+    return name.endsWith(".rs") || (TS_FILE.test(name) && isTest(name));
+  };
+  return sourceFiles(root, rules.aaa.roots, skipped)
+    .filter(isTarget)
+    .flatMap((rel) => checkAaaSource(readFileSync(join(root, rel), "utf8"), rel));
 }

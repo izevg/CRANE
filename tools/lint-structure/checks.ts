@@ -17,6 +17,13 @@ export interface Rules {
   entryFiles: string[];
   rustLayers: Record<string, string[]>;
   aaa: { roots: string[]; exemptDirs: string[] };
+  size: {
+    roots: string[];
+    exemptDirs: string[];
+    extensions: string[];
+    maxLines: number;
+    warnLines: number;
+  };
 }
 
 export interface CargoPackage {
@@ -91,6 +98,27 @@ export function checkStructure(root: string, rules: Rules): string[] {
   };
   return rules.scope
     .map((scope) => join(root, scope))
+    .filter((start) => existsSync(start))
+    .flatMap(walk);
+}
+
+/**
+ * Исходные файлы под roots: пути относительно root через `/`, обход в глубину
+ * в порядке имён. Точечные папки и папки из skipped пропускаются, отсутствующие корни игнорируются.
+ */
+export function sourceFiles(root: string, roots: string[], skipped: ReadonlySet<string>): string[] {
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true })
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .flatMap((entry) => {
+        const full = join(dir, entry.name);
+        if (!entry.isDirectory()) {
+          return [relative(root, full).split(sep).join("/")];
+        }
+        return skipped.has(entry.name) || entry.name.startsWith(".") ? [] : walk(full);
+      });
+  return roots
+    .map((r) => join(root, r))
     .filter((start) => existsSync(start))
     .flatMap(walk);
 }

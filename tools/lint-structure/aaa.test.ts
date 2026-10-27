@@ -27,6 +27,7 @@ const rules: Rules = {
   entryFiles: [],
   rustLayers: {},
   aaa: { roots: ["crates", "web"], exemptDirs: ["e2e"] },
+  size: { roots: [], exemptDirs: [], extensions: [], maxLines: 400, warnLines: 320 },
 };
 
 const source = (...lines: string[]): string => `${lines.join("\n")}\n`;

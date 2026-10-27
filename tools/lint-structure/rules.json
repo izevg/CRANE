@@ -20,6 +20,13 @@
   "storyFiles": ["*.stories.*"],
   "entryFiles": ["lib.rs", "main.rs", "mod.rs", "index.ts", "index.tsx"],
   "aaa": { "roots": ["crates", "web", "cli", "tools"], "exemptDirs": ["e2e"] },
+  "size": {
+    "roots": ["crates", "web/src", "web/screens", "cli", "tools"],
+    "exemptDirs": ["generated", "migrations"],
+    "extensions": [".rs", ".ts", ".tsx"],
+    "maxLines": 400,
+    "warnLines": 320
+  },
   "rustLayers": {
     "domain": [],
     "ports": ["domain"],
