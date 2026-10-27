@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { toast } from "sonner";
 import { copyToClipboard } from "~/shared/lib/core";
 
