@@ -73,6 +73,9 @@ msgstr "Active"
 msgid "Безопасность"
 msgstr "Security"
 
+msgid "Блокировка {id}"
+msgstr "Block {id}"
+
 msgid "Было"
 msgstr "Before"
 
@@ -369,6 +372,9 @@ msgstr "Copied"
 
 msgid "Скопировать ID"
 msgstr "Copy ID"
+
+msgid "Скопировать идентификатор блокировки"
+msgstr "Copy block ID"
 
 msgid "Скопировать идентификатор запроса"
 msgstr "Copy request ID"

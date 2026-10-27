@@ -6,6 +6,11 @@ import { columnHelper } from "~/shared/ui/data-display";
 import { STATE_COUNTS, type VersionRow } from "../data/versions";
 import { Moment } from "../frame/Moment";
 
+/** Маршрут SPA страницы экстренной блокировки: страница строит его из `block_id`, а не берёт `href` API. */
+function blockLink({ block_reason: reason }: VersionRow): { blockHref?: string } {
+  return reason?.kind === "emergency" ? { blockHref: `/emergency-blocks/${reason.block_id}` } : {};
+}
+
 /** Момент публикации выбранной версии: тот же, что первое событие ленты, таблицы и сведений. */
 export const SELECTED_AT = "2026-10-27T13:42:00Z";
 
@@ -20,7 +25,7 @@ export const columns = helper.columns([
   helper.accessor("state", {
     header: () => i18n._(msg`Состояние`),
     meta: { priority: 1 },
-    cell: (info) => <VersionStatus version={info.row.original} />,
+    cell: (info) => <VersionStatus version={info.row.original} {...blockLink(info.row.original)} />,
   }),
   helper.accessor("flags", {
     header: () => i18n._(msg`Флаги`),
