@@ -1,7 +1,7 @@
 // Сценарий proxy-репозитория crates.io: настоящий cargo собирает проект с зависимостью с crates.io
 // через `[source.crates-io] replace-with`, второй прогон с пустым CARGO_HOME идёт из кэша crane.
 import { accessLines } from "./audit.ts";
-import { type CargoClient, ROOT_CERT } from "./cargo.ts";
+import { authorizedCurl, type CargoClient } from "./cargo.ts";
 import { tail } from "./exec.ts";
 import type { Stand } from "./stand.ts";
 
@@ -99,22 +99,14 @@ export function proxyScenario(
   expectCache(watched(base), lines.slice(first, second), "miss");
   expectCache(watched(base), lines.slice(second), "hit");
 
-  const status = client.exec(
-    [
-      "curl",
-      "-sS",
-      "-o",
-      "/dev/null",
-      "-w",
-      "%{http_code}",
-      "--cacert",
-      ROOT_CERT,
-      "-K",
-      "-",
-      `${url}/api/v1/crates/${CRATE}/${MISSING_VERSION}/download`,
-    ],
-    { input: `header = "Authorization: ${stand.token}"\n` },
-  );
+  const status = authorizedCurl(client, stand.token, [
+    "-sS",
+    "-o",
+    "/dev/null",
+    "-w",
+    "%{http_code}",
+    `${url}/api/v1/crates/${CRATE}/${MISSING_VERSION}/download`,
+  ]);
   if (status.stdout.trim() !== String(HTTP_NOT_FOUND)) {
     throw new Error(`версия вне индекса: ожидался 404, получен ${status.stdout.trim()}`);
   }

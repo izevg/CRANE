@@ -2,15 +2,15 @@
 // манифесты остаются прежними (path-зависимости без реестра), правится только копия.
 import { parse, stringify } from "smol-toml";
 
-export type Table = Record<string, unknown>;
+type Table = Record<string, unknown>;
 
 const DEPENDENCY_TABLES = ["dependencies", "dev-dependencies", "build-dependencies"];
 
-export const isTable = (value: unknown): value is Table =>
+const isTable = (value: unknown): value is Table =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** Поле таблицы TOML по имени из переменной: точечный доступ к индексной сигнатуре tsc не пропускает. */
-export const field = (holder: Table, key: string): unknown => holder[key];
+const field = (holder: Table, key: string): unknown => holder[key];
 
 /** Внутренней зависимости с `path` добавляются `version` и `registry`; `path` снимет cargo при упаковке. */
 function rewriteDependencies(

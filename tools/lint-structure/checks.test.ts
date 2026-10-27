@@ -101,6 +101,7 @@ for (const c of structureCases) {
 const meta = (root: string, pkgs: [string, string, string[]][]): CargoMetadata => ({
   packages: pkgs.map(([name, path, deps]) => ({
     name,
+    version: "0.0.0",
     manifest_path: join(root, "crates", path, "Cargo.toml"),
     dependencies: deps.map((d) => ({ name: d, kind: null })),
   })),

@@ -21,6 +21,7 @@ export interface Rules {
 
 export interface CargoPackage {
   name: string;
+  version: string;
   manifest_path: string;
   dependencies: { name: string; kind: string | null }[];
 }
