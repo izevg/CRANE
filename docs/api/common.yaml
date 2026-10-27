@@ -1224,11 +1224,12 @@ components:
           type:
           - integer
           - 'null'
-        owner_workspace:
+        owner_team:
           type:
           - string
           - 'null'
-          description: Команда-владелец (workspace); для пакета в namespace - владелец namespace
+          deprecated: true
+          description: 'Отображаемое имя команды-владельца (`workspace.display_name`). Устаревшее имя поля: переименование в `owner_workspace` - вместе с реализацией v0.4.0 и web (решение be-lead).'
         last_release_at:
           type:
           - string
@@ -1265,7 +1266,7 @@ components:
       - description
       - latest
       - downloads_30d
-      - owner_workspace
+      - owner_team
       - last_release_at
       - has_readme
       - lifecycle
