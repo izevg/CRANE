@@ -1,7 +1,7 @@
 // Одноразовый стенд: тот же docker-compose.yaml, что у оператора, с отдельным проектом, секретами,
 // подсетью и портами. Всё, что создано, снимается в down(), в том числе после сбоя.
 import { randomBytes } from "node:crypto";
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { docker, log, MS_PER_SECOND, run, SECONDS_PER_MINUTE, warn } from "./exec.ts";
@@ -40,8 +40,9 @@ const SUBNET_SECOND_SPAN = 55;
 const OCTET_VALUES = 256;
 const SECRET_MODE = 0o644;
 const DIR_MODE = 0o700;
+const ENV_LINE = /^([A-Z][A-Z0-9_]*)=(.*)$/;
 const OVERLAP = /Pool overlaps|invalid pool request/;
-const COMPOSE_FILES = ["docker-compose.yaml", "tools/dogfood/memory.compose.yaml"];
+const ENV_DIST = ".env.dist";
 
 const hex = (bytes: number): string => randomBytes(bytes).toString("hex");
 
@@ -61,7 +62,9 @@ export function describeStand(root: string): Stand {
   const token = hex(HEX_BYTES_SECRET);
   const wrongToken = hex(HEX_BYTES_SECRET);
   const postgresPassword = hex(HEX_BYTES_SECRET);
-  const databaseUrl = `postgres://crane:${postgresPassword}@postgres:5432/crane`;
+  // Пользователь и база берутся из .env.dist: URL в секрете обязан совпасть с тем, что создаёт postgres.
+  const { user, database } = postgresNames(join(root, ENV_DIST));
+  const databaseUrl = `postgres://${user}:${postgresPassword}@postgres:5432/${database}`;
   const principal = `dogfood-${id}`;
   const secrets = [
     { name: "токен", value: token },
@@ -71,16 +74,7 @@ export function describeStand(root: string): Stand {
   ];
 
   const overrides = join(tmp, "overrides.env");
-  const compose = [
-    "compose",
-    "-p",
-    project,
-    ...COMPOSE_FILES.flatMap((file) => ["-f", file]),
-    "--env-file",
-    ".env.dist",
-    "--env-file",
-    overrides,
-  ];
+  const compose = ["compose", "-p", project, "--env-file", ENV_DIST, "--env-file", overrides];
   const composeRun = (args: string[]): string => docker([...compose, ...args], { cwd: root });
   const logs = (services: string[]): string =>
     composeRun(["logs", "--no-log-prefix", "--no-color", ...services]);
@@ -166,7 +160,6 @@ function startCompose(
   for (let attempt = 1; ; attempt += 1) {
     const subnet = randomSubnet();
     // Только отличия от .env.dist. Порты caddy: loopback и свободный порт хоста ("127.0.0.1::80").
-    // CRANE_BLOBS=memory временно: см. memory.compose.yaml.
     const lines = [
       "CRANE_IMAGE=crane-dogfood",
       `CRANE_VERSION=${id}`,
@@ -177,7 +170,6 @@ function startCompose(
       `CRANE_EDGE_SUBNET=${subnet}`,
       "CADDY_HTTP_PORT=127.0.0.1:",
       "CADDY_HTTPS_PORT=127.0.0.1:",
-      "CRANE_BLOBS=memory",
     ];
     writeFileSync(overrides, `${lines.join("\n")}\n`);
     try {
@@ -193,6 +185,23 @@ function startCompose(
       composeRun(["down", "-v", "--remove-orphans", "--timeout", String(DOWN_TIMEOUT_SECONDS)]);
     }
   }
+}
+
+/** POSTGRES_USER и POSTGRES_DB из .env.dist; отсутствие любого из них — ошибка. */
+function postgresNames(path: string): { user: string; database: string } {
+  const values = new Map<string, string>();
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    const match = ENV_LINE.exec(line);
+    if (match?.[1] !== undefined && match[2] !== undefined) {
+      values.set(match[1], match[2]);
+    }
+  }
+  const user = values.get("POSTGRES_USER");
+  const database = values.get("POSTGRES_DB");
+  if (!(user && database)) {
+    throw new Error(`${path}: нужны POSTGRES_USER и POSTGRES_DB`);
+  }
+  return { user, database };
 }
 
 /** Всё, что относится к стенду и ещё существует. */
