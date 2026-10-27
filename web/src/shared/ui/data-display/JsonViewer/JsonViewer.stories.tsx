@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { JsonViewer } from "~/shared/ui/data-display";
 
+const COUNT_EN = /^\d+ (keys?|items?)$/;
+
 const meta = {
   title: "Данные/JsonViewer",
   component: JsonViewer,
@@ -48,3 +50,16 @@ export const CollapsedAll: Story = {
 };
 
 export const Dark: Story = { globals: { theme: "dark" } };
+
+export const English: Story = {
+  name: "EN: подписи кнопок и счётчики",
+  globals: { locale: "en" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole("button", { name: "Expand all" })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Collapse all" })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Copy JSON" })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Collapse all" }));
+    await expect(canvas.getAllByText(COUNT_EN)[0]).toBeVisible();
+  },
+};

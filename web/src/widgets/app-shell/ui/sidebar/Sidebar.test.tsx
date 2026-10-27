@@ -149,14 +149,31 @@ describe("Sidebar", () => {
     helpHref.toEqualTypeOf<string>();
   });
 
-  it("слот account выводится в нижнем блоке", () => {
+  it("блок пользователя в развёрнутом сайдбаре показывает имя и роль", () => {
     // Arrange
     // Act
     render(
-      <Sidebar {...PROPS} account={<button type="button">{"Аккаунт"}</button>} collapsed={false} />,
+      <Sidebar
+        {...PROPS}
+        account={{ name: "Иванов И.", role: "владелец библиотеки" }}
+        collapsed={false}
+      />,
     );
 
     // Assert
-    expect(screen.getByRole("button", { name: "Аккаунт" })).toBeInTheDocument();
+    expect(screen.getByText("Иванов И.")).toBeInTheDocument();
+    expect(screen.getByText("владелец библиотеки")).toBeInTheDocument();
+  });
+
+  it("в рельсе остаётся только аватар с доступным именем из имени и роли", () => {
+    // Arrange
+    // Act
+    render(
+      <Sidebar {...PROPS} account={{ name: "Иванов И.", role: "владелец библиотеки" }} collapsed />,
+    );
+
+    // Assert
+    expect(screen.getByRole("img", { name: "Иванов И., владелец библиотеки" })).toBeInTheDocument();
+    expect(screen.queryByText("владелец библиотеки")).not.toBeInTheDocument();
   });
 });

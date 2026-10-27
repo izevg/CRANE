@@ -9,13 +9,14 @@
 
 export const COLOR_SCHEME_STORAGE_KEY = "crane.colorScheme";
 
-const COLOR_MODES = ["light", "dark", "system"] as const;
+/** Порядок пунктов переключателя темы. */
+export const COLOR_MODES = ["light", "dark", "system"] as const;
 export type ColorMode = (typeof COLOR_MODES)[number];
 export type ResolvedScheme = "light" | "dark";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
-function isColorMode(value: unknown): value is ColorMode {
+export function isColorMode(value: unknown): value is ColorMode {
   return typeof value === "string" && (COLOR_MODES as readonly string[]).includes(value);
 }
 

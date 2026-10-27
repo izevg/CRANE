@@ -1,11 +1,7 @@
+import { useLingui } from "@lingui/react/macro";
 import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
 import { Button } from "~/shared/ui/primitives";
-
-// Имя постоянное: состояние несёт aria-expanded, а не смена подписи (иначе скринридер читает его дважды).
-const LABEL = "Главное меню";
-
-/** `sheet` — меню в Sheet, `full` — развёрнутая колонка 248 px, `rail` — рельса 64 px. */
-export type SidebarMode = "full" | "rail" | "sheet";
+import type { SidebarMode } from "../../lib/shell";
 
 type Props = {
   mode: SidebarMode;
@@ -16,13 +12,15 @@ type Props = {
 
 /** Кнопка сайдбара в topbar. `aria-expanded` отражает, видно ли сейчас меню целиком. */
 export function SidebarToggle({ mode, sheetOpen, onToggle }: Props) {
+  const { t } = useLingui();
   const expanded = mode === "full" || (mode === "sheet" && sheetOpen);
   const Icon = mode === "full" ? PanelLeftCloseIcon : PanelLeftOpenIcon;
   return (
     <Button
       variant="ghost"
       size="icon"
-      aria-label={LABEL}
+      // Имя постоянное: состояние несёт aria-expanded, а не смена подписи (иначе скринридер читает его дважды).
+      aria-label={t`Главное меню`}
       aria-expanded={expanded}
       onClick={onToggle}
     >

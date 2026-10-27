@@ -17,7 +17,10 @@ type CalloutProps = Omit<React.ComponentProps<"div">, "role"> & {
   live?: LiveMode;
 };
 
-/** Встроенное сообщение в потоке страницы (inline-callout, основа баннера). */
+/**
+ * Встроенное сообщение в потоке страницы (inline-callout, основа баннера). Иконка 20 px равна высоте строки текста
+ * (line-height 20 px), поэтому стоит по центру первой строки без отступов.
+ */
 export function Callout({ tone, live, className, children, ...props }: CalloutProps) {
   const Icon = toneGlyph(tone);
   return (
@@ -32,7 +35,7 @@ export function Callout({ tone, live, className, children, ...props }: CalloutPr
       )}
       {...props}
     >
-      <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+      <Icon aria-hidden="true" className="size-5 shrink-0" />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

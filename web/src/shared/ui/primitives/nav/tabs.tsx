@@ -42,17 +42,28 @@ export function Tabs({
   );
 }
 
+const H = "group-data-[orientation=horizontal]/tabs:";
+const V = "group-data-[orientation=vertical]/tabs:";
+// Типизированное деление длин (`calc(<length> / 1px)`) нужно, чтобы получить масштаб из `--active-tab-width`.
+const SCALE_OK = "supports-[scale:calc(10px/1px)]:";
+
 /**
- * Полоса под активной вкладкой `line`: позицию и размер даёт Base UI через `--active-tab-*`,
- * скольжение — transition на токенах движения (при reduced motion токены короче, см. motion.css).
+ * Индикатор — полоска 1 px, которую двигают `translate` и растягивают `scale` (origin у края вкладок): Layout не
+ * запускается (spec 2). Позицию и размер вкладки даёт Base UI через `--active-tab-*`. Без поддержки деления длин
+ * в CSS размер меняется скачком, а скользит только `translate`. Токены движения короче при reduced motion (motion.css).
  */
+const INDICATOR = [
+  // motion-ignore: при reduced motion индикатор не скользит вовсе (0), а не укорачивается до токена в 150 мс
+  "pointer-events-none absolute bg-brand transition-[translate,scale] duration-(--dur-base) ease-(--ease-out) motion-reduce:duration-0 in-data-[motion=reduce]:duration-0 forced-colors:bg-[Highlight]",
+  `${H}bottom-0 ${H}left-0 ${H}h-0.5 ${H}origin-left ${H}w-(--active-tab-width) ${H}translate-x-(--active-tab-left)`,
+  `${H}${SCALE_OK}w-px ${H}${SCALE_OK}scale-x-[calc(var(--active-tab-width)/1px)]`,
+  `${V}top-0 ${V}right-0 ${V}w-0.5 ${V}origin-top ${V}h-(--active-tab-height) ${V}translate-y-(--active-tab-top)`,
+  `${V}${SCALE_OK}h-px ${V}${SCALE_OK}scale-y-[calc(var(--active-tab-height)/1px)]`,
+].join(" ");
+
 function TabsIndicator() {
   return (
-    <TabsPrimitive.Indicator
-      data-slot="tabs-indicator"
-      aria-hidden="true"
-      className="pointer-events-none absolute bg-brand transition-[translate,width,height] duration-(--dur-base) ease-(--ease-out) forced-colors:bg-[Highlight] group-data-[orientation=horizontal]/tabs:bottom-0 group-data-[orientation=horizontal]/tabs:left-0 group-data-[orientation=horizontal]/tabs:h-0.5 group-data-[orientation=horizontal]/tabs:w-(--active-tab-width) group-data-[orientation=horizontal]/tabs:translate-x-(--active-tab-left) group-data-[orientation=vertical]/tabs:top-0 group-data-[orientation=vertical]/tabs:right-0 group-data-[orientation=vertical]/tabs:h-(--active-tab-height) group-data-[orientation=vertical]/tabs:w-0.5 group-data-[orientation=vertical]/tabs:translate-y-(--active-tab-top)"
-    />
+    <TabsPrimitive.Indicator data-slot="tabs-indicator" aria-hidden="true" className={INDICATOR} />
   );
 }
 

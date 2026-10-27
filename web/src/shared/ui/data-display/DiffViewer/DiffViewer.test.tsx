@@ -4,6 +4,7 @@ import { type DiffRow, DiffViewer } from "~/shared/ui/data-display";
 
 const ADDED = /\^4\.17\.21/;
 const REMOVED = /\^4\.17\.20/;
+const CHANGED_SUMMARY = /изменено: было \^4\.17\.20, стало \^4\.17\.21/;
 const SAME = /"app"/;
 
 const ROWS: readonly DiffRow[] = [
@@ -72,5 +73,45 @@ describe("DiffViewer", () => {
 
     // Assert
     expect(screen.getByRole("row", { name: ADDED })).toHaveTextContent("добавлено");
+  });
+
+  it("изменённое поле в split занимает одну строку, имя поля не дублируется", () => {
+    // Arrange
+    const rows: readonly DiffRow[] = [
+      { kind: "change", path: "version", before: "1.4.1", after: "1.4.2" },
+    ];
+
+    // Act
+    render(<DiffViewer rows={rows} mode="split" label="Манифест" />);
+
+    // Assert
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(screen.getAllByText("version")).toHaveLength(1);
+  });
+
+  it("изменённое поле читается одной фразой «изменено: было …, стало …»", () => {
+    // Arrange
+    const rows: readonly DiffRow[] = [
+      { kind: "change", path: "lodash", before: "^4.17.20", after: "^4.17.21" },
+    ];
+
+    // Act
+    render(<DiffViewer rows={rows} mode="split" label="Манифест" />);
+
+    // Assert
+    expect(screen.getByRole("row", { name: CHANGED_SUMMARY })).toBeInTheDocument();
+  });
+
+  it("изменённое поле в inline тоже одна строка", () => {
+    // Arrange
+    const rows: readonly DiffRow[] = [
+      { kind: "change", path: "version", before: "1.4.1", after: "1.4.2" },
+    ];
+
+    // Act
+    render(<DiffViewer rows={rows} label="Манифест" />);
+
+    // Assert
+    expect(screen.getAllByRole("row")).toHaveLength(2);
   });
 });

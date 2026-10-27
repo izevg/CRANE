@@ -9,6 +9,8 @@ const CAPPED_TEXT = /1\s000\+/;
 const STALE_TEXT = /обновлено/;
 
 // Пропсы плитки — объединение (тон требует toneLabel), поэтому stories собраны через render, а не args.
+const DELTA_TEXT = /Изменение: 1,2/;
+
 const meta = {
   title: "Метрики/MetricTile",
   component: MetricTile,
@@ -35,7 +37,7 @@ export const WithDelta: Story = {
     />
   ),
   play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).getByText("Изменение:")).toBeInTheDocument();
+    await expect(within(canvasElement).getByText(DELTA_TEXT)).toBeInTheDocument();
   },
 };
 
@@ -141,7 +143,7 @@ export const Capped: Story = {
 };
 
 export const Stale: Story = {
-  name: "Ошибка опроса: обновлено 3 мин назад",
+  name: "Ошибка опроса: обновлено 3 мин. назад",
   render: () => (
     <MetricTile
       label="Объём хранилищ"
@@ -216,4 +218,19 @@ export const Dark: Story = {
   globals: { theme: "dark" },
   decorators: GridWide.decorators ?? [],
   render: () => <Dashboard />,
+};
+
+const UPDATED_EN = /updated/;
+
+export const English: Story = {
+  name: "EN: подписи на английском",
+  globals: { locale: "en" },
+  render: () => (
+    <MetricTile label="Storage volume" value={null} stale={{ updatedAt: THREE_MIN_AGO }} />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("No data")).toBeInTheDocument();
+    await expect(canvas.getByText(UPDATED_EN)).toBeInTheDocument();
+  },
 };

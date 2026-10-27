@@ -1,10 +1,11 @@
 // biome-ignore-all lint/style/noMagicNumbers: тестовые объёмы — произвольные числа
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { formatPercent } from "~/shared/lib/text";
+import { textFormat } from "~/shared/lib/text";
 import { ShareBar } from "~/shared/ui/metrics";
 
 // Intl ставит неразрывный пробел перед «%»; нормализатор Testing Library по умолчанию его свернул бы.
+const percent = textFormat("ru").percent;
 const RAW = { normalizer: (text: string) => text };
 const PLATFORM_ROW = /Платформа/;
 const OTHER_ROW = /Прочие \(2\)/;
@@ -47,7 +48,7 @@ describe("ShareBar", () => {
     expect(screen.getByRole("figure", { name: TITLE })).toBeInTheDocument();
   });
 
-  it("доли считаются от суммы и форматируются через formatPercent", () => {
+  it("доли считаются от суммы и форматируются как проценты", () => {
     // Arrange
     const items = [
       { id: "a", label: "Платформа", value: 3, display: "3 ТБ" },
@@ -59,7 +60,7 @@ describe("ShareBar", () => {
 
     // Assert
     const row = screen.getByRole("row", { name: PLATFORM_ROW });
-    expect(within(row).getByText(formatPercent(0.75), RAW)).toBeInTheDocument();
+    expect(within(row).getByText(percent(0.75), RAW)).toBeInTheDocument();
     expect(within(row).getByText("3 ТБ")).toBeInTheDocument();
   });
 
@@ -75,7 +76,7 @@ describe("ShareBar", () => {
     expect(within(body as HTMLElement).getAllByRole("row")).toHaveLength(9);
     const other = screen.getByRole("row", { name: OTHER_ROW });
     expect(within(other).getByText("3 ГБ")).toBeInTheDocument();
-    expect(within(other).getByText(formatPercent(3 / 55), RAW)).toBeInTheDocument();
+    expect(within(other).getByText(percent(3 / 55), RAW)).toBeInTheDocument();
   });
 
   it("8 элементов не сворачиваются", () => {
@@ -112,7 +113,7 @@ describe("ShareBar", () => {
     render(<ShareBar title={TITLE} columns={COLUMNS} items={items} />);
 
     // Assert
-    expect(screen.getByText(formatPercent(0), RAW)).toBeInTheDocument();
+    expect(screen.getByText(percent(0), RAW)).toBeInTheDocument();
   });
 
   it("caption выводится под таблицей", () => {

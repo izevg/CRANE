@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
 import {
   type KeyboardEvent,
@@ -12,7 +13,6 @@ import { useBreakpoint } from "~/shared/lib/core";
 import { type Action, ActionBar, type ActionGroup, ActionMenu } from "../../actions";
 import { Button, DialogClose, Sheet, SheetContent, SheetTitle } from "../../primitives";
 
-const CLOSE = "Закрыть";
 const HEADING_CLASS = "min-w-0 flex-1 truncate text-h2 outline-none";
 
 type DetailPanelProps = {
@@ -76,6 +76,7 @@ export function DetailPanel({
   returnFocusRef,
   ...body
 }: DetailPanelProps) {
+  const { t } = useLingui();
   const docked = useBreakpoint("2xl");
   const titleId = useId();
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -128,7 +129,7 @@ export function DetailPanel({
             </h2>
           }
           closeButton={
-            <Button variant="ghost" size="icon" aria-label={CLOSE} onClick={close}>
+            <Button variant="ghost" size="icon" aria-label={t`Закрыть`} onClick={close}>
               <XIcon aria-hidden="true" />
             </Button>
           }
@@ -154,7 +155,7 @@ export function DetailPanel({
             </SheetTitle>
           }
           closeButton={
-            <DialogClose render={<Button variant="ghost" size="icon" aria-label={CLOSE} />}>
+            <DialogClose render={<Button variant="ghost" size="icon" aria-label={t`Закрыть`} />}>
               <XIcon aria-hidden="true" />
             </DialogClose>
           }

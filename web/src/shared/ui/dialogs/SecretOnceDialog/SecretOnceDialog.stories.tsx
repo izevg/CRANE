@@ -57,3 +57,15 @@ export const EscapeBlocked: Story = {
 };
 
 export const Dark: Story = { globals: { theme: "dark" } };
+
+/** Остаётся открытым в момент axe-проверки. Секрет красится по классам символов, доступное имя области — «Код». */
+export const SecretMachineMarks: Story = {
+  name: "Секрет base64: цвета классов символов",
+  args: { secret: "q83Zt+L0/xP2mVb9==Rk7sTa" },
+  play: async () => {
+    const dialog = await within(document.body).findByRole("alertdialog");
+    const layer = dialog.querySelector("[data-slot=machine-value]");
+    await expect(layer?.textContent).toBe("q83Zt+L0/xP2mVb9==Rk7sTa");
+    await expect(layer?.querySelectorAll("span").length).toBeGreaterThan(1);
+  },
+};

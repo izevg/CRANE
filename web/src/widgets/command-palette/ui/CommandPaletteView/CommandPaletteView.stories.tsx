@@ -105,3 +105,47 @@ export const Dark: Story = {
   name: "Тёмная тема",
   globals: { theme: "dark" },
 };
+
+/** Версия пакета в строке результата — машинное значение: моно JetBrains, а не шрифт текста. */
+export const VersionInMono: Story = {
+  name: "Версия пакета в моно",
+  play: async () => {
+    const version = await within(document.body).findByText("1.4.2");
+    await expect(getComputedStyle(version).fontFamily).toContain("JetBrains Mono");
+  },
+};
+
+const INSTANT_MAX_SECONDS = 0.1;
+
+function seconds(value: string): number {
+  return Math.max(...value.split(",").map((part) => parseFloat(part)));
+}
+
+/** Палитру открывают по Ctrl+K десятки раз: без анимации входа/выхода (spec 2), в отличие от диалога. */
+export const NoMotion: Story = {
+  name: "Движение: палитра без анимации",
+  play: async () => {
+    await within(document.body).findByRole("combobox");
+    const popup = document.querySelector("[data-slot=dialog-content]");
+    if (!(popup instanceof HTMLElement)) {
+      throw new Error("нет окна палитры");
+    }
+    await expect(seconds(getComputedStyle(popup).transitionDuration)).toBeLessThanOrEqual(
+      INSTANT_MAX_SECONDS,
+    );
+    await expect(getComputedStyle(popup).transform).not.toContain("0.9");
+  },
+};
+
+export const English: Story = {
+  name: "EN: подписи на английском",
+  globals: { locale: "en" },
+  play: async () => {
+    const body = within(document.body);
+    await expect(
+      await body.findByRole("combobox", { name: "Go to, find a package or an action" }),
+    ).toBeInTheDocument();
+    await expect(body.getByRole("dialog", { name: "Command palette" })).toBeInTheDocument();
+    await expect(body.getByText("Go to")).toBeInTheDocument();
+  },
+};

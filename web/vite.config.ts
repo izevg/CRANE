@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { lingui } from "@lingui/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
@@ -39,7 +40,12 @@ export const FS_ALLOW = [
 
 // Сборка и Storybook. Тесты — в vitest.config.ts, чтобы story-проект не попадал в production-конфиг.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  // failOnMissing: сборка падает, если у сообщения нет перевода в каталоге (EN не должен молча показывать русский)
+  plugins: [
+    react(),
+    lingui({ macroTransform: true, failOnMissing: true, failOnCompileError: true }),
+    tailwindcss(),
+  ],
   server: { fs: { allow: FS_ALLOW } },
   resolve: {
     alias: {

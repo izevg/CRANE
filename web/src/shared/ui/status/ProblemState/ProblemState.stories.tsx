@@ -164,3 +164,16 @@ export const Dark: Story = {
   globals: { theme: "dark" },
   args: Forbidden.args,
 };
+
+export const NotFoundEnglish: Story = {
+  name: "EN: заголовок из локального словаря",
+  globals: { locale: "en" },
+  args: { problem: { kind: "not-found", home: { label: "Home", run: { href: "/" } } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole("heading", { name: "Not found or no access" }),
+    ).toBeVisible();
+    await expect(canvas.getByText("Check the address or package name")).toBeVisible();
+  },
+};

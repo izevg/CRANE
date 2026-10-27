@@ -1,4 +1,6 @@
-import { formatNumber, pluralRu } from "~/shared/lib/text";
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, plural } from "@lingui/core/macro";
+import type { TextFormat } from "~/shared/lib/text";
 
 export type NotificationCategory = "security" | "access" | "platform";
 
@@ -16,23 +18,32 @@ export type NotificationItem = {
   unread: boolean;
 };
 
-const BELL_LABEL = "Уведомления";
-const UNREAD_FORMS = ["непрочитанное", "непрочитанных", "непрочитанных"] as const;
-
 /** Потолок видимого счётчика: выше показываем «9+», точное число остаётся в доступном имени. */
 const BADGE_MAX = 9;
 const BADGE_OVERFLOW = "9+";
 
-/** «3 непрочитанных», «1 непрочитанное». */
-export function unreadPhrase(count: number): string {
-  return `${formatNumber(count)} ${pluralRu(count, UNREAD_FORMS)}`;
+/** «3 непрочитанных», «1 непрочитанное». Возвращает описание сообщения: перевод делает UI на активной локали. */
+export function unreadPhrase(count: number): MessageDescriptor {
+  return msg`${plural(count, {
+    one: "# непрочитанное",
+    few: "# непрочитанных",
+    many: "# непрочитанных",
+    other: "# непрочитанных",
+  })}`;
 }
 
-/** Имя кнопки: счётчик — часть имени (MUST), а не только значок. */
-export function bellLabel(unread: number): string {
-  return unread > 0 ? `${BELL_LABEL}, ${unreadPhrase(unread)}` : BELL_LABEL;
+/** Имя кнопки: счётчик — часть имени (MUST), а не только значок. Целое сообщение, а не склейка. */
+export function bellLabel(unread: number): MessageDescriptor {
+  return unread > 0
+    ? msg`${plural(unread, {
+        one: "Уведомления, # непрочитанное",
+        few: "Уведомления, # непрочитанных",
+        many: "Уведомления, # непрочитанных",
+        other: "Уведомления, # непрочитанных",
+      })}`
+    : msg`Уведомления`;
 }
 
-export function bellBadge(unread: number): string {
-  return unread > BADGE_MAX ? BADGE_OVERFLOW : formatNumber(unread);
+export function bellBadge(unread: number, format: TextFormat): string {
+  return unread > BADGE_MAX ? BADGE_OVERFLOW : format.number(unread);
 }

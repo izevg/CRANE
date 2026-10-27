@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect } from "react";
 import { LiveRegion } from "~/shared/lib/a11y";
+import { I18nProvider, i18n } from "~/shared/lib/i18n";
 import { type LinkProps, LinkProvider, Toaster, TooltipProvider } from "~/shared/ui/primitives";
 
 /**
@@ -26,13 +27,15 @@ function PreventNavigation() {
 /** Всё, что приложение монтирует в корне: ссылки, подсказки, live-регион и тосты. */
 export function StoryShell({ children }: { children: ReactNode }) {
   return (
-    <LinkProvider component={storyLink}>
-      <TooltipProvider>
-        {children}
-        <LiveRegion />
-        <Toaster />
-        <PreventNavigation />
-      </TooltipProvider>
-    </LinkProvider>
+    <I18nProvider i18n={i18n}>
+      <LinkProvider component={storyLink}>
+        <TooltipProvider>
+          {children}
+          <LiveRegion />
+          <Toaster />
+          <PreventNavigation />
+        </TooltipProvider>
+      </LinkProvider>
+    </I18nProvider>
   );
 }

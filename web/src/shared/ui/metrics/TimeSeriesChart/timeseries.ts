@@ -1,4 +1,4 @@
-import { formatNumber } from "~/shared/lib/text";
+import type { TextFormat } from "~/shared/lib/text";
 
 type SeriesPoint = { t: number; v: number };
 
@@ -18,13 +18,27 @@ export type Row = { t: number } & Record<string, number>;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
-const clock = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
-const dayAndClock = new Intl.DateTimeFormat("ru-RU", {
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+const tickFormats = new Map<
+  string,
+  { clock: Intl.DateTimeFormat; dayAndClock: Intl.DateTimeFormat }
+>();
+
+function ticksFor(locale: string) {
+  let cached = tickFormats.get(locale);
+  if (cached === undefined) {
+    cached = {
+      clock: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }),
+      dayAndClock: new Intl.DateTimeFormat(locale, {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+    tickFormats.set(locale, cached);
+  }
+  return cached;
+}
 
 /** Объединяет ряды по времени: у каждой серии свои метки, у графика и таблицы — общая ось. */
 export function mergeSeries(series: readonly Series[]): Row[] {
@@ -40,16 +54,21 @@ export function mergeSeries(series: readonly Series[]): Row[] {
 }
 
 /** Ось X в локальном времени; если окно шире суток, к часам добавляется дата. */
-export function makeTickFormatter(rows: readonly Row[]): (t: number) => string {
+export function makeTickFormatter(rows: readonly Row[], locale: string): (t: number) => string {
   const first = rows[0]?.t ?? 0;
   const last = rows.at(-1)?.t ?? 0;
+  const { clock, dayAndClock } = ticksFor(locale);
   const format = last - first > DAY_MS ? dayAndClock : clock;
   return (t) => format.format(new Date(t));
 }
 
 /** Значение с единицей для подсказки и таблицы. */
-export function formatValueWithUnit(value: number, unit: string | undefined): string {
-  const text = formatNumber(value);
+export function formatValueWithUnit(
+  value: number,
+  unit: string | undefined,
+  format: TextFormat,
+): string {
+  const text = format.number(value);
   return unit ? `${text} ${unit}` : text;
 }
 

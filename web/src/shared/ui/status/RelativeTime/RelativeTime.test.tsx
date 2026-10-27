@@ -24,7 +24,7 @@ describe("RelativeTime", () => {
     render(<RelativeTime ts={ts} />);
 
     // Assert
-    expect(screen.getByText("5 мин назад")).toBeInTheDocument();
+    expect(screen.getByText("5 мин. назад")).toBeInTheDocument();
   });
 
   it("отдаёт машиночитаемое время и полную дату в подсказке", () => {
@@ -35,7 +35,7 @@ describe("RelativeTime", () => {
     render(<RelativeTime ts={ts} />);
 
     // Assert
-    const time = screen.getByText("30 мин назад");
+    const time = screen.getByText("30 мин. назад");
     expect(time.tagName).toBe("TIME");
     expect(time).toHaveAttribute("datetime", ts.toISOString());
     expect(time).toHaveAttribute("title", expect.stringContaining("27 октября 2026"));
@@ -50,7 +50,7 @@ describe("RelativeTime", () => {
     await act(() => vi.advanceTimersByTimeAsync(MINUTE_MS));
 
     // Assert
-    expect(screen.getByText("6 мин назад")).toBeInTheDocument();
+    expect(screen.getByText("6 мин. назад")).toBeInTheDocument();
   });
 
   it("не является живым регионом", () => {
@@ -61,7 +61,7 @@ describe("RelativeTime", () => {
     render(<RelativeTime ts={ts} />);
 
     // Assert
-    expect(screen.getByText("1 мин назад")).not.toHaveAttribute("aria-live");
+    expect(screen.getByText("1 мин. назад")).not.toHaveAttribute("aria-live");
   });
 
   it("некорректная дата показывается прочерком без datetime", () => {

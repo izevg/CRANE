@@ -1,6 +1,10 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, configure } from "@testing-library/react";
 import { afterEach } from "vitest";
+import { activateLocale } from "~/shared/lib/i18n";
+
+// Русский — исходный язык сообщений: тесты проверяют русские тексты.
+await activateLocale("ru");
 
 // Под нагрузкой CI и локальной машины секунда по умолчанию на findBy/waitFor флакает.
 configure({ asyncUtilTimeout: 10_000 });

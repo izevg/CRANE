@@ -1,7 +1,9 @@
 import { Meter } from "@base-ui/react/meter";
+import { useLingui } from "@lingui/react/macro";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { formatNumber } from "~/shared/lib/text";
+import { useTextFormat } from "~/shared/lib/i18n";
 import { Badge, TONE_STRONG, type Tone } from "~/shared/ui/primitives";
+import { SCORE_MAX, SCORE_MIN, scoreTexts } from "./score";
 
 type ScoreBarProps = WithClassName<{
   /** Подпись оценки, уже переведённая вызывающим («Релевантность эксплуатации»). */
@@ -24,25 +26,6 @@ type ScoreBarProps = WithClassName<{
   badge?: string;
 }>;
 
-const MIN = 0;
-const MAX = 1;
-const FRACTION_DIGITS = 2;
-
-const CONFIDENCE_PREFIX = "уверенность ";
-const MODEL_PREFIX = "модель ";
-const VALUE_TEXT_SEPARATOR = ", ";
-
-function format(value: number): string {
-  return formatNumber(value, {
-    minimumFractionDigits: FRACTION_DIGITS,
-    maximumFractionDigits: FRACTION_DIGITS,
-  });
-}
-
-function clamp(value: number): number {
-  return Number.isFinite(value) ? Math.min(Math.max(value, MIN), MAX) : MIN;
-}
-
 /**
  * Оценка модели 0..1 на Base UI `Meter` (роль `meter`, `aria-valuetext` «0,88, уверенность 0,92»).
  * Полоса одного тона, без градиентов. Компонент ничего не знает о доменных порогах: тон, пояснения
@@ -60,13 +43,10 @@ export function ScoreBar({
   badge,
   className,
 }: ScoreBarProps) {
-  const score = clamp(value);
-  const shown = format(score);
-  const confidenceText = confidence === undefined ? null : format(clamp(confidence));
-  const valueText =
-    confidenceText === null
-      ? shown
-      : `${shown}${VALUE_TEXT_SEPARATOR}${CONFIDENCE_PREFIX}${confidenceText}`;
+  const { t } = useLingui();
+  const text = useTextFormat();
+  const { score, shown, confidence: confidenceText } = scoreTexts(value, confidence, text);
+  const valueText = confidenceText === null ? shown : t`${shown}, уверенность ${confidenceText}`;
 
   return (
     <div
@@ -76,8 +56,8 @@ export function ScoreBar({
     >
       <Meter.Root
         value={score}
-        min={MIN}
-        max={MAX}
+        min={SCORE_MIN}
+        max={SCORE_MAX}
         aria-valuetext={valueText}
         className="flex flex-col gap-1"
       >
@@ -102,8 +82,7 @@ export function ScoreBar({
       </Meter.Root>
       {confidenceText === null ? null : (
         <span className="text-caption text-muted-foreground tabular-nums">
-          {CONFIDENCE_PREFIX}
-          {confidenceText}
+          {t`уверенность ${confidenceText}`}
         </span>
       )}
       {factors.length > 0 ? (
@@ -116,12 +95,7 @@ export function ScoreBar({
         </ul>
       ) : null}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
-        {model === undefined ? null : (
-          <span>
-            {MODEL_PREFIX}
-            {model}
-          </span>
-        )}
+        {model === undefined ? null : <span>{t`модель ${model}`}</span>}
         {badge === undefined ? null : <Badge variant="outline">{badge}</Badge>}
         {notes.map((note) => (
           <span key={note}>{note}</span>

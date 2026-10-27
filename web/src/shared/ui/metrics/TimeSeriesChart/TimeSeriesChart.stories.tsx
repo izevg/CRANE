@@ -86,3 +86,79 @@ export const Dark: Story = {
   name: "Тёмная тема",
   globals: { theme: "dark" },
 };
+
+const MIN_CONTRAST = 4.5;
+const CHANNELS = /\d+(\.\d+)?/g;
+
+function luminance(color: string): number {
+  const [r = 0, g = 0, b = 0] = (color.match(CHANNELS) ?? []).slice(0, 3).map(Number);
+  const lin = (value: number) => {
+    const v = value / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+}
+
+/** Подсказка на токенах popover: фон равен `--popover`, текст читаем (≥ 4,5:1), дата короткая. */
+async function expectTokenTooltip(canvasElement: HTMLElement) {
+  await waitFor(() => expect(canvasElement.querySelector("svg.recharts-surface")).not.toBeNull(), {
+    timeout: LOAD_TIMEOUT,
+  });
+  const surface = canvasElement.querySelector(".recharts-wrapper") as HTMLElement;
+  const box = surface.getBoundingClientRect();
+  await userEvent.pointer({
+    target: surface,
+    coords: { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 },
+  });
+  const tooltip = (await waitFor(() => {
+    const found = canvasElement.querySelector(".recharts-default-tooltip") as HTMLElement | null;
+    if (!found) {
+      throw new Error("tooltip not shown");
+    }
+    return found;
+  })) as HTMLElement;
+  const probe = document.createElement("div");
+  probe.style.backgroundColor = "var(--popover)";
+  document.body.append(probe);
+  const popover = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  const style = getComputedStyle(tooltip);
+  await expect(style.backgroundColor).toBe(popover);
+  await expect(contrast(style.color, style.backgroundColor)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  const label = tooltip.querySelector(".recharts-tooltip-label") as HTMLElement;
+  await expect(contrast(getComputedStyle(label).color, popover)).toBeGreaterThanOrEqual(
+    MIN_CONTRAST,
+  );
+  await expect(label.textContent).not.toContain("2026 г.");
+}
+
+export const TooltipLight: Story = {
+  name: "Подсказка на токенах popover",
+  play: async ({ canvasElement }) => {
+    await expectTokenTooltip(canvasElement);
+  },
+};
+
+export const TooltipDark: Story = {
+  name: "Подсказка на токенах popover, тёмная тема",
+  globals: { theme: "dark" },
+  play: async ({ canvasElement }) => {
+    await expectTokenTooltip(canvasElement);
+  },
+};
+
+export const English: Story = {
+  name: "EN: подписи на английском",
+  globals: { locale: "en" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Show as table" }));
+    await expect(await canvas.findByRole("columnheader", { name: "Time" })).toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "Show as chart" })).toBeInTheDocument();
+  },
+};

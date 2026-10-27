@@ -1,25 +1,23 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { CheckIcon, type LucideIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useCallback } from "react";
-import { useColorMode } from "~/shared/lib/state";
+import { COLOR_MODES, type ColorMode, isColorMode, useColorMode } from "~/shared/lib/state";
 import { Button, Menu, MenuContent, MenuTrigger } from "~/shared/ui/primitives";
 
-const THEME_LABEL = "Тема";
-const MENU_LABEL = "Тема оформления";
+const ICONS = {
+  light: SunIcon,
+  dark: MoonIcon,
+  system: MonitorIcon,
+} satisfies Record<ColorMode, LucideIcon>;
 
-type ColorMode = ReturnType<typeof useColorMode>["mode"];
-type ModeOption = { mode: ColorMode; label: string; Icon: LucideIcon };
-
-const SYSTEM: ModeOption = { mode: "system", label: "Системная", Icon: MonitorIcon };
-const MODES: readonly ModeOption[] = [
-  { mode: "light", label: "Светлая", Icon: SunIcon },
-  { mode: "dark", label: "Тёмная", Icon: MoonIcon },
-  SYSTEM,
-];
-
-function isColorMode(value: unknown): value is ColorMode {
-  return MODES.some((option) => option.mode === value);
-}
+const LABELS = {
+  light: msg`Светлая`,
+  dark: msg`Тёмная`,
+  system: msg`Системная`,
+} satisfies Record<ColorMode, MessageDescriptor>;
 
 // Тот же вид, что у MenuItem кита: в примитивах пока нет radio-пункта (пробел фундамента).
 const RADIO_ITEM =
@@ -30,8 +28,11 @@ const RADIO_ITEM =
  * Один контрол вмещается и в развёрнутый сайдбар, и в рельсу 64 px.
  */
 export function ThemeMenu({ collapsed }: { collapsed: boolean }) {
+  const { t } = useLingui();
   const { mode, setMode } = useColorMode();
-  const current = MODES.find((option) => option.mode === mode) ?? SYSTEM;
+  const CurrentIcon = ICONS[mode];
+  const modeLabel = t(LABELS[mode]);
+  const triggerLabel = t`Тема: ${modeLabel}`;
   const handleChange = useCallback(
     (value: unknown) => {
       if (isColorMode(value)) {
@@ -46,25 +47,32 @@ export function ThemeMenu({ collapsed }: { collapsed: boolean }) {
         render={
           <Button
             variant="ghost"
-            aria-label={`${THEME_LABEL}: ${current.label}`}
+            aria-label={triggerLabel}
             className={collapsed ? "w-full px-0" : "w-full justify-start"}
           />
         }
       >
-        <current.Icon aria-hidden="true" />
-        {collapsed ? null : <span>{`${THEME_LABEL}: ${current.label}`}</span>}
+        <CurrentIcon aria-hidden="true" />
+        {collapsed ? null : <span>{triggerLabel}</span>}
       </MenuTrigger>
       <MenuContent side={collapsed ? "right" : "top"} align="start">
-        <MenuPrimitive.RadioGroup value={mode} onValueChange={handleChange} aria-label={MENU_LABEL}>
-          {MODES.map(({ mode: value, label, Icon }) => (
-            <MenuPrimitive.RadioItem key={value} value={value} className={RADIO_ITEM}>
-              <Icon aria-hidden="true" />
-              <span className="flex-1">{label}</span>
-              <MenuPrimitive.RadioItemIndicator>
-                <CheckIcon aria-hidden="true" />
-              </MenuPrimitive.RadioItemIndicator>
-            </MenuPrimitive.RadioItem>
-          ))}
+        <MenuPrimitive.RadioGroup
+          value={mode}
+          onValueChange={handleChange}
+          aria-label={t`Тема оформления`}
+        >
+          {COLOR_MODES.map((value) => {
+            const Icon = ICONS[value];
+            return (
+              <MenuPrimitive.RadioItem key={value} value={value} className={RADIO_ITEM}>
+                <Icon aria-hidden="true" />
+                <span className="flex-1">{t(LABELS[value])}</span>
+                <MenuPrimitive.RadioItemIndicator>
+                  <CheckIcon aria-hidden="true" />
+                </MenuPrimitive.RadioItemIndicator>
+              </MenuPrimitive.RadioItem>
+            );
+          })}
         </MenuPrimitive.RadioGroup>
       </MenuContent>
     </Menu>

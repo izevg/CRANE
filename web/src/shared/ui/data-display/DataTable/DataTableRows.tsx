@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { FlexRender, type Header, type Row, type RowData } from "@tanstack/react-table";
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from "lucide-react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
@@ -8,6 +9,7 @@ import {
   CELL,
   CHECKBOX_COLUMN,
   columnClass,
+  edgeClass,
   type features,
   HEAD,
   HEAD_PIN_LEFT,
@@ -16,12 +18,8 @@ import {
   PIN_LEFT,
   PIN_LEFT_AFTER_CHECKBOX,
   PIN_RIGHT,
-  SELECTED_BAR,
 } from "./columns";
 
-const LOADING = "Загрузка";
-const ACTIONS_HEADER = "Действия";
-const SELECT_ALL = "Выбрать все загруженные";
 const SKELETON_ROWS = 8;
 const SKELETON_KEYS = Array.from({ length: SKELETON_ROWS }, (_, index) => `skeleton-${index}`);
 
@@ -98,6 +96,7 @@ export function HeadRow<TData extends RowData>({
   selection,
   hasActions,
 }: HeadRowProps<TData>) {
+  const { t } = useLingui();
   const firstPin = selection ? HEAD_PIN_LEFT_AFTER_CHECKBOX : HEAD_PIN_LEFT;
   return (
     <tr aria-rowindex={1} className="h-10 border-b">
@@ -107,7 +106,7 @@ export function HeadRow<TData extends RowData>({
             checked={selection.allSelected}
             indeterminate={selection.someSelected && !selection.allSelected}
             onCheckedChange={selection.onToggleAll}
-            aria-label={SELECT_ALL}
+            aria-label={t`Выбрать все загруженные`}
           />
         </th>
       ) : null}
@@ -122,7 +121,7 @@ export function HeadRow<TData extends RowData>({
       ))}
       {hasActions ? (
         <th scope="col" data-pin="end" className={cx(HEAD, HEAD_PIN_RIGHT)}>
-          <span className="sr-only">{ACTIONS_HEADER}</span>
+          <span className="sr-only">{t`Действия`}</span>
         </th>
       ) : null}
     </tr>
@@ -187,7 +186,10 @@ export function DataRow<TData extends RowData>({
     }
   };
   const handleFocus = () => onFocusRow(row.id);
-  const pinFirst = checkbox ? PIN_LEFT_AFTER_CHECKBOX : cx(PIN_LEFT, SELECTED_BAR);
+  const pinFirst = checkbox ? PIN_LEFT_AFTER_CHECKBOX : PIN_LEFT;
+  const dataCells = row.getAllCells();
+  const offset = checkbox ? 1 : 0;
+  const total = offset + dataCells.length + (actions ? 1 : 0);
   return (
     <tr
       data-row-id={row.id}
@@ -198,12 +200,12 @@ export function DataRow<TData extends RowData>({
       onClick={focusable ? handleClick : undefined}
       onKeyDown={focusable ? handleKeyDown : undefined}
       className={cx(
-        "group/row h-11 border-b bg-card transition-[background-color] duration-(--dur-instant) ease-(--ease-out) hover:bg-(--row-hover-bg) aria-selected:bg-(--row-selected-bg) focus-visible:-outline-offset-2 forced-colors:aria-selected:outline-2 forced-colors:aria-selected:-outline-offset-2 forced-colors:aria-selected:outline-[Highlight]",
+        "group/row h-11 border-b bg-card hover:bg-(--row-hover-bg) hover:transition-[background-color] hover:duration-(--dur-instant) hover:ease-(--ease-out) aria-selected:bg-(--row-selected-bg) focus-visible:outline-hidden forced-colors:focus-visible:outline-2 forced-colors:focus-visible:-outline-offset-2 forced-colors:aria-selected:outline-2 forced-colors:aria-selected:-outline-offset-2 forced-colors:aria-selected:outline-[Highlight]",
         focusable && "cursor-pointer",
       )}
     >
       {checkbox ? (
-        <td className={cx(CELL, CHECKBOX_COLUMN, PIN_LEFT, SELECTED_BAR)}>
+        <td className={cx(CELL, CHECKBOX_COLUMN, PIN_LEFT, edgeClass(0, total))}>
           <Checkbox
             checked={checkbox.checked}
             onCheckedChange={checkbox.onChange}
@@ -211,20 +213,21 @@ export function DataRow<TData extends RowData>({
           />
         </td>
       ) : null}
-      {row.getAllCells().map((cell, position) => (
+      {dataCells.map((cell, position) => (
         <td
           key={cell.id}
           className={cx(
             CELL,
             columnClass(cell.column.columnDef.meta, compact),
             position === 0 && pinFirst,
+            edgeClass(offset + position, total),
           )}
         >
           <FlexRender cell={cell} />
         </td>
       ))}
       {actions ? (
-        <td className={cx(CELL, PIN_RIGHT)}>
+        <td className={cx(CELL, PIN_RIGHT, edgeClass(total - 1, total))}>
           <ActionMenu actions={actions} />
         </td>
       ) : null}
@@ -234,6 +237,7 @@ export function DataRow<TData extends RowData>({
 
 /** Скелетон повторяет сетку колонок, чтобы раскладка не прыгала при появлении данных. */
 export function SkeletonRows({ cells }: { cells: readonly { key: string; className: string }[] }) {
+  const { t } = useLingui();
   return (
     <>
       {SKELETON_KEYS.map((rowKey, rowIndex) => (
@@ -241,7 +245,7 @@ export function SkeletonRows({ cells }: { cells: readonly { key: string; classNa
           {cells.map((cell, cellIndex) => (
             <td key={cell.key} className={cx(CELL, cell.className)}>
               {rowIndex === 0 && cellIndex === 0 ? (
-                <span className="sr-only">{LOADING}</span>
+                <span className="sr-only">{t`Загрузка`}</span>
               ) : null}
               <Skeleton className="h-4 w-full max-w-40" />
             </td>

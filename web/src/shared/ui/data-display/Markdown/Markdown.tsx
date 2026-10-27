@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { lazy, Suspense } from "react";
 import { Skeleton } from "../../primitives";
 
@@ -6,16 +7,15 @@ const MarkdownContent = lazy(() =>
   import("./MarkdownContent").then((module) => ({ default: module.MarkdownContent })),
 );
 
-const LOADING = "Загрузка текста";
-
 type MarkdownProps = {
   /** Недоверенный markdown (README пакета, текст модели): HTML в нём игнорируется, ссылки санируются. */
   source: string;
 };
 
 function MarkdownFallback() {
+  const { t } = useLingui();
   return (
-    <div role="status" aria-label={LOADING} className="flex flex-col gap-2">
+    <div role="status" aria-label={t`Загрузка текста`} className="flex flex-col gap-2">
       <Skeleton className="h-4 w-2/3" />
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-5/6" />

@@ -1,3 +1,5 @@
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useCallback, useState } from "react";
 import { type Action, ActionButton } from "~/shared/ui/actions";
 import {
@@ -13,32 +15,18 @@ import {
   TabsTrigger,
 } from "~/shared/ui/primitives";
 import { type NotificationCategory, type NotificationItem, unreadPhrase } from "../../lib/model";
+import { ALL_TAB, isCategory, tabCount, tabOf } from "../../lib/tabs";
 import { NotificationsBell } from "../NotificationsBell/NotificationsBell";
 import { NotificationRow } from "./NotificationRow";
 
-const TITLE = "Уведомления";
-const EMPTY = "Новых уведомлений нет";
-const READ_ALL = "Прочитать все";
-const ALL = "all";
-
 const TABS = [
-  { value: ALL, label: "Все" },
-  { value: "security", label: "Безопасность" },
-  { value: "access", label: "Доступ" },
-  { value: "platform", label: "Платформа" },
+  { value: ALL_TAB, label: msg`Все` },
+  { value: "security", label: msg`Безопасность` },
+  { value: "access", label: msg`Доступ` },
+  { value: "platform", label: msg`Платформа` },
 ] as const;
 
 const SKELETON_ROWS = ["first", "second", "third"] as const;
-
-type Tab = (typeof TABS)[number]["value"];
-
-function isCategory(value: unknown): value is NotificationCategory {
-  return value === "security" || value === "access" || value === "platform";
-}
-
-function tabOf(category: NotificationCategory | undefined): Tab {
-  return category ?? ALL;
-}
 
 type Props = {
   items: readonly NotificationItem[];
@@ -84,10 +72,6 @@ function Skeletons() {
   );
 }
 
-function tabCount(tab: Tab, unread: number, byCategory: Props["unreadByCategory"]): number {
-  return isCategory(tab) ? byCategory[tab] : unread;
-}
-
 /**
  * Центр уведомлений (K2): колокольчик и Popover 360 px. Данные, опрос и пометка прочитанным — снаружи;
  * виджет только показывает список и сообщает о действиях пользователя.
@@ -103,6 +87,7 @@ export function NotificationsCenter({
   onMarkRead,
   onReadAll,
 }: Props) {
+  const { t } = useLingui();
   const [open, setOpen] = useState(false);
   const active = tabOf(category);
 
@@ -128,10 +113,10 @@ export function NotificationsCenter({
       <PopoverTrigger render={<NotificationsBell unread={unread} />} />
       <PopoverContent align="end" size="wide" flush className="max-w-[calc(100vw-2rem)]">
         <div className="flex items-center justify-between gap-2 px-3 pt-3">
-          <PopoverTitle>{TITLE}</PopoverTitle>
+          <PopoverTitle>{t`Уведомления`}</PopoverTitle>
           {onReadAll === undefined ? null : (
             <Button variant="ghost" onClick={handleReadAll}>
-              {READ_ALL}
+              {t`Прочитать все`}
             </Button>
           )}
         </div>
@@ -141,13 +126,13 @@ export function NotificationsCenter({
               const count = tabCount(tab.value, unread, unreadByCategory);
               return (
                 <TabsTrigger key={tab.value} value={tab.value}>
-                  {tab.label}
+                  {t(tab.label)}
                   {count > 0 ? (
                     <>
                       <span aria-hidden="true" className="text-caption tabular-nums">
                         {count}
                       </span>
-                      <span className="sr-only">{`, ${unreadPhrase(count)}`}</span>
+                      <span className="sr-only">{`, ${t(unreadPhrase(count))}`}</span>
                     </>
                   ) : null}
                 </TabsTrigger>
@@ -187,11 +172,14 @@ function PanelBody({
   loadMore: Action | undefined;
   onOpen: (item: NotificationItem) => void;
 }) {
+  const { t } = useLingui();
   if (loading) {
     return <Skeletons />;
   }
   if (items.length === 0) {
-    return <p className="px-3 py-6 text-center text-body text-muted-foreground">{EMPTY}</p>;
+    return (
+      <p className="px-3 py-6 text-center text-body text-muted-foreground">{t`Новых уведомлений нет`}</p>
+    );
   }
   return (
     <>

@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatDateTime } from "~/shared/lib/text";
+import { useLocale, useTextFormat } from "~/shared/lib/i18n";
 import {
   formatValueWithUnit,
   lastIndexOf,
@@ -51,6 +51,18 @@ const MARGIN = { top: 8, right: 96, bottom: 0, left: 0 };
 const TICK = { fill: "var(--muted-foreground)", fontSize: 12 };
 const AXIS_LINE = { stroke: "var(--chart-grid)" };
 const Y_DOMAIN: [number, "auto"] = [0, "auto"];
+/**
+ * Подсказка на токенах popover (фон, рамка, текст): иначе Recharts рисует белую плашку в тёмной теме.
+ * Цвет значений тоже `--popover-foreground`: цвета рядов `--chart-4/5` как цвет текста контраста не дают.
+ */
+const TOOLTIP_STYLE = {
+  backgroundColor: "var(--popover)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius-md)",
+  color: "var(--popover-foreground)",
+  boxShadow: "var(--shadow-card)",
+} as const;
+const TOOLTIP_TEXT = { color: "var(--popover-foreground)" } as const;
 const X_DOMAIN: ["dataMin", "dataMax"] = ["dataMin", "dataMax"];
 
 type EndLabelProps = {
@@ -114,12 +126,17 @@ function SeriesLine({ item, color, lastIndex, filled }: SeriesLineProps) {
 /** График на Recharts. Грузится отдельным чанком; без анимации, чтобы опрос не «мигал» линиями. */
 export function TimeSeriesPlot({ series, slo, unit, area }: PlotProps) {
   const rows = mergeSeries(series);
-  const tick = makeTickFormatter(rows);
+  const locale = useLocale();
+  const format = useTextFormat();
+  const tick = makeTickFormatter(rows, locale);
   const filled = area && series.length === 1;
-  const formatTooltipLabel = useCallback((label: ReactNode) => formatDateTime(Number(label)), []);
+  const formatTooltipLabel = useCallback(
+    (label: ReactNode) => format.dateTimeShort(Number(label)),
+    [format],
+  );
   const formatTooltipValue = useCallback(
-    (value: unknown) => formatValueWithUnit(Number(value), unit),
-    [unit],
+    (value: unknown) => formatValueWithUnit(Number(value), unit, format),
+    [unit, format],
   );
 
   return (
@@ -139,6 +156,9 @@ export function TimeSeriesPlot({ series, slo, unit, area }: PlotProps) {
         <YAxis width="auto" domain={Y_DOMAIN} tick={TICK} axisLine={false} tickLine={false} />
         <Tooltip
           isAnimationActive={false}
+          contentStyle={TOOLTIP_STYLE}
+          labelStyle={TOOLTIP_TEXT}
+          itemStyle={TOOLTIP_TEXT}
           labelFormatter={formatTooltipLabel}
           formatter={formatTooltipValue}
         />

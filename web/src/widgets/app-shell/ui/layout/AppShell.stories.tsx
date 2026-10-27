@@ -96,11 +96,7 @@ const meta = {
         { id: "settings", label: "Настройки", href: "/settings", icon: SettingsIcon },
       ],
       helpHref: "/help",
-      account: (
-        <Button variant="ghost" className="w-full justify-start">
-          Анна Смирнова · владелец библиотеки
-        </Button>
-      ),
+      account: { name: "Анна Смирнова", role: "владелец библиотеки" },
     },
     topbar: {
       breadcrumbs: { trail: [{ label: "Поиск", href: "/search" }], current: "Результаты" },
@@ -224,5 +220,17 @@ export const Dark: Story = {
   args: { banners: [P0, READ_ONLY] },
   play: async () => {
     await waitFor(() => expect(document.documentElement).toHaveAttribute("data-theme", "dark"));
+  },
+};
+
+export const English: Story = {
+  name: "EN: подписи на английском",
+  globals: { locale: "en" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("navigation", { name: "Primary menu" })).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "Help" })).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "Skip to content" })).toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "Theme: System" })).toBeVisible();
   },
 };

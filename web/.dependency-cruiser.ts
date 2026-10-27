@@ -94,7 +94,8 @@ const config: IConfiguration = {
       // story — точка входа Storybook, на неё никто не импортирует
       from: {
         orphan: true,
-        pathNot: ["\\.(test|stories)\\.(ts|tsx)$", "^src/app/main\\.tsx$"],
+        // .d.ts — объявление модулей (*.po), на него никто не импортирует
+        pathNot: ["\\.(test|stories)\\.(ts|tsx)$", "\\.d\\.ts$", "^src/app/main\\.tsx$"],
       },
       to: {},
     },

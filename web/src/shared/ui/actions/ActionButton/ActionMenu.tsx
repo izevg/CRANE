@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { MoreHorizontalIcon } from "lucide-react";
 import {
   Button,
@@ -10,8 +11,6 @@ import {
 } from "../../primitives";
 import { ActionContent } from "./ActionButton";
 import type { Action } from "./action";
-
-const MORE_ACTIONS = "Другие действия";
 
 function ActionMenuItem({ action }: { action: Action }) {
   const variant = action.destructive ? "destructive" : "default";
@@ -45,6 +44,7 @@ function ActionMenuItem({ action }: { action: Action }) {
  * пустой список — ничего не рендерится.
  */
 export function ActionMenu({ actions }: { actions: readonly Action[] }) {
+  const { t } = useLingui();
   if (actions.length === 0) {
     return null;
   }
@@ -52,7 +52,7 @@ export function ActionMenu({ actions }: { actions: readonly Action[] }) {
   const destructive = actions.filter((action) => action.destructive);
   return (
     <Menu>
-      <MenuTrigger render={<Button variant="ghost" size="icon" aria-label={MORE_ACTIONS} />}>
+      <MenuTrigger render={<Button variant="ghost" size="icon" aria-label={t`Другие действия`} />}>
         <MoreHorizontalIcon aria-hidden="true" />
       </MenuTrigger>
       <MenuContent align="end">

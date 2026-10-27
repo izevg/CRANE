@@ -1,26 +1,25 @@
+import { useLingui } from "@lingui/react/macro";
 import { CopyableId } from "~/shared/ui/actions";
 
-const RULE = "Правило";
-const REQUEST_ID = "Идентификатор запроса";
-const COPY_REQUEST_ID = "Скопировать идентификатор запроса";
-const CONTACT = "Контакт";
-
 export function RuleLine({ ruleId }: { ruleId: string }) {
-  return <p className="mt-2 text-body wrap-anywhere">{`${RULE}: ${ruleId}`}</p>;
+  const { t } = useLingui();
+  return <p className="mt-2 text-body wrap-anywhere">{t`Правило: ${ruleId}`}</p>;
 }
 
 export function RequestIdLine({ requestId }: { requestId: string }) {
+  const { t } = useLingui();
   return (
     <p className="mt-3 flex max-w-full items-center gap-1 text-caption text-muted-foreground">
-      <span>{`${REQUEST_ID}:`}</span>
-      <CopyableId value={requestId} label={COPY_REQUEST_ID} />
+      <span>{t`Идентификатор запроса:`}</span>
+      <CopyableId value={requestId} label={t`Скопировать идентификатор запроса`} />
     </p>
   );
 }
 
 export function ContactLine({ contact }: { contact: string }) {
+  const { t } = useLingui();
   return (
-    <p className="mt-2 text-body text-muted-foreground wrap-anywhere">{`${CONTACT}: ${contact}`}</p>
+    <p className="mt-2 text-body text-muted-foreground wrap-anywhere">{t`Контакт: ${contact}`}</p>
   );
 }
 

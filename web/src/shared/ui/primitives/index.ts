@@ -8,6 +8,7 @@ export {
   TableRow,
 } from "./display/data/table";
 export { Skeleton } from "./display/feedback/skeleton";
+export { MachineValue } from "./display/machine-value/MachineValue";
 export { Badge } from "./display/surfaces/badge";
 export {
   Callout,

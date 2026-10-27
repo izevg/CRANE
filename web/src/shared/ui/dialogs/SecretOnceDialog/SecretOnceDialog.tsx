@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { useCallback, useId, useState } from "react";
 import { type Action, ActionButton } from "../../actions";
 import { CodeBlock } from "../../data-display";
@@ -13,12 +14,6 @@ import {
   Checkbox,
 } from "../../primitives";
 
-const WARNING = "Сохраните сейчас — больше мы его не покажем";
-const COPY = "Копировать токен";
-const SAVED = "Я сохранил токен";
-const DONE = "Готово";
-const DONE_REASON = "Отметьте, что сохранили токен";
-
 type SecretOnceDialogProps = {
   /** Секрет живёт только в памяти диалога: `null` — диалог закрыт и секрета в DOM нет. */
   secret: string | null;
@@ -30,6 +25,7 @@ type SecretOnceDialogProps = {
 type BodyProps = Omit<SecretOnceDialogProps, "secret"> & { secret: string };
 
 function SecretDialogBody({ secret, title, onDone }: BodyProps) {
+  const { t } = useLingui();
   const [saved, setSaved] = useState(false);
   const checkboxId = useId();
   // Диалог открыт, пока есть секрет, поэтому клик вне окна и Esc до отметки ничего не закрывают сами:
@@ -43,9 +39,9 @@ function SecretDialogBody({ secret, title, onDone }: BodyProps) {
     [saved, onDone],
   );
   const done: Action = {
-    label: DONE,
+    label: t`Готово`,
     run: { onSelect: onDone },
-    ...(saved ? {} : { disabledReason: DONE_REASON }),
+    ...(saved ? {} : { disabledReason: t`Отметьте, что сохранили токен` }),
   };
   return (
     <AlertDialog open onOpenChange={handleOpenChange}>
@@ -55,12 +51,12 @@ function SecretDialogBody({ secret, title, onDone }: BodyProps) {
         </AlertDialogHeader>
         <AlertDialogBody className="flex flex-col gap-4">
           <Callout tone="warning">
-            <CalloutTitle>{WARNING}</CalloutTitle>
+            <CalloutTitle>{t`Сохраните сейчас — больше мы его не покажем`}</CalloutTitle>
           </Callout>
-          <CodeBlock code={secret} copyLabel={COPY} />
+          <CodeBlock code={secret} copyLabel={t`Копировать токен`} marked />
           <div className="flex items-center gap-2 text-body">
             <Checkbox id={checkboxId} checked={saved} onCheckedChange={setSaved} />
-            <label htmlFor={checkboxId}>{SAVED}</label>
+            <label htmlFor={checkboxId}>{t`Я сохранил токен`}</label>
           </div>
         </AlertDialogBody>
         <AlertDialogFooter>

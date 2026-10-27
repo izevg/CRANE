@@ -3,7 +3,7 @@ import { expect, within } from "storybook/test";
 import { RelativeTime } from "~/shared/ui/status";
 
 const MINUTE = 60_000;
-const MINUTES_AGO = /мин назад/;
+const MINUTES_AGO = /мин\. назад/;
 
 const meta = {
   title: "Статус/RelativeTime",

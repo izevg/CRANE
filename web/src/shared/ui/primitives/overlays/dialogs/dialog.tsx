@@ -1,10 +1,9 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import { useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
 import type * as React from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { Button } from "../../forms/toggle/button";
-
-const CLOSE = "Закрыть";
 
 type DialogSize = "default" | "palette";
 
@@ -42,13 +41,21 @@ export function DialogContent({
   size?: DialogSize;
   flush?: boolean;
 }) {
+  const { t } = useLingui();
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Backdrop className="anim-scrim fixed inset-0 isolate z-50 bg-(--scrim)" />
+      <DialogPrimitive.Backdrop
+        className={cx(
+          "fixed inset-0 isolate z-50 bg-(--scrim)",
+          size === "palette" ? "" : "anim-scrim",
+        )}
+      />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cx(
-          "anim-dialog fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] flex-col -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-body text-popover-foreground shadow-card outline-none",
+          // Палитра открывается по Ctrl+K много раз за сессию: без анимации входа и выхода (spec 2), в отличие от диалога
+          size === "palette" ? "" : "anim-dialog",
+          "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] flex-col -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover [--timeline-surface:var(--popover)] text-body text-popover-foreground shadow-card outline-none",
           SIZE[size],
           flush ? FLUSH : PADDED,
           className,
@@ -63,7 +70,7 @@ export function DialogContent({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={CLOSE}
+                aria-label={t`Закрыть`}
                 className="absolute top-4 right-4"
               />
             }

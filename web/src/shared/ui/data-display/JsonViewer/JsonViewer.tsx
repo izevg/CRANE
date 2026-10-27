@@ -1,3 +1,5 @@
+import { plural } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -6,22 +8,13 @@ import {
 } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { formatNumber, pluralRu } from "~/shared/lib/text";
 import { CopyButton } from "../../actions";
 import { Button } from "../../primitives";
 import { collapseAll, defaultCollapsed, flatten, type JsonRow, type JsonValue } from "./tree";
 
 export type { JsonValue } from "./tree";
 
-const ROOT_NAME = "корень";
-const COLLAPSE = "Свернуть";
-const EXPAND = "Развернуть";
-const EXPAND_ALL = "Развернуть всё";
-const COLLAPSE_ALL = "Свернуть всё";
-const COPY_JSON = "Копировать JSON";
 const REGION = "JSON";
-const KEYS = ["ключ", "ключа", "ключей"] as const;
-const ITEMS = ["элемент", "элемента", "элементов"] as const;
 const INDENT_REM = 1;
 const JSON_INDENT = 2;
 
@@ -48,10 +41,13 @@ function brackets(row: JsonRow): { open: string; close: string } {
     : { open: "{", close: "}" };
 }
 
-function summary(row: Extract<JsonRow, { kind: "collapsed" }>): string {
-  const size = row.size;
-  const word = pluralRu(size, row.container === "array" ? ITEMS : KEYS);
-  return `${formatNumber(size)} ${word}`;
+/** «3 элемента» / «12 ключей»: свёрнутый контейнер; склонение и порядок слов — в сообщении (ICU plural). */
+function Summary({ row }: { row: Extract<JsonRow, { kind: "collapsed" }> }) {
+  const { t } = useLingui();
+  const { size } = row;
+  return row.container === "array"
+    ? t`${plural(size, { one: "# элемент", few: "# элемента", many: "# элементов", other: "# элемента" })}`
+    : t`${plural(size, { one: "# ключ", few: "# ключа", many: "# ключей", other: "# ключа" })}`;
 }
 
 function Label({ row }: { row: JsonRow }) {
@@ -92,7 +88,9 @@ function RowBody({ row }: { row: JsonRow }) {
       <>
         <Label row={row} />
         <Punct>{`${open}…${close}`}</Punct>
-        <span className="ml-2 text-muted-foreground">{summary(row)}</span>
+        <span className="ml-2 text-muted-foreground">
+          <Summary row={row} />
+        </span>
         {comma}
       </>
     );
@@ -121,7 +119,8 @@ function Line({
 }) {
   const expanded = row.kind === "open";
   const toggleable = expanded || row.kind === "collapsed";
-  const name = row.label ?? ROOT_NAME;
+  const { t } = useLingui();
+  const name = row.label ?? t`корень`;
   const handleToggle = useCallback(() => onToggle(row.nodeId), [onToggle, row.nodeId]);
   return (
     <div className="flex min-h-6 items-start hover:bg-(--row-hover-bg)">
@@ -140,7 +139,7 @@ function Line({
             variant="ghost"
             size="icon-sm"
             aria-expanded={expanded}
-            aria-label={`${expanded ? COLLAPSE : EXPAND} ${name}`}
+            aria-label={expanded ? t`Свернуть ${name}` : t`Развернуть ${name}`}
             onClick={handleToggle}
           >
             {expanded ? (
@@ -162,6 +161,7 @@ function Line({
 
 /** Дерево JSON со сворачиванием узлов и номерами строк. Значения выводятся текстом, разметка из данных невозможна. */
 export function JsonViewer({ value, label = REGION, className }: JsonViewerProps) {
+  const { t } = useLingui();
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => defaultCollapsed(value));
   const rows = useMemo(() => flatten(value, collapsed), [value, collapsed]);
   const toggle = useCallback((nodeId: string) => {
@@ -180,13 +180,13 @@ export function JsonViewer({ value, label = REGION, className }: JsonViewerProps
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="ghost" size="sm" onClick={expandAll}>
           <ChevronsUpDownIcon aria-hidden="true" />
-          {EXPAND_ALL}
+          {t`Развернуть всё`}
         </Button>
         <Button variant="ghost" size="sm" onClick={collapseEverything}>
           <ChevronsDownUpIcon aria-hidden="true" />
-          {COLLAPSE_ALL}
+          {t`Свернуть всё`}
         </Button>
-        <CopyButton value={JSON.stringify(value, null, JSON_INDENT)} label={COPY_JSON} />
+        <CopyButton value={JSON.stringify(value, null, JSON_INDENT)} label={t`Копировать JSON`} />
       </div>
       <section
         aria-label={label}

@@ -161,7 +161,7 @@ describe("MetricTile", () => {
 
     // Assert
     expect(screen.getByText("48")).toBeInTheDocument();
-    expect(screen.getByText(STALE_TEXT)).toHaveTextContent("обновлено 3 мин назад");
+    expect(screen.getByText(STALE_TEXT)).toHaveTextContent("обновлено 3 мин. назад");
   });
 
   it("дельта выводится со словом «Изменение» для скринридера и знаком минус", () => {

@@ -1,22 +1,23 @@
+import { useLingui } from "@lingui/react/macro";
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { formatCount, formatNumber, formatPercent } from "~/shared/lib/text";
+import { useTextFormat } from "~/shared/lib/i18n";
 import { Card, Link, Skeleton, TONE_SURFACE, toneGlyph } from "~/shared/ui/primitives";
 import { RelativeTime } from "~/shared/ui/status";
 import { Sparkline } from "../Sparkline/Sparkline";
-
-type TileDelta = {
-  /** Процентное изменение, например -3.1. */
-  pct: number;
-  /** Какое направление считается хорошим. */
-  polarity: "up-good" | "down-good" | "neutral";
-};
-
-/** `toneLabel` обязателен при не нейтральном тоне: цвет один не передаёт статус (WCAG 1.4.1). */
-type TileTone = { tone?: "neutral" } | { tone: "warning" | "error"; toneLabel: string };
-
-type TileValue = number | { count: number; capped: boolean } | string | null;
+import {
+  type ActiveTone,
+  deltaText,
+  deltaVerdict,
+  formatValue,
+  resolveTone,
+  type TileDelta,
+  type TileTone,
+  type TileValue,
+  UNIT_GAP,
+  valueWithUnit,
+} from "./tile";
 
 type MetricTileProps = TileTone &
   WithClassName<{
@@ -36,15 +37,6 @@ type MetricTileProps = TileTone &
   }>;
 
 const NO_VALUE = "—";
-const NO_DATA = "Нет данных";
-const NO_DATA_NAME = "нет данных";
-const STALE_PREFIX = "обновлено ";
-const DELTA_PREFIX = "Изменение: ";
-const MINUS = "−";
-const NAME_SEPARATOR = ": ";
-const UNIT_SEPARATOR = " ";
-const TONE_SEPARATOR = ", ";
-const PERCENT = 100;
 
 // min-height, а не height: при увеличенных интервалах текста (WCAG 1.4.12) подпись не обрезается.
 const HEAD_GRID = "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2";
@@ -54,19 +46,10 @@ const STRETCHED =
 const SIZE = "min-h-28 @3xl/page:min-h-[168px]";
 const PADDING = "px-4 py-3 @3xl/page:py-4";
 
-type ActiveTone = "warning" | "error";
-
 const RING = {
   warning: "ring-1 ring-warning-strong",
   error: "ring-1 ring-error-strong",
 } satisfies Record<ActiveTone, string>;
-
-function resolveTone(props: TileTone): { tone: ActiveTone; label: string } | null {
-  if (!("toneLabel" in props)) {
-    return null;
-  }
-  return { tone: props.tone, label: props.toneLabel };
-}
 
 /**
  * Бейдж тона. Порог — ширина самой плитки (container query), а не окна: в узкой плитке остаётся иконка,
@@ -88,40 +71,33 @@ function ToneBadge({ tone, label }: { tone: ActiveTone; label: string }) {
   );
 }
 
-function deltaStyle({ pct, polarity }: TileDelta): string {
-  if (polarity === "neutral" || pct === 0) {
-    return TONE_SURFACE.neutral;
-  }
-  const good = polarity === "up-good" ? pct > 0 : pct < 0;
-  return good ? TONE_SURFACE.success : TONE_SURFACE.error;
-}
+const DELTA_STYLE = {
+  good: TONE_SURFACE.success,
+  bad: TONE_SURFACE.error,
+  neutral: TONE_SURFACE.neutral,
+} as const;
 
 function DeltaChip({ delta }: { delta: TileDelta }) {
+  const { t } = useLingui();
+  const format = useTextFormat();
   const Glyph = delta.pct >= 0 ? ArrowUpIcon : ArrowDownIcon;
-  const sign = delta.pct < 0 ? MINUS : "";
+  const change = deltaText(delta, format);
   return (
     <span
       className={cx(
         "inline-flex h-5 items-center gap-1 rounded-full px-2 text-caption tabular-nums",
-        deltaStyle(delta),
+        DELTA_STYLE[deltaVerdict(delta)],
       )}
     >
       <Glyph className="size-3" aria-hidden="true" />
-      <span className="sr-only">{DELTA_PREFIX}</span>
-      {sign}
-      {formatPercent(Math.abs(delta.pct) / PERCENT)}
+      <span className="sr-only">{t`Изменение: ${change}`}</span>
+      <span aria-hidden="true">{change}</span>
     </span>
   );
 }
 
-function formatValue(value: Exclude<TileValue, null>): string {
-  if (typeof value === "number") {
-    return formatNumber(value);
-  }
-  return typeof value === "string" ? value : formatCount(value);
-}
-
 function Value({ value, unit }: { value: TileValue; unit: string | undefined }) {
+  const format = useTextFormat();
   if (value === null) {
     return <span className="text-metric-xl">{NO_VALUE}</span>;
   }
@@ -134,11 +110,11 @@ function Value({ value, unit }: { value: TileValue; unit: string | undefined }) 
           text ? "min-w-0 truncate whitespace-nowrap text-metric" : "text-metric-xl",
         )}
       >
-        {formatValue(value)}
+        {formatValue(value, format)}
       </span>
       {unit ? (
         <span className="ml-1 text-body text-muted-foreground">
-          {UNIT_SEPARATOR}
+          {UNIT_GAP}
           {unit}
         </span>
       ) : null}
@@ -160,9 +136,10 @@ function Footer({
   caption: ReactNode;
   stale: { updatedAt: string } | undefined;
 }) {
+  const { t } = useLingui();
   let main: ReactNode = null;
   if (empty) {
-    main = <span className="truncate text-caption text-muted-foreground">{NO_DATA}</span>;
+    main = <span className="truncate text-caption text-muted-foreground">{t`Нет данных`}</span>;
   } else if (delta) {
     main = <DeltaChip delta={delta} />;
   } else if (caption) {
@@ -173,26 +150,12 @@ function Footer({
       {main}
       {stale ? (
         <span className="shrink-0 whitespace-nowrap text-caption text-warning">
-          {STALE_PREFIX}
-          <RelativeTime ts={stale.updatedAt} />
+          {t`обновлено`} <RelativeTime ts={stale.updatedAt} />
         </span>
       ) : null}
       {!empty && delta && caption ? <span className="sr-only">{caption}</span> : null}
     </div>
   );
-}
-
-/** Имя плитки-ссылки: «P0 открыто: 1, требует действия». */
-function linkName(
-  label: string,
-  value: TileValue,
-  unit: string | undefined,
-  toneLabel: string | undefined,
-): string {
-  const number = value === null ? NO_DATA_NAME : formatValue(value);
-  const shown = value === null || !unit ? number : `${number}${UNIT_SEPARATOR}${unit}`;
-  const name = `${label}${NAME_SEPARATOR}${shown}`;
-  return toneLabel === undefined ? name : `${name}${TONE_SEPARATOR}${toneLabel}`;
 }
 
 type LinkedHead = { href: string; name: string; describedBy: string };
@@ -221,11 +184,18 @@ function Head({ linked, children }: { linked: LinkedHead | null; children: React
 
 export function MetricTile(props: MetricTileProps) {
   const { label, value, unit, caption, delta, spark, reference, href, stale, className } = props;
+  const { t } = useLingui();
+  const format = useTextFormat();
   const labelId = useId();
   const footerId = useId();
   const tone = resolveTone(props);
   const empty = value === null;
   const linked = href !== undefined;
+  // Имя плитки-ссылки: «P0 открыто: 1, требует действия». Каждая фраза — целое сообщение: порядок слов зависит от языка.
+  const shown = valueWithUnit(value, unit, format) ?? t`нет данных`;
+  const toneLabel = tone?.label;
+  const linkName = () =>
+    toneLabel === undefined ? t`${label}: ${shown}` : t`${label}: ${shown}, ${toneLabel}`;
 
   const card = (
     <Card
@@ -243,7 +213,11 @@ export function MetricTile(props: MetricTileProps) {
       <Head
         linked={
           linked
-            ? { href, name: linkName(label, value, unit, tone?.label), describedBy: footerId }
+            ? {
+                href,
+                name: linkName(),
+                describedBy: footerId,
+              }
             : null
         }
       >

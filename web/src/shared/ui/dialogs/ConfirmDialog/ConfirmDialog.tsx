@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { type ReactNode, useCallback, useId, useRef } from "react";
 import { type Action, ActionButton } from "../../actions";
 import {
@@ -11,8 +12,6 @@ import {
   AlertDialogTitle,
 } from "../../primitives";
 
-const CANCEL = "Отмена";
-const PENDING_REASON = "Выполняется…";
 const CONFIRM_CONTROL = "button,a";
 
 type ConfirmDialogProps = {
@@ -45,6 +44,7 @@ export function ConfirmDialog({
   confirm,
   pending = false,
 }: ConfirmDialogProps) {
+  const { t } = useLingui();
   const hasChildren = children !== undefined && children !== null && children !== false;
   const cancelRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLSpanElement>(null);
@@ -68,7 +68,7 @@ export function ConfirmDialog({
     },
     [pending, onOpenChange],
   );
-  const action: Action = pending ? { ...confirm, disabledReason: PENDING_REASON } : confirm;
+  const action: Action = pending ? { ...confirm, disabledReason: t`Выполняется…` } : confirm;
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent initialFocus={confirm.destructive ? cancelRef : firstFocus}>
@@ -95,11 +95,11 @@ export function ConfirmDialog({
             aria-disabled={pending || undefined}
             aria-describedby={pending ? reasonId : undefined}
           >
-            {CANCEL}
+            {t`Отмена`}
           </AlertDialogCancel>
           {pending ? (
             <span id={reasonId} className="sr-only">
-              {PENDING_REASON}
+              {t`Выполняется…`}
             </span>
           ) : null}
           <span ref={confirmRef} className="contents">

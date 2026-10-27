@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { useCallback, useId } from "react";
 import {
   Badge,
@@ -12,19 +13,29 @@ import {
 import type { Action } from "./action";
 
 const MFA = "MFA";
-const STEP_UP_HINT = ", требуется подтверждение входа";
 
 type ActionButtonVariant = "primary" | "secondary" | "ghost";
+type ChipVariant = "inherit" | "inverse" | "control";
 
 /** Подпись действия: у step-up добавляется бейдж «MFA», а скринридер получает пояснение. */
-export function ActionContent({ action }: { action: Action }) {
+export function ActionContent({
+  action,
+  chip = "inherit",
+}: {
+  action: Action;
+  /** Поверхность бейджа: на кнопке она своя (`inverse`/`control`), в пункте меню — цвет пункта. */
+  chip?: ChipVariant;
+}) {
+  const { t } = useLingui();
   return (
     <>
       {action.label}
       {action.stepUp ? (
         <>
-          <Badge variant="inherit">{MFA}</Badge>
-          <span className="sr-only">{STEP_UP_HINT}</span>
+          <Badge variant={chip} className="ml-1">
+            {MFA}
+          </Badge>
+          <span className="sr-only">{t`, требуется подтверждение входа`}</span>
         </>
       ) : null}
     </>
@@ -45,7 +56,9 @@ export function ActionButton({ action, variant }: Props) {
   const reasonId = useId();
   const blocked = action.disabledReason !== undefined;
   const style: ButtonVariant = action.destructive ? "destructive" : variant;
-  const content = <ActionContent action={action} />;
+  // Бейдж не должен сливаться с фоном кнопки: на заливке primary он инверсный, на остальных — с рамкой контрола.
+  const chip: ChipVariant = style === "primary" && !blocked ? "inverse" : "control";
+  const content = <ActionContent action={action} chip={chip} />;
   const { run } = action;
   const handleClick = useCallback(() => {
     if (!blocked && "onSelect" in run) {

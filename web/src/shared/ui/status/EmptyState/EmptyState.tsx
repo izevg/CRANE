@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { InboxIcon, type LucideIcon } from "lucide-react";
 import { cx } from "~/shared/lib/core";
 import { type Action, ActionButton } from "~/shared/ui/actions";
@@ -27,18 +28,20 @@ type EmptyStateProps = (
 
 const LAYOUT = "flex flex-col items-center px-6 text-center";
 const HEADINGS = { 2: "h2", 3: "h3" } as const;
-const FILTERED_TITLE = "Ничего не найдено по фильтрам";
 
 /**
  * Пустое состояние. Кнопка есть только там, где передано действие: без `Action` вызывающий
  * не получает ни кнопки, ни ссылки.
  */
 export function EmptyState(props: EmptyStateProps) {
+  const { t } = useLingui();
   const Heading = HEADINGS[props.headingLevel ?? 2];
   if (props.variant === "filtered") {
     return (
       <div className={cx(LAYOUT, "py-8", props.className)}>
-        <Heading className="text-balance text-h3">{props.title ?? FILTERED_TITLE}</Heading>
+        <Heading className="text-balance text-h3">
+          {props.title ?? t`Ничего не найдено по фильтрам`}
+        </Heading>
         {props.reset ? (
           <div className="mt-4">
             <ActionButton action={props.reset} variant="secondary" />

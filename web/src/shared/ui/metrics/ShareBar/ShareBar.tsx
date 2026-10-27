@@ -1,6 +1,7 @@
+import { useLingui } from "@lingui/react/macro";
 import { type ReactNode, useId } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { formatNumber, formatPercent } from "~/shared/lib/text";
+import { useTextFormat } from "~/shared/lib/i18n";
 import {
   Table,
   TableBody,
@@ -9,14 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/shared/ui/primitives";
-
-type ShareItem = {
-  id: string;
-  label: string;
-  value: number;
-  /** Значение для легенды в единицах вызывающего: «4,2 ТБ». */
-  display: string;
-};
+import { type ShareItem, shareOf, toSegments } from "./share";
 
 type ShareBarProps = WithClassName<{
   title: string;
@@ -28,40 +22,6 @@ type ShareBarProps = WithClassName<{
   caption?: ReactNode;
 }>;
 
-/** Сколько крупнейших долей показываем отдельно; остальное сворачивается в «Прочие (N)». */
-const TOP_LIMIT = 8;
-const OTHER_ID = "__other__";
-const OTHER_LABEL = "Прочие";
-
-/** Цвета сегментов — `--chart-1..5` по кругу; «Прочие» — нейтральный. */
-const PALETTE = ["bg-chart-1", "bg-chart-2", "bg-chart-3", "bg-chart-4", "bg-chart-5"] as const;
-const OTHER_COLOR = "bg-muted-foreground";
-
-type Segment = ShareItem & { color: string };
-
-function toSegments(items: readonly ShareItem[], formatOther: (sum: number) => string): Segment[] {
-  const sorted = [...items].sort((a, b) => b.value - a.value);
-  const top = sorted.slice(0, TOP_LIMIT).map((item, index) => ({
-    ...item,
-    color: PALETTE[index % PALETTE.length] ?? OTHER_COLOR,
-  }));
-  const rest = sorted.slice(TOP_LIMIT);
-  if (rest.length === 0) {
-    return top;
-  }
-  const sum = rest.reduce((total, item) => total + item.value, 0);
-  return [
-    ...top,
-    {
-      id: OTHER_ID,
-      label: `${OTHER_LABEL} (${rest.length})`,
-      value: sum,
-      display: formatOther(sum),
-      color: OTHER_COLOR,
-    },
-  ];
-}
-
 /**
  * Доля от целого: одна горизонтальная полоса 100 % и легенда-таблица — главный носитель данных.
  * Полоса декоративна (`aria-hidden`), сегменты разделены зазором 2 px цвета карточки, потому что
@@ -71,14 +31,19 @@ export function ShareBar({
   title,
   columns,
   items,
-  formatOther = formatNumber,
+  formatOther,
   caption,
   className,
 }: ShareBarProps) {
+  const { t } = useLingui();
   const titleId = useId();
-  const segments = toSegments(items, formatOther);
+  const format = useTextFormat();
+  const segments = toSegments(
+    items,
+    formatOther ?? ((sum) => format.number(sum)),
+    (count) => t`Прочие (${count})`,
+  );
   const total = segments.reduce((sum, segment) => sum + segment.value, 0);
-  const share = (value: number) => (total > 0 ? value / total : 0);
 
   return (
     <figure
@@ -120,7 +85,7 @@ export function ShareBar({
               </TableCell>
               <TableCell className="text-right tabular-nums">{segment.display}</TableCell>
               <TableCell className="text-right tabular-nums">
-                {formatPercent(share(segment.value))}
+                {format.percent(shareOf(segment.value, total))}
               </TableCell>
             </TableRow>
           ))}

@@ -11,14 +11,19 @@
     "fsd": "steiger ./src",
     "unused": "knip",
     "deps": "depcruise src --config .dependency-cruiser.ts",
-    "check": "pnpm run typecheck && pnpm run fsd && pnpm run unused && pnpm run deps",
+    "check": "pnpm run typecheck && pnpm run fsd && pnpm run unused && pnpm run deps && pnpm run i18n:check && node ../tools/lint-i18n/index.ts && node ../tools/lint-motion/index.ts",
     "test": "vitest run --passWithNoTests",
     "mutate": "stryker run",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "i18n:extract": "lingui extract",
+    "i18n:check": "lingui check sync && lingui check missing"
   },
   "devDependencies": {
     "@feature-sliced/steiger-plugin": "^0.8.0",
+    "@lingui/cli": "^6.10.1",
+    "@lingui/format-po": "^6.10.1",
+    "@lingui/vite-plugin": "^6.10.1",
     "@storybook/addon-a11y": "^10.6.5",
     "@storybook/addon-vitest": "^10.6.5",
     "@storybook/react-vite": "^10.6.5",
@@ -45,7 +50,10 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
-    "@fontsource-variable/jost": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/onest": "^5.3.1",
+    "@lingui/core": "^6.10.1",
+    "@lingui/react": "^6.10.1",
     "@tanstack/react-table": "9.3.1",
     "@tanstack/react-virtual": "3.14.21",
     "lucide-react": "^1.62.0",

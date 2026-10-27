@@ -1,12 +1,19 @@
+import { useLingui } from "@lingui/react/macro";
 import { ChevronRightIcon } from "lucide-react";
 import type * as React from "react";
 import { cx } from "~/shared/lib/core";
 import { Link, type LinkProps } from "./link";
 
-const LABEL = "Навигационная цепочка";
-
 export function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
-  return <nav aria-label={LABEL} data-slot="breadcrumb" className={className} {...props} />;
+  const { t } = useLingui();
+  return (
+    <nav
+      aria-label={t`Навигационная цепочка`}
+      data-slot="breadcrumb"
+      className={className}
+      {...props}
+    />
+  );
 }
 
 export function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {

@@ -1,3 +1,5 @@
+import { plural } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { announce } from "~/shared/lib/a11y";
@@ -15,10 +17,6 @@ type BulkActionBarProps = WithClassName<{
   onClear: () => void;
 }>;
 
-const REGION_LABEL = "Массовые действия";
-const CLEAR_LABEL = "Снять выделение";
-const SELECTED_PREFIX = "Выбрано ";
-
 /** Панель висит на `bottom-4` (16 px от края); запас над ней ещё 16 px: итого высота + 32. */
 const SCROLL_PADDING_GAP = 32;
 
@@ -31,14 +29,22 @@ const SCROLL_PADDING_GAP = 32;
  * объявляется скринридеру через общий live-регион.
  */
 export function BulkActionBar({ count, actions, onClear, className }: BulkActionBarProps) {
+  const { t } = useLingui();
   const barRef = useRef<HTMLDivElement>(null);
   const visible = count > 0;
+  // Одно сообщение и для видимого текста, и для объявления: порядок слов зависит от языка
+  const selected = t`${plural(count, {
+    one: "Выбрана # строка",
+    few: "Выбрано # строки",
+    many: "Выбрано # строк",
+    other: "Выбрано # строки",
+  })}`;
   useScrollPaddingBottom(barRef, visible, SCROLL_PADDING_GAP);
   useEffect(() => {
     if (count > 0) {
-      announce(`${SELECTED_PREFIX}${count}`);
+      announce(selected);
     }
-  }, [count]);
+  }, [count, selected]);
 
   if (!visible) {
     return null;
@@ -48,18 +54,15 @@ export function BulkActionBar({ count, actions, onClear, className }: BulkAction
     <div
       ref={barRef}
       role="group"
-      aria-label={REGION_LABEL}
+      aria-label={t`Массовые действия`}
       className={cx(
         "sticky bottom-4 z-10 mx-auto flex w-full max-w-full flex-wrap items-center gap-3 bg-card px-4 py-2 text-body shadow-card transition-[opacity,translate] duration-(--dur-base) ease-(--ease-out) starting:translate-y-2 starting:opacity-0 motion-reduce:transition-none md:w-fit md:rounded-lg",
         className,
       )}
     >
-      <span className="font-semibold tabular-nums">
-        {SELECTED_PREFIX}
-        {count}
-      </span>
+      <span className="font-semibold tabular-nums">{selected}</span>
       <ActionBar actions={actions} />
-      <Button variant="ghost" size="icon-sm" aria-label={CLEAR_LABEL} onClick={onClear}>
+      <Button variant="ghost" size="icon-sm" aria-label={t`Снять выделение`} onClick={onClear}>
         <XIcon aria-hidden="true" />
       </Button>
     </div>

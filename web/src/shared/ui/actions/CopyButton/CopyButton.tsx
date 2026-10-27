@@ -1,3 +1,4 @@
+import { useLingui } from "@lingui/react/macro";
 import { Check, Copy } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { copyToClipboard, cx } from "~/shared/lib/core";
@@ -5,7 +6,6 @@ import { showToast } from "~/shared/lib/state";
 import { Button } from "../../primitives";
 
 const COPIED_MS = 1200;
-const COPY_FAILED = "Не удалось скопировать — выделите текст вручную";
 
 type CopyButtonProps = {
   value: string;
@@ -19,19 +19,20 @@ const ICON =
 
 /** Копирует значение; «Скопировано» объявляется через общий live-регион, иконка на секунду меняется на галочку. */
 export function CopyButton({ value, label, className }: CopyButtonProps) {
+  const { t } = useLingui();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const copy = useCallback(async () => {
     if (!(await copyToClipboard(value))) {
-      showToast.error({ title: COPY_FAILED });
+      showToast.error({ title: t`Не удалось скопировать — выделите текст вручную` });
       return;
     }
     setCopied(true);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), COPIED_MS);
-  }, [value]);
+  }, [value, t]);
 
   return (
     <Button

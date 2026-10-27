@@ -1,16 +1,10 @@
+import { useLingui } from "@lingui/react/macro";
 import type { CSSProperties } from "react";
 import { Toaster as Sonner } from "sonner";
 import { useColorMode } from "~/shared/lib/state";
 import { toneGlyph } from "../../display/tone/tone";
 
 const VISIBLE_TOASTS = 3;
-// Не «Уведомления»: так называется центр уведомлений в шапке, это другой объект.
-const CONTAINER_LABEL = "Оповещения";
-const CLOSE_LABEL = "Закрыть";
-
-// В sonner подпись кнопки закрытия задаётся только через toastOptions
-const TOAST_OPTIONS = { closeButtonAriaLabel: CLOSE_LABEL };
-
 const STYLE = {
   "--normal-bg": "var(--popover)",
   "--normal-text": "var(--popover-foreground)",
@@ -32,14 +26,16 @@ const ICONS = {
 
 /** Контейнер тостов справа снизу, не больше трёх видимых. Монтируется один раз в корне; показывает `showToast`. */
 export function Toaster() {
+  const { t } = useLingui();
   const { resolved } = useColorMode();
   return (
     <Sonner
       theme={resolved}
       position="bottom-right"
       visibleToasts={VISIBLE_TOASTS}
-      containerAriaLabel={CONTAINER_LABEL}
-      toastOptions={TOAST_OPTIONS}
+      containerAriaLabel={t`Оповещения`}
+      // В sonner подпись кнопки закрытия задаётся только через toastOptions
+      toastOptions={{ closeButtonAriaLabel: t`Закрыть` }}
       className="toaster group"
       icons={ICONS}
       style={STYLE}

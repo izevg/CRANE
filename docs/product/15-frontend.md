@@ -11,6 +11,8 @@ SPA на React строится на собственном UI kit на Base UI:
 | Данные | TanStack Query, Router, Table, Virtual (MIT); клиент API генерируется из OpenAPI (orval, MIT) |
 | Графики и граф зависимостей | Recharts (MIT), xyflow / React Flow (MIT) |
 | Markdown README | react-markdown + rehype-sanitize (MIT), подсветка Shiki (MIT) |
+| Интерфейс RU/EN | Lingui (MIT): исходный язык ru, локали ru и en; тексты в коде макросами `t`, `msg`, `plural`, переводы в каталогах `.po` |
+| Шрифты | Onest (текст и заголовки) и JetBrains Mono без лигатур (машинные значения и код); оба под OFL-1.1, self-hosted через fontsource |
 | Тесты | Vitest, Testing Library (MIT), Playwright (Apache-2.0), Storybook (MIT) |
 
 ## Структура кода: FSD и правило четырёх
@@ -39,5 +41,6 @@ SPA на React строится на собственном UI kit на Base UI:
 -   Списки любого размера с виртуализацией; prefetch карточки по наведению.
 -   Первая загрузка SPA меньше 250 КБ gzip, остальное лениво по маршрутам.
 -   Доступность WCAG 2.2 AA (контрасты уже заложены в токенах кита), светлая и тёмная темы.
+-   Интерфейс на русском и английском (RU/EN) обязателен: нет захардкоженных видимых строк, язык переключается в самом интерфейсе.
 -   Командная палитра (Ctrl K: переходы и поиск пакетов по ссылкам из `GET /me`) и центр уведомлений (те же события, что уходят в почту и вебхуки) — с первой версии UI.
 -   Композиция, паттерны и экраны — [docs/ui/](../ui/README.md); контракт данных — `docs/api/admin.openapi.yaml`.

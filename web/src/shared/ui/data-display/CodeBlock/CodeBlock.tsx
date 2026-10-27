@@ -1,8 +1,8 @@
+import { useLingui } from "@lingui/react/macro";
 import { useLayoutEffect, useRef } from "react";
 import { cx } from "~/shared/lib/core";
 import { CopyButton } from "../../actions";
-
-const DEFAULT_LABEL = "Код";
+import { MachineValue } from "../../primitives";
 
 type CodeBlockProps = {
   code: string;
@@ -12,6 +12,8 @@ type CodeBlockProps = {
   label?: string;
   /** Переносить длинные строки; по умолчанию строки прокручиваются по горизонтали. */
   wrap?: boolean;
+  /** Секрет, хэш или токен: символы красятся по классам (до 64 знаков). Для команд и конфигов не включать. */
+  marked?: boolean;
 };
 
 /**
@@ -22,9 +24,11 @@ type CodeBlockProps = {
 export function CodeBlock({
   code,
   copyLabel,
-  label = DEFAULT_LABEL,
+  label,
   wrap = false,
+  marked = false,
 }: CodeBlockProps) {
+  const { t } = useLingui();
   const ref = useRef<HTMLPreElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: смена текста не меняет размер рамки, но меняет переполнение
   useLayoutEffect(() => {
@@ -45,24 +49,27 @@ export function CodeBlock({
     observer.observe(pre);
     return () => observer.disconnect();
   }, [code, wrap]);
+  // Кнопка стоит рядом с областью кода, а не поверх неё: прямоугольники не пересекаются по построению,
+  // длинная строка прокручивается внутри своей области. В разметке кнопка идёт первой (первый фокус в диалоге),
+  // визуально справа (`order-last`).
   return (
-    <div className="relative">
-      <CopyButton
-        value={code}
-        label={copyLabel}
-        className="absolute top-1 right-1 z-[1] bg-(--code-bg)"
-      />
+    <div className="flex items-start gap-2 rounded-lg bg-(--code-bg) p-2">
+      <span className="order-last shrink-0 rounded-md border border-border bg-card">
+        <CopyButton value={code} label={copyLabel} />
+      </span>
       {/* biome-ignore lint/a11y/useSemanticElements: у <pre> нет подходящей роли с именем, нужен именованный регион */}
       <pre
         ref={ref}
         role="region"
-        aria-label={label}
+        aria-label={label ?? t`Код`}
         className={cx(
-          "max-h-64 overflow-auto rounded-lg bg-(--code-bg) p-3 pr-12 font-mono text-caption text-foreground",
+          "m-0 max-h-64 min-w-0 flex-1 overflow-auto p-1 font-mono text-caption text-foreground",
           wrap ? "whitespace-pre-wrap wrap-anywhere" : "whitespace-pre",
         )}
       >
-        <code>{code}</code>
+        <code>
+          <MachineValue value={code} marked={marked} />
+        </code>
       </pre>
     </div>
   );

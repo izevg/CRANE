@@ -28,3 +28,7 @@ export const OpenSelect: Story = {
   },
 };
 ```
+
+## Язык
+
+Тулбар «Язык» (RU/EN) вызывает `activateLocale` в `loaders`, `I18nProvider` стоит в `StoryShell`. Выбор в `localStorage` витрина не пишет. Юнит-тесты (jsdom) получают `I18nProvider` автоматически: в `vitest.unit.config.ts` `@testing-library/react` подменён на `test/rtl.tsx`; импортируйте `render` как обычно.

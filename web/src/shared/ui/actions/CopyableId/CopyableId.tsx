@@ -1,8 +1,9 @@
+import { useLingui } from "@lingui/react/macro";
+import { MachineValue } from "../../primitives";
 import { CopyButton } from "../CopyButton/CopyButton";
 
 const HEAD = 4;
 const TAIL = 4;
-const DEFAULT_LABEL = "Скопировать ID";
 
 /** `a88d…6973`; значение, которое сокращение не сделало бы короче, остаётся целиком. */
 function shorten(value: string): string {
@@ -19,22 +20,25 @@ type CopyableIdProps = {
   full?: boolean;
   /** Начало доступного имени кнопки; к нему добавляется полное значение. */
   label?: string;
+  /** Размечать цветом по классам символов (по умолчанию да); `false` для значений не «машинного» вида (PURL, версия) и статусных фонов. */
+  marked?: boolean;
 };
 
 /**
  * Идентификатор с усечением в середине. Полное значение лежит в `title`, в доступном имени кнопки
  * и в скрытом для глаза тексте; копируется всегда полное значение.
  */
-export function CopyableId({ value, full = false, label = DEFAULT_LABEL }: CopyableIdProps) {
+export function CopyableId({ value, full = false, label, marked = true }: CopyableIdProps) {
+  const { t } = useLingui();
+  const copyLabel = label ?? t`Скопировать ID`;
   const shown = full ? value : shorten(value);
   const shortened = shown !== value;
   return (
-    <span className="inline-flex max-w-full min-w-0 items-center gap-0.5 tabular-nums">
+    <span className="inline-flex max-w-full min-w-0 items-center gap-0.5 font-mono tabular-nums">
       <span title={value} className="min-w-0 wrap-anywhere">
-        <span aria-hidden={shortened || undefined}>{shown}</span>
-        {shortened ? <span className="sr-only">{value}</span> : null}
+        <MachineValue value={shown} marked={marked} {...(shortened ? { spoken: value } : {})} />
       </span>
-      <CopyButton value={value} label={`${label}: ${value}`} className="shrink-0" />
+      <CopyButton value={value} label={`${copyLabel}: ${value}`} className="shrink-0" />
     </span>
   );
 }

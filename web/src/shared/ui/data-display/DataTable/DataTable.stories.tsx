@@ -177,6 +177,8 @@ export const SelectedRow: Story = {
     await userEvent.keyboard("{ArrowDown}");
     await expect(selected()).toHaveTextContent("1.4.0");
     await expect(selected()).toHaveFocus();
+    // Выбор стрелками не анимируется: у выбранной строки нет перехода цвета фона
+    await expect(getComputedStyle(selected()).transitionDuration).toBe("0s");
     await userEvent.keyboard("{ArrowUp}{ArrowUp}");
     await expect(selected()).toHaveTextContent("1.4.2");
   },
@@ -314,4 +316,50 @@ export const NarrowScroll: Story = {
 export const Dark: Story = {
   globals: { theme: "dark" },
   render: () => <SelectableTable />,
+};
+
+const TOP_RING = /0px 2px 0px 0px inset$/;
+const SHADOW_SPLIT = /,(?![^(]*\))/;
+
+/** Верхняя грань кольца фокуса ячейки: «цвет 0px 2px 0px 0px inset». */
+function topRing(cell: Element): string | undefined {
+  return getComputedStyle(cell)
+    .boxShadow.split(SHADOW_SPLIT)
+    .map((part) => part.trim())
+    .find((part) => TOP_RING.test(part));
+}
+
+function FocusRingTable() {
+  const [selectedId, setSelectedId] = useState<string | null>("v-141");
+  return (
+    <div className="w-[420px]">
+      <DataTable
+        columns={WIDE_COLUMNS}
+        data={[...VERSIONS]}
+        getRowId={getRowId}
+        caption="Версии @acme/ui"
+        selectedId={selectedId}
+        onRowSelect={setSelectedId}
+        actions={rowActions}
+      />
+    </div>
+  );
+}
+
+export const FocusRingEqual: Story = {
+  name: "Обводка фокуса одной толщины и цвета на закреплённых и обычных колонках",
+  render: () => <FocusRingTable />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    canvas.getByRole("row", { selected: true }).focus();
+    await userEvent.keyboard("{ArrowDown}");
+    const row = canvas.getByRole("row", { selected: true });
+    const cells = within(row).getAllByRole("cell");
+    const pinnedFirst = topRing(cells[0] as Element);
+    const middle = topRing(cells[2] as Element);
+    const pinnedLast = topRing(cells.at(-1) as Element);
+    await expect(pinnedFirst).toBeDefined();
+    await expect(middle).toBe(pinnedFirst);
+    await expect(pinnedLast).toBe(pinnedFirst);
+  },
 };

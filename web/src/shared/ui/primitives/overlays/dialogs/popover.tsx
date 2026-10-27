@@ -45,7 +45,7 @@ export function PopoverContent({
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cx(
-            "anim-popup z-50 flex flex-col rounded-md bg-popover text-body text-popover-foreground shadow-card",
+            "anim-popup z-50 flex flex-col rounded-md bg-popover [--timeline-surface:var(--popover)] text-body text-popover-foreground shadow-card",
             SIZE[size],
             flush ? FLUSH : PADDED,
             className,

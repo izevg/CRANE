@@ -1,6 +1,7 @@
+import { useLingui } from "@lingui/react/macro";
 import { lazy, Suspense, useCallback, useId, useState } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { formatDateTime } from "~/shared/lib/text";
+import { useTextFormat } from "~/shared/lib/i18n";
 import {
   Button,
   Skeleton,
@@ -30,20 +31,19 @@ type TimeSeriesChartProps = WithClassName<{
   area?: boolean;
 }>;
 
-const SHOW_TABLE = "Показать таблицей";
-const SHOW_CHART = "Показать графиком";
-const TIME_COLUMN = "Время";
 const NO_VALUE = "—";
 /** Высота графика одна для заглушки и самого графика: раскладка не прыгает при загрузке чанка. */
 const PLOT_HEIGHT = "h-60";
 
 function DataTable({ series, unit }: { series: readonly Series[]; unit: string | undefined }) {
+  const { t } = useLingui();
+  const format = useTextFormat();
   const rows = mergeSeries(series);
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>{TIME_COLUMN}</TableHead>
+          <TableHead>{t`Время`}</TableHead>
           {series.map((item) => (
             <TableHead key={item.id} className="text-right">
               {item.label}
@@ -54,12 +54,12 @@ function DataTable({ series, unit }: { series: readonly Series[]; unit: string |
       <TableBody>
         {rows.map((row) => (
           <TableRow key={row.t}>
-            <TableCell>{formatDateTime(row.t)}</TableCell>
+            <TableCell>{format.dateTime(row.t)}</TableCell>
             {series.map((item) => {
               const value = row[item.id];
               return (
                 <TableCell key={item.id} className="text-right tabular-nums">
-                  {value === undefined ? NO_VALUE : formatValueWithUnit(value, unit)}
+                  {value === undefined ? NO_VALUE : formatValueWithUnit(value, unit, format)}
                 </TableCell>
               );
             })}
@@ -83,9 +83,10 @@ export function TimeSeriesChart({
   area = false,
   className,
 }: TimeSeriesChartProps) {
+  const { t } = useLingui();
   const titleId = useId();
   const [tabular, setTabular] = useState(false);
-  const toggleLabel = tabular ? SHOW_CHART : SHOW_TABLE;
+  const toggleLabel = tabular ? t`Показать графиком` : t`Показать таблицей`;
   const toggle = useCallback(() => setTabular((value) => !value), []);
 
   return (
