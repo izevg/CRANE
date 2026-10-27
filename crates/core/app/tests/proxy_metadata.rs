@@ -493,3 +493,32 @@ fn failing_cache_degrades_to_direct_upstream_fetch() {
     assert_eq!(served.result, CacheResult::Miss);
     assert_eq!(upstream.call_count(), 1);
 }
+
+#[test]
+fn entry_aged_exactly_ttl_is_stale() {
+    // Arrange
+    let world = World::new([Step::Found(b"v1", None)]);
+    world.metadata(DOC).unwrap();
+    world.advance(secs(100));
+
+    // Act
+    let served = world.metadata(DOC).unwrap();
+
+    // Assert
+    assert_eq!(served.result, CacheResult::Stale);
+}
+
+#[test]
+fn entry_aged_one_millisecond_below_ttl_is_still_hit() {
+    // Arrange
+    let world = World::new([Step::Found(b"v1", None)]);
+    world.metadata(DOC).unwrap();
+    world.advance(just_before(secs(100)));
+
+    // Act
+    let served = world.metadata(DOC).unwrap();
+
+    // Assert
+    assert_eq!(served.result, CacheResult::Hit);
+    assert!(served.revalidation.is_some());
+}

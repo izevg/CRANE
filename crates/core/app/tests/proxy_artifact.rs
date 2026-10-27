@@ -249,3 +249,40 @@ fn cas_backend_failure_on_hit_is_a_backend_error() {
     // Assert
     assert!(matches!(outcome, Err(ProxyError::Backend(_))));
 }
+
+const WORLD_SHA256: &str = "486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7";
+
+#[test]
+fn cached_blob_with_other_digest_is_not_served_and_fresh_bytes_win() {
+    // Arrange
+    let world = World::new([Step::Found(b"hello", None), Step::Found(b"world", None)]);
+    world.artifact(CRATE, None).unwrap();
+    let expected = Sha256::from_hex(WORLD_SHA256).unwrap();
+
+    // Act
+    let served = world.artifact(CRATE, Some(expected)).unwrap();
+
+    // Assert
+    assert_eq!(served.result, CacheResult::Miss);
+    assert_eq!(served.body.digests.sha256, expected);
+    assert_eq!(bytes_of(served.body), b"world");
+    assert_eq!(world.upstream.call_count(), 2);
+}
+
+#[test]
+fn cached_blob_with_other_digest_is_refetched_and_mismatch_reported() {
+    // Arrange
+    let world = World::new([Step::Found(b"hello", None), Step::Found(b"hello", None)]);
+    world.artifact(CRATE, None).unwrap();
+    let expected = Sha256::from_hex(WORLD_SHA256).unwrap();
+
+    // Act
+    let outcome = world.artifact(CRATE, Some(expected));
+
+    // Assert
+    assert!(matches!(
+        outcome,
+        Err(ProxyError::DigestMismatch { expected: e, actual }) if e == expected && actual == hello_sha256()
+    ));
+    assert_eq!(world.upstream.call_count(), 2);
+}
