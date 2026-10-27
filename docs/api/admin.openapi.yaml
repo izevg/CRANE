@@ -3770,7 +3770,6 @@ paths:
       x-crane-action: finding:list
       x-crane-step-up: false
       x-crane-audit: null
-      x-crane-open-question: Имена состояний находок и исключений в docs/product не определены; `status` - строка.
       parameters:
       - name: priority
         in: query
@@ -6629,6 +6628,7 @@ x-crane-link-rels:
   - crane:latency
   - crane:latest
   - crane:license
+  - crane:license-reviews
   - crane:members
   - crane:metadata
   - crane:my-actions
