@@ -82,8 +82,7 @@ components:
     IdempotencyKey:
       name: Idempotency-Key
       in: header
-      description: Ключ идемпотентности. Обязателен для POST (создание и действия). Хранится 24 часа вместе с хэшем
-        запроса; повтор с тем же телом возвращает прежний результат, повтор с другим телом даёт 422 `idempotency-key-reuse`.
+      description: 'Ключ идемпотентности. Обязателен для POST (создание и действия). Хранится 24 часа вместе с хэшем запроса; повтор с тем же телом возвращает прежний результат, повтор с другим телом даёт 422 `idempotency-key-reuse`. Ключ действует в пределах principal: чужой ключ не совпадает с вашим. Ответы с секретом (`*Created` токена, credential робота, вебхука) не сохраняются: повтор возвращает 409 `idempotency-replay-secret` со ссылкой на созданный ресурс, без секрета.'
       required: true
       schema:
         type: string
@@ -927,6 +926,7 @@ components:
       - crane:create-compliance-report
       - crane:create-repository
       - crane:update-repository
+      - crane:update-repository-protection
       - crane:purge-cache
       - crane:run
       - crane:create-retention-rule
@@ -1141,10 +1141,22 @@ components:
       properties:
         similar_to:
           type: string
+          description: Отображаемое имя настоящего пакета.
+        similar_to_purl:
+          type: string
+          description: Package URL настоящего пакета без версии, на который похоже имя.
+        similar_to_href:
+          type:
+          - string
+          - 'null'
+          format: uri-reference
+          description: Путь карточки настоящего пакета `/packages/{format}/{repository}/{name}` в репозитории, видимом вызывающему; null, если такого нет.
         distance:
           type: integer
       required:
       - similar_to
+      - similar_to_purl
+      - similar_to_href
       - distance
     Highlight:
       title: Highlight
@@ -1357,16 +1369,21 @@ components:
       required:
       - _links
       - _embedded
-    BlockReason:
-      title: BlockReason
+    BlockReasonKind:
+      title: BlockReasonKind
+      type: string
+      enum:
+      - rule
+      - emergency
+      description: Вид блокировки.
+    BlockReasonRule:
+      title: BlockReasonRule
       type: object
-      description: Причина блокировки; для emergency - advisory и ближайшая исправленная версия.
+      description: Блокировка по правилу политики.
       properties:
         kind:
           type: string
-          enum:
-          - rule
-          - emergency
+          const: rule
         rule_id:
           type: string
         advisory_id:
@@ -1375,6 +1392,37 @@ components:
           type: string
       required:
       - kind
+      - rule_id
+    BlockReasonEmergency:
+      title: BlockReasonEmergency
+      type: object
+      description: Экстренная блокировка (14.8); снимается только `POST /emergency-blocks/{block_id}/lift`.
+      properties:
+        kind:
+          type: string
+          const: emergency
+        block_id:
+          type: string
+          description: Идентификатор ресурса EmergencyBlock.
+        advisory_id:
+          type: string
+        fixed_in:
+          type: string
+      required:
+      - kind
+      - block_id
+      - advisory_id
+    BlockReason:
+      title: BlockReason
+      description: Причина блокировки версии.
+      oneOf:
+      - $ref: '#/components/schemas/BlockReasonRule'
+      - $ref: '#/components/schemas/BlockReasonEmergency'
+      discriminator:
+        propertyName: kind
+        mapping:
+          rule: '#/components/schemas/BlockReasonRule'
+          emergency: '#/components/schemas/BlockReasonEmergency'
     VersionFlags:
       title: VersionFlags
       type: object
@@ -1442,6 +1490,7 @@ components:
           oneOf:
           - $ref: '#/components/schemas/BlockReason'
           - type: 'null'
+          description: Не null тогда и только тогда, когда `state = blocked`.
         flags:
           $ref: '#/components/schemas/VersionFlags'
         published_at:
@@ -1473,6 +1522,7 @@ components:
       - version
       - purl
       - state
+      - block_reason
       - flags
       - published_at
       - published_by
@@ -1559,6 +1609,7 @@ components:
           oneOf:
           - $ref: '#/components/schemas/BlockReason'
           - type: 'null'
+          description: Не null тогда и только тогда, когда `state = blocked`.
         flags:
           $ref: '#/components/schemas/VersionFlags'
         published_at:
@@ -1616,6 +1667,7 @@ components:
       - version
       - purl
       - state
+      - block_reason
       - flags
       - published_at
       - published_by
@@ -1735,6 +1787,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CodeStep'
+        available_clients:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InstallClient'
+          description: Клиенты, совместимые с форматом пакета, в порядке показа; первый - клиент по умолчанию.
         manual_config:
           $ref: '#/components/schemas/CodeFile'
         install:
@@ -1744,6 +1802,7 @@ components:
           description: 'Ссылки HAL: self'
       required:
       - client
+      - available_clients
       - setup_steps
       - manual_config
       - install
@@ -4141,7 +4200,7 @@ components:
     VexCreate:
       title: VexCreate
       type: object
-      description: Нужен `finding_ids` либо `advisory_id` с `version_range`. Находки разных advisory дают 422 `bulk-vex-single-advisory`.
+      description: Нужен `finding_ids` либо `advisory_id` с `version_range`. Находки разных advisory дают 422 `bulk-vex-single-advisory`. VEX не меняет состояние версии; ограничения по ролям и malware - в описании `POST /vex-statements`.
       x-crane-open-question: Поле `justification` - машинный код обоснования OpenVEX/CycloneDX (кандидат на enum VexJustification) или свободный текст? Сейчас строка без ограничений.
       properties:
         finding_ids:
@@ -5221,7 +5280,7 @@ components:
           $ref: '#/components/schemas/RepositorySettings'
         _links:
           $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, crane:update-repository, crane:purge-cache'
+          description: 'Ссылки HAL: self, crane:update-repository, crane:update-repository-protection, crane:purge-cache'
       required:
       - name
       - format
@@ -5269,6 +5328,24 @@ components:
       - format
       - kind
       - workspace
+    RepositoryProtection:
+      title: RepositoryProtection
+      type: object
+      description: Защитные настройки репозитория. Меняются только отдельной операцией со step-up (14.12); каждое изменение - событие SIEM «Ослабление политики».
+      properties:
+        mutable:
+          type: boolean
+          description: Только Maven-репозиторий SNAPSHOT; для остальных форматов и release - 422.
+        dev_skip_quarantine:
+          type: boolean
+          description: Только hosted dev-репозиторий; для proxy - 422 (quarantine новых upstream-версий не отключается).
+        upstream_url:
+          type: string
+          format: uri
+          description: Только proxy; хост из allowlist экземпляра (16.8).
+      required:
+      - mutable
+      - dev_skip_quarantine
     RepositoryPatch:
       title: RepositoryPatch
       type: object
@@ -7459,14 +7536,17 @@ components:
         - access
         summary: Выпустить токен
         description: |-
-          Выпуск `session` (12 ч; это `cctl setup` и `cctl login --refresh`, заменяет `/tokens/session` из раздела 13) или `personal` (до 90 дней по политике). Секрет есть только в этом ответе (`Cache-Control: no-store`).
+          Выпуск `session` (12 ч, но не дольше сессии IdP; это `cctl setup` и `cctl login --refresh`, заменяет `/tokens/session` из раздела 13) или `personal` (до 90 дней по политике, только со step-up). Секрет есть только в этом ответе (`Cache-Control: no-store`).
 
-          Роли: любой аутентифицированный.
+          Выпускать токены может только человек со своей интерактивной сессией IdP: cookie BFF или JWT IdP, полученный входом пользователя (authorization code + PKCE, в том числе loopback, или device code) и его продлением. Токен CRANE (`crp_`, `crr_`, `crci_`) и JWT сервисного аккаунта (client credentials) выпуск не проходят: 403 `interactive-login-required`. Scopes нового токена не шире текущих прав человека; запрос шире даёт 403 `scope-exceeds-principal`. Команда атрибуции фиксируется при выпуске: 14.15.
+
+          Роли: любой аутентифицированный человек.
         operationId: createToken
         x-crane-phase: P0
         x-crane-since: v0.4.0
         x-crane-action: token:create
         x-crane-step-up: false
+        x-crane-step-up-when: kind = personal
         x-crane-audit:
           event: token.created
           ocsf_class: 3001
@@ -8230,14 +8310,14 @@ components:
         - access
         summary: Выпустить или ротировать credential
         description: |-
-          Ротация: второй секрет выпускается заранее, оба действуют 24 часа, затем старый отзывается. Секрет есть только в этом ответе.
+          Ротация: второй секрет выпускается заранее, оба действуют 24 часа, затем старый отзывается. Секрет есть только в этом ответе. Выпуск секрета равносилен созданию робота, поэтому требует того же step-up и той же интерактивной сессии IdP: токены CRANE получают 403 `interactive-login-required`. Scopes credential - ровно scopes робота, расширить их при выпуске нельзя.
 
           Роли: owner.
         operationId: issueRobotCredential
         x-crane-phase: P0
         x-crane-since: v0.4.0
         x-crane-action: robot:issue_credential
-        x-crane-step-up: false
+        x-crane-step-up: true
         x-crane-audit:
           event: robot.credential_issued
           ocsf_class: 3001

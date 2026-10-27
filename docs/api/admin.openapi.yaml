@@ -20,9 +20,12 @@ info:
     | --- | --- |
     | `x-crane-phase`, `x-crane-since` | Фаза и версия поставки |
     | `x-crane-action` | Действие Cedar `<контекст>:<глагол>` (для журнала `audit:read`, `audit:reveal_pii`, `audit:export`, как в 14.12) |
-    | `x-crane-step-up` | Требует MFA (`acr`); без него 401 с `WWW-Authenticate` по RFC 9470 |
+    | `x-crane-step-up` | Требует свежего MFA (step-up, раздел 13); без него 401 с `WWW-Authenticate` по RFC 9470 |
+    | `x-crane-step-up-when` | Условие, при котором операции с `x-crane-step-up: false` всё же нужен step-up (например, `kind = personal`) |
     | `x-crane-audit` | `{event, ocsf_class}` или `null` для чтений без аудита (классы 14.9: 3002, 3001, 6003, 2002, 2003, 2004) |
     | `x-crane-open-question` | Неясность продукта, решение за владельцем |
+
+    Флаги `x-crane-step-up` совпадают со списком опасных действий раздела 14.12; расхождение ловит контракт-тест.
 
     ## Адресация
 
@@ -34,11 +37,11 @@ info:
 
     ## Ошибки
 
-    Ошибки - `application/problem+json` (RFC 9457), схема `Problem`. Скрытый и несуществующий ресурс дают одинаковый 404 (`…/problems/not-found`, «Не найдено или нет доступа», без `rule_id`, `remediation`, `contact`, `reasons`; время ответа не различается, потому что авторизация Cedar на уровне репозитория или workspace выполняется до поиска). 403 - только для ресурса, который вызывающий видит, но действие ему запрещено. Трасса решения - только `GET /diagnostics/{request_id}`. 401 с MFA: `StepUpRequired` и `WWW-Authenticate: Bearer error="insufficient_user_authentication", acr_values="mfa"`. 410 - истёкший план (`plan-expired`); 503 - read-only, деградация, ИИ недоступен (`…/ai-unavailable`).
+    Ошибки - `application/problem+json` (RFC 9457), схема `Problem`. Скрытый и несуществующий ресурс дают одинаковый 404 (`…/problems/not-found`, «Не найдено или нет доступа», без `rule_id`, `remediation`, `contact`, `reasons`; время ответа не различается, потому что авторизация Cedar на уровне репозитория или workspace выполняется до поиска). 403 - только для ресурса, который вызывающий видит, но действие ему запрещено. Трасса решения - только `GET /diagnostics/{request_id}`. 401 с MFA: `StepUpRequired` и `WWW-Authenticate: Bearer error="insufficient_user_authentication", acr_values="mfa"`. 410 - истёкший план (`plan-expired`); 503 - read-only, деградация, ИИ недоступен (`…/ai-unavailable`). То же правило действует в протоколах форматов (`/cargo`, `/npm`, `/pypi`, `/maven`, `/nuget`): скрытый пакет отвечает как несуществующий, причина - только в `GET /diagnostics/{request_id}` (13).
 
     ## Заголовки и условные запросы
 
-    Каждый ответ несёт `X-Request-Id`. Мутации принимают `Idempotency-Key` (обязателен для POST; хранится 24 часа вместе с хэшем запроса; повтор с другим телом - 422 `idempotency-key-reuse`). Кэшируемые GET отдают `ETag` и принимают `If-None-Match` (304). Изменение политик и настроек требует `If-Match` (412).
+    Каждый ответ несёт `X-Request-Id`. Мутации принимают `Idempotency-Key` (обязателен для POST; хранится 24 часа вместе с хэшем запроса; повтор с другим телом - 422 `idempotency-key-reuse`). Кэшируемые GET отдают `ETag` и принимают `If-None-Match` (304). Изменение политик и настроек требует `If-Match` (412). Ключ идемпотентности действует в пределах principal; ответы с секретом не сохраняются, повтор даёт 409 `idempotency-replay-secret` без секрета.
 
     ## Права строк
 
@@ -47,6 +50,10 @@ info:
     ## Секреты и персональные данные
 
     Секрет возвращают только 201 выпуска токена, credential робота и вебхука (схемы `*Created`, `Cache-Control: no-store`). Везде иначе - только `prefix` (префикс и 8 символов). Ключи интеграций - `{is_set, updated_at}`. Журнал всегда маскирован (`actor.pseudonym`, `src_ip_masked` /24); полные данные - только `POST /audit/events/{event_id}/reveal`. ФИО из Keycloak вне журнала допустимы. Тексты промптов LLM, заголовки Authorization и байты пакетов через /api не отдаются.
+
+    ## Байты пакетов и сырое содержимое
+
+    Ответы с недоверенным содержимым (`/packages/{format}/{repository}/{name}/versions/{version}/metadata`, `/packages/{format}/{repository}/{name}/versions/{version}/evidence/{evidence_id}/content`, README `/packages/{format}/{repository}/{name}/readme`, файлы пакетов в протоколах) всегда несут `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox; default-src 'none'` и, кроме JSON-документов протоколов, `Content-Disposition: attachment`. Протоколы форматов отдаются с отдельного origin пакетов (`CRANE_PACKAGES_URL`, 16.1), если он задан. Консоль (SPA и `/api`) отдаётся со строгой CSP (раздел 15).
 
     ## Представление: JSON-HAL
 
@@ -108,6 +115,7 @@ info:
     | `crane:create-compliance-report` | POST | `/compliance-reports` | `ComplianceReportCreate` |
     | `crane:create-repository` | POST | `/repositories` | `RepositoryCreate` |
     | `crane:update-repository` | PATCH | `/repositories/{format}/{repository}` | `RepositoryPatch` |
+    | `crane:update-repository-protection` | PUT | `/repositories/{format}/{repository}/protection` | `RepositoryProtection` |
     | `crane:purge-cache` | POST | `/repositories/{format}/{repository}/cache/purge` | нет |
     | `crane:run` | POST | `/retention/runs` | `RetentionRun` |
     | `crane:create-retention-rule` | POST | `/retention/rules` | `RetentionRuleCreate` |
@@ -401,7 +409,7 @@ paths:
           $ref: ./common.yaml#/components/schemas/Acr
       - name: return_to
         in: query
-        description: Путь возврата.
+        description: 'Путь возврата. Только относительный путь того же origin: начинается с `/`, но не с `//` и не содержит `\`; иначе 400. Защита от open redirect.'
         schema:
           type: string
       responses:
@@ -1946,7 +1954,10 @@ paths:
       tags:
       - platform
       summary: Создать репозиторий
-      description: 'Роли: owner, platform-admin.'
+      description: |-
+        Защитные поля при создании принимают только значения по умолчанию (`mutable: false`, `dev_skip_quarantine: false`), иначе 422 `protected-setting`; `upstream_url` - из allowlist экземпляра.
+
+        Роли: owner, platform-admin.
       operationId: createRepository
       x-crane-phase: P0
       x-crane-since: v0.4.0
@@ -2034,7 +2045,10 @@ paths:
       tags:
       - platform
       summary: Изменить репозиторий
-      description: 'Роли: owner, platform-admin.'
+      description: |-
+        Только эксплуатационные настройки (TTL, лимиты, delivery, класс хранения). Защитные поля (`mutable`, `dev_skip_quarantine`, `upstream_url`) здесь не меняются: 422 `protected-setting`, их меняет `PUT …/protection`.
+
+        Роли: owner, platform-admin.
       operationId: updateRepository
       x-crane-phase: P0
       x-crane-since: v0.4.0
@@ -2069,6 +2083,65 @@ paths:
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
           $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '412':
+          $ref: ./common.yaml#/components/responses/PreconditionFailed
+        '422':
+          $ref: ./common.yaml#/components/responses/Unprocessable
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /repositories/{format}/{repository}/protection:
+    put:
+      tags:
+      - platform
+      summary: Изменить защитные настройки
+      description: |-
+        Ослабление защиты (`mutable: true`, `dev_skip_quarantine: true`, смена `upstream_url`) - событие SIEM High «Ослабление политики» до применения изменения.
+
+        Роли: appsec (`mutable`, `dev_skip_quarantine`), platform-admin (`upstream_url`).
+      operationId: updateRepositoryProtection
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: repository:update_protection
+      x-crane-step-up: true
+      x-crane-audit:
+        event: repository.protection_changed
+        ocsf_class: 6003
+      x-crane-rel: crane:update-repository-protection
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/Format
+      - $ref: ./common.yaml#/components/parameters/Repository
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKeyOptional
+      - $ref: ./common.yaml#/components/parameters/IfMatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./common.yaml#/components/schemas/RepositoryProtection
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/Repository
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '404':
@@ -2203,12 +2276,15 @@ paths:
       tags:
       - access
       summary: Создать политику доверия
-      description: 'Роли: owner.'
+      description: |-
+        Правило со scope записи (publish) действует, только если условия требуют `ref_protected = true` и список имён пакетов; сервер добавляет это требование сам и отвечает 422 `write-scope-requires-protected-ref`, если условие явно ослаблено. Пайплайны merge request и из форков (`source_project_path` ≠ `project_path`) получают только чтение (10.5).
+
+        Роли: owner.
       operationId: createTrustPolicy
       x-crane-phase: P1
       x-crane-since: v0.6.0
       x-crane-action: trust_policy:create
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: trust_policy.created
         ocsf_class: 3001
@@ -2283,12 +2359,15 @@ paths:
       tags:
       - access
       summary: Изменить политику доверия
-      description: 'Роли: owner.'
+      description: |-
+        Правило со scope записи (publish) действует, только если условия требуют `ref_protected = true` и список имён пакетов; сервер добавляет это требование сам и отвечает 422 `write-scope-requires-protected-ref`, если условие явно ослаблено. Пайплайны merge request и из форков (`source_project_path` ≠ `project_path`) получают только чтение (10.5).
+
+        Роли: owner.
       operationId: updateTrustPolicy
       x-crane-phase: P1
       x-crane-since: v0.6.0
       x-crane-action: trust_policy:update
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: trust_policy.updated
         ocsf_class: 3001
@@ -2342,7 +2421,7 @@ paths:
       x-crane-phase: P1
       x-crane-since: v0.6.0
       x-crane-action: trust_policy:delete
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: trust_policy.deleted
         ocsf_class: 3001
@@ -3635,7 +3714,7 @@ paths:
       x-crane-phase: P2
       x-crane-since: v1.1.0
       x-crane-action: webhook:create
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: webhook.created
         ocsf_class: 6003
@@ -4065,7 +4144,7 @@ paths:
       - vulnerabilities
       summary: Снять блокировку
       description: |-
-        Также снимается автоматически по выходу исправленной версии или VEX `not_affected`. Снятие ослабляет защиту, поэтому тоже требует step-up (решение строже документа, не опечатка).
+        Единственный способ снять экстренную блокировку: ни VEX, ни выход исправленной версии, ни отзыв advisory её не снимают (14.8). Снятие ослабляет защиту, поэтому тоже требует step-up (решение строже документа, не опечатка).
 
         Роли: appsec.
       operationId: liftEmergencyBlock
@@ -4256,12 +4335,14 @@ paths:
       description: |-
         Массовое действие: 200 с результатом по каждой находке.
 
-        Роли: maintainer, owner, appsec.
+        VEX не меняет состояние версии и никогда не снимает блокировку: экстренная блокировка снимается только `POST /emergency-blocks/{block_id}/lift`. Для advisory вредоносного пакета (`MAL-*`, `is_malware`) VEX запрещён: 422 `vex-not-applicable-malware`. Находки P0 и P1 и находки заблокированных версий принимает только appsec; maintainer и owner получают для них 403 `vex-requires-appsec`. Каждое заявление пишется в журнал, заявление по P0, P1 или заблокированной версии дополнительно уходит в SIEM с серьёзностью High (14.9).
+
+        Роли: maintainer, owner (свои пакеты, находки P2–P4 незаблокированных версий); appsec (любые).
       operationId: createVexStatements
       x-crane-phase: P2
       x-crane-since: v1.1.0
       x-crane-action: vex:create
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: vex.created
         ocsf_class: 2002
@@ -5381,7 +5462,7 @@ paths:
       x-crane-phase: P2
       x-crane-since: v1.1.0
       x-crane-action: license_policy:update
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: license_policy.updated
         ocsf_class: 6003
@@ -5470,7 +5551,7 @@ paths:
       x-crane-phase: P2
       x-crane-since: v1.1.0
       x-crane-action: vulnerability_policy:update
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: vulnerability_policy.updated
         ocsf_class: 6003
@@ -5562,7 +5643,7 @@ paths:
       x-crane-phase: P2
       x-crane-since: v1.1.0
       x-crane-action: gate:update
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: gate.updated
         ocsf_class: 6003
@@ -5789,7 +5870,7 @@ paths:
       x-crane-phase: P2
       x-crane-since: v1.1.0
       x-crane-action: quarantine:release
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: version.released
         ocsf_class: 6003
@@ -5957,7 +6038,7 @@ paths:
       x-crane-phase: P2
       x-crane-since: v1.1.0
       x-crane-action: siem:update
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: siem.sink_created
         ocsf_class: 6003
@@ -6009,7 +6090,7 @@ paths:
       x-crane-phase: P2
       x-crane-since: v1.1.0
       x-crane-action: siem:update
-      x-crane-step-up: false
+      x-crane-step-up: true
       x-crane-audit:
         event: siem.sink_updated
         ocsf_class: 6003
@@ -6513,6 +6594,8 @@ paths:
       description: |-
         Одноразово, TTL 10 минут, привязано к хэшу плана. Step-up требуется, если skill = `create_exception`; тогда 401 `StepUpRequired`. Истёкший план - 410 `plan-expired`.
 
+        Подтверждение только из UI (cookie BFF): токеном агента или любым bearer план не подтверждается, иначе агент подтвердил бы свой же план (13).
+
         Роли: любой аутентифицированный (владелец плана).
       operationId: confirmAgentPlan
       x-crane-phase: P3
@@ -6523,6 +6606,8 @@ paths:
         event: agent.plan_confirmed
         ocsf_class: 6003
       x-crane-rel: crane:confirm-plan
+      security:
+      - session: []
       parameters:
       - $ref: ./common.yaml#/components/parameters/ConfirmationId
       - $ref: ./common.yaml#/components/parameters/IdempotencyKey
