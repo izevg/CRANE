@@ -6,8 +6,8 @@
 Запуск: python3 tools/estimate-agent-hours.py [--start ГГГГ-ММ-ДД] [--holidays ГГГГ-ММ-ДД ...] [--gantt]
                                               [--parallel N] [--hours Ч]
 С --start печатает календарь релизов по трём сценариям (рабочие дни пн–пт, нерабочие даты задаются --holidays)
-и календарь base по наблюдению 27.10 (8 агентов × 10 ч, OBSERVED) независимо от --parallel и --hours.
---parallel и --hours задают ёмкость (агентов одновременно, часов в рабочий день; по умолчанию 4 × 8, BASE_CAPACITY)
+и календарь base по верхней оценке ёмкости 27.10 (8 × 10, OBSERVED) независимо от --parallel и --hours.
+--parallel и --hours задают ёмкость (параллельных веток, часов в рабочий день; по умолчанию 4 × 8, BASE)
 и меняют все расчёты в днях и датах.
 С --gantt дополнительно печатает диаграмму Ганта (Mermaid) для базового сценария.
 Работы «после v1» считаются в итоге, но в календарь и диаграмму не попадают.
@@ -101,14 +101,9 @@ CALENDAR = [
     ("Release candidate: стабилизация и обратная связь", "P1", 5),  # допущение, уточняется по ходу
 ]
 SCENARIO_COMPLEXITY = {"low": 0.9, "base": 1.0, "high": 1.25}
-BASE_CAPACITY = (4, 8)   # агентов параллельно, часов в рабочий день: база плана, на ней посчитаны даты ROADMAP
-# Наблюдение 27.10.2026 по журналу веток (UTC): одновременно шли 2–6 лидов, у каждого 1–3 исполнителя и ревьюеры,
-# то есть ≈ 6–10 агентов; рабочий день оператора и оркестратора ≈ 8–10 ч (v0.1.0 10:09–14:10, затем
-# web-ui-kit, OpenAPI, UI-доки, 4 docs-PR и 3 fix-PR параллельно до ~18:00).
-# Неопределённость: норма эталона измерена в параллельности ВЕТОК (REF["parallel"] = 3.8), а не агентов; лиды
-# и ревьюеры — накладные, не строки кода. По веткам 27.10 шло ≈ 4–6 одновременно (v0.1.0 ≈ 5: 20 агент-ч за 4 ч),
-# поэтому 8 × 10 — верхняя оценка ёмкости, и это один день замера.
-OBSERVED = ("по наблюдению 27.10", 8, 10)
+# ёмкость: (имя, параллельных веток, часов в рабочий день)
+BASE = ("база плана", 4, 8)  # на ней посчитаны даты ROADMAP
+OBSERVED = ("верхняя оценка 27.10", 8, 10)  # обоснование — ROADMAP, «Как посчитаны даты»
 OPERATOR_FACTOR = 1.5    # Rust и безопасность требуют больше ревью, чем эталон
 
 
@@ -163,7 +158,7 @@ def estimate(scn):
     return by_stage
 
 
-def main(per_day):
+def main(cap):
     print(f"Эталон: {REF_AGENT_H:.0f} агент-ч, {RATE:.2f} агент-ч/KLOC, оператор {OPERATOR_RATIO:.2f} ч на агент-ч")
     rust = sum(m[2] for m in MODULES if m[3] == "rust"); ts = sum(m[2] for m in MODULES if m[3] == "ts")
     print(f"CRANE: Rust {rust:g} KLOC, TypeScript {ts} KLOC")
@@ -172,15 +167,16 @@ def main(per_day):
         print(f"\n[{scn}] всего {total:.0f} агент-ч (из них {POST_V1}: {st[POST_V1]:.0f}), "
               f"оператор {total * OPERATOR_RATIO * OPERATOR_FACTOR:.0f} ч")
         for s in ("P0", "P1", "P2", "P3", POST_V1):
-            dev_days = st[s] / per_day
+            dev_days = st[s] / per_day(cap)
             tail = ""
             if s == POST_V1:
                 tail = f", календарь {sum(d for _, cs, d in CALENDAR if cs == s)} раб. дн., вне графика"
             print(f"  {s}: {st[s]:5.0f} агент-ч, разработка {dev_days:4.1f} раб. дн., "
                   f"оператор {st[s] * OPERATOR_RATIO * OPERATOR_FACTOR:4.0f} ч{tail}")
         if scn == "base":
+            hours = work_hours(scn)
             print(f"  Чувствительность, не прогноз: если объём протоколов 50% оценки — "
-                  f"всего {total - protocol_hours() / 2:.0f} агент-ч (base)")
+                  f"всего {total - hours[module(hours, 'Протоколы:')] / 2:.0f} агент-ч (base)")
     st = estimate("base")
     print("\nМодули (base):")
     for name, stage, kloc, lang, k in MODULES:
@@ -197,10 +193,10 @@ def work_hours(scn):
     return hours
 
 
-def protocol_hours():
-    """Агент-часы модуля «Протоколы:» в сценарии base."""
-    matches = [h for n, h in work_hours("base").items() if n.startswith("Протоколы:")]
-    assert len(matches) == 1, f"«Протоколы:» → {len(matches)} модулей"
+def module(hours, prefix):
+    """Имя единственного модуля или работы, начинающихся с prefix."""
+    matches = [n for n in hours if n.startswith(prefix)]
+    assert len(matches) == 1, f"префикс «{prefix}» → {matches}"
     return matches[0]
 
 
@@ -211,10 +207,9 @@ def release_hours(scn):
     for version, stage, title, parts in RELEASES:
         total = 0.0
         for prefix, share in parts:
-            matches = [n for n in hours if n.startswith(prefix)]
-            assert len(matches) == 1, f"{version}: префикс «{prefix}» → {matches}"
-            total += hours[matches[0]] * share
-            used[matches[0]] += share
+            name = module(hours, prefix)
+            total += hours[name] * share
+            used[name] += share
         result.append((version, stage, title, total))
     unassigned = [n for n, u in used.items() if abs(u - 1) > 1e-9]
     assert not unassigned, f"модули не распределены по релизам ровно один раз: {unassigned}"
@@ -233,7 +228,12 @@ def workday(start, offset):
     return day
 
 
-def schedule(scn, start, per_day):
+def per_day(cap):
+    _, parallel, hours = cap
+    return parallel * hours
+
+
+def schedule(scn, start, cap):
     """Календарь релизов. Время — в рабочих днях от start (дробное для работы агентов)."""
     cal = {name: days for name, _, days in CALENDAR}
     rel = {v: (stage, title, h) for v, stage, title, h in release_hours(scn)}
@@ -241,7 +241,7 @@ def schedule(scn, start, per_day):
 
     def dev(version, begin):
         stage, title, h = rel[version]
-        end = begin + h / per_day
+        end = begin + h / per_day(cap)
         return title, h, begin, end
 
     def row(version, title, h, begin, end, note=""):
@@ -266,18 +266,16 @@ def schedule(scn, start, per_day):
     return rows
 
 
-def print_schedule(start, parallel, hours, scenarios=("low", "base", "high"), tag=""):
-    for scn in scenarios:
-        label = f"{scn}, {tag}" if tag else scn
-        print(f"\nКалендарь [{label}] от {start.isoformat()} (ёмкость {parallel:g} × {hours:g} ч: "
-              f"агентов × часов в день, рабочие дни пн–пт):")
-        for version, title, h, b, e, note in schedule(scn, start, parallel * hours):
-            hrs = f"{h:4.0f} агент-ч" if h else " " * 11
-            tail = f"  ({note})" if note else ""
-            print(f"  {version:7} {b.isoformat()} → {e.isoformat()}  {hrs}  {title}{tail}")
+def print_schedule(start, scn, cap):
+    name, parallel, hours = cap
+    print(f"\nКалендарь [{scn}] от {start.isoformat()} ({name}: {parallel:g} × {hours:g} ч, рабочие дни пн–пт):")
+    for version, title, h, b, e, note in schedule(scn, start, cap):
+        hrs = f"{h:4.0f} агент-ч" if h else " " * 11
+        tail = f"  ({note})" if note else ""
+        print(f"  {version:7} {b.isoformat()} → {e.isoformat()}  {hrs}  {title}{tail}")
 
 
-def print_gantt(start, per_day):
+def print_gantt(start, cap):
     """Диаграмма Ганта (Mermaid) для базового сценария."""
     sections = {"P0": "P0 ядро", "P1": "P1 удобство", "P2": "P2 безопасность", "P3": "P3 развитие"}
     stage = {v: st for v, st, _, _ in RELEASES}
@@ -286,7 +284,7 @@ def print_gantt(start, per_day):
     print('%%{init: {"gantt": {"fontSize": 14, "sectionFontSize": 14, "barHeight": 26, "barGap": 6, "leftPadding": 150}}}%%')
     print("gantt\n  todayMarker off\n  dateFormat YYYY-MM-DD\n  axisFormat %d.%m\n  excludes weekends")
     current = None
-    for version, title, _, b, e, note in schedule("base", start, per_day):
+    for version, title, _, b, e, note in schedule("base", start, cap):
         if stage[version] != current:
             current = stage[version]
             print(f"  section {sections[current]}")
@@ -300,36 +298,25 @@ def print_gantt(start, per_day):
     print("```")
 
 
-def positive(kind, limit=None):
-    """Тип аргумента argparse: число больше нуля (и не больше limit)."""
-    def parse(text):
-        try:
-            value = kind(text)
-        except ValueError:
-            raise argparse.ArgumentTypeError(f"не число: {text!r}")
-        if not math.isfinite(value) or value <= 0 or (limit is not None and value > limit):
-            raise argparse.ArgumentTypeError(f"нужно число больше 0{f' и не больше {limit}' if limit else ''}: {text}")
-        return value
-    return parse
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--start", type=dt.date.fromisoformat, help="дата старта, ГГГГ-ММ-ДД")
     parser.add_argument("--holidays", type=dt.date.fromisoformat, nargs="*", default=[],
                         help="нерабочие даты сверх выходных")
     parser.add_argument("--gantt", action="store_true", help="диаграмма Ганта (Mermaid), нужен --start")
-    parser.add_argument("--parallel", type=positive(int), default=BASE_CAPACITY[0],
-                        help="агентов параллельно, целое > 0 (по умолчанию %(default)s)")
-    parser.add_argument("--hours", type=positive(float, 24), default=BASE_CAPACITY[1],
-                        help="часов работы агентов в рабочий день, > 0 и ≤ 24 (по умолчанию %(default)s)")
+    parser.add_argument("--parallel", type=int, default=BASE[1],
+                        help="параллельных веток (единица нормы эталона), по умолчанию %(default)s")
+    parser.add_argument("--hours", type=float, default=BASE[2],
+                        help="часов работы в рабочий день, 0 < ч ≤ 24, по умолчанию %(default)s")
     args = parser.parse_args()
+    if args.parallel <= 0 or not 0 < args.hours <= 24:
+        parser.error("ёмкость: --parallel > 0 и 0 < --hours ≤ 24")
     HOLIDAYS.update(args.holidays)
-    per_day = args.parallel * args.hours
-    main(per_day)
+    cap = BASE if (args.parallel, args.hours) == BASE[1:] else ("ёмкость", args.parallel, args.hours)
+    main(cap)
     if args.start:
-        print_schedule(args.start, args.parallel, args.hours)
-        name, obs_parallel, obs_hours = OBSERVED
-        print_schedule(args.start, obs_parallel, obs_hours, ("base",), f"{name}: {obs_parallel} × {obs_hours} ч")
+        for scn in ("low", "base", "high"):
+            print_schedule(args.start, scn, cap)
+        print_schedule(args.start, "base", OBSERVED)
         if args.gantt:
-            print_gantt(args.start, per_day)
+            print_gantt(args.start, cap)
