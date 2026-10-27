@@ -2,7 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { useSessionDraft } from "./useSessionDraft";
 
-const KEY = "crane.draft.test";
+const FORM = "test";
+const KEY = `crane.draft.${FORM}`;
 const isText = (value: unknown): value is string => typeof value === "string";
 
 afterEach(() => {
@@ -12,12 +13,12 @@ afterEach(() => {
 describe("useSessionDraft", () => {
   it("сохранённый черновик восстанавливается новым хуком после перезагрузки", () => {
     // Arrange
-    const first = renderHook(() => useSessionDraft(KEY, isText));
+    const first = renderHook(() => useSessionDraft(FORM, isText));
     act(() => first.result.current[1]("Нужен доступ к релизу"));
     first.unmount();
 
     // Act
-    const reloaded = renderHook(() => useSessionDraft(KEY, isText));
+    const reloaded = renderHook(() => useSessionDraft(FORM, isText));
 
     // Assert
     expect(reloaded.result.current[0]).toBe("Нужен доступ к релизу");
@@ -28,7 +29,7 @@ describe("useSessionDraft", () => {
     sessionStorage.setItem(KEY, JSON.stringify({ not: "текст" }));
 
     // Act
-    const { result } = renderHook(() => useSessionDraft(KEY, isText));
+    const { result } = renderHook(() => useSessionDraft(FORM, isText));
 
     // Assert
     expect(result.current[0]).toBeUndefined();
@@ -36,7 +37,7 @@ describe("useSessionDraft", () => {
 
   it("clear удаляет черновик из хранилища и из состояния", () => {
     // Arrange
-    const { result } = renderHook(() => useSessionDraft(KEY, isText));
+    const { result } = renderHook(() => useSessionDraft(FORM, isText));
     act(() => result.current[1]("черновик"));
 
     // Act

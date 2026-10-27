@@ -3,8 +3,8 @@ import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useCallback, useState } from "react";
 import { expect, within } from "storybook/test";
-import { useStepUpDraft } from "~/features/step-up";
 import { i18n } from "~/shared/lib/i18n";
+import { useSessionDraft } from "~/shared/lib/state";
 import { type Action, CopyableId } from "~/shared/ui/actions";
 import { columnHelper, DataTable, JsonViewer, KeyValueList } from "~/shared/ui/data-display";
 import { ConfirmDialog } from "~/shared/ui/dialogs";
@@ -476,15 +476,9 @@ function RevealDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useLingui();
-  const [draft, saveDraft, clearDraft] = useStepUpDraft("reveal-event", isText);
-  const [text, setText] = useState(draft ?? "");
-  const change = useCallback(
-    (next: string) => {
-      setText(next);
-      saveDraft(next);
-    },
-    [saveDraft],
-  );
+  // Текст обоснования живёт только в черновике: он же переживает редирект step-up
+  const [draft, saveDraft, clearDraft] = useSessionDraft("reveal-event", isText);
+  const text = draft ?? "";
   return (
     <ConfirmDialog
       open={open}
@@ -504,7 +498,7 @@ function RevealDialog({
       <Callout tone="info">
         <CalloutDescription>{t`Потребуется подтверждение входа (MFA)`}</CalloutDescription>
       </Callout>
-      <JustificationField label={t`Обоснование`} value={text} onChange={change} />
+      <JustificationField label={t`Обоснование`} value={text} onChange={saveDraft} />
     </ConfirmDialog>
   );
 }

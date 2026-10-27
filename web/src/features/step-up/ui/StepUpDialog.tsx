@@ -13,7 +13,7 @@ type StepUpDialogProps = {
 /**
  * Подтверждение входа вторым фактором (patterns §21). Своих полей кода нет: подтверждение проходит в Keycloak
  * (WCAG 2.2 3.3.8), диалог только объясняет, что произойдёт, и ведёт туда. Введённое в форме сохраняется на время
- * редиректа: черновик ведёт вызывающий через `useStepUpDraft`.
+ * редиректа: черновик ведёт вызывающий через `useSessionDraft`.
  */
 export function StepUpDialog({ open, onOpenChange, actionLabel, onContinue }: StepUpDialogProps) {
   const { t } = useLingui();
