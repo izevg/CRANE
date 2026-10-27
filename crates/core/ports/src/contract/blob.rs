@@ -11,14 +11,27 @@ const HELLO_SHA256: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e7304
 
 /// Проверяет реализацию `BlobStore`; `new` создаёт чистое хранилище для каждого сценария.
 pub async fn blob_store_contract<B: BlobStore>(new: impl Fn() -> B) {
-    staged_blob_is_readable_after_commit(&new()).await;
-    commit_is_idempotent(&new()).await;
+    stage_computes_sha256_and_size_over_all_chunks(&new()).await;
+    commit_returns_digests_of_content(&new()).await;
+    committed_blob_opens_with_exact_bytes(&new()).await;
+    commit_of_already_stored_content_is_idempotent(&new()).await;
+    commit_of_missing_staged_object_fails(&new()).await;
+    commit_after_transfer_is_idempotent(&new()).await;
     open_unknown_is_not_found(&new()).await;
     uncommitted_blob_is_not_readable(&new()).await;
     broken_body_is_reported_as_body_error(&new()).await;
-    commit_of_missing_staged_object_fails(&new()).await;
-    staged_objects_are_independent(&new()).await;
-    commit_after_transfer_is_idempotent(&new()).await;
+    commit_of_one_staged_object_keeps_other_staged_object_intact(&new()).await;
+}
+
+fn world() -> ByteStream {
+    body(vec![Ok(Bytes::from_static(b"world"))])
+}
+
+fn hello_digests() -> Digests {
+    Digests {
+        sha256: hello_sha256(),
+        size: 5,
+    }
 }
 
 fn body(chunks: Vec<io::Result<Bytes>>) -> ByteStream {
@@ -44,83 +57,72 @@ async fn read_all(mut stream: ByteStream) -> Vec<u8> {
     out
 }
 
-async fn staged_blob_is_readable_after_commit<B: BlobStore>(store: &B) {
-    let staged = store.stage(hello()).await.expect("stage");
+async fn stage_computes_sha256_and_size_over_all_chunks<B: BlobStore>(store: &B) {
+    // Arrange
+    let input = hello();
+
+    // Act
+    let result = store.stage(input).await;
+
+    // Assert
+    let staged = result.expect("stage");
     assert_eq!(
-        (staged.digests().sha256, staged.digests().size),
-        (hello_sha256(), 5),
+        *staged.digests(),
+        hello_digests(),
         "stage считает SHA-256 и размер по всем чанкам потока"
     );
+}
 
-    let digests = store.commit(staged).await.expect("commit");
+async fn commit_returns_digests_of_content<B: BlobStore>(store: &B) {
+    // Arrange
+    let staged = store.stage(hello()).await.expect("stage");
+
+    // Act
+    let result = store.commit(staged).await;
+
+    // Assert
     assert_eq!(
-        digests.sha256,
-        hello_sha256(),
+        result.expect("commit"),
+        hello_digests(),
         "commit возвращает дайджесты содержимого"
     );
-    let opened = store
-        .open(&digests.sha256)
-        .await
-        .expect("open закоммиченного blob");
+}
 
+async fn committed_blob_opens_with_exact_bytes<B: BlobStore>(store: &B) {
+    // Arrange
+    let staged = store.stage(hello()).await.expect("stage");
+    let digests = store.commit(staged).await.expect("commit");
+
+    // Act
+    let result = store.open(&digests.sha256).await;
+
+    // Assert
     assert_eq!(
-        read_all(opened).await,
+        read_all(result.expect("open закоммиченного blob")).await,
         b"hello",
         "open отдаёт ровно те байты, что были загружены"
     );
 }
 
-async fn commit_is_idempotent<B: BlobStore>(store: &B) {
+async fn commit_of_already_stored_content_is_idempotent<B: BlobStore>(store: &B) {
+    // Arrange
     let first = store.stage(hello()).await.expect("stage 1");
     let second = store.stage(hello()).await.expect("stage 2");
-
     let first = store.commit(first).await.expect("первый commit");
-    let second = store.commit(second).await;
 
-    let second = second.expect("commit идемпотентен: blob уже есть, это не ошибка");
+    // Act
+    let result = store.commit(second).await;
+
+    // Assert
     assert_eq!(
-        first, second,
+        result.expect("commit идемпотентен: blob уже есть, это не ошибка"),
+        first,
         "повторный commit того же содержимого возвращает те же Digests"
     );
 }
 
-async fn open_unknown_is_not_found<B: BlobStore>(store: &B) {
-    let unknown = Sha256::from([0xab; 32]);
-
-    let result = store.open(&unknown).await;
-
-    assert!(
-        matches!(&result, Err(BlobError::NotFound(sha)) if *sha == unknown),
-        "open неизвестного дайджеста даёт NotFound с этим дайджестом"
-    );
-}
-
-async fn uncommitted_blob_is_not_readable<B: BlobStore>(store: &B) {
-    let staged = store.stage(hello()).await.expect("stage");
-
-    let result = store.open(&staged.digests().sha256).await;
-
-    assert!(
-        matches!(result, Err(BlobError::NotFound(_))),
-        "staged-объект без commit недоступен для open"
-    );
-}
-
-async fn broken_body_is_reported_as_body_error<B: BlobStore>(store: &B) {
-    let broken = body(vec![
-        Ok(Bytes::from_static(b"hel")),
-        Err(io::Error::other("обрыв")),
-    ]);
-
-    let result = store.stage(broken).await;
-
-    assert!(
-        matches!(result, Err(BlobError::Body(_))),
-        "обрыв входного потока даёт BlobError::Body, а не успех и не Backend"
-    );
-}
-
 async fn commit_of_missing_staged_object_fails<B: BlobStore>(store: &B) {
+    // Arrange
     let missing = Sha256::from([0xcd; 32]);
     let staged = Staged::new(
         StagingKey::new("missing".to_owned()),
@@ -130,8 +132,10 @@ async fn commit_of_missing_staged_object_fails<B: BlobStore>(store: &B) {
         },
     );
 
+    // Act
     let result = store.commit(staged).await;
 
+    // Assert
     assert!(
         matches!(result, Err(BlobError::Backend(_))),
         "commit без staged-объекта и без такого blob — ошибка Backend, а не молчаливая потеря данных"
@@ -143,33 +147,90 @@ async fn commit_of_missing_staged_object_fails<B: BlobStore>(store: &B) {
     );
 }
 
-async fn staged_objects_are_independent<B: BlobStore>(store: &B) {
-    let hello = store.stage(hello()).await.expect("stage hello");
-    let world = store
-        .stage(body(vec![Ok(Bytes::from_static(b"world"))]))
-        .await
-        .expect("stage world");
+async fn commit_after_transfer_is_idempotent<B: BlobStore>(store: &B) {
+    // Arrange
+    let staged = store.stage(hello()).await.expect("stage");
+    let digests = store.commit(staged).await.expect("первый commit");
+    let replay = Staged::new(StagingKey::new("missing".to_owned()), digests);
 
-    let hello = store.commit(hello).await.expect("commit hello");
-    let world = store.commit(world).await.expect("commit world");
+    // Act
+    let result = store.commit(replay).await;
 
-    let opened_hello = store.open(&hello.sha256).await.expect("open hello");
-    let opened_world = store.open(&world.sha256).await.expect("open world");
+    // Assert
+    assert_eq!(
+        result.expect(
+            "повтор commit после переноса: staged-объекта нет, но blob уже есть — это успех"
+        ),
+        digests,
+        "повторный commit возвращает те же Digests"
+    );
+}
+
+async fn open_unknown_is_not_found<B: BlobStore>(store: &B) {
+    // Arrange
+    let unknown = Sha256::from([0xab; 32]);
+
+    // Act
+    let result = store.open(&unknown).await;
+
+    // Assert
+    assert!(
+        matches!(&result, Err(BlobError::NotFound(sha)) if *sha == unknown),
+        "open неизвестного дайджеста даёт NotFound с этим дайджестом"
+    );
+}
+
+async fn uncommitted_blob_is_not_readable<B: BlobStore>(store: &B) {
+    // Arrange
+    let staged = store.stage(hello()).await.expect("stage");
+    let sha256 = staged.digests().sha256;
+
+    // Act
+    let result = store.open(&sha256).await;
+
+    // Assert
+    assert!(
+        matches!(result, Err(BlobError::NotFound(_))),
+        "staged-объект без commit недоступен для open"
+    );
+}
+
+async fn broken_body_is_reported_as_body_error<B: BlobStore>(store: &B) {
+    // Arrange
+    let broken = body(vec![
+        Ok(Bytes::from_static(b"hel")),
+        Err(io::Error::other("обрыв")),
+    ]);
+
+    // Act
+    let result = store.stage(broken).await;
+
+    // Assert
+    assert!(
+        matches!(result, Err(BlobError::Body(_))),
+        "обрыв входного потока даёт BlobError::Body, а не успех и не Backend"
+    );
+}
+
+// Правило «staged-объекты не мешают друг другу»: пока world ждёт в staging,
+// commit hello не должен ни затронуть его, ни подменить его байты; commit world
+// в Act проверяет это на втором объекте, а оба blob читаются в Assert.
+async fn commit_of_one_staged_object_keeps_other_staged_object_intact<B: BlobStore>(store: &B) {
+    // Arrange
+    let staged_hello = store.stage(hello()).await.expect("stage hello");
+    let staged_world = store.stage(world()).await.expect("stage world");
+    let hello_digests = store.commit(staged_hello).await.expect("commit hello");
+
+    // Act
+    let result = store.commit(staged_world).await;
+
+    // Assert
+    let world_digests = result.expect("commit world");
+    let opened_hello = store.open(&hello_digests.sha256).await.expect("open hello");
+    let opened_world = store.open(&world_digests.sha256).await.expect("open world");
     assert_eq!(
         (read_all(opened_hello).await, read_all(opened_world).await),
         (b"hello".to_vec(), b"world".to_vec()),
         "одновременно существующие staged-объекты не мешают друг другу: каждый blob отдаёт свои байты"
     );
-}
-
-async fn commit_after_transfer_is_idempotent<B: BlobStore>(store: &B) {
-    let staged = store.stage(hello()).await.expect("stage");
-    let digests = store.commit(staged).await.expect("первый commit");
-    let replay = Staged::new(StagingKey::new("missing".to_owned()), digests);
-
-    let result = store.commit(replay).await;
-
-    let again = result
-        .expect("повтор commit после переноса: staged-объекта нет, но blob уже есть — это успех");
-    assert_eq!(again, digests, "повторный commit возвращает те же Digests");
 }
