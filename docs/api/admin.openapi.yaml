@@ -30,7 +30,7 @@ info:
 
     ## Списки
 
-    Курсор: `cursor` (непрозрачная строка) и `limit` (по умолчанию 50, максимум 200). Следующая страница - `_links.next.href`, `prev` аналогично; offset, page и total на горячих списках нет. Счётчики - только отдельные агрегаты: `stats.versions_by_state`, `GET /findings/summary`, фасеты поиска `{value, count, capped}` (потолок 1000), `GET /audit/summary`. Сортировка: `sort=-published_at` (минус - по убыванию, ключи через запятую). Множества фильтров - повторяемые параметры (`priority=P0&priority=P1`). `fields` - частичный ответ (поиск, версии, находки, журнал). Время - RFC 3339 UTC с миллисекундами; числа сырые (байты, мс, доли 0..1); enum - машинные коды; человеческий текст только в `problem.detail` и `remediation`. Деградации явные: `stale{since, reason, served_until}`; плитка без данных - `null`, не 0.
+    Курсор: `cursor` (непрозрачная строка) и `limit` (по умолчанию 50, максимум 200). Следующая страница - `_links.next.href`, `prev` аналогично; offset, page и total на горячих списках нет. Счётчики - только отдельные агрегаты: `stats.versions_by_state`, `GET /findings/summary`, `GET /license-reviews/summary`, фасеты поиска `{value, count, capped}` (потолок 1000), `GET /audit/summary`. Сортировка: `sort=-published_at` (минус - по убыванию, ключи через запятую). Множества фильтров - повторяемые параметры (`priority=P0&priority=P1`). `fields` - частичный ответ (поиск, версии, находки, журнал). Время - RFC 3339 UTC с миллисекундами; числа сырые (байты, мс, доли 0..1); enum - машинные коды; человеческий текст только в `problem.detail` и `remediation`. Деградации явные: `stale{since, reason, served_until}`; плитка без данных - `null`, не 0.
 
     ## Ошибки
 
@@ -50,7 +50,7 @@ info:
 
     ## Представление: JSON-HAL
 
-    Ресурсы и коллекции - `application/hal+json`; ошибки - `application/problem+json`. Каждый ресурс имеет `_links` с обязательным `self`, на корне ответа - `_links.curies` (`crane` -> `https://crane.example/docs/rels/{rel}`). Коллекции кладут элементы в `_embedded.<rel>`. Доступность действия определяется наличием ссылки-действия в `_links` (сервер кладёт её, только если Cedar разрешает и состояние допускает); нет ссылки - нет кнопки. `denied_actions[{action, rule_id, reason}]` - обычное свойство только для `issue_token`, `promote`, `request_approval`, `delete_version`. Протокольные ответы не HAL: raw metadata версии, README (`text/markdown`).
+    Ресурсы и коллекции - `application/hal+json`; ошибки - `application/problem+json`. Каждый ресурс имеет `_links` с обязательным `self`, на корне ответа - `_links.curies` (`crane` -> `https://crane.example/docs/rels/{rel}`). Коллекции кладут элементы в `_embedded.<rel>`. Доступность действия определяется наличием ссылки-действия в `_links` (сервер кладёт её, только если Cedar разрешает и состояние допускает); нет ссылки - нет кнопки. `denied_actions[{action, rule_id, reason}]` - обычное свойство только для отношений `crane:issue-token`, `crane:promote`, `crane:request-approval`, `crane:delete`; `action` - ActionRel (ключ ссылки-действия в `_links`). Протокольные ответы не HAL: raw metadata версии, README (`text/markdown`).
 
     ### Отношения ссылок
 
@@ -131,7 +131,7 @@ info:
 
     ## Живые данные
 
-    Только опрос с ETag и 304 и `Cache-Control: private, max-age=<каденс>`. SSE не используется: BFF работает на нескольких репликах, SSE требует фан-аута через Valkey и липких соединений; каденс не короче 15 с, поэтому выигрыш нулевой. A2A-стриминг - отдельный протокол. Каденсы: `/status` 30 с; плитки и компоненты обзора 15 с; графики 60 с; `/findings/summary` 30 с; `/notifications` и `/notifications/unread-count` 60 с. На скрытой вкладке опрос приостанавливается; есть кнопка «Пауза автообновления».
+    Только опрос с ETag и 304 и `Cache-Control: private, max-age=<каденс>`. SSE не используется: BFF работает на нескольких репликах, SSE требует фан-аута через Valkey и липких соединений; каденс не короче 15 с, поэтому выигрыш нулевой. A2A-стриминг - отдельный протокол. Каденсы: `/status` 30 с; плитки и компоненты обзора 15 с; графики 60 с; `/findings/summary` 30 с; `/license-reviews/summary` 30 с; `/notifications` и `/notifications/unread-count` 60 с. На скрытой вкладке опрос приостанавливается; есть кнопка «Пауза автообновления».
 
     ## Командная палитра
 
@@ -495,10 +495,7 @@ paths:
         in: query
         description: Решение.
         schema:
-          type: string
-          enum:
-          - allow
-          - deny
+          $ref: ./common.yaml#/components/schemas/Decision
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
@@ -691,11 +688,7 @@ paths:
         schema:
           type: array
           items:
-            type: string
-            enum:
-            - security
-            - access
-            - platform
+            $ref: ./common.yaml#/components/schemas/NotificationCategory
       - name: unread
         in: query
         description: Только непрочитанные.
@@ -894,7 +887,7 @@ paths:
       - catalog
       summary: Команды установки
       description: |-
-        Без секрета: токен подставляется как `${CRANE_TOKEN}`.
+        Без секрета: токен подставляется как `${CRANE_TOKEN}`. Клиент, несовместимый с форматом пакета (матрица в InstallClient), даёт 400.
 
         Роли: reader, developer, maintainer, owner, appsec, secops, platform-admin.
       operationId: getInstallInstructions
@@ -913,18 +906,7 @@ paths:
         description: Клиент.
         required: true
         schema:
-          type: string
-          enum:
-          - npm
-          - pnpm
-          - yarn
-          - pip
-          - uv
-          - poetry
-          - maven
-          - gradle
-          - dotnet
-          - cargo
+          $ref: ./common.yaml#/components/schemas/InstallClient
       - $ref: ./common.yaml#/components/parameters/IfNoneMatch
       responses:
         '200':
@@ -942,6 +924,8 @@ paths:
                 $ref: ./common.yaml#/components/schemas/InstallInstructions
         '304':
           $ref: ./common.yaml#/components/responses/NotModified
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
         '401':
           $ref: ./common.yaml#/components/responses/Unauthorized
         '404':
@@ -2481,12 +2465,7 @@ paths:
         in: query
         description: Окно.
         schema:
-          type: string
-          enum:
-          - 1h
-          - 6h
-          - 24h
-          - 7d
+          $ref: ./common.yaml#/components/schemas/PlatformWindow
       - $ref: ./common.yaml#/components/parameters/IfNoneMatch
       responses:
         '200':
@@ -2529,10 +2508,7 @@ paths:
         in: query
         description: Группировка.
         schema:
-          type: string
-          enum:
-          - workspace
-          - format
+          $ref: ./common.yaml#/components/schemas/UsageGroup
       - name: top
         in: query
         description: Сколько групп.
@@ -2581,12 +2557,7 @@ paths:
         in: query
         description: Окно.
         schema:
-          type: string
-          enum:
-          - 1h
-          - 6h
-          - 24h
-          - 7d
+          $ref: ./common.yaml#/components/schemas/PlatformWindow
       - $ref: ./common.yaml#/components/parameters/IfNoneMatch
       responses:
         '200':
@@ -3843,11 +3814,7 @@ paths:
         in: query
         description: Тип зависимости.
         schema:
-          type: string
-          enum:
-          - runtime
-          - dev
-          - test
+          $ref: ./common.yaml#/components/schemas/DepScope
       - name: q
         in: query
         description: Поиск.
@@ -3933,14 +3900,16 @@ paths:
       tags:
       - vulnerabilities
       summary: Фиды уязвимостей
-      description: 'Роли: appsec, secops.'
+      description: |-
+        Полный список без пагинации (все фиды). Счётчики, например фиды, требующие внимания (`state` не `ok`), клиент считает по нему.
+
+        Роли: appsec, secops.
       operationId: listFeeds
       x-crane-phase: P2
       x-crane-since: v1.1.0
       x-crane-action: feed:list
       x-crane-step-up: false
       x-crane-audit: null
-      x-crane-open-question: Значения состояния не определены в docs/product; поле - строка. Поле `state`.
       parameters:
       - $ref: ./common.yaml#/components/parameters/IfNoneMatch
       responses:
@@ -3984,10 +3953,7 @@ paths:
         in: query
         description: Состояние.
         schema:
-          type: string
-          enum:
-          - active
-          - lifted
+          $ref: ./common.yaml#/components/schemas/EmergencyBlockState
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
@@ -4158,7 +4124,6 @@ paths:
       x-crane-action: license:list_reviews
       x-crane-step-up: false
       x-crane-audit: null
-      x-crane-open-question: Значения состояния не определены в docs/product; поле - строка. Поле `state`.
       parameters:
       - name: sort
         in: query
@@ -4180,6 +4145,47 @@ paths:
             application/hal+json:
               schema:
                 $ref: ./common.yaml#/components/schemas/LicenseReviewPage
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+  /license-reviews/summary:
+    get:
+      tags:
+      - licenses
+      summary: Сводка очереди лицензий
+      description: |-
+        Живые данные: опрос с ETag, `Cache-Control: private, max-age=30`.
+
+        Роли: appsec.
+      operationId: getLicenseReviewsSummary
+      x-crane-phase: P2
+      x-crane-since: v1.1.0
+      x-crane-action: license:list_reviews
+      x-crane-step-up: false
+      x-crane-audit: null
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IfNoneMatch
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+            ETag:
+              $ref: ./common.yaml#/components/headers/ETag
+            Cache-Control:
+              $ref: ./common.yaml#/components/headers/CacheControl
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/LicenseReviewSummary
+        '304':
+          $ref: ./common.yaml#/components/responses/NotModified
         '401':
           $ref: ./common.yaml#/components/responses/Unauthorized
         '403':
@@ -4602,12 +4608,7 @@ paths:
         in: query
         description: Фильтр по уровню.
         schema:
-          type: string
-          enum:
-          - downloads
-          - lockfile
-          - sbom
-          - deployed
+          $ref: ./common.yaml#/components/schemas/ImpactLevel
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
@@ -4696,10 +4697,7 @@ paths:
         in: query
         description: Решение.
         schema:
-          type: string
-          enum:
-          - allow
-          - deny
+          $ref: ./common.yaml#/components/schemas/Decision
       - name: rule_id
         in: query
         description: Правило.
@@ -6448,12 +6446,7 @@ paths:
         schema:
           type: array
           items:
-            type: string
-            enum:
-            - downloads
-            - lockfile
-            - sbom
-            - deployed
+            $ref: ./common.yaml#/components/schemas/ImpactLevel
       responses:
         '200':
           description: Успешно.
@@ -6616,75 +6609,6 @@ components:
     bearer:
       $ref: ./common.yaml#/components/securitySchemes/bearer
 x-crane-link-rels:
-  actions:
-  - crane:issue-token
-  - crane:revoke
-  - crane:create-robot
-  - crane:credentials
-  - crane:disable
-  - crane:create-namespace
-  - crane:delete-namespace
-  - crane:create-trust-policy
-  - crane:update-trust-policy
-  - crane:delete-trust-policy
-  - crane:favorite
-  - crane:unfavorite
-  - crane:deprecate
-  - crane:undeprecate
-  - crane:yank
-  - crane:unyank
-  - crane:unlist
-  - crane:relist
-  - crane:set-dist-tag
-  - crane:delete
-  - crane:request-approval
-  - crane:promote
-  - crane:evaluate
-  - crane:approve-request
-  - crane:reject-request
-  - crane:quarantine-release
-  - crane:quarantine-block
-  - crane:accept-vex
-  - crane:create-exception
-  - crane:create-issue
-  - crane:block
-  - crane:lift-block
-  - crane:revoke-exception
-  - crane:decide
-  - crane:create-break-glass
-  - crane:approve-break-glass
-  - crane:reject-break-glass
-  - crane:revoke-break-glass
-  - crane:create-advisory
-  - crane:update-license-policy
-  - crane:update-vulnerability-policy
-  - crane:update-gates
-  - crane:reveal
-  - crane:create-audit-export
-  - crane:create-audit-integrity-check
-  - crane:create-siem-sink
-  - crane:update-siem-sink
-  - crane:create-compliance-report
-  - crane:create-repository
-  - crane:update-repository
-  - crane:purge-cache
-  - crane:run
-  - crane:create-retention-rule
-  - crane:create-retention-hold
-  - crane:create-integrity-check
-  - crane:create-storage-move
-  - crane:update-quota
-  - crane:retry
-  - crane:create-import
-  - crane:create-workspace
-  - crane:create-webhook
-  - crane:redeliver
-  - crane:check-readiness
-  - crane:warm-cache
-  - crane:mark-read
-  - crane:mark-all-read
-  - crane:confirm-plan
-  - crane:reject-plan
   navigation:
   - crane:audit-events
   - crane:content
