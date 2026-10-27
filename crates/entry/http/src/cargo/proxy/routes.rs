@@ -10,14 +10,14 @@ use axum_extra::TypedHeader;
 use axum_extra::headers::IfNoneMatch;
 use crane_app::proxy::Fetched;
 use crane_app::registry::RegistryError;
-use crane_domain::proxy::{NegativePolicy, UpstreamPath};
+use crane_domain::proxy::NegativePolicy;
 use crane_domain::registry::{Format, PackageName};
-use crane_format_cargo::{INDEX, archive, index_path, parse_index_path, render_config};
+use crane_format_cargo::{archive, parse_index_path, render_config};
 use crane_ports::proxy::{FetchLeases, ProxyCache, Upstream};
 use crane_ports::registry::BlobStore;
 
 use super::Shared;
-use super::respond::{respond, with_facts};
+use super::respond::{failure, respond, with_facts};
 use crate::cargo::index_response;
 use crate::context::CacheFacts;
 use crate::error::{CargoError, chain};
@@ -42,19 +42,13 @@ where
     L: FetchLeases + 'static,
     B: BlobStore + 'static,
 {
-    // `parse_index_path` принимает только каноничную раскладку, поэтому в upstream уходит
-    // ровно тот путь, который сам cargo построил бы для этого крейта.
-    if parse_index_path(&path).is_none() {
-        return CargoError::not_found().into_response();
-    }
-    let Ok(upstream_path) = UpstreamPath::parse(&path) else {
+    // `parse_index_path` принимает только каноничную раскладку; путь для upstream строится из имени.
+    let Some(package) = parse_index_path(&path) else {
         return CargoError::not_found().into_response();
     };
-    let result = shared
-        .engine
-        .metadata(&shared.origins.index, &upstream_path, &INDEX)
-        .await;
-    respond(result, |body| index_response(body, if_none_match))
+    respond(shared.index(&package).await, |body| {
+        index_response(body, if_none_match)
+    })
 }
 
 pub(super) async fn download<U, PC, L, B>(
@@ -71,16 +65,9 @@ where
         Ok(package) => package,
         Err(error) => return CargoError::bad_request(chain(&error)).into_response(),
     };
-    let Ok(index) = UpstreamPath::parse(&index_path(&package)) else {
-        return CargoError::not_found().into_response();
-    };
-    let index = match shared
-        .engine
-        .metadata(&shared.origins.index, &index, &INDEX)
-        .await
-    {
+    let index = match shared.index(&package).await {
         Ok(index) => index,
-        Err(error) => return respond::<()>(Err(error), |()| Ok(().into_response())),
+        Err(error) => return failure(error),
     };
     // Ревалидация индекса здесь не запускается: она ленивая и брошенной ничего не стоит,
     // а свежесть индекса поддерживают его собственные запросы.

@@ -9,7 +9,6 @@ use crate::context::CacheFacts;
 use crate::error::{CargoError, chain};
 
 // Warning отменён RFC 9111 и оставлен по требованию; основной сигнал — `Age` и поле `cache` журнала.
-const WARNING: header::HeaderName = header::WARNING;
 const STALE: HeaderValue = HeaderValue::from_static("110 - \"Response is Stale\"");
 const REVALIDATION_FAILED: HeaderValue = HeaderValue::from_static("111 - \"Revalidation Failed\"");
 
@@ -35,20 +34,23 @@ pub(super) fn respond<T>(
             headers.insert(header::AGE, HeaderValue::from(age.as_secs()));
             match result {
                 CacheResult::Stale => {
-                    headers.insert(WARNING, STALE);
+                    headers.insert(header::WARNING, STALE);
                 }
                 CacheResult::StaleOnError(_) => {
-                    headers.insert(WARNING, REVALIDATION_FAILED);
+                    headers.insert(header::WARNING, REVALIDATION_FAILED);
                 }
                 CacheResult::Hit | CacheResult::Miss => {}
             }
             with_facts(response, CacheFacts::served(&result))
         }
-        Err(error) => {
-            let facts = CacheFacts::failed(&error);
-            with_facts(CargoError::from(error).into_response(), facts)
-        }
+        Err(error) => failure(error),
     }
+}
+
+/// Ответ на ошибку движка: тело для клиента без деталей, факты для журнала.
+pub(super) fn failure(error: ProxyError) -> Response {
+    let facts = CacheFacts::failed(&error);
+    with_facts(CargoError::from(error).into_response(), facts)
 }
 
 pub(super) fn with_facts(mut response: Response, facts: CacheFacts) -> Response {

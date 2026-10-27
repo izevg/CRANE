@@ -7,8 +7,11 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::routing::{get, put};
-use crane_app::proxy::ProxyEngine;
-use crane_domain::proxy::Origin;
+use bytes::Bytes;
+use crane_app::proxy::{ProxyEngine, ProxyError, Served};
+use crane_domain::proxy::{Origin, UpstreamPath};
+use crane_domain::registry::PackageName;
+use crane_format_cargo::{INDEX, index_path};
 use crane_ports::proxy::{FetchLeases, ProxyCache, Upstream};
 use crane_ports::registry::BlobStore;
 
@@ -28,6 +31,23 @@ struct Shared<U, PC, L, B> {
     origins: CargoProxyOrigins,
     /// База, которую клиент получает в `config.json`: наши `dl` и `api`, а не crates.io.
     base: String,
+}
+
+impl<U, PC, L, B> Shared<U, PC, L, B>
+where
+    U: Upstream + 'static,
+    PC: ProxyCache + 'static,
+    L: FetchLeases + 'static,
+    B: BlobStore + 'static,
+{
+    /// Единственный путь к индексу: в upstream уходит путь, построенный из имени, а не пришедший в URL.
+    async fn index(&self, package: &PackageName) -> Result<Served<Bytes>, ProxyError> {
+        // Путь из `index_path` всегда проходит разбор; `NotFound` здесь недостижим и нужен лишь типу.
+        let path = UpstreamPath::parse(&index_path(package)).map_err(|_| ProxyError::NotFound)?;
+        self.engine
+            .metadata(&self.origins.index, &path, &INDEX)
+            .await
+    }
 }
 
 /// Router proxy-репозитория без слоя аутентификации: его накладывает `api_router`.
