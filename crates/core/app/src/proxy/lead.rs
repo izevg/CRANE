@@ -287,11 +287,11 @@ async fn store_artifact<B: BlobStore>(
     let bounded = bounded(body, max_bytes);
     let staged = blobs.stage(bounded).await.map_err(|error| match error {
         BlobError::Body(error) => body_failure(&error),
-        other => ProxyError::backend(other),
+        other => ProxyError::blob(other),
     })?;
     // Несовпавший staged-объект не коммитим: чужие байты не должны попасть в CAS.
     job.target.check_digest(staged.digests())?;
-    let digests = blobs.commit(staged).await.map_err(ProxyError::backend)?;
+    let digests = blobs.commit(staged).await.map_err(ProxyError::blob)?;
     // Содержимое неизменяемо: запись без срока, вытеснение — право бэкенда.
     Ok((CachedState::Blob(digests), Duration::MAX))
 }

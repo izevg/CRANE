@@ -32,6 +32,10 @@ pub enum CatalogError {
     /// Compare-and-set не сошёлся: фактическое состояние отличается от ожидаемого.
     #[error("конфликт состояния: фактическое {actual:?}")]
     StateConflict { actual: VersionState },
+    /// Каталог не отвечает (соединение, пул, остановка сервера): повтор позже имеет смысл.
+    /// Не путать с `Backend`: тот означает баг или повреждение, повтор не поможет.
+    #[error("хранилище не отвечает")]
+    Unreachable(#[source] Box<dyn std::error::Error + Send + Sync>),
     #[error("ошибка каталога")]
     Backend(#[source] Box<dyn std::error::Error + Send + Sync>),
 }

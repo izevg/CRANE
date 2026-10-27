@@ -138,7 +138,7 @@ flowchart LR
 | --- | --- |
 | **Throughput** | Enterprise profile target of ~50,000 RPS; the download hot path never touches the database |
 | **Smallest profile** | One VM, 2 vCPU / 4 GB, PostgreSQL and a local disk only |
-| **Availability** | 99.99% for downloads across three zones; reads keep working when the primary database fails |
+| **Availability** | 99.99% for downloads across three zones; when the catalog (PostgreSQL) is unreachable, all protocol requests, reads included, get 503 + Retry-After: without the catalog reservations, blocks and quarantine cannot be checked (fail closed, decision 46) |
 | **Vulnerability detection** | ≤ 15 minutes from advisory publication to an owner's task |
 | **Dependency licenses** | Permissive OSS only: MIT, Apache-2.0, BSD, ISC; enforced by `cargo-deny` |
 

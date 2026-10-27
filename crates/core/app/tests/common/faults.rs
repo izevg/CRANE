@@ -126,7 +126,7 @@ impl Catalog for DownCatalog {
         _format: Format,
         _name: &str,
     ) -> impl Future<Output = Result<Option<Repository>, CatalogError>> + Send {
-        ready(Err(CatalogError::Backend("БД недоступна".into())))
+        ready(Err(CatalogError::Unreachable("БД недоступна".into())))
     }
 
     fn publish_version(

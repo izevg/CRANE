@@ -68,14 +68,16 @@ impl CacheFacts {
         }
     }
 
-    /// Ошибка движка; `NotFound` и сбой бэкенда не про upstream, поэтому фактов нет.
+    /// Ошибка движка; `NotFound`, недоступность хранилища и сбой бэкенда не про upstream, поэтому фактов нет.
     pub(crate) fn failed(error: &ProxyError) -> Self {
         let (failure, reason) = match error {
             ProxyError::Upstream(failure) => upstream_failure(failure),
             // Ожидаемый и полученный sha256 — событие цепочки поставки, их место в журнале.
             ProxyError::DigestMismatch { .. } => (Some("digest-mismatch"), Some(error.to_string())),
             ProxyError::TooLarge { .. } => (Some("too-large"), None),
-            ProxyError::NotFound | ProxyError::Backend(_) => (None, None),
+            ProxyError::NotFound | ProxyError::Unreachable(_) | ProxyError::Backend(_) => {
+                (None, None)
+            }
         };
         Self {
             cache: None,

@@ -37,7 +37,7 @@ fn unreachable_catalog_makes_registry_not_ready() {
 
     // Assert
     assert!(
-        matches!(result, Err(RegistryError::Backend(_))),
+        matches!(result, Err(RegistryError::Unreachable(_))),
         "{result:?}"
     );
 }

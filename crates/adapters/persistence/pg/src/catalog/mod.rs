@@ -40,7 +40,7 @@ mod publish;
 mod rows;
 
 use self::rows::{
-    corrupt, kind_as_str, repository_from_row, state_as_str, state_parse, version_from_row,
+    backend, corrupt, kind_as_str, repository_from_row, state_as_str, state_parse, version_from_row,
 };
 
 /// Каталог реестра в PostgreSQL. Схему создаёт [`crate::migrate`].
@@ -54,11 +54,6 @@ impl PgCatalog {
     pub const fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-}
-
-/// Сбой драйвера или БД.
-fn backend(error: sqlx::Error) -> CatalogError {
-    CatalogError::Backend(Box::new(error))
 }
 
 impl Catalog for PgCatalog {

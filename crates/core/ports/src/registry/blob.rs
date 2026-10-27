@@ -60,6 +60,9 @@ pub enum BlobError {
     /// Входной поток оборвался: это ошибка запроса клиента, а не хранилища.
     #[error("ошибка чтения тела запроса")]
     Body(#[source] std::io::Error),
+    /// Хранилище не отвечает (соединение, таймаут, 5xx): повтор позже имеет смысл.
+    #[error("хранилище не отвечает")]
+    Unreachable(#[source] Box<dyn std::error::Error + Send + Sync>),
     #[error("ошибка хранилища blob")]
     Backend(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
