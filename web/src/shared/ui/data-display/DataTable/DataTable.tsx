@@ -15,7 +15,7 @@ import {
   features,
   nextSelection,
 } from "./columns";
-import { HeadRow, type HeadSelection, type RowCheckbox, TableBody } from "./DataTableRows";
+import { BodyRows, HeadRow, type HeadSelection, type RowCheckbox } from "./DataTableRows";
 import { useLoadMoreFocus, useRowFocus, useRowWindow, useScrollerLayout } from "./useRowFocus";
 
 const SCROLL_MAX_HEIGHT = "max-h-[640px]";
@@ -279,7 +279,7 @@ export function DataTable<TData extends RowData>({
             ))}
           </thead>
           <tbody>
-            <TableBody
+            <BodyRows
               state={state}
               rows={rows}
               view={view}

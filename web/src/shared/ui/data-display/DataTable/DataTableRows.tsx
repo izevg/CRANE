@@ -291,7 +291,7 @@ type RowShared<TData extends RowData> = {
   onMove: (index: number) => void;
 };
 
-type TableBodyProps<TData extends RowData> = {
+type BodyRowsProps<TData extends RowData> = {
   state: BodyState;
   rows: readonly Row<typeof features, TData>[];
   view: { items: readonly { index: number }[]; padTop: number; padBottom: number };
@@ -303,7 +303,7 @@ type TableBodyProps<TData extends RowData> = {
 };
 
 /** Содержимое `<tbody>` по состоянию: скелетон, ошибка, пусто или окно строк между распорками. */
-export function TableBody<TData extends RowData>({
+export function BodyRows<TData extends RowData>({
   state,
   rows,
   view,
@@ -312,7 +312,7 @@ export function TableBody<TData extends RowData>({
   error,
   empty,
   rowProps,
-}: TableBodyProps<TData>) {
+}: BodyRowsProps<TData>) {
   if (state === "loading") {
     return <SkeletonRows cells={skeletonCells} />;
   }
