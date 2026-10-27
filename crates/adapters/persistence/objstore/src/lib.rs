@@ -7,4 +7,5 @@
 mod config;
 mod store;
 
+pub use config::is_public_s3_param;
 pub use store::ObjectBlobStore;

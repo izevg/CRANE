@@ -82,8 +82,7 @@ pub(crate) enum ConfigError {
         var: &'static str,
         reason: String,
     },
-    /// Имя ключа запроса `CRANE_BLOBS` с учётными данными; значение в ошибку не попадает.
-    /// Ключ запроса `CRANE_BLOBS` вне списка несекретных параметров.
+    /// Ключ запроса `CRANE_BLOBS` вне списка несекретных параметров; значение в ошибку не попадает.
     BlobsKey {
         key: String,
     },
@@ -223,61 +222,17 @@ fn blobs_url(value: &str) -> Result<Url, ConfigError> {
             });
         }
     }
-    // В запросе допустимы только заведомо несекретные ключи, поэтому URL не секрет,
-    // а текст ошибки `from_url` не может процитировать ни ключ доступа, ни ключ SSE-C.
+    // Ключи проверяет адаптер теми же правилами, что разбирает: в URL остаются только
+    // несекретные параметры, поэтому ни URL, ни текст ошибки не процитируют секрет.
     match url
         .query_pairs()
-        .map(|(key, _)| key)
-        .find(|key| !is_public_s3_key(key))
+        .find(|(key, value)| !crane_objstore::is_public_s3_param(key, value))
     {
-        Some(key) => Err(ConfigError::BlobsKey {
+        Some((key, _)) => Err(ConfigError::BlobsKey {
             key: key.into_owned(),
         }),
         None => Ok(url),
     }
-}
-
-/// Несекретные параметры `object_store` для S3 (имя без префикса `aws_`, регистр не важен).
-/// Белый список, а не чёрный: новый секретный ключ библиотеки (как `sse_customer_key_base64`)
-/// не проскочит в журнал. Учётные данные, их поставщики (роль, токены, metadata) и `proxy_url`
-/// (в нём бывает пароль) сюда не входят — только переменные AWS_*.
-const PUBLIC_S3_KEYS: [&str; 30] = [
-    "region",
-    "default_region",
-    "bucket",
-    "bucket_name",
-    "endpoint",
-    "endpoint_url",
-    "endpoint_url_s3",
-    "virtual_hosted_style_request",
-    "s3_express",
-    "unsigned_payload",
-    "checksum_algorithm",
-    "skip_signature",
-    "copy_if_not_exists",
-    "conditional_put",
-    "disable_tagging",
-    "disable_bulk_delete",
-    "request_payer",
-    "server_side_encryption",
-    "sse_kms_key_id",
-    "sse_bucket_key_enabled",
-    "allow_http",
-    "allow_invalid_certificates",
-    "disable_system_certificates",
-    "connect_timeout",
-    "timeout",
-    "read_timeout",
-    "pool_idle_timeout",
-    "pool_max_idle_per_host",
-    "http1_only",
-    "user_agent",
-];
-
-fn is_public_s3_key(key: &str) -> bool {
-    let key = key.to_ascii_lowercase();
-    let key = key.strip_prefix("aws_").unwrap_or(&key);
-    PUBLIC_S3_KEYS.contains(&key)
 }
 
 /// Секрет (токен, URL базы). Без `Debug` и `Display`: случайно попасть в журнал он не может.
@@ -937,13 +892,12 @@ mod tests {
         // Arrange
         let cases = [
             "s3://b?endpoint=http://x:8333&aws_allow_http=true",
-            "s3://b?AWS_SERVER_SIDE_ENCRYPTION=aws:kms&aws_sse_kms_key_id=alias/crane",
+            "s3://b?aws_server_side_encryption=aws:kms&aws_sse_kms_key_id=alias/crane",
             "s3://b?aws_secret_access_key=SECRETKEY",
-            "s3://b?AWS_SESSION_TOKEN=SECRETKEY",
-            "s3://b?access_key_id=SECRETKEY",
+            "s3://b?aws_session_token=SECRETKEY",
             "s3://b?aws_sse_customer_key_base64=SECRETKEY",
-            "s3://b?proxy_url=http://u:SECRETKEY@proxy",
-            "s3://b?aws_role_arn=arn:aws:iam::1:role/x",
+            "s3://b?endpoint=http://u:SECRETKEY@x:8333",
+            "s3://b?foo=1",
         ];
 
         // Act
@@ -966,11 +920,10 @@ mod tests {
                 "принято".to_owned(),
                 "принято".to_owned(),
                 rejected("aws_secret_access_key"),
-                rejected("AWS_SESSION_TOKEN"),
-                rejected("access_key_id"),
+                rejected("aws_session_token"),
                 rejected("aws_sse_customer_key_base64"),
-                rejected("proxy_url"),
-                rejected("aws_role_arn"),
+                rejected("endpoint"),
+                rejected("foo"),
             ]
         );
     }
