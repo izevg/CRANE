@@ -9,3 +9,15 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+# Исполняемая спецификация портов для адаптеров; в рантайм-сборку не попадает.
+contract = ["dep:futures-util"]
+
+[dependencies]
+bytes = "1"
+crane-domain = { path = "../domain" }
+futures-core = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
+thiserror = "2"
+uuid = "1"
