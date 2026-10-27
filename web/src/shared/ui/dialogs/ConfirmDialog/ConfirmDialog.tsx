@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useRef } from "react";
+import { type ReactNode, useCallback, useId, useRef } from "react";
 import { type Action, ActionButton } from "../../actions";
 import {
   AlertDialog,
@@ -13,8 +13,7 @@ import {
 
 const CANCEL = "Отмена";
 const PENDING_REASON = "Выполняется…";
-const FIELD = "input,textarea,select,[role=combobox]";
-const CONFIRM_SLOT = "[data-confirm-slot] :is(button,a)";
+const CONFIRM_CONTROL = "button,a";
 
 type ConfirmDialogProps = {
   open: boolean;
@@ -46,16 +45,19 @@ export function ConfirmDialog({
   confirm,
   pending = false,
 }: ConfirmDialogProps) {
+  const hasChildren = children !== undefined && children !== null && children !== false;
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const popupRef = useRef<HTMLDivElement>(null);
-  const firstFocus = useCallback(() => {
-    const popup = popupRef.current;
-    return (
-      popup?.querySelector<HTMLElement>(FIELD) ??
-      popup?.querySelector<HTMLElement>(CONFIRM_SLOT) ??
-      null
-    );
-  }, []);
+  const confirmRef = useRef<HTMLSpanElement>(null);
+  const reasonId = useId();
+  // Поля формы стоят в разметке раньше подвала, поэтому при `children` подходит поведение по умолчанию
+  // (первый фокусируемый элемент). Без полей фокус идёт на кнопку подтверждения, а не на «Отмена».
+  const firstFocus = useCallback(
+    () =>
+      hasChildren
+        ? true
+        : (confirmRef.current?.querySelector<HTMLElement>(CONFIRM_CONTROL) ?? true),
+    [hasChildren],
+  );
   const handleOpenChange = useCallback(
     (next: boolean, details: { cancel: () => void }) => {
       if (!next && pending) {
@@ -69,10 +71,7 @@ export function ConfirmDialog({
   const action: Action = pending ? { ...confirm, disabledReason: PENDING_REASON } : confirm;
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent
-        ref={popupRef}
-        initialFocus={confirm.destructive ? cancelRef : firstFocus}
-      >
+      <AlertDialogContent initialFocus={confirm.destructive ? cancelRef : firstFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description === undefined ? null : (
@@ -90,8 +89,20 @@ export function ConfirmDialog({
           {children}
         </AlertDialogBody>
         <AlertDialogFooter>
-          <AlertDialogCancel ref={cancelRef}>{CANCEL}</AlertDialogCancel>
-          <span data-confirm-slot="" className="contents">
+          {/* Во время выполнения «Отмена» остаётся в Tab, но не закрывает диалог и объясняет почему */}
+          <AlertDialogCancel
+            ref={cancelRef}
+            aria-disabled={pending || undefined}
+            aria-describedby={pending ? reasonId : undefined}
+          >
+            {CANCEL}
+          </AlertDialogCancel>
+          {pending ? (
+            <span id={reasonId} className="sr-only">
+              {PENDING_REASON}
+            </span>
+          ) : null}
+          <span ref={confirmRef} className="contents">
             <ActionButton action={action} variant="primary" />
           </span>
         </AlertDialogFooter>

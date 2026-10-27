@@ -20,29 +20,24 @@ const DONE = "Готово";
 const DONE_REASON = "Отметьте, что сохранили токен";
 
 type SecretOnceDialogProps = {
-  open: boolean;
-  /** Секрет живёт только в памяти диалога: при `open=false` его нет в DOM. */
-  secret: string;
+  /** Секрет живёт только в памяти диалога: `null` — диалог закрыт и секрета в DOM нет. */
+  secret: string | null;
   title: string;
   /** Пользователь сохранил секрет и закрывает диалог. */
   onDone: () => void;
 };
 
-type BodyProps = Omit<SecretOnceDialogProps, "open">;
+type BodyProps = Omit<SecretOnceDialogProps, "secret"> & { secret: string };
 
 function SecretDialogBody({ secret, title, onDone }: BodyProps) {
   const [saved, setSaved] = useState(false);
   const checkboxId = useId();
+  // Диалог открыт, пока есть секрет, поэтому клик вне окна и Esc до отметки ничего не закрывают сами:
+  // достаточно не вызывать onDone. После отметки Esc завершает показ.
   const handleOpenChange = useCallback(
-    (next: boolean, details: { cancel: () => void }) => {
-      // Esc закрывает диалог только после отметки; клик вне окна AlertDialog игнорирует сам
-      if (next) {
-        return;
-      }
-      if (saved) {
+    (next: boolean) => {
+      if (!next && saved) {
         onDone();
-      } else {
-        details.cancel();
       }
     },
     [saved, onDone],
@@ -78,8 +73,8 @@ function SecretDialogBody({ secret, title, onDone }: BodyProps) {
 
 /**
  * Показ секрета один раз (токен, ключ вебхука). «Готово» недоступна до отметки, Esc и клик вне окна не закрывают
- * диалог до неё. Состояние и секрет существуют, только пока диалог открыт: закрытый диалог не рендерит ничего.
+ * диалог до неё. Состояние и секрет существуют, только пока `secret` не `null`.
  */
-export function SecretOnceDialog({ open, ...body }: SecretOnceDialogProps) {
-  return open ? <SecretDialogBody {...body} /> : null;
+export function SecretOnceDialog({ secret, ...rest }: SecretOnceDialogProps) {
+  return secret === null ? null : <SecretDialogBody secret={secret} {...rest} />;
 }

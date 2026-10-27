@@ -116,6 +116,29 @@ describe("ConfirmDialog", () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
+  it("во время выполнения «Отмена» объясняет причину и не закрывает диалог", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={onOpenChange}
+        title="Удалить?"
+        confirm={destructive}
+        pending
+      />,
+    );
+    const cancel = screen.getByRole("button", { name: "Отмена" });
+
+    // Act
+    await user.click(cancel);
+
+    // Assert
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(cancel).toHaveAccessibleDescription("Выполняется…");
+  });
+
   it("во время выполнения подтверждение недоступно и Esc не закрывает диалог", async () => {
     // Arrange
     const user = userEvent.setup();

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { SecretOnceDialog } from "~/shared/ui/dialogs";
@@ -10,7 +10,7 @@ describe("SecretOnceDialog", () => {
   it("показывает предупреждение, секрет целиком и кнопку копирования", () => {
     // Arrange
     // Act
-    render(<SecretOnceDialog open secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />);
+    render(<SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />);
 
     // Assert
     expect(screen.getByText("Сохраните сейчас — больше мы его не покажем")).toBeVisible();
@@ -18,10 +18,21 @@ describe("SecretOnceDialog", () => {
     expect(screen.getByRole("button", { name: "Копировать токен" })).toBeVisible();
   });
 
+  it("начальный фокус на «Копировать токен», а не на самом секрете", async () => {
+    // Arrange
+    // Act
+    render(<SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />);
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Копировать токен" })).toHaveFocus(),
+    );
+  });
+
   it("не показывает длину секрета", () => {
     // Arrange
     // Act
-    render(<SecretOnceDialog open secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />);
+    render(<SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />);
 
     // Assert
     expect(screen.queryByText(LENGTH_HINT)).not.toBeInTheDocument();
@@ -30,7 +41,7 @@ describe("SecretOnceDialog", () => {
   it("«Готово» недоступна до отметки чекбокса", () => {
     // Arrange
     // Act
-    render(<SecretOnceDialog open secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />);
+    render(<SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />);
 
     // Assert
     expect(screen.getByRole("button", { name: "Готово" })).toHaveAttribute("aria-disabled", "true");
@@ -40,7 +51,7 @@ describe("SecretOnceDialog", () => {
     // Arrange
     const user = userEvent.setup();
     const onDone = vi.fn();
-    render(<SecretOnceDialog open secret={SECRET} title="Токен выпущен" onDone={onDone} />);
+    render(<SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={onDone} />);
 
     // Act
     await user.click(screen.getByRole("button", { name: "Готово" }));
@@ -53,7 +64,7 @@ describe("SecretOnceDialog", () => {
     // Arrange
     const user = userEvent.setup();
     const onDone = vi.fn();
-    render(<SecretOnceDialog open secret={SECRET} title="Токен выпущен" onDone={onDone} />);
+    render(<SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={onDone} />);
 
     // Act
     await user.keyboard("{Escape}");
@@ -67,7 +78,7 @@ describe("SecretOnceDialog", () => {
     // Arrange
     const user = userEvent.setup();
     const onDone = vi.fn();
-    render(<SecretOnceDialog open secret={SECRET} title="Токен выпущен" onDone={onDone} />);
+    render(<SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={onDone} />);
     await user.click(screen.getByRole("checkbox", { name: "Я сохранил токен" }));
 
     // Act
@@ -81,7 +92,7 @@ describe("SecretOnceDialog", () => {
     // Arrange
     const user = userEvent.setup();
     const onDone = vi.fn();
-    render(<SecretOnceDialog open secret={SECRET} title="Токен выпущен" onDone={onDone} />);
+    render(<SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={onDone} />);
     await user.click(screen.getByRole("checkbox", { name: "Я сохранил токен" }));
 
     // Act
@@ -91,16 +102,14 @@ describe("SecretOnceDialog", () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
-  it("при open=false секрета нет в документе", () => {
+  it("при secret=null секрета нет в документе", () => {
     // Arrange
     const { rerender } = render(
-      <SecretOnceDialog open secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />,
+      <SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />,
     );
 
     // Act
-    rerender(
-      <SecretOnceDialog open={false} secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />,
-    );
+    rerender(<SecretOnceDialog secret={null} title="Токен выпущен" onDone={vi.fn()} />);
 
     // Assert
     expect(screen.queryByText(SECRET)).not.toBeInTheDocument();
@@ -110,14 +119,12 @@ describe("SecretOnceDialog", () => {
   it("повторное открытие начинается с неотмеченного чекбокса", () => {
     // Arrange
     const { rerender } = render(
-      <SecretOnceDialog open secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />,
+      <SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />,
     );
-    rerender(
-      <SecretOnceDialog open={false} secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />,
-    );
+    rerender(<SecretOnceDialog secret={null} title="Токен выпущен" onDone={vi.fn()} />);
 
     // Act
-    rerender(<SecretOnceDialog open secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />);
+    rerender(<SecretOnceDialog secret={SECRET} title="Токен выпущен" onDone={vi.fn()} />);
 
     // Assert
     expect(screen.getByRole("button", { name: "Готово" })).toHaveAttribute("aria-disabled", "true");
