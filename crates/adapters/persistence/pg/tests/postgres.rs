@@ -6,15 +6,17 @@
 )]
 mod support;
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use crane_domain::registry::{FormatMetadata, VersionState};
-use crane_pg::{PgCatalog, migrate};
+use crane_pg::migrate;
 use crane_ports::registry::{Catalog, CatalogError};
-use support::{asset, hosted_repository, name, new_version, version};
+use support::{asset, hosted_repository, join_all, name, new_version, version};
 
-const ROUNDS: u64 = 8;
+/// Число конкурентов в гонках: достаточно, чтобы окно между проверкой и записью пересеклось.
+const CONTENDERS: u64 = 16;
 
 #[test]
 fn failed_first_publish_leaves_no_package_behind() {
@@ -24,18 +26,18 @@ fn failed_first_publish_leaves_no_package_behind() {
         let repo = hosted_repository(&catalog).await;
         let mut broken = new_version(10, repo, "Foo-Bar", "1.0.0");
         broken.assets = vec![asset("same.crate", 1, 1), asset("same.crate", 2, 2)];
+        let failure = catalog
+            .publish_version(broken)
+            .await
+            .expect_err("повтор пути файла отклоняется");
 
         // Act
-        let failed = catalog.publish_version(broken).await;
         let later = catalog
             .publish_version(new_version(11, repo, "foo_bar", "1.0.0"))
             .await;
 
         // Assert
-        assert!(
-            matches!(failed, Err(CatalogError::Backend(_))),
-            "{failed:?}"
-        );
+        assert!(matches!(failure, CatalogError::Backend(_)), "{failure:?}");
         assert_eq!(
             later.map(|v| v.package.as_written().to_owned()).ok(),
             Some("foo_bar".to_owned())
@@ -49,33 +51,24 @@ fn concurrent_duplicate_publish_yields_one_ok_and_version_exists() {
         // Arrange
         let catalog = Arc::new(server.fresh_catalog().await);
         let repo = hosted_repository(&*catalog).await;
+        let tasks = (0..CONTENDERS)
+            .map(|n| {
+                let catalog = catalog.clone();
+                let contender = new_version(100 + n, repo, "dup", "1.0.0");
+                tokio::spawn(async move { catalog.publish_version(contender).await })
+            })
+            .collect();
 
-        for round in 0..ROUNDS {
-            let package = format!("dup{round}");
-            let (a, b) = (catalog.clone(), catalog.clone());
-            let (first, second) = (
-                new_version(100 + round * 2, repo, &package, "1.0.0"),
-                new_version(101 + round * 2, repo, &package, "1.0.0"),
-            );
+        // Act
+        let results = join_all(tasks).await;
 
-            // Act
-            let tasks = [
-                tokio::spawn(async move { a.publish_version(first).await }),
-                tokio::spawn(async move { b.publish_version(second).await }),
-            ];
-            let mut results = Vec::new();
-            for task in tasks {
-                results.push(task.await.expect("задача завершилась"));
-            }
-
-            // Assert
-            let ok = results.iter().filter(|r| r.is_ok()).count();
-            let exists = results
-                .iter()
-                .filter(|r| matches!(r, Err(CatalogError::VersionExists)))
-                .count();
-            assert_eq!((ok, exists), (1, 1), "раунд {round}: {results:?}");
-        }
+        // Assert
+        let ok = results.iter().filter(|r| r.is_ok()).count();
+        let exists = results
+            .iter()
+            .filter(|r| matches!(r, Err(CatalogError::VersionExists)))
+            .count();
+        assert_eq!((ok, exists), (1, usize::try_from(CONTENDERS - 1).unwrap()));
     });
 }
 
@@ -85,38 +78,37 @@ fn concurrent_first_publishes_under_different_spellings_share_one_package() {
         // Arrange
         let catalog = Arc::new(server.fresh_catalog().await);
         let repo = hosted_repository(&*catalog).await;
+        let tasks = (0..CONTENDERS)
+            .map(|n| {
+                let catalog = catalog.clone();
+                let spelling = if n % 2 == 0 { "Foo-Bar" } else { "foo_bar" };
+                let contender = new_version(200 + n, repo, spelling, &format!("1.0.{n}"));
+                tokio::spawn(async move { catalog.publish_version(contender).await })
+            })
+            .collect();
 
-        for round in 0..ROUNDS {
-            let (a, b) = (catalog.clone(), catalog.clone());
-            let dashed = new_version(200 + round * 2, repo, &format!("p{round}-x"), "1.0.0");
-            let underscored = new_version(201 + round * 2, repo, &format!("P{round}_x"), "1.0.1");
+        // Act
+        let results = join_all(tasks).await;
 
-            // Act
-            let tasks = [
-                tokio::spawn(async move { a.publish_version(dashed).await }),
-                tokio::spawn(async move { b.publish_version(underscored).await }),
-            ];
-            let mut published = Vec::new();
-            for task in tasks {
-                published.push(task.await.expect("задача завершилась"));
-            }
-
-            // Assert
-            let spellings: Vec<_> = published
-                .iter()
-                .map(|r| r.as_ref().map(|v| v.package.as_written().to_owned()).ok())
-                .collect();
-            let stored = catalog
-                .versions(repo, &name(&format!("p{round}_x")))
-                .await
-                .expect("versions");
-            assert!(
-                spellings.iter().all(Option::is_some),
-                "раунд {round}: {published:?}"
-            );
-            assert_eq!(spellings[0], spellings[1], "раунд {round}");
-            assert_eq!(stored.len(), 2, "раунд {round}");
-        }
+        // Assert
+        let stored = catalog
+            .versions(repo, &name("foo_bar"))
+            .await
+            .expect("versions");
+        let ok = results.iter().filter(|r| r.is_ok()).count();
+        let spellings: BTreeSet<String> = results
+            .iter()
+            .filter_map(|r| r.as_ref().ok())
+            .map(|v| v.package.as_written().to_owned())
+            .collect();
+        assert_eq!(
+            (ok, spellings.len(), stored.len()),
+            (
+                usize::try_from(CONTENDERS).unwrap(),
+                1,
+                usize::try_from(CONTENDERS).unwrap()
+            )
+        );
     });
 }
 
@@ -131,12 +123,12 @@ fn publish_result_equals_find_result_for_nanosecond_timestamp() {
 
         // Act
         let published = catalog.publish_version(input).await.expect("publish");
+
+        // Assert
         let found = catalog
             .find_version(repo, &name("nano"), &version("1.0.0"))
             .await
             .expect("find");
-
-        // Assert
         assert_eq!(
             published.published_at,
             SystemTime::UNIX_EPOCH + Duration::new(1_700_000_000, 123_456_000)
@@ -150,9 +142,9 @@ fn migrate_is_idempotent_on_empty_database() {
     support::run(async |server| {
         // Arrange
         let pool = server.empty_pool().await;
+        migrate(&pool).await.expect("первый запуск");
 
         // Act
-        let first = migrate(&pool).await;
         let second = migrate(&pool).await;
 
         // Assert
@@ -160,7 +152,7 @@ fn migrate_is_idempotent_on_empty_database() {
             .fetch_one(&pool)
             .await
             .expect("журнал миграций");
-        assert!(first.is_ok() && second.is_ok(), "{first:?} {second:?}");
+        assert!(second.is_ok(), "{second:?}");
         assert_eq!(applied, 1);
     });
 }
@@ -180,13 +172,13 @@ fn assets_come_back_in_byte_order_of_path_regardless_of_input_order() {
 
         // Act
         let published = catalog.publish_version(input).await.expect("publish");
+
+        // Assert
         let found = catalog
             .find_version(repo, &name("order"), &version("1.0.0"))
             .await
             .expect("find")
             .expect("версия есть");
-
-        // Assert
         let expected = vec![
             asset("B.crate", 1, 10),
             asset("a.crate", 2, 20),
@@ -219,16 +211,14 @@ fn metadata_is_returned_byte_for_byte() {
 fn concurrent_transitions_from_same_state_let_exactly_one_win() {
     support::run(async |server| {
         // Arrange
-        let catalog: Arc<PgCatalog> = Arc::new(server.fresh_catalog().await);
+        let catalog = Arc::new(server.fresh_catalog().await);
         let repo = hosted_repository(&*catalog).await;
         let id = catalog
             .publish_version(new_version(1, repo, "race", "1.0.0"))
             .await
             .expect("publish")
             .id;
-
-        // Act
-        let tasks: Vec<_> = (0..16)
+        let tasks = (0..CONTENDERS)
             .map(|n| {
                 let catalog = catalog.clone();
                 let to = if n % 2 == 0 {
@@ -241,10 +231,9 @@ fn concurrent_transitions_from_same_state_let_exactly_one_win() {
                 )
             })
             .collect();
-        let mut results = Vec::new();
-        for task in tasks {
-            results.push(task.await.expect("задача завершилась"));
-        }
+
+        // Act
+        let results = join_all(tasks).await;
 
         // Assert
         let ok = results.iter().filter(|r| r.is_ok()).count();
@@ -252,7 +241,10 @@ fn concurrent_transitions_from_same_state_let_exactly_one_win() {
             .iter()
             .filter(|r| matches!(r, Err(CatalogError::StateConflict { .. })))
             .count();
-        assert_eq!((ok, conflicts), (1, 15), "{results:?}");
+        assert_eq!(
+            (ok, conflicts),
+            (1, usize::try_from(CONTENDERS - 1).unwrap())
+        );
     });
 }
 
@@ -298,6 +290,8 @@ fn version_without_assets_has_empty_asset_list_everywhere() {
 
         // Act
         let published = catalog.publish_version(input).await.expect("publish");
+
+        // Assert
         let found = catalog
             .find_version(repo, &name("bare"), &version("1.0.0"))
             .await
@@ -307,8 +301,6 @@ fn version_without_assets_has_empty_asset_list_everywhere() {
             .versions(repo, &name("bare"))
             .await
             .expect("versions");
-
-        // Assert
         let listed_counts: Vec<usize> = listed.iter().map(|v| v.assets.len()).collect();
         assert_eq!(
             (published.assets.len(), found.assets.len(), listed_counts),
@@ -328,13 +320,13 @@ fn two_assets_with_identical_content_are_both_stored() {
 
         // Act
         let published = catalog.publish_version(input).await.expect("publish");
+
+        // Assert
         let found = catalog
             .find_version(repo, &name("twin"), &version("1.0.0"))
             .await
             .expect("find")
             .expect("версия есть");
-
-        // Assert
         let expected = vec![asset("a.crate", 5, 9), asset("b.crate", 5, 9)];
         assert_eq!(published.assets, expected);
         assert_eq!(found.assets, expected);
@@ -352,12 +344,12 @@ fn asset_size_beyond_bigint_is_rejected_without_side_effects() {
 
         // Act
         let result = catalog.publish_version(input).await;
+
+        // Assert
         let stored = catalog
             .find_version(repo, &name("huge"), &version("1.0.0"))
             .await
             .expect("find");
-
-        // Assert
         assert!(
             matches!(result, Err(CatalogError::Backend(_))),
             "{result:?}"

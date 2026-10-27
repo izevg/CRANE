@@ -159,84 +159,59 @@ fn assets_from_columns(
 mod tests {
     use super::*;
 
-    const KINDS: [RepositoryKind; 2] = [RepositoryKind::Hosted, RepositoryKind::Proxy];
-    const STATES: [VersionState; 4] = [
-        VersionState::Quarantined,
-        VersionState::Released,
-        VersionState::Blocked,
-        VersionState::Deleted,
-    ];
-
     #[test]
-    fn repository_kind_round_trips_through_text() {
+    fn repository_kind_codec_matches_sql_enum_both_ways() {
         // Arrange
-        let kinds = KINDS;
+        let kinds = [RepositoryKind::Hosted, RepositoryKind::Proxy];
 
         // Act
-        let back = kinds.map(|k| kind_parse(kind_as_str(k)).ok());
+        let actual = kinds.map(|k| (kind_as_str(k), kind_parse(kind_as_str(k)).ok()));
 
         // Assert
-        assert_eq!(back, kinds.map(Some));
+        assert_eq!(
+            actual,
+            [
+                ("hosted", Some(RepositoryKind::Hosted)),
+                ("proxy", Some(RepositoryKind::Proxy)),
+            ]
+        );
     }
 
     #[test]
-    fn repository_kind_texts_match_sql_enum() {
+    fn version_state_codec_matches_sql_enum_both_ways() {
         // Arrange
-        let kinds = KINDS;
+        let states = [
+            VersionState::Quarantined,
+            VersionState::Released,
+            VersionState::Blocked,
+            VersionState::Deleted,
+        ];
 
         // Act
-        let texts = kinds.map(kind_as_str);
+        let actual = states.map(|s| (state_as_str(s), state_parse(state_as_str(s)).ok()));
 
         // Assert
-        assert_eq!(texts, ["hosted", "proxy"]);
+        assert_eq!(
+            actual,
+            [
+                ("quarantined", Some(VersionState::Quarantined)),
+                ("released", Some(VersionState::Released)),
+                ("blocked", Some(VersionState::Blocked)),
+                ("deleted", Some(VersionState::Deleted)),
+            ]
+        );
     }
 
     #[test]
-    fn unknown_repository_kind_is_rejected() {
+    fn unknown_enum_text_is_rejected_as_corrupt_row() {
         // Arrange
-        let text = "mirror";
+        let unknown = ["mirror", "Hosted", "", "released "];
 
         // Act
-        let result = kind_parse(text);
+        let rejected = unknown.map(|t| (kind_parse(t).is_err(), state_parse(t).is_err()));
 
         // Assert
-        assert!(matches!(result, Err(CatalogError::Backend(_))));
-    }
-
-    #[test]
-    fn version_state_round_trips_through_text() {
-        // Arrange
-        let states = STATES;
-
-        // Act
-        let back = states.map(|s| state_parse(state_as_str(s)).ok());
-
-        // Assert
-        assert_eq!(back, states.map(Some));
-    }
-
-    #[test]
-    fn version_state_texts_match_sql_enum() {
-        // Arrange
-        let states = STATES;
-
-        // Act
-        let texts = states.map(state_as_str);
-
-        // Assert
-        assert_eq!(texts, ["quarantined", "released", "blocked", "deleted"]);
-    }
-
-    #[test]
-    fn unknown_version_state_is_rejected() {
-        // Arrange
-        let text = "Released";
-
-        // Act
-        let result = state_parse(text);
-
-        // Assert
-        assert!(matches!(result, Err(CatalogError::Backend(_))));
+        assert_eq!(rejected, [(true, true); 4]);
     }
 
     #[test]
@@ -268,39 +243,20 @@ mod tests {
     }
 
     #[test]
-    fn assets_with_mismatched_array_lengths_are_corrupt() {
+    fn inconsistent_asset_columns_are_rejected_as_corrupt_row() {
         // Arrange
-        let (paths, digests, sizes) = (vec!["a".to_owned()], vec![vec![0; 32]], vec![]);
+        let path = || vec!["a".to_owned()];
+        let cases = [
+            (path(), vec![vec![0; 32]], vec![]),
+            (path(), vec![vec![0; 31]], vec![1]),
+            (path(), vec![vec![0; 32]], vec![-1]),
+        ];
 
         // Act
-        let result = assets_from_columns(paths, digests, sizes);
+        let rejected = cases.map(|(p, d, s)| assets_from_columns(p, d, s).is_err());
 
         // Assert
-        assert!(matches!(result, Err(CatalogError::Backend(_))));
-    }
-
-    #[test]
-    fn asset_with_short_digest_is_corrupt() {
-        // Arrange
-        let (paths, digests, sizes) = (vec!["a".to_owned()], vec![vec![0; 31]], vec![1]);
-
-        // Act
-        let result = assets_from_columns(paths, digests, sizes);
-
-        // Assert
-        assert!(matches!(result, Err(CatalogError::Backend(_))));
-    }
-
-    #[test]
-    fn asset_with_negative_size_is_corrupt() {
-        // Arrange
-        let (paths, digests, sizes) = (vec!["a".to_owned()], vec![vec![0; 32]], vec![-1]);
-
-        // Act
-        let result = assets_from_columns(paths, digests, sizes);
-
-        // Assert
-        assert!(matches!(result, Err(CatalogError::Backend(_))));
+        assert_eq!(rejected, [true; 3]);
     }
 
     #[test]

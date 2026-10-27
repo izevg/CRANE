@@ -195,3 +195,12 @@ pub(crate) async fn hosted_repository(catalog: &impl Catalog) -> RepositoryId {
         .expect("репозиторий создаётся")
         .id
 }
+
+/// Дожидается всех задач; порядок результатов совпадает с порядком задач.
+pub(crate) async fn join_all<T>(tasks: Vec<tokio::task::JoinHandle<T>>) -> Vec<T> {
+    let mut results = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        results.push(task.await.expect("задача завершилась без паники"));
+    }
+    results
+}

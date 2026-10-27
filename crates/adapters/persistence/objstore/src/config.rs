@@ -80,39 +80,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn prefix_store_places_keys_under_trimmed_root() {
+    fn s3_prefix_roots_all_cas_keys() {
         // Arrange
         let inner = Arc::new(InMemory::new());
         let store = PrefixStore::new(inner.clone(), "/team/cas/");
-
-        // Act
         let runtime = tokio::runtime::Builder::new_current_thread()
             .build()
             .expect("runtime");
-        runtime
-            .block_on(store.put(&Path::from("blobs/x"), "data".into()))
-            .expect("put");
+
+        // Act
+        let put = runtime.block_on(store.put(&Path::from("blobs/x"), "data".into()));
 
         // Assert
         let stored = runtime.block_on(inner.head(&Path::from("team/cas/blobs/x")));
+        assert!(put.is_ok());
         assert!(stored.is_ok());
     }
 
     #[test]
-    fn prefix_store_with_slash_root_leaves_keys_untouched() {
+    fn empty_or_slash_path_leaves_keys_untouched() {
         // Arrange
         let inner = Arc::new(InMemory::new());
         let store = PrefixStore::new(inner.clone(), "/");
-
-        // Act
         let runtime = tokio::runtime::Builder::new_current_thread()
             .build()
             .expect("runtime");
-        runtime
-            .block_on(store.put(&Path::from("blobs/x"), "data".into()))
-            .expect("put");
+
+        // Act
+        let put = runtime.block_on(store.put(&Path::from("blobs/x"), "data".into()));
 
         // Assert
-        assert!(runtime.block_on(inner.head(&Path::from("blobs/x"))).is_ok());
+        let stored = runtime.block_on(inner.head(&Path::from("blobs/x")));
+        assert!(put.is_ok());
+        assert!(stored.is_ok());
     }
 }

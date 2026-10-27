@@ -11,9 +11,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
+use crane_domain::registry::Sha256;
 use crane_objstore::ObjectBlobStore;
-use crane_ports::registry::ByteStream;
-use futures_util::stream;
+use crane_ports::registry::{BlobStore, ByteStream};
+use futures_util::{StreamExt, stream};
 use url::Url;
 use uuid::Uuid;
 
@@ -73,4 +74,14 @@ pub fn count_files(dir: &Path) -> usize {
         .map(|e| e.expect("запись каталога читается").path())
         .map(|p| if p.is_dir() { count_files(&p) } else { 1 })
         .sum()
+}
+
+/// Читает blob целиком через `open`.
+pub async fn read_all(store: &ObjectBlobStore, sha256: &Sha256) -> Vec<u8> {
+    let mut stream = store.open(sha256).await.expect("open");
+    let mut read = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        read.extend_from_slice(&chunk.expect("chunk"));
+    }
+    read
 }
