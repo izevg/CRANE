@@ -24,8 +24,8 @@ node_modules/
 *.p12
 
 # Локальные настройки агентов и IDE
-.claude/worktrees/
-.claude/settings.local.json
+.claude/
+.cursor/
 .idea/
 .vscode/
 *.swp
