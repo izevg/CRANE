@@ -43,6 +43,7 @@ fn publish_creates_released_record_with_store_digests_and_clock_time() {
         version: version("1.0.0"),
         state: VersionState::Released,
         yanked: false,
+        deprecated: None,
         published_at: fixed_now(),
         assets: vec![Asset {
             path: asset_path("foo", "1.0.0"),

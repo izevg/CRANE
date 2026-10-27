@@ -7,9 +7,9 @@ mod lifecycle;
 mod locator;
 
 pub use coordinate::{Format, FormatError, NameError, PackageName, Version, VersionError};
-pub use digest::{DigestError, Sha256};
+pub use digest::{Checksum, DigestError, Sha1, Sha256, Sha512};
 pub use entity::{
     Asset, FormatMetadata, PackageVersion, Repository, RepositoryId, RepositoryKind, VersionId,
 };
-pub use lifecycle::{TransitionError, VersionState};
+pub use lifecycle::{DeletePolicy, TransitionError, VersionState};
 pub use locator::Coordinate;

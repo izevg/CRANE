@@ -37,6 +37,8 @@ pub struct PackageVersion {
     pub state: VersionState,
     /// Ортогонален состоянию (PEP 592, Cargo yank).
     pub yanked: bool,
+    /// Сообщение об устаревании (npm deprecate); `None` — версия не устарела.
+    pub deprecated: Option<String>,
     pub published_at: SystemTime,
     pub assets: Vec<Asset>,
     pub metadata: FormatMetadata,

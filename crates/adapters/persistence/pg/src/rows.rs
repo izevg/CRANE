@@ -121,6 +121,7 @@ pub(crate) fn version_from_row(row: &PgRow) -> Result<PackageVersion, CatalogErr
             .map_err(corrupt)?,
         state: state_parse(column::<&str>(row, "state")?)?,
         yanked: column::<bool>(row, "yanked")?,
+        deprecated: None,
         published_at: from_db_time(column::<OffsetDateTime>(row, "published_at")?)?,
         assets: assets_from_columns(
             column::<Vec<String>>(row, "paths")?,

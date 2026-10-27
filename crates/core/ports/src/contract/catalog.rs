@@ -111,6 +111,7 @@ fn expected_record(new: &NewVersion) -> PackageVersion {
         version: new.version.clone(),
         state: new.state,
         yanked: false,
+        deprecated: None,
         published_at: new.published_at,
         assets: new.assets.clone(),
         metadata: new.metadata.clone(),

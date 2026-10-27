@@ -110,6 +110,7 @@ impl Catalog for MemoryCatalog {
             version: version.version,
             state: version.state,
             yanked: false,
+            deprecated: None,
             published_at: version.published_at,
             assets: version.assets,
             metadata: version.metadata,
