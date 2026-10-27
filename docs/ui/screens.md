@@ -6,7 +6,7 @@
 
 - Пакет адресуется координатами `/packages/{format}/{repository}/{name}`; версия — каноническая форма. На экране — `name.display`, `version.display`; каноническая форма в подсказке.
 - Коллекции — `_embedded["crane:<rel>"]` + `_links.next` («Загрузить ещё»); total нет. Счётчики сегментов и фасетов — отдельные агрегаты, у больших — `{count, capped}` → «1 000+».
-- Ресурсы — `application/hal+json`. Кнопка = ссылка: действие есть ⇔ в `_links` ресурса или элемента коллекции есть `crane:<rel>`; href из ссылки, путь UI не собирает. Disabled с причиной — только из `denied_actions` (выпуск токена, продвижение, запрос одобрения, удаление версии). Навигация — `GET /me` → `_links`.
+- Ресурсы — `application/hal+json`. Имена rel — по таблице «Отношения ссылок» в `info` admin-спеки (источник истины; один rel = одна операция). Каждая мутация достижима ссылкой, включая кнопки «Создать…»: они рендерятся по ссылке `crane:create-<ресурс>` на коллекции (выпуск токена — `crane:issue-token`). Кнопка = ссылка: действие есть ⇔ в `_links` ресурса или элемента коллекции есть `crane:<rel>`; href из ссылки, путь UI не собирает. Disabled с причиной — только из `denied_actions` (выпуск токена, продвижение, запрос одобрения, удаление версии). Навигация — `GET /me` → `_links`.
 - Ошибки — problem+json, рендер одним компонентом (`patterns.md` §27). Скрытое и несуществующее — один нейтральный 404 «Не найдено или нет доступа»; 403 с правилом и контактом — только для видимого ресурса, где запрещено действие. Step-up — 401 `required_acr` → модал → повтор с тем же `Idempotency-Key`.
 - Живые данные — polling с ETag (`composition.md` §7).
 
@@ -71,7 +71,7 @@
 
 **Исправить.** Таблица не обрезается при открытой панели (приоритеты колонок). «Курсорная пагинация · Показано 6 из 48» → только «Загрузить ещё». «Yank (отозвать)» → «Yank» с подсказкой по формату (в Cargo «можно вернуть», в PyPI «скрыть от новых установок»). Иконка «скачать» без подписи в подвале — убрать в меню.
 
-**Данные.** `GET …/versions?state&prerelease&sort=-published_at&cursor` → `version, state, flags{yanked,unlisted,deprecated_message,dist_tags[],mutable}, published_at, published_by{kind,display,credential_prefix?}, source{pipeline,commit,ref}?, max_priority?, license_decision?, block_reason{kind,rule_id?,advisory_id?,fixed_in?}?`. Панель: `GET …/versions/{v}`, `…/history`, `…/metadata`, `…/diff?against=`. Действия: `PUT/DELETE …/versions/{v}/yank`, `DELETE …/versions/{v}` (reason).
+**Данные.** `GET …/versions?state&prerelease&sort=-published_at&cursor` → `version, state, flags{yanked,unlisted,deprecated_message,dist_tags[],mutable}, published_at, published_by{kind,display,credential_prefix?}, source{pipeline,commit,ref}?, max_priority?, license_decision?, block_reason{kind,rule_id?,advisory_id?,fixed_in?}?`. Панель: `GET …/versions/{v}`, `…/history`, `…/metadata`, `…/diff?against=`. Действия: `PUT/DELETE …/versions/{v}/yank` (rel `crane:yank`/`crane:unyank`), удаление — `POST …/versions/{v}/deletion {reason}` (rel `crane:delete`).
 
 **Приёмка.** ↑/↓ в таблице при открытой панели меняют выбранную версию, фокус остаётся в таблице; Esc закрывает панель и возвращает фокус на строку; `?selected=1.4.2` открывает панель при перезагрузке; на 1440 видны колонки P1+P2 без горизонтального скролла.
 
@@ -90,7 +90,7 @@
 
 **Исправить.** Убрать вторые крошки и строку «Kafka lag: 0 · Скан синхронизирован» (Kafka в продукте нет). «Security Gate Fail» → убрать. «Удалить версию…» из шапки в меню «…». Убрать правую «опасную зону». ScoreBar virality — один тон. «Доверительный интервал» → «уверенность». «SLSA Level 3», «Подпись Cosign валидна» — убрать (нет в продукте). Запрос на одобрение: «Статус: In Review» → «На рассмотрении».
 
-**Данные.** `GET …/versions/{v}/promotion?target=release`, `POST …/promotion/evaluate`, `POST …/promotions`, `GET …/license`, `GET …/evidence`, `GET …/findings` (+ `scan`), `DELETE …/versions/{v}`.
+**Данные.** `GET …/versions/{v}/promotion?target=release`, `POST …/promotion/evaluate`, `POST …/promotions`, `GET …/license`, `GET …/evidence`, `GET …/findings` (+ `scan`), `POST …/versions/{v}/deletion {reason}` (rel `crane:delete`).
 
 **Приёмка.** Каждая карточка гейта имеет текстовый результат; «Нет данных» различим в forced-colors (рамка + текст); фокус в диалоге удаления на «Отмена»; после «Пересчитать» тост и обновлённые карточки, фокус остаётся на кнопке.
 
@@ -127,7 +127,7 @@
 
 **Исправить.** Убрать «Выгрузить отчёт» как primary (нет в документации для админа; если нужно — I1). Убрать «Журнал инцидентов», «Перезапустить все (3)». Не обрезать названия быстрых действий. Ошибки задач на английском («Timeout connecting to Trivy») — показываем как есть, это сырой текст ошибки, но с подписью «Последняя ошибка».
 
-**Данные.** `GET /platform/overview?window=` (tiles), `GET /status` (components), `GET /platform/series/requests?window`, `GET /platform/series/storage-by-workspace?window` (top-8 + other), `GET /platform/retention/forecast`, `GET /jobs/dead?limit=3`, `GET /integrity/checks/latest`; действия: `POST /retention/dry-runs` (синхронно, с лимитом выборки), `POST /cache/warmups` (202), `POST /integrity/checks` (202 + ресурс). Каденс: плитки и компоненты 15 с, графики 60 с.
+**Данные.** `GET /platform/overview?window=` (tiles), `GET /status` (components), `GET /platform/series/requests?window`, `GET /platform/series/storage-by-workspace?window` (top-8 + other), `GET /platform/retention/forecast`, `GET /jobs?state=dead&limit=3` (строка несёт `crane:retry`), `GET /integrity/checks/latest`; действия: `GET /retention/preview?rule_id=&limit` (без MFA; из ответа `crane:run` → `POST /retention/runs`, step-up), `POST /cache/warmups` (202), `POST /integrity/checks` (202 + ресурс). Каденс: плитки и компоненты 15 с, графики 60 с.
 
 **Приёмка.** При паузе автообновления сетевых запросов опроса нет; на скрытой вкладке опрос останавливается; плитка без данных показывает «—»; графики не анимируются при обновлении; сводка графика доступна скринридеру.
 
@@ -141,7 +141,7 @@
 - Плитки: P0 открыто · Просрочено SLA · В KEV · Отставание фидов · Экстренные блокировки (caption «активных: 1»). Каждая — ссылка на фильтр.
 - Фильтры: сегменты приоритета со счётчиками «Все · P0 1 · P1 6 · P2 23 · P3 51 · P4 140» · переключатели KEV, Malware, Просрочено · select Команда, Экосистема, Область · поиск «CVE, пакет, PURL».
 - Таблица (сортировка приоритет ↓, SLA ↑). Колонки по приоритету: P1 — чекбокс, Приоритет, SLA, Бюллетень (+ алиас caption), Пакет@версия; P2 — exploit_relevance, Команда, Развёрнуто; P3 (с 2xl или через «Колонки») — CVSS, EPSS, KEV, Malware, Исправлено в, blast_radius, Источник приоритета, Область, Статус, Задача.
-- Чекбоксы и BulkActionBar (§22) показываются, только если у коллекции есть ссылки `crane:vex-statements` / `crane:exceptions` / `crane:issues`: «Принять VEX» (только один advisory) · «Исключение с TTL» (MFA) · «Создать задачи» · ×.
+- Чекбоксы и BulkActionBar (§22) показываются, только если у коллекции находок есть ссылки `crane:accept-vex` / `crane:create-exception` / `crane:create-issue` (каждая кнопка — по своей ссылке): «Принять VEX» (только один advisory) · «Исключение с TTL» (MFA) · «Создать задачи» · ×.
 - Правая колонка (с 2xl рядом, иначе под таблицей): «Экстренные блокировки» (активные; блокирует AppSec сам, без подтверждения SecOps; вредоносные пакеты блокируются автоматически и помечены «авто»), «Фиды» (лаг по каждому; warning > 30 мин), «Лицензии на проверку» (топ-3 по вирусности).
 
 **Исправить.** Убрать primary «Принять VEX» и «Экспорт в CSV» (не описан), «Настроить гейты» → ссылка. Убрать курсор «cur_sec_…» и «Показано 5 из 221». Убрать цветные чипы экосистем. Плитка «Фиды 4 мин» — без «9 источников онлайн» лейбла-бейджа (в caption). Кнопка «Экспорт» из bulk-панели — убрать.
@@ -160,7 +160,7 @@
 
 **Исправить.** Убрать вторые крошки, «Контекст: Production-кластер», чип «3,9 мс · кэш», «Колонки» в карточке (переносится в общий механизм). Колонка «Окружение» — не показывается, пока API не отдаёт evidence о развёртывании (решение владельца 27.10.2026). «Critical risk» модели → убрать. «Регламент: подтверждает в течение 30 мин» — убрать (нет в документации). «KEV Exploit Active» → «В KEV».
 
-**Данные.** `GET /findings/{id}` (+ `scores[{kind,value,confidence,factors[],model,model_version,shadow}]`, `priority_source`, `sla`), `GET /findings/{id}/impact?level=&cursor` → `consumers[{project, version, team, downloads, lockfile, sbom, deployed}]` + `counts`, `GET /findings/{id}/history`, `GET /findings/{id}/explanation` (P3; 503 `ai-unavailable`). Действия: `POST /vex-statements`, `POST /exceptions` (MFA), `POST /issues` — со списком из одной находки; `POST /emergency-blocks` (сразу активна, step-up MFA; снятие — `…/lift`).
+**Данные.** `GET /findings/{id}` (+ `scores[{kind,value,confidence,factors[],model,model_version,shadow}]`, `priority_source`, `sla`), `GET /impact?finding={id}&level=&cursor` (по ссылке `crane:impact` у находки) → `consumers[{project, version, team, downloads, lockfile, sbom, deployed}]` + `counts`, `GET /findings/{id}/history`, `GET /findings/{id}/explanation` (P3; 503 `ai-unavailable`). Действия: `POST /vex-statements`, `POST /exceptions` (MFA), `POST /issues` — со списком из одной находки; `POST /emergency-blocks` (сразу активна, step-up MFA; снятие — `…/lift`).
 
 **Приёмка.** Каждая ячейка уровня читается скринридером как «Lockfile: да»; при 503 объяснения страница без ошибок, вместо карточки — info-строка; отсчёт SLA не объявляется live region.
 
@@ -245,7 +245,7 @@
 | E3 Репозитории | P0 | A + B + J | 8, 26 | список + настройки | StickySaveBar; таблица TTL proxy |
 | E4 Upstream | P1 | A | 3, 9 | `{name, status, since, latency_p95_ms, rpm, coalesced_ratio, stale_served_24h, allowlist}` | Последствие для клиентов в caption |
 | E5 Квоты | P1 | A | 2 (RingGauge) | `{workspace, bytes, warn_bytes, hard_bytes, trend}` | RingGauge с текстом %, не только дугой |
-| E6 Retention и GC | P1 | A + результат | 23, 32 | `POST /retention/dry-runs` (синхронно, `_embedded["crane:candidates"]` + `next`), `POST /retention/runs {rule_id, reason}` | «Применить» — деструктивный диалог с причиной, кнопка с бейджем MFA (step-up обязателен); пробный прогон — без MFA |
+| E6 Retention и GC | P1 | A + результат | 23, 32 | `GET /retention/preview?rule_id=&limit` (`_embedded["crane:candidates"]` + `next`), из ответа `crane:run` → `POST /retention/runs {rule_id, reason}` | «Применить» — деструктивный диалог с причиной, кнопка с бейджем MFA (step-up обязателен); пробный прогон — без MFA |
 | E7 Целостность | P1 | A | 27 | `POST/GET /integrity/checks` | Асинхронный прогресс |
 | E8 Готовность и прогрев | P1 | J + A | 2, 32 | `POST /readiness`, `POST /cache/warmups` (202) | MUST: drag-and-drop с альтернативой кнопкой «Выбрать файл» (WCAG 2.2 2.5.7) |
 | E9 Очереди | P1 | A + C | 16, 17 | `{kind, queued, oldest_age_s, running, failed_24h}`, dead jobs, `POST /jobs/{id}/retry` | «Повторить» — только одиночный, по строке и в панели; массового нет |
@@ -262,14 +262,14 @@
 | F2 Находка | B | S8 |
 | F3 Бюллетень | B + J | 8, 16; алиасы чипами-ссылками; источники полей — provenance-чипы |
 | F4 Фиды | A + D | 3, 4 (гистограмма времени обнаружения + SLO 15 мин) |
-| F5 Экстренный режим | A + C | 16, 23; `{advisory, versions, blocked_by, blocked_at, review_due_at, auto}`; AppSec блокирует сам: «Заблокировать» (MFA, `crane:block`) → сразу активна; «Снять» (`…/lift`) при исправлении или VEX; вредоносные — автоматически (бейдж «авто»); SecOps видит только чтение |
-| F6 Исключения | A + Sheet | 10, 21; состояния requested/active/expired/revoked; строки SOAR «требует одобрения человека» |
+| F5 Экстренный режим | A + C | 16, 23; `{advisory, versions, blocked_by, blocked_at, review_due_at, auto}`; AppSec блокирует сам: «Заблокировать» (MFA, `crane:block`) → сразу активна; «Снять» (`…/lift`) при исправлении или VEX; вредоносные — автоматически (бейдж «авто»); SecOps видит только чтение. Break-glass (≤ 24 ч, два одобрения): таблица выдач с действиями «Отклонить» и «Отозвать» по ссылкам строки; каждое использование — в журнале |
+| F6 Исключения | A + Sheet | 10, 21; отзыв — `crane:revoke-exception`; состояния requested/active/expired/revoked; строки SOAR «требует одобрения человека» |
 | F7 VEX | A + Sheet | 9 |
 | F8 Лицензии на проверку | E + C | 13, 14; решение с обязательным комментарием |
 | F9 Политика лицензий | J | матрица-таблица категорий × контекстов; Diff + комментарий перед сохранением |
 | F10 Политики и гейты | J (вкладки) | 11, 17; предупреждение об ослаблении вне окна |
 | F11 Одобрения | E + C | 11 |
-| F12 Карантин | A | 9; чипы причин |
+| F12 Карантин | A | 9; чипы причин; «Выпустить» / «Заблокировать» — `crane:quarantine-release` / `crane:quarantine-block` |
 | F13 Метрики | D | 2, 4 (SLO-линии, shadow vs боевая) |
 
 ### G. SecOps (P2)

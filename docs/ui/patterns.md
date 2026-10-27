@@ -220,7 +220,7 @@
 
 **Анатомия.** Чекбокс-колонка (закреплена) → при выборе плавающий `BulkActionBar` снизу по центру: «Выбрано 3» · действия · ×. Ниже `md` — на всю ширину.
 
-**Данные.** Массовое и одиночное действие — один вызов: `POST /vex-statements|/exceptions|/issues {finding_ids[]…}` → `results[{finding_id, outcome, id?, problem?}]`.
+**Данные.** Кнопки — по ссылкам коллекции `crane:accept-vex`, `crane:create-exception`, `crane:create-issue`. Массовое и одиночное действие — один вызов: `POST /vex-statements|/exceptions|/issues {finding_ids[]…}` → `results[{finding_id, outcome, id?, problem?}]`.
 
 **Правила.**
 - MUST: итог — тост «Создано 2 · пропущено 1 · ошибок 0» + при ошибках остаётся выделение только на неуспешных строках, у каждой — причина.

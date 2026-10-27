@@ -81,7 +81,7 @@
 - **Живые данные.** Polling с ETag (30 / 15 / 60 / 30 / 60 с), пауза на скрытой вкладке и кнопкой.
 - **Массовые действия.** `POST /vex-statements|/exceptions|/issues` со списком `finding_ids[]` → результаты по строкам; VEX — один advisory.
 
-При утверждении изменено: скрытое и несуществующее — единый 404; после решений владельца (D1, D3, D8, D10) экстренная блокировка без шага подтверждения, `POST /jobs/{id}/retry` в контракте, API уведомлений и скачивание evidence через `/api` — be-lead отразил это в спеке.
+При утверждении изменено: скрытое и несуществующее — единый 404; после решений владельца (D1, D3, D8, D10) экстренная блокировка без шага подтверждения, `POST /jobs/{id}/retry` в контракте, API уведомлений и скачивание evidence через `/api` — be-lead отразил это в спеке. После ревью спеки be-lead уточнил имена (консенсус не менялся): кнопки «Создать…» по `crane:create-<ресурс>` и `crane:issue-token`; один rel = одна операция (`crane:accept-vex`, `crane:create-exception`, `crane:create-issue`, `crane:quarantine-release|block`, `crane:revoke-exception`); удаление версии — `POST …/deletion {reason}`; превью retention — `GET /retention/preview`; влияние — `GET /impact?finding=`; мёртвые задачи — `GET /jobs?state=dead`. Источник истины для имён rel — таблица «Отношения ссылок» в admin-спеке.
 
 Отвергнуто вместе: SSE, единый 403 для скрытых (заменён единым 404 при утверждении), трасса в теле ошибки, точные total, отдельный suggest для палитры, единый уровень достоверности, bulk retry, HAL-FORMS, массив `allowed_actions`, `/findings/bulk/*`.
 
