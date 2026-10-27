@@ -326,6 +326,7 @@ dependencies = [
  "crane-domain",
  "crane-memory",
  "crane-ports",
+ "futures-channel",
  "futures-executor",
  "futures-util",
  "thiserror",

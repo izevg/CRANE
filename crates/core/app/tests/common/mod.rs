@@ -7,6 +7,8 @@
     reason = "dead_code: фикстуры общие для трёх тестовых бинарей, каждый берёт своё подмножество; unwrap в тестах = падение теста"
 )]
 
+pub(crate) mod proxy;
+
 use std::future::{Future, ready};
 use std::io;
 use std::sync::{Arc, Mutex};
