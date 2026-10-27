@@ -13,11 +13,9 @@ import {
   DialogTrigger,
 } from "~/shared/ui/primitives";
 
-const meta = {
-  title: "Примитивы/Dialog",
-  component: Dialog,
-  render: () => (
-    <Dialog>
+function TokenDialog({ defaultOpen = false }: { defaultOpen?: boolean }) {
+  return (
+    <Dialog defaultOpen={defaultOpen}>
       <DialogTrigger render={<Button variant="secondary" />}>Создать токен</DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -31,8 +29,13 @@ const meta = {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  ),
-} satisfies Meta<typeof Dialog>;
+  );
+}
+
+const meta = {
+  title: "Примитивы/Dialog",
+  component: TokenDialog,
+} satisfies Meta<typeof TokenDialog>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -54,5 +57,14 @@ export const EscapeCloses: Story = {
     await within(document.body).findByRole("dialog");
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(within(document.body).queryByRole("dialog")).toBeNull());
+  },
+};
+
+/** Остаётся открытым в момент axe-проверки: порталы и фон модалки попадают в контекст `body`. */
+export const Open: Story = {
+  args: { defaultOpen: true },
+  play: async () => {
+    const dialog = await within(document.body).findByRole("dialog", { name: "Новый токен" });
+    await waitFor(() => expect(dialog).toContainElement(document.activeElement as HTMLElement));
   },
 };

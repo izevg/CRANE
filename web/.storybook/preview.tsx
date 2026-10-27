@@ -59,7 +59,8 @@ const preview: Preview = {
   parameters: {
     layout: "padded",
     // Нарушения axe валят прогон story-тестов. Отключать правило можно только в конкретной story и с причиной.
-    a11y: { test: "error" },
+    // context "body": порталы оверлеев (Dialog, Menu, Popover…) живут вне #storybook-root и иначе не попали бы в axe.
+    a11y: { test: "error", context: "body" },
   },
 };
 

@@ -12,11 +12,9 @@ import {
   SheetTrigger,
 } from "~/shared/ui/primitives";
 
-const meta = {
-  title: "Примитивы/Sheet",
-  component: Sheet,
-  render: () => (
-    <Sheet>
+function EventSheet({ defaultOpen = false }: { defaultOpen?: boolean }) {
+  return (
+    <Sheet defaultOpen={defaultOpen}>
       <SheetTrigger render={<Button variant="secondary" />}>Открыть событие</SheetTrigger>
       <SheetContent>
         <SheetHeader>
@@ -31,8 +29,13 @@ const meta = {
         </SheetFooter>
       </SheetContent>
     </Sheet>
-  ),
-} satisfies Meta<typeof Sheet>;
+  );
+}
+
+const meta = {
+  title: "Примитивы/Sheet",
+  component: EventSheet,
+} satisfies Meta<typeof EventSheet>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -54,5 +57,13 @@ export const EscapeCloses: Story = {
     await within(document.body).findByRole("dialog");
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(within(document.body).queryByRole("dialog")).toBeNull());
+  },
+};
+
+/** Остаётся открытым в момент axe-проверки. */
+export const Open: Story = {
+  args: { defaultOpen: true },
+  play: async () => {
+    await within(document.body).findByRole("dialog", { name: "Событие 6003" });
   },
 };

@@ -36,6 +36,14 @@ export const DestructiveLast: Story = {
   },
 };
 
+/** Остаётся открытым в момент axe-проверки. */
+export const Open: Story = {
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole("button", { name: "Другие действия" }));
+    await within(document.body).findByRole("menu");
+  },
+};
+
 export const Empty: Story = {
   name: "Пустой список — ничего не рисуется",
   args: { actions: [] },

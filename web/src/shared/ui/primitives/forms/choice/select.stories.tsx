@@ -17,11 +17,9 @@ const WORKSPACES = [
   { value: "mobile", label: "mobile" },
 ];
 
-const meta = {
-  title: "Примитивы/Select",
-  component: Select,
-  render: () => (
-    <Select items={WORKSPACES} defaultValue="all">
+function WorkspaceSelect({ defaultOpen = false }: { defaultOpen?: boolean }) {
+  return (
+    <Select items={WORKSPACES} defaultValue="all" defaultOpen={defaultOpen}>
       <SelectTrigger aria-label="Workspace">
         <SelectValue />
       </SelectTrigger>
@@ -36,8 +34,13 @@ const meta = {
         </SelectGroup>
       </SelectContent>
     </Select>
-  ),
-} satisfies Meta<typeof Select>;
+  );
+}
+
+const meta = {
+  title: "Примитивы/Select",
+  component: WorkspaceSelect,
+} satisfies Meta<typeof WorkspaceSelect>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -50,5 +53,13 @@ export const Default: Story = {
       within(canvasElement).getByRole("combobox", { name: "Workspace" }),
     ).toHaveTextContent("billing");
     await waitFor(() => expect(within(document.body).queryByRole("listbox")).toBeNull());
+  },
+};
+
+/** Остаётся открытым в момент axe-проверки. */
+export const Open: Story = {
+  args: { defaultOpen: true },
+  play: async () => {
+    await within(document.body).findByRole("listbox");
   },
 };

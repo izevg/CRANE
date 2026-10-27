@@ -9,19 +9,22 @@ import {
   PopoverTrigger,
 } from "~/shared/ui/primitives";
 
-const meta = {
-  title: "Примитивы/Popover",
-  component: Popover,
-  render: () => (
-    <Popover>
+function StatusPopover({ defaultOpen = false }: { defaultOpen?: boolean }) {
+  return (
+    <Popover defaultOpen={defaultOpen}>
       <PopoverTrigger render={<Button variant="secondary" />}>Состояние</PopoverTrigger>
       <PopoverContent>
         <PopoverTitle>Режим: норма</PopoverTitle>
         <PopoverDescription>Все компоненты работают, последняя проверка 14:05.</PopoverDescription>
       </PopoverContent>
     </Popover>
-  ),
-} satisfies Meta<typeof Popover>;
+  );
+}
+
+const meta = {
+  title: "Примитивы/Popover",
+  component: StatusPopover,
+} satisfies Meta<typeof StatusPopover>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -33,5 +36,15 @@ export const Default: Story = {
     await waitFor(() => expect(text).toBeVisible());
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(within(document.body).queryByText("Режим: норма")).toBeNull());
+  },
+};
+
+/** Остаётся открытым в момент axe-проверки. */
+export const Open: Story = {
+  args: { defaultOpen: true },
+  play: async () => {
+    await waitFor(async () =>
+      expect(await within(document.body).findByText("Режим: норма")).toBeVisible(),
+    );
   },
 };

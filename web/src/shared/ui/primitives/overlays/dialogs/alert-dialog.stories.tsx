@@ -15,10 +15,16 @@ import {
   Button,
 } from "~/shared/ui/primitives";
 
-function DeleteVersion({ onConfirm }: { onConfirm: () => void }) {
+function DeleteVersion({
+  onConfirm,
+  defaultOpen = false,
+}: {
+  onConfirm: () => void;
+  defaultOpen?: boolean;
+}) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   return (
-    <AlertDialog>
+    <AlertDialog defaultOpen={defaultOpen}>
       <AlertDialogTrigger render={<Button variant="destructive" />}>
         Удалить версию
       </AlertDialogTrigger>
@@ -76,5 +82,16 @@ export const Confirm: Story = {
     const dialog = await within(document.body).findByRole("alertdialog");
     await userEvent.click(within(dialog).getByRole("button", { name: "Удалить" }));
     await expect(args.onConfirm).toHaveBeenCalledTimes(1);
+  },
+};
+
+/** Остаётся открытым в момент axe-проверки. */
+export const Open: Story = {
+  args: { defaultOpen: true },
+  play: async () => {
+    const dialog = await within(document.body).findByRole("alertdialog");
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "Отмена" })).toHaveFocus(),
+    );
   },
 };

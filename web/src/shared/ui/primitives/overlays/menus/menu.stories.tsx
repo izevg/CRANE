@@ -11,9 +11,15 @@ import {
   MenuTrigger,
 } from "~/shared/ui/primitives";
 
-function ActionsMenu({ onSelect }: { onSelect: () => void }) {
+function ActionsMenu({
+  onSelect,
+  defaultOpen = false,
+}: {
+  onSelect: () => void;
+  defaultOpen?: boolean;
+}) {
   return (
-    <Menu>
+    <Menu defaultOpen={defaultOpen}>
       <MenuTrigger render={<Button variant="secondary" />}>Действия</MenuTrigger>
       <MenuContent>
         <MenuGroup>
@@ -58,5 +64,13 @@ export const KeyboardNavigation: Story = {
     await userEvent.keyboard("{ArrowDown}");
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(within(document.body).queryByRole("menu")).toBeNull());
+  },
+};
+
+/** Остаётся открытым в момент axe-проверки. */
+export const Open: Story = {
+  args: { defaultOpen: true },
+  play: async () => {
+    await within(document.body).findByRole("menu");
   },
 };
