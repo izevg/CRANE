@@ -16,6 +16,9 @@ crane-domain = { path = "../../../core/domain" }
 crane-ports = { path = "../../../core/ports" }
 futures-channel = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# Кэш proxy в single-node ограничен по байтам: без вытеснения документы до 64 МиБ копились бы вечно.
+# Синхронный вариант: порты отдают готовые футуры, async-рантайм кэшу не нужен.
+moka = { version = "0.12", features = ["sync"] }
 sha2 = "0.10"
 uuid = "1"
 

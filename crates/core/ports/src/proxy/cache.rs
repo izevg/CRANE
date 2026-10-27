@@ -59,7 +59,8 @@ pub enum CacheError {
 /// Кэш записей proxy. Не источник истины: use case трактует ошибку `get` как промах,
 /// ошибку `put` игнорирует.
 ///
-/// Реализации: moka (L1, в процессе) и Valkey (L2) за одним трейтом.
+/// Реализации: Valkey-адаптер держит L1 (moka) перед L2 и сбрасывает её по каналу `inv`;
+/// single-node — ограниченный кэш в памяти (crane-memory).
 pub trait ProxyCache: Send + Sync {
     fn get(
         &self,
