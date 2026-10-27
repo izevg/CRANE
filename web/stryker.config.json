@@ -9,7 +9,8 @@
     "src/**/*.{ts,tsx}",
     "!src/**/*.test.{ts,tsx}",
     "!src/**/*.stories.tsx",
-    "!src/app/main.tsx"
+    "!src/app/main.tsx",
+    "!src/shared/api/generated/**"
   ],
   "reporters": ["clear-text", "progress"],
   "thresholds": {
