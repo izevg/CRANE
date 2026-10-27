@@ -10,28 +10,15 @@ use crane_app::proxy::ProxyError;
 use crane_app::registry::RegistryError;
 use crane_domain::registry::VersionState;
 
+mod kind;
+
+pub(crate) use kind::ProblemKind;
+
 const INTERNAL_DETAIL: &str = "внутренняя ошибка сервера";
 /// Единственный текст клиенту при недоступном хранилище: адреса и причины остаются в журнале.
 const UNREACHABLE_DETAIL: &str = "хранилище временно недоступно";
 const NOT_READY_DETAIL: &str = "хранилище не готово";
 const UPSTREAM_DETAIL: &str = "upstream недоступен";
-
-/// Тип проблемы RFC 9457 (поле `type` вне форматов). Задаётся тем, кто создаёт ошибку,
-/// а не выводится из статуса: один и тот же 503 бывает «хранилище не отвечает» и «не готов».
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProblemKind {
-    Blank,
-    StorageUnreachable,
-}
-
-impl ProblemKind {
-    pub(crate) const fn uri(self) -> &'static str {
-        match self {
-            Self::Blank => "about:blank",
-            Self::StorageUnreachable => "urn:crane:problem:storage-unreachable",
-        }
-    }
-}
 
 /// Что именно писать в тело ошибки. Ответ несёт его в расширениях с пустым телом:
 /// id запроса известен только внешнему слою, он и рендерит тело (`context::render`).
