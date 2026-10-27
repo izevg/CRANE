@@ -6,6 +6,7 @@ import { initColorScheme } from "~/shared/lib/state";
 import "~/shared/styles";
 import { Toaster, TooltipProvider } from "~/shared/ui/primitives";
 import { App } from "./App";
+import "./index.css";
 
 const root = document.querySelector("#root");
 if (root === null) {

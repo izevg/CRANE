@@ -1,0 +1,310 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-container: var(--brand-container);
+  --color-brand-border: var(--brand-border);
+  --color-hint: var(--hint);
+  --color-surface-high: var(--surface-high);
+  --color-surface-highest: var(--surface-highest);
+  --color-inverse: var(--inverse);
+  --color-inverse-foreground: var(--inverse-foreground);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-success-strong: var(--success-strong);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-strong: var(--warning-strong);
+  --color-error: var(--error);
+  --color-error-bg: var(--error-bg);
+  --color-error-strong: var(--error-strong);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-info-strong: var(--info-strong);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-highlight-ring: var(--highlight-ring);
+  --color-series-p50: var(--series-p50);
+  --color-series-p95: var(--series-p95);
+  --color-series-p99: var(--series-p99);
+  --color-series-slo: var(--series-slo);
+  --color-diff-add-bg: var(--diff-add-bg);
+  --color-diff-add-fg: var(--diff-add-fg);
+  --color-diff-del-bg: var(--diff-del-bg);
+  --color-diff-del-fg: var(--diff-del-fg);
+  --color-diff-mod-bg: var(--diff-mod-bg);
+  --color-diff-mod-fg: var(--diff-mod-fg);
+  --color-code-bg: var(--code-bg);
+  --color-code-key: var(--code-key);
+  --color-code-string: var(--code-string);
+  --color-code-number: var(--code-number);
+  --color-code-null: var(--code-null);
+  --color-code-punct: var(--code-punct);
+  --color-code-line-no: var(--code-line-no);
+  --color-bar-track: var(--bar-track);
+  --color-row-selected-bg: var(--row-selected-bg);
+  --color-row-selected-bar: var(--row-selected-bar);
+  --color-row-hover-bg: var(--row-hover-bg);
+
+  --color-env-prod-bg: var(--env-prod-bg);
+  --color-env-prod-fg: var(--env-prod-fg);
+  --color-env-stage-bg: var(--env-stage-bg);
+  --color-env-stage-fg: var(--env-stage-fg);
+  --color-env-dev-bg: var(--env-dev-bg);
+  --color-env-dev-fg: var(--env-dev-fg);
+
+  --radius-xs: 4px; /* мелкие элементы: чекбокс 16px, подсветка совпадений */
+  --radius-sm: 8px;
+  --radius-md: var(--radius); /* 12px — контролы */
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius-card); /* 16px — карточки */
+  --shadow-subtle: var(--shadow-subtle);
+  --shadow-card: var(--shadow-card);
+
+  /* Jost (OFL-1.1) — временная гарнитура: токены оставлены под подмену лицензированным шрифтом */
+  --font-sans:
+    "Jost Variable", ui-sans-serif, system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-display:
+    "Jost Variable", ui-sans-serif, system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --font-weight-medium: 400;
+  --font-weight-semibold: 700;
+  --font-weight-heading: 600;
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  * {
+    border-color: var(--border);
+  }
+  :focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: var(--focus-ring);
+  }
+  html {
+    scroll-padding-top: var(--topbar-height);
+  }
+  .tabular,
+  .font-mono,
+  td.num,
+  [data-num] {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@utility text-display {
+  font-family: var(--font-display);
+  font-size: 48px;
+  line-height: 56px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+@utility text-h1 {
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+}
+@utility text-h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+@utility text-h3 {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 700;
+}
+@utility text-body-lg {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  line-height: 28px;
+  font-weight: 400;
+}
+@utility text-body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+@utility text-caption {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+}
+@utility text-overline {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+@utility text-metric-xl {
+  font-family: var(--font-sans);
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+@utility text-metric {
+  font-family: var(--font-sans);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Анимации всплывающих слоёв (Base UI: data-starting-style / data-ending-style), 41 §6.2 */
+@utility anim-popup {
+  transform-origin: var(--transform-origin, center);
+  transition-property: opacity, transform;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-out);
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  &[data-open]:not([data-starting-style]) {
+    transition-duration: var(--dur-base);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &[data-starting-style],
+    &[data-ending-style] {
+      transform: none;
+    }
+  }
+}
+@utility anim-fade {
+  transition-property: opacity;
+  transition-duration: var(--dur-instant);
+  transition-timing-function: var(--ease-out);
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+  }
+}
+@utility anim-dialog {
+  transition-property: opacity, transform;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-out);
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  &[data-open]:not([data-starting-style]) {
+    transition-duration: var(--dur-base);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &[data-starting-style],
+    &[data-ending-style] {
+      transform: none;
+    }
+  }
+}
+@utility anim-scrim {
+  transition-property: opacity;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-out);
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+  }
+}
+@utility anim-sheet {
+  transition-property: opacity, transform;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-drawer);
+  &[data-open]:not([data-starting-style]) {
+    transition-duration: var(--dur-slow);
+  }
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+  }
+  &[data-side="right"][data-starting-style],
+  &[data-side="right"][data-ending-style] {
+    transform: translateX(100%);
+  }
+  &[data-side="left"][data-starting-style],
+  &[data-side="left"][data-ending-style] {
+    transform: translateX(-100%);
+  }
+  &[data-side="top"][data-starting-style],
+  &[data-side="top"][data-ending-style] {
+    transform: translateY(-100%);
+  }
+  &[data-side="bottom"][data-starting-style],
+  &[data-side="bottom"][data-ending-style] {
+    transform: translateY(100%);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &[data-starting-style],
+    &[data-ending-style] {
+      transform: none;
+    }
+  }
+}
+
+/* StatusDot `syncing`: кольцо расходится ровно 3 раза и останавливается (WCAG 2.2.2) */
+@keyframes status-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  to {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+@utility animate-status-pulse {
+  animation: status-pulse 1.6s linear 3;
+}
