@@ -56,28 +56,30 @@ gantt
 
 ## Шаг 0. Подготовка (до старта v0.1.0)
 
-- [ ] Ветка `release/v0.1.0` создана от `main`.
+- [x] Ветка `release/v0.1.0` создана от `main`.
 - [x] Решение 12 (раздел 19): имя CLI и бинарника; от него зависят имена крейтов и `crane setup`.
-- [ ] Замер скорости: время начала и конца каждой feature-ветки v0.1.0 фиксируется, чтобы пересчитать норму.
+- [x] Замер скорости выполнен: см. «Как посчитаны даты».
 
 ## v0.1.0 · Каркас и dogfood: Cargo hosted
 
-**28 октября – 2 ноября** · ~100 агент-ч · разделы 8, 9, 13 (Cargo).
+**Готово 27 октября** · замер ≈ 15–25 агент-ч (план был ~100) · разделы 8, 9, 13 (Cargo).
+
+Выполнено PR #8, #10, #12, #13, #15, #16 в `release/v0.1.0`; полный гейт (`task gate`) запускается отдельно перед PR релиза в `main`.
 
 Цель — CRANE хранит и раздаёт собственные крейты настоящему `cargo`. Это первое доказательство работоспособности продукта.
 
-1. `feat(core)`: workspace по разделу 8. Все группы и крейты-заглушки (`core`, `formats`, `adapters`, `entry`), `task structure` проверяет правило четырёх и направление слоёв.
-2. `feat(domain)`: типы без IO: `Format`, `PackageName` с нормализацией Cargo (регистр, `-` ≡ `_`), `Version` (SemVer), `Sha256`, state machine версии (раздел 9.2), ошибки.
-3. `feat(ports)`: трейты `BlobStore`, каталог (репозитории, пакеты, версии), `Clock`, `IdGen`; in-memory реализации для тестов `app`.
-4. `feat(adapters)`: PostgreSQL на sqlx, миграции expand / migrate / contract, минимальный срез таблиц раздела 9 (repositories, namespaces, packages, versions, blobs).
-5. `feat(adapters)`: CAS на `object_store`: staging → проверка SHA-256 → commit, идемпотентно; локальная ФС и S3 одним адаптером.
-6. `feat(app)`: use cases publish, fetch, yank / unyank: атомарная публикация, неизменяемость версии, tombstone.
-7. `feat(formats)`: Cargo sparse: `config.json`, пути индекса, NDJSON, `ETag`, download, publish в бинарном формате cargo, yank / unyank, owners.
-8. `feat(entry)`: axum, problem+json, health; бинарник с ролями `serve` и `migrate`; конфигурация.
-9. Временная аутентификация статическим токеном из конфигурации (до v0.4.0); фиксируется в `DEBT.md`.
-10. `build(deploy)`: Compose single node: CRANE + PostgreSQL + локальный диск.
-11. **Dogfood (hosted)**: `task dogfood` поднимает временный стенд и прогоняет полный цикл настоящего `cargo` на временных пакетах (`cargo new` во временном каталоге, зависимости между ними); стенд удаляется вместе с данными.
-12. `test`: e2e с настоящим `cargo` (две последние стабильные версии) в `task gate`.
+1. [x] `feat(core)`: workspace по разделу 8. Все группы и крейты-заглушки (`core`, `formats`, `adapters`, `entry`), `task structure` проверяет правило четырёх и направление слоёв.
+2. [x] `feat(domain)`: типы без IO: `Format`, `PackageName` с нормализацией Cargo (регистр, `-` ≡ `_`), `Version` (SemVer), `Sha256`, state machine версии (раздел 9.2), ошибки.
+3. [x] `feat(ports)`: трейты `BlobStore`, каталог (репозитории, пакеты, версии), `Clock`, `IdGen`; in-memory реализации для тестов `app`.
+4. [x] `feat(adapters)`: PostgreSQL на sqlx, миграции expand / migrate / contract, минимальный срез таблиц раздела 9 (repositories, packages, versions, blobs).
+5. [x] `feat(adapters)`: CAS на `object_store`: staging → проверка SHA-256 → commit, идемпотентно; локальная ФС и S3 одним адаптером.
+6. [x] `feat(app)`: use cases publish, fetch, yank / unyank: атомарная публикация, неизменяемость версии, tombstone.
+7. [x] `feat(formats)`: Cargo sparse: `config.json`, пути индекса, NDJSON, `ETag`, download, publish в бинарном формате cargo, yank / unyank, owners только на чтение (статическая личность).
+8. [x] `feat(entry)`: axum, problem+json, health; бинарник с ролями `serve` и `migrate`; конфигурация.
+9. [x] Временная аутентификация статическим токеном из конфигурации (до v0.4.0); фиксируется в `DEBT.md`.
+10. [x] `build(deploy)`: Compose single node: CRANE + PostgreSQL + локальный диск.
+11. [x] **Dogfood (hosted)**: `task dogfood` поднимает временный стенд и прогоняет полный цикл настоящего `cargo` на временных пакетах (`cargo new` во временном каталоге, зависимости между ними); стенд удаляется вместе с данными.
+12. [x] `test`: e2e с настоящим `cargo` (две последние стабильные версии) в `task gate`.
 
 **Готово, когда:** реальный `cargo` публикует, находит, скачивает и yank-ает крейт; мутационный порог держится на `domain`, `app`, `formats/cargo`; норма скорости пересчитана.
 
@@ -90,7 +92,7 @@ gantt
 3. `feat(formats)`: proxy crates.io: `index.crates.io` и `static.crates.io`, собственный `dl` в `config.json`.
 4. **Dogfood (полный)**: сборка CRANE целиком идёт через собственный реестр: внутренние крейты из hosted (`registry = "crane"`), внешние зависимости через proxy crates.io. Проверка перенесена из v0.1.0: без proxy сборка CRANE на собственном реестре невозможна.
 5. `feat(formats)`: npm hosted и proxy: packument, tarball, dist-tags, deprecate, unpublish по политике.
-6. `feat(app)`: namespaces и защита от dependency confusion: hosted всегда приоритетнее proxy.
+6. `feat(app)`: namespaces и защита от dependency confusion: hosted всегда приоритетнее proxy. Таблица `namespace` добавляется expand-миграцией (как в комментарии `crates/adapters/persistence/pg/migrations/0001_catalog.sql:75`).
 
 **Готово, когда:** сборка CRANE проходит на собственном реестре (hosted + proxy crates.io); `npm install` и `cargo build` проходят через proxy при недоступном upstream (stale-if-error); повторные запросы к upstream схлопываются.
 
@@ -115,6 +117,7 @@ gantt
 4. `feat(entry)`: OpenMetrics, OTLP, health и readiness, алерты в поставке.
 5. `feat(web)`: каркас SPA по FSD: каталог, карточка пакета, администрирование; Storybook и Playwright подключаются здесь (`DEBT.md`, п. 3).
 6. `feat(cli)`: `login` (device flow), `setup` шести клиентов, credential providers для NuGet и Cargo.
+7. `feat(formats)`: `cargo owners add / remove` на реальных принципалах и Cedar (`DEBT.md`, п. 7).
 
 **Готово, когда:** каждый запрос проходит Cedar и объясняет отказ; пакетные менеджеры работают на краткоживущих токенах.
 
@@ -126,6 +129,7 @@ gantt
 2. `test`: нагрузочный стенд (oha, Gatling) и оптимизация горячего пути; PoC на целевом железе по профилю L.
 3. `build(deploy)`: Compose и Helm, профили S / M / L (раздел 16.3), проверяемые backup и restore.
 4. **Репозиторий становится публичным**: включаются защита веток и автовыпуск версий (`DEBT.md`).
+5. Остаток модулей P0, не построенный в v0.1.0: ядро (очередь задач, остальные контексты), CAS (GC, retention, проверка целостности), доводка протоколов.
 
 **Готово, когда:** выполнен объём P0 из раздела 18; нагрузка и восстановление подтверждены замером.
 
