@@ -137,6 +137,9 @@ fn publish_result_equals_find_result_for_nanosecond_timestamp() {
     });
 }
 
+/// Число миграций в `migrator()`: два файла, `0001` и `0002`.
+const MIGRATIONS: i64 = 2;
+
 #[test]
 fn migrate_is_idempotent_on_empty_database() {
     support::run(async |server| {
@@ -153,7 +156,7 @@ fn migrate_is_idempotent_on_empty_database() {
             .await
             .expect("журнал миграций");
         assert!(second.is_ok(), "{second:?}");
-        assert_eq!(applied, 1);
+        assert_eq!(applied, MIGRATIONS);
     });
 }
 

@@ -687,7 +687,10 @@ fn pair(tag: &str, seq: u128) -> (String, VersionId) {
 async fn publish_with_tags_sets_them_sorted_by_tag<C: Catalog>(catalog: &C) {
     // Arrange
     let repo = ensure_repo(catalog, 1, "main").await;
-    let new = tagged(new_version(10, repo, "serde", "1.0.0"), &["next", "latest"]);
+    let new = tagged(
+        new_version(10, repo, "serde", "1.0.0"),
+        &["next", "latest", "next"],
+    );
 
     // Act
     let result = catalog.publish_version(new).await;
@@ -697,7 +700,7 @@ async fn publish_with_tags_sets_them_sorted_by_tag<C: Catalog>(catalog: &C) {
     assert_eq!(
         tags_of(catalog, repo, "serde").await,
         vec![pair("latest", 10), pair("next", 10)],
-        "теги публикации стоят на новой версии и отсортированы по имени"
+        "теги публикации стоят на новой версии, повтор имени схлопывается, порядок по имени"
     );
 }
 
