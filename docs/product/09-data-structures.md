@@ -1,6 +1,6 @@
 # 9. Структуры данных
 
-Модель следует исходным требованиям: физическое хранение (blob) отделено от логической версии (package version) и от её видимости (state + политики). Идентификаторы UUIDv7, монотонные по времени, что хорошо для индексов.
+Модель следует исходным требованиям: физическое хранение (blob) отделено от логической версии (package version) и от её видимости (state + политики). Идентификаторы версий и репозиториев UUIDv7, монотонные по времени, что хорошо для индексов; `package.id` — `bigint identity` (внутренний ключ, 8-байтовый горячий FK).
 
 ## Логическая модель
 
@@ -53,24 +53,26 @@ CREATE TABLE namespace (
   UNIQUE (format, pattern));
 
 CREATE TABLE package (
-  id uuid PRIMARY KEY, repository_id uuid NOT NULL, namespace_id uuid,
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- внутренний ключ, наружу не выдаётся
+  repository_id uuid NOT NULL, namespace_id uuid,
   name_norm text NOT NULL, name_display text NOT NULL,
   owner_workspace_id uuid, gitlab_project_id bigint,
   lifecycle text NOT NULL DEFAULT 'active', -- active | deprecated | eol
-  replacement_id uuid, description text,
+  replacement_id bigint, description text,
   search_tsv tsvector GENERATED ALWAYS AS (...) STORED,
   embedding vector(1024),            -- pgvector, размерность embedder'а
   UNIQUE (repository_id, name_norm));
 
 CREATE TABLE package_version (
-  id uuid PRIMARY KEY, package_id uuid NOT NULL REFERENCES package,
-  version text NOT NULL, sort_key bytea NOT NULL,    -- формат-специфичный порядок
+  id uuid PRIMARY KEY, package_id bigint NOT NULL REFERENCES package,
+  version text NOT NULL,             -- каноническая форма (Cargo: SemVer без build metadata), ключ уникальности
+  version_display text NOT NULL,     -- написание клиента, как name_display у пакета
   purl text NOT NULL,                -- pkg:npm/%40acme/ui@1.2.3, ключ графа
   state ver_state NOT NULL, mutable boolean NOT NULL DEFAULT false,
   yanked boolean NOT NULL DEFAULT false, deprecated_msg text,
   published_by uuid NOT NULL, published_at timestamptz NOT NULL,
   source jsonb,                      -- project, commit, pipeline, job, ref
-  metadata jsonb NOT NULL,           -- нормализованная metadata формата
+  metadata json NOT NULL,            -- metadata формата как есть; json, не jsonb (см. ниже)
   UNIQUE (package_id, version));
 
 CREATE TABLE blob_store (
@@ -126,6 +128,99 @@ CREATE TABLE risk_score (
   created_at timestamptz NOT NULL,
   PRIMARY KEY (subject_id, kind, model_version));
 ```
+
+Порядок версий в схеме не хранится: `sort_key` убран из таблицы. Порядко-сохраняющее кодирование для Maven и PEP 440 — отдельная задача на появление потребителя; индекс Cargo упорядочен по публикации `(published_at, id)`.
+
+`metadata` имеет тип `json`, а не `jsonb`: `jsonb` переписывает текст (порядок ключей, пробелы), а metadata формата — непрозрачные байты для индекса Cargo и ETag, они должны вернуться побайтно.
+
+## Реализовано в v0.1.0
+
+В `crane-pg` реализован минимальный срез; остальные колонки и таблицы из схемы выше добавляются позже nullable-расширением (expand).
+
+```sql
+-- migrations/0001_catalog.sql (crane-pg); типы pkg_format, repo_kind, ver_state как выше
+CREATE TABLE repository (
+  id uuid PRIMARY KEY, format pkg_format NOT NULL, kind repo_kind NOT NULL, name text NOT NULL,
+  CONSTRAINT repository_format_name_key UNIQUE (format, name));
+
+CREATE TABLE package (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  repository_id uuid NOT NULL,
+  name_norm text NOT NULL, name_display text NOT NULL,
+  CONSTRAINT package_repository_id_fkey FOREIGN KEY (repository_id) REFERENCES repository (id),
+  CONSTRAINT package_repository_id_name_norm_key UNIQUE (repository_id, name_norm));
+
+CREATE TABLE package_version (
+  id uuid PRIMARY KEY, package_id bigint NOT NULL REFERENCES package (id),
+  version text NOT NULL, version_display text NOT NULL,
+  state ver_state NOT NULL, yanked boolean NOT NULL DEFAULT false,
+  published_at timestamptz NOT NULL, metadata json NOT NULL,
+  CONSTRAINT package_version_package_id_version_key UNIQUE (package_id, version)
+) WITH (fillfactor = 90);
+
+CREATE TABLE blob (
+  store_id text NOT NULL, sha256 bytea NOT NULL CHECK (octet_length(sha256) = 32),
+  size bigint NOT NULL CHECK (size >= 0), created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (store_id, sha256));
+
+CREATE TABLE asset (
+  version_id uuid NOT NULL REFERENCES package_version (id), path text NOT NULL,
+  store_id text NOT NULL, blob_sha256 bytea NOT NULL,
+  PRIMARY KEY (version_id, path),
+  FOREIGN KEY (store_id, blob_sha256) REFERENCES blob (store_id, sha256));
+```
+
+*Рис. 9.3. Срез схемы v0.1.0.* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД.
+
+| Отложено | Когда добавляется |
+| --- | --- |
+| `namespace`, `package.namespace_id`, `workspace_id` | Защита от dependency confusion и workspaces (v0.2.0 и позже) |
+| `purl`, `sort_key`, `mutable`, `published_by`, `source` | Появление потребителя (граф, сортировка, аудит публикаций) |
+| `sha512`, `sha1`, `md5`, `media_type` | Форматы, которым нужны эти дайджесты и типы |
+| таблица `blob_store` | Второе физическое хранилище; пока `store_id` — текст без FK |
+
+## Масштаб L: каталог
+
+Профиль L (раздел 3): 1–5 млн пакетов (hosted и proxy), десятки миллионов версий и файлов.
+
+**Замер на синтетике, PG 17, 2026-10-27**, после `VACUUM ANALYZE`. Набор: 1 млн пакетов, по 10 версий (10 млн версий), по одному asset и одному blob на версию, `metadata` ≈ 96 Б (малый JSON вроде cargo).
+
+| Таблица | Строк | Heap | Индексы | На строку (heap / индексы) |
+| --- | --- | --- | --- | --- |
+| `package` | 1 млн | 73 МБ | 105 МБ (PK и UNIQUE `(repository_id, name_norm)`) | ~73 Б / ~105 Б |
+| `package_version` | 10 млн | 1953 МБ | 809 МБ (PK uuid и UNIQUE `(package_id, version)`) | ~195 Б с учётом fillfactor 90 (средний tuple 176 Б, из них `metadata` 96 Б) / ~81 Б |
+| `asset` | 10 млн | 965 МБ | 611 МБ (PK) | ~96 Б / ~61 Б |
+| `blob` | 10 млн | 805 МБ | 731 МБ (PK) | ~80 Б / ~73 Б |
+
+Итого ≈ 6 ГБ на 10 млн версий.
+
+**Экстраполяция на L:** 10–100 млн версий, то есть ×1–×10 к замеру, ≈ 6–60 ГБ, а пакетов 1–5 млн (×1–×5 для `package`). Сверху добавится рост `metadata`: реальная metadata cargo крупнее 96 Б, а значения больше ~2 КБ уходят в TOAST (сжатие, отдельная relation, в строке остаётся указатель). Число asset на версию в других форматах больше одного (Maven), тогда `asset` растёт пропорционально. Blob после дедупликации не больше числа asset.
+
+**Планы запросов** (`EXPLAIN (ANALYZE, BUFFERS)`, тот же набор):
+
+| Запрос | План |
+| --- | --- |
+| `find_version` | Index scan по UNIQUE `package`, затем index scan по UNIQUE `(package_id, version)`; 9 buffers, 0,04 мс при тёплом кэше |
+| `versions()` | UNIQUE `package`, range scan по префиксу `package_id` в UNIQUE `package_version`, quicksort строк одного пакета в памяти; asset каждой версии читается через PK `asset` плюс проба по PK `blob` |
+| `set_yanked`, `transition` | Index scan по `package_version_pkey` |
+
+Однострочная таблица `repository` читается seq scan: для крошечной таблицы это нормально.
+
+| Индекс | Какой запрос обслуживает |
+| --- | --- |
+| `package`: UNIQUE `(repository_id, name_norm)` | Поиск пакета по имени в репозитории |
+| `package_version`: UNIQUE `(package_id, version)` | `find_version`; уникальность при публикации; `versions()` — range scan по префиксу `package_id`, сортировка строк одного пакета в памяти, отдельный индекс не нужен |
+| `package_version`: PK `id` | `transition`, `set_yanked` |
+| `asset`: PK `(version_id, path)` | Файлы версии |
+| `blob`: PK `(store_id, sha256)` | Дедупликация при публикации; цель FK из `asset` |
+
+Правила и заметки:
+
+-   **fillfactor 90 у `package_version`.** `state` и `yanked` не проиндексированы, поэтому их UPDATE идут как HOT (без записи в индексы); запас на странице даёт fillfactor. Inline-`metadata` ≤ ~2 КБ копируется целиком при каждом UPDATE строки; большая уходит в TOAST и копируется только указатель.
+-   **Нет индекса `asset(store_id, blob_sha256)`** до появления GC; тогда он добавляется `CREATE INDEX CONCURRENTLY`.
+-   **Нет OFFSET-пагинации и `count(*)` на горячих путях**: курсорная выборка по ключу.
+-   **UUIDv7 для `version.id`.** Вставки в PK-индекс остаются почти append-only; v4 даёт случайные расщепления страниц. `IdGen` обязан выдавать v7.
+-   **Миграции безопасны онлайн.** `CREATE INDEX CONCURRENTLY` в отдельной миграции без транзакции; без перезаписи таблиц; `NOT NULL` через `NOT VALID` + `VALIDATE CONSTRAINT`; значения enum только добавляются.
 
 ## Полный перечень таблиц
 
@@ -185,13 +280,13 @@ stateDiagram-v2
 
 ```
 blobs/sha256/9f/86/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
-staging/2026/10/25/0192c1a4-7d2e-7c3b-9a51-6f0d3e4b8a11      (lifecycle: удалить через 24 ч)
+staging/0192c1a4-7d2e-7c3b-9a51-6f0d3e4b8a11                (lifecycle: удалить через 24 ч)
 evidence/sbom/9f86.../0192c1b0-....cdx.json.zst
 evidence/scan/9f86.../trivy-0.6x-db-2026102512.json.zst
 backup/pg/...  backup/manifests/...
 ```
 
-Ключ blob вычисляется из SHA-256, поэтому одинаковые файлы в разных репозиториях одного хранилища хранятся один раз, а проверка целостности сводится к пересчёту хэша.
+Staging-объекты лежат плоско под `staging/<uuid>`: S3 lifecycle работает по префиксу и возрасту объекта, папки с датами не нужны. Ключ blob вычисляется из SHA-256, поэтому одинаковые файлы в разных репозиториях одного хранилища хранятся один раз, а проверка целостности сводится к пересчёту хэша.
 
 ## Хранилища blob: один CAS по умолчанию, классы хранения по необходимости
 
