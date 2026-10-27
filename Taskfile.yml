@@ -33,7 +33,7 @@ tasks:
     desc: Типы и тесты tools/ и конфигов в корне
     cmds:
       - pnpm exec tsc -p tsconfig.json
-      - node --test tools/lint-structure/checks.test.ts
+      - node --test tools/lint-structure/checks.test.ts tools/prune-worktrees.test.ts
 
   rust:fmt:
     desc: cargo fmt --check
@@ -80,6 +80,11 @@ tasks:
       - "! pnpm --filter web exec playwright --version >/dev/null 2>&1 || pnpm --filter web run e2e"
       - |
         printf 'Gate: passed\nGate-SHA: %s\nGate-Date: %s\n' "$(git rev-parse HEAD)" "$(date -u +%Y-%m-%dT%H:%MZ)" | tee out/gate-report.md
+
+  worktrees:prune:
+    desc: "Удалить worktree влитых веток (dry-run; удаление: task worktrees:prune -- --apply)"
+    cmds:
+      - node tools/prune-worktrees.ts {{.CLI_ARGS}}
 
   bump:
     desc: "Бамп версий: task bump TAG=v0.1.0"
