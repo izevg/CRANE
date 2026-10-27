@@ -248,20 +248,22 @@ export function checkCollapse(access: Access[], egress: Egress[], expected: Coll
 const SERVED_FROM_CACHE = new Set(["hit", "stale", "stale-on-error"]);
 const SERVER_ERROR_FROM = 500;
 
+// config.json индекса crane собирает сам, upstream и кэш в нём не участвуют: поля `cache` у него нет.
+const isConfig = (line: Access): boolean => line.path.endsWith("/index/config.json");
+
 /**
- * Офлайн-фаза: строки access без единого промаха и без 5xx, все ответы из кэша. Пустая фаза — отказ:
- * сборка без запросов ничего не доказывает.
+ * Офлайн-фаза: строки access без единого промаха и без 5xx, все ответы из кэша (config.json индекса
+ * проверяется только на 5xx). Пустая фаза — отказ: сборка без запросов ничего не доказывает.
  */
 export function checkOffline(lines: Access[]): string[] {
-  if (lines.length === 0) {
-    return ["в офлайн-фазе нет ни одной access-строки"];
+  if (lines.every(isConfig)) {
+    return ["в офлайн-фазе нет ни одного ответа proxy из кэша"];
   }
   return lines
     .filter(
       (line) =>
         line.status >= SERVER_ERROR_FROM ||
-        line.cache === undefined ||
-        !SERVED_FROM_CACHE.has(line.cache),
+        (!isConfig(line) && (line.cache === undefined || !SERVED_FROM_CACHE.has(line.cache))),
     )
     .map((line) => `${line.path}: status ${line.status}, cache ${line.cache ?? "-"}`);
 }

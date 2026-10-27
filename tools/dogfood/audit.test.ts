@@ -343,6 +343,8 @@ describe("egressLines", () => {
 });
 
 const BAD_GATEWAY = 502;
+const UNAUTHORIZED = 401;
+const OK = 200;
 const LAST_OK = 499;
 const FIRST_SERVER_ERROR = 500;
 const HIT_SEEN = /cache=miss.*200\/hit/;
@@ -470,6 +472,33 @@ describe("checkOffline", () => {
   it("rejects a line without cache", () => {
     // Arrange
     const lines = [served(undefined)];
+
+    // Act
+    const problems = checkOffline(lines);
+
+    // Assert
+    assert.equal(problems.length, 1);
+  });
+
+  it("does not require cache on the index config but rejects its 5xx", () => {
+    // Arrange
+    const config = "/cargo/r/index/config.json";
+    const lines = [
+      served("hit"),
+      served(undefined, UNAUTHORIZED, config),
+      served(undefined, BAD_GATEWAY, config),
+    ];
+
+    // Act
+    const problems = checkOffline(lines);
+
+    // Assert
+    assert.deepEqual(problems, [`${config}: status ${BAD_GATEWAY}, cache -`]);
+  });
+
+  it("rejects a phase made only of index config requests", () => {
+    // Arrange
+    const lines = [served(undefined, OK, "/cargo/r/index/config.json")];
 
     // Act
     const problems = checkOffline(lines);
