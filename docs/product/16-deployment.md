@@ -40,7 +40,7 @@ services:
     environment:
       CRANE_DATABASE_URL: postgres://crane@postgres/crane
       CRANE_CACHE: valkey://valkey:6379        # или "memory" для профиля S; URL с паролем — через CRANE_CACHE_FILE
-      CRANE_BLOBS: s3://blobs?endpoint=http://seaweedfs:8333   # или file:///data/blobs
+      CRANE_BLOBS: s3://blobs?endpoint=http://seaweedfs:8333&allow_http=true   # или file:///data/blobs
     read_only: true
     deploy: { resources: { limits: { cpus: "2", memory: 1g } } }
   analyzer:
@@ -66,6 +66,7 @@ services:
 | `CRANE_DATABASE_URL` или `CRANE_DATABASE_URL_FILE` | одна из двух | каталог: `memory` (данные теряются при рестарте) или `postgres://…` (`postgresql://…`); файл читается без завершающего перевода строки |
 | `CRANE_CACHE` или `CRANE_CACHE_FILE` | `memory` | кэш proxy и координатор выборок: `memory` (ограничен по байтам, в процессе) или Valkey; схемы `valkey`, `valkeys` (TLS), `valkey-cluster`, `valkeys-cluster`, `valkey-sentinel`, `valkeys-sentinel` (`redis://` не принимается). Необязательна, в отличие от хранилищ: кэш не источник истины, его потеря данных не теряет, поэтому правило «`memory` пишется явно» выше на неё не распространяется. URL может содержать пароль, поэтому есть `_FILE` (читается без завершающего перевода строки, как `CRANE_DATABASE_URL_FILE`) |
 | `CRANE_BLOBS` | обязательна | хранилище blob: `memory`, `file:///абсолютный/путь` или `s3://bucket[/prefix]?endpoint=…` |
+| `AWS_ACCESS_KEY_ID_FILE` и `AWS_SECRET_ACCESS_KEY_FILE` | нет | статический ключ S3 из файлов (секреты Docker/Kubernetes), только окружение (в TOML их нет). Задаются парой: один файл без второго — ошибка запуска; переменная `AWS_ACCESS_KEY_ID` (`AWS_SECRET_ACCESS_KEY`) вместе со своим файлом — конфликт; при `memory` и `file://` ключ не нужен, и сервер отказывается стартовать. Без обоих файлов ключи, роли и метаданные берутся из обычных `AWS_*`. Файл читается без завершающего перевода строки |
 | `CRANE_PUBLIC_URL` | обязательна | внешний адрес консоли и `/api` (`http://` или `https://`); в `config.json` cargo попадает, если `CRANE_PACKAGES_URL` не задан |
 | `CRANE_PACKAGES_URL` | пусто | origin пакетов для протоколов (`/cargo`, `/npm`, `/pypi`, `/maven`, `/nuget`) и presigned-ссылок. Если задан, консоль на `CRANE_PUBLIC_URL` не отдаёт протоколы, а origin пакетов не отдаёт консоль и `/api`; `config.json` cargo и `cctl setup` берут адрес отсюда. Лучше отдельный регистрируемый домен; поддомен допустим: cookie сессии host-only (`__Host-`), мутации требуют CSRF-токена и Origin |
 | `CRANE_TOKEN` или `CRANE_TOKEN_FILE` | одна из двух | временный статический токен до v0.4.0; файл читается без завершающего перевода строки |
@@ -82,9 +83,11 @@ services:
 
 `memory` нельзя смешивать с постоянным хранилищем: пара `CRANE_DATABASE_URL` и `CRANE_BLOBS` либо вся в памяти, либо вся постоянная. Иначе каталог в PostgreSQL после рестарта ссылался бы на потерянные blob, и сервер отказывается стартовать. Адрес базы с паролем в журналы и тексты ошибок не попадает. При недоступной БД `crane serve` падает на старте, `crane migrate` применяет миграции и идемпотентен.
 
-`/healthz/ready` проверяет PostgreSQL и хранилище blob и укладывается в 1,5 с: на отказ или таймаут он отвечает 503, а `/healthz/live` хранилищ не трогает. Учётные данные в query `CRANE_BLOBS` запрещены (только `AWS_*`). Учётной записи S3 нужно право `s3:ListBucket`: без него отсутствующий ключ даёт 403 вместо 404, и готовность остаётся неуспешной.
+`/healthz/ready` проверяет PostgreSQL и хранилище blob и укладывается в 1,5 с: на отказ или таймаут он отвечает 503, а `/healthz/live` хранилищ не трогает. Учётные данные в query `CRANE_BLOBS` запрещены (только `AWS_*`; статический ключ из файлов читают `AWS_ACCESS_KEY_ID_FILE` и `AWS_SECRET_ACCESS_KEY_FILE`). Учётной записи S3 нужно право `s3:ListBucket`: без него отсутствующий ключ даёт 403 вместо 404, и готовность остаётся неуспешной.
 
 `crane healthcheck` опрашивает `/healthz/ready` на `CRANE_ADMIN_PORT` и завершается с кодом 0 или 1 (для healthcheck в compose: в образе нет curl).
+
+**S3-режим.** Вместо тома `blobs` CAS можно держать в S3 (в поставке SeaweedFS). Режим целиком описан override-файлом `docker-compose.s3.yaml`, а не профилем: он меняет настройку самого crane. Включение: строка `COMPOSE_FILE=docker-compose.yaml:docker-compose.s3.yaml` в `.env` (или `-f` в команде), `CRANE_BLOBS=s3://<S3_BUCKET>?endpoint=http://seaweedfs:8333&allow_http=true` и два файла секретов: `S3_ACCESS_KEY_ID_SECRET` и `S3_SECRET_ACCESS_KEY_SECRET` (ключ crane; их создаёт `task secrets:init`). SeaweedFS собирает из них identities при старте (политика доступа живёт в compose, а не в файле, который не перезаписывается). Одноразовый сервис `seaweedfs-init` создаёт бакет `S3_BUCKET` до старта crane, потому что `/healthz/ready` проверяет бакет и без него crane не станет готов. SeaweedFS живёт в отдельной сети `s3` (`internal`), в которой только он и crane; анонимного доступа нет, ключи лежат в файлах и в окружение не попадают. Без override-файла single-node не меняется и новых секретов не требует.
 
 **Секреты и сети в compose.** Токен, пароль PostgreSQL и URL каталога (с паролем) лежат в файлах, пути к которым задают `CRANE_TOKEN_SECRET`, `POSTGRES_PASSWORD_SECRET` и `CRANE_DATABASE_URL_SECRET`; compose монтирует их в `/run/secrets`, а сервер читает через `CRANE_TOKEN_FILE` и `CRANE_DATABASE_URL_FILE`. Ни в переменных окружения, ни в compose-файле, ни в `.env` значений секретов нет. Сеть `edge` с фиксированной подсетью `CRANE_EDGE_SUBNET` соединяет только caddy и crane; та же подсеть передаётся как `CRANE_TRUSTED_PROXIES`, поэтому в аудите виден адрес клиента, а не Caddy. PostgreSQL в `edge` не входит, порт admin наружу не публикуется. Любой обратный прокси обязан удалять клиентский `X-Request-Id` (Caddy: `header_up -X-Request-Id`), иначе клиент выбирает свой идентификатор корреляции (14.9).
 

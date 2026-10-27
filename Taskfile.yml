@@ -108,7 +108,7 @@ tasks:
   deploy:check:
     desc: Compose-файлы и Helm-чарт (docker compose config, helm lint, helm template)
     cmds:
-      - docker compose --env-file .env.dist --profile cache --profile scan --profile s3 config -q
+      - docker compose --env-file .env.dist -f docker-compose.yaml -f docker-compose.s3.yaml --profile cache --profile scan config -q
       - docker compose --env-file .env.dist -f docker-compose.dev.yaml --profile s3 --profile scan config -q
       - helm lint deploy/helm/crane --set existingSecret=crane-env
       - helm template crane deploy/helm/crane --set existingSecret=crane-env --set ingress.enabled=true >/dev/null

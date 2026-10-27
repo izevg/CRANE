@@ -3,7 +3,7 @@
 # Значения только из .env; пропущенная переменная останавливает запуск.
 # Секреты (токен, пароль PostgreSQL, URL каталога) лежат в файлах и монтируются в /run/secrets:
 # ни в переменных окружения, ни в этом файле их нет.
-# Профили: cache (valkey), scan (analyzer + trivy), s3 (seaweedfs вместо тома).
+# Профили: cache (valkey), scan (analyzer + trivy). S3 вместо тома blobs: override docker-compose.s3.yaml.
 name: crane
 
 x-crane: &crane
@@ -114,13 +114,6 @@ services:
     restart: unless-stopped
     command: ["--save", "", "--appendonly", "no", "--maxmemory", "${VALKEY_MAXMEMORY:?}", "--maxmemory-policy", "allkeys-lru"]
 
-  seaweedfs:
-    profiles: [s3]
-    image: ${SEAWEEDFS_IMAGE:?}
-    restart: unless-stopped
-    command: ["server", "-dir=/data", "-s3", "-s3.port=8333"]
-    volumes: [s3:/data]
-
 networks:
   scan:
     internal: true
@@ -140,6 +133,5 @@ secrets:
 volumes:
   pg:
   blobs:
-  s3:
   trivy:
   caddy-data:

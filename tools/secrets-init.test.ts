@@ -12,6 +12,12 @@ const ENV = {
   POSTGRES_USER: "crane",
   POSTGRES_DB: "cranedb",
 };
+const S3_ENV = {
+  ...ENV,
+  S3_ACCESS_KEY_ID_SECRET: "./secrets/s3_access_key_id",
+  S3_SECRET_ACCESS_KEY_SECRET: "./secrets/s3_secret_access_key",
+};
+const S3_FILE_COUNT = 5;
 const MODE_MASK = 0o777;
 const DIR_MODE = 0o700;
 const FILE_MODE = 0o644;
@@ -96,5 +102,28 @@ describe("initSecrets", () => {
 
     // Assert
     assert.throws(call, { message: NAMES_VARIABLE });
+  });
+
+  it("creates the S3 key pair when the S3 variables are set", () => {
+    // Arrange
+    const root = workdir();
+
+    // Act
+    const created = initSecrets(S3_ENV, root, sequence);
+
+    // Assert
+    assert.equal(created.length, S3_FILE_COUNT);
+    assert.notEqual(read(root, "s3_access_key_id"), read(root, "s3_secret_access_key"));
+  });
+
+  it("creates no S3 files when the S3 variables are not set", () => {
+    // Arrange
+    const root = workdir();
+
+    // Act
+    const created = initSecrets(ENV, root, sequence);
+
+    // Assert
+    assert.equal(created.length, FILE_COUNT);
   });
 });

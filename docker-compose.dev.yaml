@@ -36,7 +36,19 @@ services:
   seaweedfs:
     profiles: [s3]
     image: ${SEAWEEDFS_IMAGE:?}
-    command: ["server", "-dir=/data", "-s3", "-s3.port=8333"]
+    # Ключ S3 из файлов секретов собирается в identities во временный файл контейнера (как в docker-compose.s3.yaml);
+    # crane на хосте берёт его из AWS_ACCESS_KEY_ID_FILE и AWS_SECRET_ACCESS_KEY_FILE. Бакет создаёт разработчик:
+    # `weed shell`, `s3.bucket.create -name <бакет>`.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -eu
+        umask 077
+        printf '{"identities":[{"name":"crane","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' \
+          "$$(cat /run/secrets/s3_access_key_id)" "$$(cat /run/secrets/s3_secret_access_key)" > /tmp/s3.json
+        exec weed server -dir=/data -s3 -s3.port=8333 -s3.config=/tmp/s3.json
+    secrets: [s3_access_key_id, s3_secret_access_key]
     ports: ["${DEV_BIND:?}:${SEAWEEDFS_S3_PORT:?}:8333"]
     volumes: [blobs:/data]
 
@@ -51,6 +63,10 @@ services:
 secrets:
   postgres_password:
     file: ${POSTGRES_PASSWORD_SECRET:?задайте POSTGRES_PASSWORD_SECRET}
+  s3_access_key_id:
+    file: ${S3_ACCESS_KEY_ID_SECRET:?задайте S3_ACCESS_KEY_ID_SECRET}
+  s3_secret_access_key:
+    file: ${S3_SECRET_ACCESS_KEY_SECRET:?задайте S3_SECRET_ACCESS_KEY_SECRET}
 
 volumes:
   pg:
