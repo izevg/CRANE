@@ -14,16 +14,6 @@ fn not_supported(reason: impl Into<Box<dyn std::error::Error + Send + Sync>>) ->
     }
 }
 
-/// Корень внутри бакета: `s3://bucket/prefix` кладёт всё под `prefix/`.
-fn rooted(store: Arc<dyn ObjectStore>, root: &str) -> Arc<dyn ObjectStore> {
-    let root = root.trim_matches('/');
-    if root.is_empty() {
-        store
-    } else {
-        Arc::new(PrefixStore::new(store, root))
-    }
-}
-
 impl ObjectBlobStore {
     /// Собирает хранилище по URL из `CRANE_BLOBS`.
     ///
@@ -76,7 +66,9 @@ fn s3(url: &Url) -> Result<Arc<dyn ObjectStore>, Error> {
     for (key, value) in url.query_pairs() {
         builder = builder.with_config(key.parse::<AmazonS3ConfigKey>()?, value.into_owned());
     }
-    Ok(rooted(Arc::new(builder.build()?), url.path()))
+    // `s3://bucket/prefix` кладёт всё под `prefix/`. Path отбрасывает пустые сегменты,
+    // поэтому пустой путь или `/` даёт пустой префикс, а PrefixStore с ним ничего не меняет.
+    Ok(Arc::new(PrefixStore::new(builder.build()?, url.path())))
 }
 
 #[cfg(test)]
@@ -88,10 +80,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn root_prefix_wraps_every_object_key() {
+    fn prefix_store_places_keys_under_trimmed_root() {
         // Arrange
         let inner = Arc::new(InMemory::new());
-        let store = rooted(inner.clone(), "/team/cas/");
+        let store = PrefixStore::new(inner.clone(), "/team/cas/");
 
         // Act
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -107,10 +99,10 @@ mod tests {
     }
 
     #[test]
-    fn empty_root_leaves_keys_untouched() {
+    fn prefix_store_with_slash_root_leaves_keys_untouched() {
         // Arrange
         let inner = Arc::new(InMemory::new());
-        let store = rooted(inner.clone(), "/");
+        let store = PrefixStore::new(inner.clone(), "/");
 
         // Act
         let runtime = tokio::runtime::Builder::new_current_thread()

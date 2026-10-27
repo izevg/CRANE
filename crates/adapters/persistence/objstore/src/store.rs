@@ -40,22 +40,23 @@ impl BlobStore for ObjectBlobStore {
         let mut writer = BufWriter::new(Arc::clone(&self.store), path.clone());
         let mut hasher = sha2::Sha256::new();
         let mut size = 0u64;
-        while let Some(chunk) = body.next().await {
-            let chunk = match chunk {
-                Ok(chunk) => chunk,
-                Err(e) => {
-                    // Ошибка отката вторична: клиенту важнее причина обрыва, а хвосты
-                    // чистит lifecycle-правило на staging/.
-                    let _ = writer.abort().await;
-                    return Err(BlobError::Body(e));
-                }
-            };
-            hasher.update(&chunk);
-            size += chunk.len() as u64;
-            if let Err(e) = writer.put(chunk).await {
-                let _ = writer.abort().await;
-                return Err(backend(e));
+        // Отдельный блок, чтобы откат был в одной точке. shutdown сюда не входит:
+        // abort после него паникует («Already shut down»).
+        let streamed: Result<(), BlobError> = async {
+            while let Some(chunk) = body.next().await {
+                let chunk = chunk.map_err(BlobError::Body)?;
+                hasher.update(&chunk);
+                size += chunk.len() as u64;
+                writer.put(chunk).await.map_err(backend)?;
             }
+            Ok(())
+        }
+        .await;
+        if let Err(e) = streamed {
+            // Ошибка отката вторична: клиенту важнее причина сбоя, а хвосты
+            // чистит lifecycle-правило на staging/.
+            let _ = writer.abort().await;
+            return Err(e);
         }
         writer.shutdown().await.map_err(backend)?;
         let digests = Digests {
