@@ -15,6 +15,7 @@ pub async fn catalog_contract<C: Catalog>(new: impl Fn() -> C) {
     version_is_unique_by_canonical_form(&new()).await;
     deleted_version_stays_reserved(&new()).await;
     package_keeps_first_written_name(&new()).await;
+    names_differing_only_in_spelling_collide(&new()).await;
     repositories_are_isolated(&new()).await;
     transition_is_compare_and_set(&new()).await;
     set_yanked_is_idempotent(&new()).await;
@@ -238,6 +239,23 @@ async fn package_keeps_first_written_name<C: Catalog>(catalog: &C) {
         written,
         vec!["1.0.0", "1.0.1"],
         "versions находит пакет по нормализованному имени и отдаёт версии в порядке публикации"
+    );
+}
+
+async fn names_differing_only_in_spelling_collide<C: Catalog>(catalog: &C) {
+    let repo = ensure_repo(catalog, 1, "main").await;
+    catalog
+        .publish_version(new_version(10, repo, "Foo-Bar", "1.0.0"))
+        .await
+        .expect("первая публикация");
+
+    let result = catalog
+        .publish_version(new_version(11, repo, "foo_bar", "1.0.0"))
+        .await;
+
+    assert!(
+        matches!(result, Err(CatalogError::VersionExists)),
+        "уникальность считается по normalized() имени: Foo-Bar и foo_bar — один пакет, иначе две сущности на одной координате; ждали VersionExists, получили {result:?}"
     );
 }
 

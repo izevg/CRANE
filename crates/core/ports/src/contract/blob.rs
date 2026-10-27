@@ -4,7 +4,7 @@ use bytes::Bytes;
 use crane_domain::Sha256;
 use futures_util::{StreamExt, stream};
 
-use crate::{BlobError, BlobStore, ByteStream};
+use crate::{BlobError, BlobStore, ByteStream, Digests, Staged, StagingKey};
 
 /// SHA-256 от `hello`; константа, чтобы не тянуть хеш-библиотеку в порты.
 const HELLO_SHA256: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
@@ -16,6 +16,7 @@ pub async fn blob_store_contract<B: BlobStore>(new: impl Fn() -> B) {
     open_unknown_is_not_found(&new()).await;
     uncommitted_blob_is_not_readable(&new()).await;
     broken_body_is_reported_as_body_error(&new()).await;
+    commit_of_missing_staged_object_fails(&new()).await;
 }
 
 fn body(chunks: Vec<io::Result<Bytes>>) -> ByteStream {
@@ -114,5 +115,28 @@ async fn broken_body_is_reported_as_body_error<B: BlobStore>(store: &B) {
     assert!(
         matches!(result, Err(BlobError::Body(_))),
         "обрыв входного потока даёт BlobError::Body, а не успех и не Backend"
+    );
+}
+
+async fn commit_of_missing_staged_object_fails<B: BlobStore>(store: &B) {
+    let missing = Sha256::from([0xcd; 32]);
+    let staged = Staged::new(
+        StagingKey::new("missing".to_owned()),
+        Digests {
+            sha256: missing,
+            size: 1,
+        },
+    );
+
+    let result = store.commit(staged).await;
+
+    assert!(
+        matches!(result, Err(BlobError::Backend(_))),
+        "commit без staged-объекта и без такого blob — ошибка Backend, а не молчаливая потеря данных"
+    );
+    let opened = store.open(&missing).await;
+    assert!(
+        matches!(opened, Err(BlobError::NotFound(_))),
+        "неудавшийся commit не создаёт blob: open даёт NotFound"
     );
 }

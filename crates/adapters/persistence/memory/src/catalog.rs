@@ -125,8 +125,8 @@ impl MemoryCatalog {
     }
 }
 
-// Внутри нет `.await`, поэтому методы возвращают готовые футуры: `async fn` без await
-// не проходит `clippy::unused_async`, а `allow` вне контракта запрещён.
+// Внутри нет `.await`, а `async fn` без него не проходит `clippy::unused_async`,
+// поэтому методы возвращают готовые футуры.
 impl Catalog for MemoryCatalog {
     fn ensure_repository(
         &self,

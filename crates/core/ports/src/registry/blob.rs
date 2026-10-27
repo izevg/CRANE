@@ -78,6 +78,8 @@ pub trait BlobStore: Send + Sync {
 
     /// Переносит staged-объект в CAS по его SHA-256.
     /// Идемпотентно: если такой blob уже есть, это успех.
+    /// Если staged-объекта нет и такого blob тоже нет, это ошибка (`Backend`):
+    /// молча вернуть дайджесты нельзя, версия получила бы ссылку на несуществующий blob.
     fn commit(&self, staged: Staged) -> impl Future<Output = Result<Digests, BlobError>> + Send;
 
     /// Открывает закоммиченный blob. Staged-объекты недоступны: `NotFound`.

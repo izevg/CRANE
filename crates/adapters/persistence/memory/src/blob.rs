@@ -36,11 +36,19 @@ impl MemoryBlobStore {
         key
     }
 
-    fn promote(&self, key: &StagingKey, sha256: Sha256) {
+    fn promote(&self, key: &StagingKey, sha256: Sha256) -> Result<(), BlobError> {
         let mut state = self.lock();
-        let data = state.staging.remove(key.as_str());
-        if let Some(data) = data {
-            state.blobs.entry(sha256).or_insert(data);
+        match state.staging.remove(key.as_str()) {
+            Some(data) => {
+                state.blobs.entry(sha256).or_insert(data);
+                Ok(())
+            }
+            // Дубликат уже закоммичен раньше: идемпотентность сохраняется.
+            None if state.blobs.contains_key(&sha256) => Ok(()),
+            // Иначе use case запишет версию со ссылкой на несуществующий blob.
+            None => Err(BlobError::Backend(
+                format!("staged-объект {} не найден", key.as_str()).into(),
+            )),
         }
     }
 
@@ -66,10 +74,12 @@ impl BlobStore for MemoryBlobStore {
         Ok(Staged::new(StagingKey::new(key), digests))
     }
 
-    // `commit` и `open` без `.await` возвращают готовые футуры (см. `unused_async`).
+    // `async fn` без `.await` не проходит `clippy::unused_async`, поэтому готовые футуры.
     fn commit(&self, staged: Staged) -> impl Future<Output = Result<Digests, BlobError>> + Send {
-        self.promote(staged.key(), staged.digests().sha256);
-        ready(Ok(*staged.digests()))
+        let committed = self
+            .promote(staged.key(), staged.digests().sha256)
+            .map(|()| *staged.digests());
+        ready(committed)
     }
 
     fn open(&self, sha256: &Sha256) -> impl Future<Output = Result<ByteStream, BlobError>> + Send {

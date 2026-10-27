@@ -6,7 +6,6 @@
 mod registry;
 mod system;
 
-// Контракт не `#[cfg(test)]`, поэтому линты на паники приходится снимать здесь, в одном месте.
 #[cfg(feature = "contract")]
 #[allow(
     clippy::unwrap_used,
