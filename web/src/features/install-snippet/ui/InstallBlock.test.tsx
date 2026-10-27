@@ -10,6 +10,8 @@ import { InstallBlock, useInstallClient } from "../index";
 const TOKEN_REF = ["$", "{CRANE_TOKEN}"].join("");
 
 const INSTRUCTIONS = {
+  client: "npm" as const,
+  available_clients: ["npm", "pnpm", "yarn"] as InstallClient[],
   setup_steps: [{ title: "Вход", code: "cctl login\ncctl setup npm" }],
   manual_config: {
     path: ".npmrc",
@@ -21,15 +23,17 @@ const INSTRUCTIONS = {
 const COPY_STEP = /^Копировать/;
 const KEY = "crane.install.npm";
 
-/** Страница-обёртка: клиента держит хук страницы, блок управляемый. */
+/** Страница-обёртка: список клиентов берёт из ответа сервера и отдаёт хуку, блок управляемый. */
 function Page({
   onClientChange,
-  loading = false,
+  answered = true,
 }: {
   onClientChange: (client: InstallClient) => void;
-  loading?: boolean;
+  /** `false` — первый рендер до ответа сервера: инструкций и списка клиентов ещё нет. */
+  answered?: boolean;
 }) {
-  const [client, setClient] = useInstallClient("npm");
+  const instructions = answered ? INSTRUCTIONS : undefined;
+  const [client, setClient] = useInstallClient("npm", instructions?.available_clients);
   const change = useCallback(
     (next: InstallClient) => {
       setClient(next);
@@ -39,18 +43,16 @@ function Page({
   );
   return (
     <InstallBlock
-      format="npm"
       client={client}
       onClientChange={change}
-      instructions={INSTRUCTIONS}
-      loading={loading}
+      instructions={instructions}
       envHref="/help/env"
     />
   );
 }
 
-function renderBlock(onClientChange = vi.fn(), loading = false) {
-  return render(<Page onClientChange={onClientChange} loading={loading} />);
+function renderBlock(onClientChange = vi.fn()) {
+  return render(<Page onClientChange={onClientChange} />);
 }
 
 const pressed = (name: string) => screen.getByRole("button", { name });
@@ -97,7 +99,7 @@ describe("InstallBlock", () => {
     expect(pressed("yarn")).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("невалидное значение в хранилище заменяется первым клиентом", () => {
+  it("клиент из хранилища вне available_clients отбрасывается в пользу первого доступного", () => {
     // Arrange
     localStorage.setItem(KEY, "poetry");
 
@@ -133,14 +135,26 @@ describe("InstallBlock", () => {
     expect([before, toggle.getAttribute("aria-expanded")]).toEqual(["false", "true"]);
   });
 
-  it("пока инструкции грузятся, команд для копирования нет и шаги помечены занятыми", () => {
+  it("до первого ответа сервера команд для копирования нет, шаги помечены занятыми", () => {
     // Arrange
     // Act
-    const { container } = renderBlock(vi.fn(), true);
+    const { container } = render(<Page onClientChange={vi.fn()} answered={false} />);
 
     // Assert
     expect(screen.queryByRole("button", { name: COPY_STEP })).not.toBeInTheDocument();
     expect(container.querySelectorAll("[aria-busy=true]")).toHaveLength(2);
+  });
+
+  it("инструкции не для выбранного клиента скрывают команды чужого клиента", () => {
+    // Arrange
+    localStorage.setItem(KEY, "pnpm");
+
+    // Act
+    renderBlock();
+
+    // Assert
+    expect(pressed("pnpm")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: COPY_STEP })).not.toBeInTheDocument();
   });
 
   it("кнопка копирования шага настройки называется по заголовку шага", () => {

@@ -214,6 +214,9 @@ msgstr "Breadcrumbs"
 msgid "Навигация по разделам реестра"
 msgstr "Navigate the registry sections"
 
+msgid "Настроить вручную"
+msgstr "Configure manually"
+
 msgid "Настроить вручную ({path})"
 msgstr "Configure manually ({path})"
 

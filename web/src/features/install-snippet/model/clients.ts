@@ -1,18 +1,5 @@
 import type { Format, InstallClient } from "~/shared/api";
 
-/**
- * Клиенты, доступные для формата пакета: первый в списке — по умолчанию. Список живёт в одном модуле намеренно:
- * когда сервер начнёт отдавать `available_clients` (отдельный PR в спеку), замена сводится к правке этого файла,
- * а блок и хук не меняются.
- */
-export const CLIENTS_BY_FORMAT = {
-  npm: ["npm", "pnpm", "yarn"],
-  pypi: ["pip", "uv", "poetry"],
-  maven: ["maven", "gradle"],
-  nuget: ["dotnet"],
-  cargo: ["cargo"],
-} as const satisfies Record<Format, readonly [InstallClient, ...InstallClient[]]>;
-
 // i18n-fixture: названия инструментов не переводятся
 const CLIENT_LABEL = {
   npm: "npm",
@@ -29,6 +16,11 @@ const CLIENT_LABEL = {
 
 export function clientLabel(client: InstallClient): string {
   return CLIENT_LABEL[client];
+}
+
+/** Значение из хранилища — известный клиент (список для формата приходит с сервера: `available_clients`). */
+export function isInstallClient(value: unknown): value is InstallClient {
+  return typeof value === "string" && Object.hasOwn(CLIENT_LABEL, value);
 }
 
 /** Ключ хранилища: выбор клиента помнится отдельно для каждого формата. */

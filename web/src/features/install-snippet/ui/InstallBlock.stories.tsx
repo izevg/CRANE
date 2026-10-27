@@ -12,7 +12,9 @@ const VIEWPORTS = {
   mobile: { name: "Телефон 390", styles: { width: "390px", height: "844px" } },
 };
 
-const NPM = {
+const NPM: NonNullable<ComponentProps<typeof InstallBlock>["instructions"]> = {
+  client: "npm",
+  available_clients: ["npm", "pnpm", "yarn"],
   setup_steps: [{ title: "Вход и настройка npm", code: "cctl login\ncctl setup npm" }],
   manual_config: {
     path: ".npmrc",
@@ -24,15 +26,20 @@ const NPM = {
 /** Страница держит выбранного клиента; в истории это локальное состояние, а выбор ещё и уходит в `onClientChange`. */
 function Controlled(props: ComponentProps<typeof InstallBlock>) {
   const [client, setClient] = useState(props.client);
-  const { onClientChange: notify } = props;
+  const { onClientChange: notify, instructions } = props;
   const change = useCallback(
-    (next: ComponentProps<typeof InstallBlock>["client"]) => {
+    (next: NonNullable<ComponentProps<typeof InstallBlock>["client"]>) => {
       setClient(next);
       notify(next);
     },
     [notify],
   );
-  return <InstallBlock {...props} client={client} onClientChange={change} />;
+  // «Сервер» отвечает сразу для выбранного клиента; story загрузки задают инструкции сами
+  const answered =
+    instructions === undefined || client === undefined ? instructions : { ...instructions, client };
+  return (
+    <InstallBlock {...props} client={client} instructions={answered} onClientChange={change} />
+  );
 }
 
 const meta = {
@@ -46,7 +53,6 @@ const meta = {
     spyOn(navigator.clipboard, "writeText").mockResolvedValue();
   },
   args: {
-    format: "npm",
     client: "npm",
     instructions: NPM,
     onClientChange,
@@ -77,9 +83,10 @@ export const Npm: Story = {
 export const Pypi: Story = {
   name: "PyPI: pip, uv, poetry",
   args: {
-    format: "pypi",
     client: "pip",
     instructions: {
+      client: "pip",
+      available_clients: ["pip", "uv", "poetry"],
       setup_steps: [{ title: "Вход и настройка pip", code: "cctl login\ncctl setup pypi" }],
       manual_config: {
         path: "pip.conf",
@@ -93,9 +100,10 @@ export const Pypi: Story = {
 export const Maven: Story = {
   name: "Maven: Maven и Gradle",
   args: {
-    format: "maven",
     client: "maven",
     instructions: {
+      client: "maven",
+      available_clients: ["maven", "gradle"],
       setup_steps: [{ title: "Вход и настройка Maven", code: "cctl login\ncctl setup maven" }],
       manual_config: {
         path: "settings.xml",
@@ -111,9 +119,10 @@ export const Maven: Story = {
 export const Cargo: Story = {
   name: "Cargo: один клиент",
   args: {
-    format: "cargo",
     client: "cargo",
     instructions: {
+      client: "cargo",
+      available_clients: ["cargo"],
       setup_steps: [{ title: "Вход и настройка cargo", code: "cctl login\ncctl setup cargo" }],
       manual_config: {
         path: ".cargo/config.toml",
@@ -125,12 +134,26 @@ export const Cargo: Story = {
 };
 
 export const Loading: Story = {
-  name: "Загрузка инструкций: заглушки вместо чужих команд",
-  args: { loading: true },
+  name: "До первого ответа: заглушки, копировать нечего",
+  args: { client: undefined, instructions: undefined },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.queryByRole("button", { name: COPY })).toBeNull();
     await expect(canvasElement.querySelectorAll("[aria-busy=true]")).toHaveLength(2);
+  },
+};
+
+export const Refetching: Story = {
+  name: "Клиент сменили, инструкции ещё старые: заглушки вместо чужих команд",
+  args: { client: "pnpm" },
+  render: (args) => <InstallBlock {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("button", { name: "pnpm" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(canvas.queryByRole("button", { name: COPY })).toBeNull();
   },
 };
 
