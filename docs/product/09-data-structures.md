@@ -222,6 +222,43 @@ CREATE TABLE asset (
 -   **UUIDv7 для `version.id`.** Вставки в PK-индекс остаются почти append-only; v4 даёт случайные расщепления страниц. `IdGen` обязан выдавать v7.
 -   **Миграции безопасны онлайн.** `CREATE INDEX CONCURRENTLY` в отдельной миграции без транзакции; без перезаписи таблиц; `NOT NULL` через `NOT VALID` + `VALIDATE CONSTRAINT`; значения enum только добавляются.
 
+## Очередь задач
+
+Таблица `job` рассчитана на профиль L и устроена как очередь с visibility timeout (по образцу SQS): взятая задача не удаляется, а становится невидимой до `run_at`.
+
+```sql
+CREATE TABLE job (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  kind text NOT NULL, payload json NOT NULL,
+  attempts int NOT NULL DEFAULT 0,
+  run_at timestamptz NOT NULL,       -- «невидима до»: срок lease или время повтора
+  claimed_at timestamptz,            -- без индекса, для наблюдаемости
+  last_error text);
+CREATE INDEX job_run_at ON job (run_at);   -- единственный индекс, кроме PK
+```
+
+```sql
+-- claim
+UPDATE job SET run_at = now() + $lease, attempts = attempts + 1, claimed_at = now()
+WHERE id IN (SELECT id FROM job WHERE kind = ANY($1) AND run_at <= now()
+             ORDER BY run_at LIMIT $n FOR UPDATE SKIP LOCKED)
+RETURNING id, kind, payload, attempts;
+```
+
+| Событие | Операция |
+| --- | --- |
+| Успех | `DELETE FROM job WHERE id = $1 AND attempts = $2`: завершённые задачи удаляются, а не помечаются |
+| Ошибка | `UPDATE job SET run_at = now() + backoff, last_error = $3 WHERE id = $1 AND attempts = $2` |
+| Исчерпаны попытки | Строка переезжает в append-only `job_dead` (партиции по `died_at`, если таблица растёт) |
+| Просрочен lease | Задача снова видна по `run_at <= now()` и берётся другим воркером |
+
+-   **`attempts` — токен владения.** Воркер с истёкшим lease не перезапишет задачу, которую уже взял другой: его `complete` и `fail` не совпадут по `attempts`. Поэтому обработчики идемпотентны.
+-   **Горячая таблица маленькая**: только невыполненные и выполняемые задачи.
+-   **autovacuum агрессивный** из-за churn от DELETE и UPDATE: например, `autovacuum_vacuum_scale_factor = 0.01` и малая задержка cost. fillfactor не настраивается: claim меняет индексированный `run_at`, HOT невозможен.
+-   **Пробуждение воркеров:** `NOTIFY` в той же транзакции, что и вставка, плюс периодический опрос как запасной путь. `LISTEN` требует отдельного прямого соединения и не работает через PgBouncer в transaction mode.
+-   **Отклонено: удерживать row lock всё время выполнения задачи.** Это занимает соединение пула, а долгие транзакции держат `xmin` и тормозят vacuum.
+-   **Outbox с relay** нужен только для внешней доставки (webhooks, SIEM): P2 / v1.1.0. Внутренние задачи идут через `job`. Инвалидация кэша metadata в v0.2.0 — прямая после commit, TTL как страховка; очередь не нужна.
+
 ## Полный перечень таблиц
 
 | Группа | Таблицы |
@@ -232,7 +269,7 @@ CREATE TABLE asset (
 | Уязвимости и скоринг | `advisory`, `feed_cursor`, `risk_score`, `vex_statement`, `emergency_block`, `break_glass_grant` |
 | Граф | `dependency_edge`, `usage_evidence`, `consumer` (проект, сборка, деплой) |
 | Proxy | `proxy_entry` (ключ upstream, etag, fetched\_at, expires\_at, negative, blob) |
-| Эксплуатация | `job`, `outbox`, `webhook_subscription`, `webhook_delivery`, `idempotency_key`, `retention_rule`, `retention_hold`, `quota_usage`, `audit_event`, `siem_sink`, `siem_cursor` |
+| Эксплуатация | `job`, `job_dead`, `outbox`, `webhook_subscription`, `webhook_delivery`, `idempotency_key`, `retention_rule`, `retention_hold`, `quota_usage`, `audit_event`, `siem_sink`, `siem_cursor` |
 
 ## Жизненный цикл версии
 

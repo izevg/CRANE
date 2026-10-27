@@ -106,11 +106,18 @@ pub trait AccessEvaluator: Send + Sync {
 pub struct Decision { pub allow: bool, pub rules: Vec<PolicyId>, pub reason: ReasonCode,
                       pub remediation: Vec<Remedy> }
 
+/// Очередь только для потребителя (worker). Постановка задач в порт не входит:
+/// задачи приходят данными в атомарные методы каталога.
+///
+/// Задача может выполниться повторно после истечения lease, поэтому обработчики идемпотентны.
 pub trait JobQueue: Send + Sync {
-    async fn enqueue(&self, tx: &mut Tx, job: NewJob) -> Result<JobId>; // в той же транзакции
-    async fn lease(&self, kinds: &[JobKind], n: usize, ttl: Duration) -> Result<Vec<Job>>;
-    async fn complete(&self, id: JobId, outcome: Outcome) -> Result<()>;
+    async fn claim(&self, kinds: &[JobKind], n: usize, lease: Duration) -> Result<Vec<Job>>;
+    async fn complete(&self, id: JobId, attempt: u32) -> Result<()>;            // attempt — токен владения
+    async fn fail(&self, id: JobId, attempt: u32, error: &str) -> Result<()>;   // повтор с backoff или job_dead
 }
+// Типа транзакции (Tx) в портах нет. Каталог принимает задачи данными:
+// publish_version(new, jobs: &[NewJob]), адаптер пишет данные и строки job в одной транзакции.
+// Параметр jobs появится вместе с первой задачей (не в v0.1.0).
 
 pub trait Scanner: Send + Sync {
     fn id(&self) -> ScannerId;
@@ -187,8 +194,12 @@ classDiagram
   }
   class JobQueue {
     <<trait>>
-    +enqueue()
-    +lease()
+    +claim()
+    +complete()
+    +fail()
+  }
+  class Worker {
+    +run(kinds)
   }
   class Singleflight {
     +run(key, fut) Shared
@@ -200,13 +211,12 @@ classDiagram
   PublishService --> BlobStore
   PublishService --> Catalog
   PublishService --> AccessEvaluator
-  PublishService --> JobQueue
   ProxyService --> FormatProtocol
   ProxyService --> BlobStore
   ProxyService --> Catalog
   ProxyService --> Singleflight
   PromotionService --> PolicyEngine
-  PromotionService --> JobQueue
+  Worker --> JobQueue
 ```
 
 *Рис. 8.1. Use case сервисы зависят только от трейтов.*
@@ -222,7 +232,7 @@ classDiagram
 | Hexagonal (ports & adapters) | Вся граница ядра. Тесты ядра идут на in-memory адаптерах. |
 | Typestate | Жизненный цикл загрузки: `Upload<Staged>` → `Upload<Verified>` → `Version<Committed>`. Пропустить проверку digest невозможно на уровне компилятора. |
 | State machine | Версия пакета, exception, promotion request. |
-| Transactional outbox | События и задачи пишутся в той же транзакции, что и изменение данных. |
+| Задачи как данные | Задачи ставит атомарный метод каталога в той же транзакции, что и изменение данных (`publish_version(new, jobs)`). Транзакционный outbox с relay нужен только для внешней доставки (webhooks, SIEM), решение в P2 / v1.1.0. |
 | Singleflight | Proxy fetch и рендер metadata при промахе кэша. |
 | Strategy | Политики TTL proxy, правила retention, стратегии выдачи blob (stream или presigned redirect). |
 | Specification | Условия политик promotion и retention как композиция предикатов. |
