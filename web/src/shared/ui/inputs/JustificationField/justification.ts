@@ -12,19 +12,20 @@ export function justificationLength(value: string): number {
 
 export type JustificationStatus = "short" | "ok" | "long";
 
-export function justificationStatus(
-  value: string,
-  min: number = JUSTIFICATION_MIN,
-  max: number = JUSTIFICATION_MAX,
-): JustificationStatus {
+export function justificationStatus(value: string): JustificationStatus {
   const length = justificationLength(value);
-  if (length < min) {
+  if (length < JUSTIFICATION_MIN) {
     return "short";
   }
-  return length > max ? "long" : "ok";
+  return length > JUSTIFICATION_MAX ? "long" : "ok";
+}
+
+/** Единственный предикат «обоснование годится»: им пользуются и поле, и кнопка действия (экраны сами не считают). */
+export function isJustified(value: string): boolean {
+  return justificationStatus(value) === "ok";
 }
 
 /** Сколько символов осталось до предела; не меньше нуля. */
-export function justificationLeft(value: string, max: number = JUSTIFICATION_MAX): number {
-  return Math.max(max - justificationLength(value), 0);
+export function justificationLeft(value: string): number {
+  return Math.max(JUSTIFICATION_MAX - justificationLength(value), 0);
 }

@@ -542,8 +542,8 @@ msgstr "Обзор"
 msgid "Обоснование"
 msgstr "Обоснование"
 
-msgid "Обоснование: минимум {MIN_JUSTIFICATION} символов"
-msgstr "Обоснование: минимум {MIN_JUSTIFICATION} символов"
+msgid "Обоснование: от {JUSTIFICATION_MIN} до {JUSTIFICATION_MAX} символов"
+msgstr "Обоснование: от {JUSTIFICATION_MIN} до {JUSTIFICATION_MAX} символов"
 
 msgid "Образы без тега старше 14 дн · oci-hosted"
 msgstr "Образы без тега старше 14 дн · oci-hosted"

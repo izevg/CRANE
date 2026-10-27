@@ -10,9 +10,10 @@ import { columnHelper, DataTable, JsonViewer, KeyValueList } from "~/shared/ui/d
 import { ConfirmDialog } from "~/shared/ui/dialogs";
 import {
   FilterSelect,
+  isJustified,
+  JUSTIFICATION_MAX,
   JUSTIFICATION_MIN,
   JustificationField,
-  justificationStatus,
   SegmentedControl,
 } from "~/shared/ui/inputs";
 import { DetailPanel, PageHeader } from "~/shared/ui/layout";
@@ -57,7 +58,6 @@ function headerActions(): readonly [Action, Action] {
   ];
 }
 
-const MIN_JUSTIFICATION = JUSTIFICATION_MIN;
 const noop = () => undefined;
 
 const helper = columnHelper<AuditEvent>();
@@ -490,9 +490,11 @@ function RevealDialog({
         label: t`Раскрыть`,
         run: { onSelect: clearDraft },
         stepUp: true,
-        ...(justificationStatus(text) === "short"
-          ? { disabledReason: t`Обоснование: минимум ${MIN_JUSTIFICATION} символов` }
-          : {}),
+        ...(isJustified(text)
+          ? {}
+          : {
+              disabledReason: t`Обоснование: от ${JUSTIFICATION_MIN} до ${JUSTIFICATION_MAX} символов`,
+            }),
       }}
     >
       <Callout tone="info">

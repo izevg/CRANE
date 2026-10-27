@@ -25,11 +25,17 @@ msgstr "{count, plural, one {# непрочитанное} few {# непрочи
 msgid "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
 msgstr "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
 
-msgid "{count} из {minLength}"
-msgstr "{count} из {minLength}"
+msgid "{count} из {limit}"
+msgstr "{count} из {limit}"
 
 msgid "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
 msgstr "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
+
+msgid "{JUSTIFICATION_MAX, plural, one {Максимум # символ} few {Максимум # символа} many {Максимум # символов} other {Максимум # символа}}"
+msgstr "{JUSTIFICATION_MAX, plural, one {Максимум # символ} few {Максимум # символа} many {Максимум # символов} other {Максимум # символа}}"
+
+msgid "{JUSTIFICATION_MIN, plural, one {Минимум # символ} few {Минимум # символа} many {Минимум # символов} other {Минимум # символа}}"
+msgstr "{JUSTIFICATION_MIN, plural, one {Минимум # символ} few {Минимум # символа} many {Минимум # символов} other {Минимум # символа}}"
 
 msgid "{label}: {shown}"
 msgstr "{label}: {shown}"
@@ -195,9 +201,6 @@ msgstr "Личное и справка"
 
 msgid "Массовые действия"
 msgstr "Массовые действия"
-
-msgid "Минимум {minLength} символов"
-msgstr "Минимум {minLength} символов"
 
 msgid "модель {model}"
 msgstr "модель {model}"

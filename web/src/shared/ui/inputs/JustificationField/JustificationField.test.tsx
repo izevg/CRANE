@@ -1,11 +1,29 @@
 // biome-ignore-all lint/style/noMagicNumbers: числа в тестах — длины тестовых строк и ожидаемые счётчики
+// biome-ignore-all lint/style/useComponentExportOnlyModules: тестовая обёртка не экспортируется
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { Harness } from "./Harness";
-import { justificationLength, justificationStatus } from "./justification";
+import { JustificationField } from "./JustificationField";
+import { isJustified, justificationLength, justificationStatus } from "./justification";
 
 const MIN_ERROR = /Минимум 20 символов/;
+const MAX_ERROR = /Максимум 2\s000 символов/;
+
+/** Управляемая обёртка: поле хранит значение само, как это делает форма. */
+function Harness({ initial = "", showError = false }: { initial?: string; showError?: boolean }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <JustificationField
+      label="Обоснование"
+      value={value}
+      onChange={setValue}
+      showError={showError}
+    />
+  );
+}
+
+const field = () => screen.getByRole("textbox", { name: "Обоснование" });
 
 describe("justificationLength", () => {
   it("пробелы по краям не считаются", () => {
@@ -32,7 +50,7 @@ describe("justificationLength", () => {
   });
 });
 
-describe("justificationStatus", () => {
+describe("justificationStatus и isJustified", () => {
   it("ровно минимум — достаточно, на один меньше — недобор", () => {
     // Arrange
     const enough = "а".repeat(20);
@@ -55,51 +73,117 @@ describe("justificationStatus", () => {
     // Assert
     expect(status).toBe("short");
   });
+
+  it("ровно максимум в code points — достаточно, даже если UTF-16 длина больше", () => {
+    // Arrange
+    const value = `${"а".repeat(1999)}😀`;
+
+    // Act
+    const status = justificationStatus(value);
+
+    // Assert
+    expect(status).toBe("ok");
+    expect(value.length).toBeGreaterThan(2000);
+  });
+
+  it("на один символ больше максимума — превышение", () => {
+    // Arrange
+    const value = "а".repeat(2001);
+
+    // Act
+    const actual = [justificationStatus(value), isJustified(value)];
+
+    // Assert
+    expect(actual).toEqual(["long", false]);
+  });
+
+  it("isJustified истинно только для допустимой длины", () => {
+    // Arrange
+    const values = ["", "а".repeat(20), "а".repeat(2000), "а".repeat(2001)];
+
+    // Act
+    const actual = values.map(isJustified);
+
+    // Assert
+    expect(actual).toEqual([false, true, true, false]);
+  });
 });
 
 describe("JustificationField", () => {
+  it("поле обязательное: required и aria-required", () => {
+    // Arrange
+    // Act
+    render(<Harness />);
+
+    // Assert
+    expect(field()).toBeRequired();
+    expect(field()).toHaveAttribute("aria-required", "true");
+  });
+
   it("счётчик показывает набранное из минимума", () => {
     // Arrange
     // Act
-    render(<Harness label="Обоснование" initial="двенадцать!!" />);
+    render(<Harness initial="двенадцать!!" />);
 
     // Assert
-    expect(screen.getByRole("textbox", { name: "Обоснование" })).toHaveAccessibleDescription(
-      "12 из 20",
-    );
+    expect(field()).toHaveAccessibleDescription("12 из 20");
   });
 
   it("после минимума счётчик показывает остаток до предела", () => {
     // Arrange
     // Act
-    render(<Harness label="Обоснование" initial={"а".repeat(25)} />);
+    render(<Harness initial={"а".repeat(25)} />);
 
     // Assert
-    expect(screen.getByRole("textbox", { name: "Обоснование" })).toHaveAccessibleDescription(
-      "Осталось 1\u00a0975 символов",
-    );
+    expect(field()).toHaveAccessibleDescription("Осталось 1 975 символов");
+  });
+
+  it("остаток склоняется по правилам языка: 21 — «Остался 21 символ»", () => {
+    // Arrange
+    // Act
+    render(<Harness initial={"а".repeat(1979)} />);
+
+    // Assert
+    expect(field()).toHaveAccessibleDescription("Остался 21 символ");
+  });
+
+  it("native maxLength нет: ввод сверх предела не обрезается молча", () => {
+    // Arrange
+    // Act
+    render(<Harness initial={"а".repeat(2001)} />);
+
+    // Assert
+    expect(field()).not.toHaveAttribute("maxlength");
+  });
+
+  it("превышение предела показывает ошибку «Максимум 2000 символов»", () => {
+    // Arrange
+    // Act
+    render(<Harness initial={"а".repeat(2001)} />);
+
+    // Assert
+    expect(field()).toHaveAccessibleDescription(MAX_ERROR);
+    expect(field()).toBeInvalid();
   });
 
   it("ошибка недобора появляется после ухода из поля и связана с ним", async () => {
     // Arrange
     const user = userEvent.setup();
-    render(<Harness label="Обоснование" initial="коротко" />);
-    await user.click(screen.getByRole("textbox", { name: "Обоснование" }));
+    render(<Harness initial="коротко" />);
+    await user.click(field());
 
     // Act
     await user.tab();
 
     // Assert
-    expect(screen.getByRole("textbox", { name: "Обоснование" })).toHaveAccessibleDescription(
-      MIN_ERROR,
-    );
-    expect(screen.getByRole("textbox", { name: "Обоснование" })).toBeInvalid();
+    expect(field()).toHaveAccessibleDescription(MIN_ERROR);
+    expect(field()).toBeInvalid();
   });
 
   it("до ухода из поля ошибки нет", () => {
     // Arrange
     // Act
-    render(<Harness label="Обоснование" initial="коротко" />);
+    render(<Harness initial="коротко" />);
 
     // Assert
     expect(screen.queryByText(MIN_ERROR)).not.toBeInTheDocument();
@@ -108,32 +192,18 @@ describe("JustificationField", () => {
   it("showError показывает ошибку сразу", () => {
     // Arrange
     // Act
-    render(<Harness label="Обоснование" initial="коротко" showError />);
+    render(<Harness initial="коротко" showError />);
 
     // Assert
-    expect(screen.getByRole("textbox", { name: "Обоснование" })).toHaveAccessibleDescription(
-      MIN_ERROR,
-    );
+    expect(field()).toHaveAccessibleDescription(MIN_ERROR);
   });
 
   it("при достаточной длине ошибки нет даже с showError", () => {
     // Arrange
     // Act
-    render(<Harness label="Обоснование" initial={"а".repeat(20)} showError />);
+    render(<Harness initial={"а".repeat(20)} showError />);
 
     // Assert
     expect(screen.queryByText(MIN_ERROR)).not.toBeInTheDocument();
-  });
-
-  it("textarea ограничена максимумом", () => {
-    // Arrange
-    // Act
-    render(<Harness label="Обоснование" />);
-
-    // Assert
-    expect(screen.getByRole("textbox", { name: "Обоснование" })).toHaveAttribute(
-      "maxlength",
-      "2000",
-    );
   });
 });

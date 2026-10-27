@@ -542,8 +542,8 @@ msgstr "Overview"
 msgid "Обоснование"
 msgstr "Justification"
 
-msgid "Обоснование: минимум {MIN_JUSTIFICATION} символов"
-msgstr "Justification: at least {MIN_JUSTIFICATION} characters"
+msgid "Обоснование: от {JUSTIFICATION_MIN} до {JUSTIFICATION_MAX} символов"
+msgstr "Justification: {JUSTIFICATION_MIN} to {JUSTIFICATION_MAX} characters"
 
 msgid "Образы без тега старше 14 дн · oci-hosted"
 msgstr "Untagged images older than 14 d · oci-hosted"
