@@ -31,23 +31,31 @@ pub struct Version {
 impl Version {
     pub fn parse(format: Format, raw: &str) -> Result<Self, VersionError> {
         match format {
-            Format::Cargo => {
-                let mut parsed =
-                    semver::Version::parse(raw).map_err(|e| VersionError::Invalid {
-                        raw: raw.to_owned(),
-                        reason: e.to_string(),
-                    })?;
-                // SemVer 2.0: build metadata не участвует в precedence, а `semver::Version`
-                // сравнивает его лексикографически, поэтому из ключа он убирается.
-                parsed.build = semver::BuildMetadata::EMPTY;
-                Ok(Self {
-                    key: VersionKey::SemVer(parsed),
-                    written: raw.to_owned(),
-                })
-            }
-            Format::Maven | Format::Npm | Format::PyPi | Format::NuGet => {
-                Err(VersionError::Unsupported(format))
-            }
+            Format::Cargo | Format::Npm => Self::parse_semver(raw),
+            Format::Maven | Format::PyPi | Format::NuGet => Err(VersionError::Unsupported(format)),
+        }
+    }
+
+    /// Строгий SemVer 2.0: общая схема версий Cargo и npm (то, что реально бывает в реестре).
+    fn parse_semver(raw: &str) -> Result<Self, VersionError> {
+        let mut parsed = semver::Version::parse(raw).map_err(|e| VersionError::Invalid {
+            raw: raw.to_owned(),
+            reason: e.to_string(),
+        })?;
+        // SemVer 2.0: build metadata не участвует в precedence, а `semver::Version`
+        // сравнивает его лексикографически, поэтому из ключа он убирается.
+        parsed.build = semver::BuildMetadata::EMPTY;
+        Ok(Self {
+            key: VersionKey::SemVer(parsed),
+            written: raw.to_owned(),
+        })
+    }
+
+    /// Есть ли у версии pre-release часть (`1.0.0-rc.1`).
+    #[must_use]
+    pub fn is_prerelease(&self) -> bool {
+        match &self.key {
+            VersionKey::SemVer(v) => !v.pre.is_empty(),
         }
     }
 
@@ -254,5 +262,41 @@ mod tests {
 
         // Assert
         assert!(!equal);
+    }
+
+    #[test]
+    fn npm_versions_follow_the_same_semver_rules() {
+        // Arrange
+        let raws = ["1.0.0+a", "1.0.0+b", "1.0", "v1.0.0"];
+
+        // Act
+        let actual = raws.map(|r| {
+            Version::parse(Format::Npm, r)
+                .map(|v| v.canonical())
+                .map_err(|_| ())
+        });
+
+        // Assert
+        assert_eq!(
+            actual,
+            [
+                Ok("1.0.0".to_owned()),
+                Ok("1.0.0".to_owned()),
+                Err(()),
+                Err(())
+            ]
+        );
+    }
+
+    #[test]
+    fn prerelease_is_detected_only_by_pre_part() {
+        // Arrange
+        let versions = ["1.0.0", "1.0.0+build-1", "1.0.0-rc.1", "1.0.0-rc.1+b"].map(cargo);
+
+        // Act
+        let actual = versions.each_ref().map(Version::is_prerelease);
+
+        // Assert
+        assert_eq!(actual, [false, false, true, true]);
     }
 }
