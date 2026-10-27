@@ -1,5 +1,6 @@
 import type { MessageDescriptor } from "@lingui/core";
-import { useLingui } from "@lingui/react";
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import {
   CloudAlertIcon,
   FileQuestionMarkIcon,
@@ -11,15 +12,6 @@ import {
 import { type ReactNode, useId } from "react";
 import { cx } from "~/shared/lib/core";
 import { type Action, ActionBar, type ActionGroup } from "~/shared/ui/actions";
-import {
-  FORBIDDEN_TITLE,
-  NOT_FOUND_HINT,
-  NOT_FOUND_TITLE,
-  OFFLINE_HINT,
-  OFFLINE_TITLE,
-  SESSION_HINT,
-  SESSION_TITLE,
-} from "./messages";
 import { ContactLine, RemediationList, RequestIdLine, RuleLine } from "./ProblemParts";
 
 /**
@@ -71,6 +63,26 @@ type Head = {
   hint?: MessageDescriptor | string | undefined;
 };
 
+// Заголовки по kind: серверный `title` для них не показывается (язык сервера не зависит от языка интерфейса).
+const KIND_TEXT = {
+  "not-found": {
+    title: msg`Не найдено или нет доступа`,
+    hint: msg`Проверьте адрес или имя пакета`,
+  },
+  forbidden: { title: msg`Недостаточно прав` },
+  offline: {
+    title: msg`Нет соединения`,
+    hint: msg`Проверьте сеть — данные обновятся, когда связь вернётся`,
+  },
+  session: {
+    title: msg`Сессия завершена`,
+    hint: msg`Войдите снова, чтобы продолжить работу`,
+  },
+} satisfies Record<
+  Exclude<ProblemView["kind"], "error">,
+  { title: MessageDescriptor; hint?: MessageDescriptor }
+>;
+
 const HEADINGS = { 1: "h1", 2: "h2", 3: "h3" } as const;
 
 const NEUTRAL = { circle: "bg-muted", iconTone: "text-muted-foreground" } as const;
@@ -81,15 +93,14 @@ function headOf(problem: ProblemView): Head {
       return {
         ...NEUTRAL,
         Icon: FileQuestionMarkIcon,
-        title: NOT_FOUND_TITLE,
-        hint: NOT_FOUND_HINT,
+        ...KIND_TEXT["not-found"],
       };
     case "forbidden":
       return {
         Icon: ShieldAlertIcon,
         circle: "bg-warning-bg",
         iconTone: "text-warning",
-        title: FORBIDDEN_TITLE,
+        ...KIND_TEXT.forbidden,
       };
     case "error":
       return {
@@ -100,14 +111,13 @@ function headOf(problem: ProblemView): Head {
         hint: problem.detail,
       };
     case "offline":
-      return { ...NEUTRAL, Icon: WifiOffIcon, title: OFFLINE_TITLE, hint: OFFLINE_HINT };
+      return { ...NEUTRAL, Icon: WifiOffIcon, ...KIND_TEXT.offline };
     case "session":
       return {
         Icon: KeyRoundIcon,
         circle: "bg-info-bg",
         iconTone: "text-info",
-        title: SESSION_TITLE,
-        hint: SESSION_HINT,
+        ...KIND_TEXT.session,
       };
   }
 }
@@ -204,7 +214,7 @@ export function ProblemState({
   compact = false,
   className,
 }: ProblemStateProps) {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   const headingId = useId();
   const head = headOf(problem);
   const Heading = HEADINGS[headingLevel];
@@ -228,11 +238,11 @@ export function ProblemState({
         <Icon className={cx(head.iconTone, compact ? "size-5" : "size-7")} aria-hidden="true" />
       </span>
       <Heading id={headingId} className="mt-4 max-w-[48ch] text-balance text-h3 wrap-anywhere">
-        {typeof head.title === "string" ? head.title : _(head.title)}
+        {typeof head.title === "string" ? head.title : t(head.title)}
       </Heading>
       {head.hint ? (
         <p className="mt-1 max-w-[48ch] text-body text-muted-foreground wrap-anywhere">
-          {typeof head.hint === "string" ? head.hint : _(head.hint)}
+          {typeof head.hint === "string" ? head.hint : t(head.hint)}
         </p>
       ) : null}
       <Details problem={problem} />

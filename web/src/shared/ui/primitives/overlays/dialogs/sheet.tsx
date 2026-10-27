@@ -1,10 +1,9 @@
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
-import { useLingui } from "@lingui/react";
+import { useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
 import type * as React from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { Button } from "../../forms/toggle/button";
-import { CLOSE } from "../../text/messages";
 
 type SheetSide = "top" | "right" | "bottom" | "left";
 
@@ -30,7 +29,7 @@ export function SheetContent({
   showCloseButton = true,
   ...props
 }: WithClassName<SheetPrimitive.Popup.Props> & { side?: SheetSide; showCloseButton?: boolean }) {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   return (
     <SheetPrimitive.Portal>
       <SheetPrimitive.Backdrop className="anim-scrim fixed inset-0 z-50 bg-(--scrim)" />
@@ -52,7 +51,7 @@ export function SheetContent({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={_(CLOSE)}
+                aria-label={t`Закрыть`}
                 className="absolute top-3 right-3"
               />
             }

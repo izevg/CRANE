@@ -1,9 +1,8 @@
-import { useLingui } from "@lingui/react";
+import { useLingui } from "@lingui/react/macro";
 import type { CSSProperties } from "react";
 import { Toaster as Sonner } from "sonner";
 import { useColorMode } from "~/shared/lib/state";
 import { toneGlyph } from "../../display/tone/tone";
-import { CLOSE, TOASTER_LABEL } from "../../text/messages";
 
 const VISIBLE_TOASTS = 3;
 const STYLE = {
@@ -27,16 +26,16 @@ const ICONS = {
 
 /** Контейнер тостов справа снизу, не больше трёх видимых. Монтируется один раз в корне; показывает `showToast`. */
 export function Toaster() {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   const { resolved } = useColorMode();
   return (
     <Sonner
       theme={resolved}
       position="bottom-right"
       visibleToasts={VISIBLE_TOASTS}
-      containerAriaLabel={_(TOASTER_LABEL)}
+      containerAriaLabel={t`Оповещения`}
       // В sonner подпись кнопки закрытия задаётся только через toastOptions
-      toastOptions={{ closeButtonAriaLabel: _(CLOSE) }}
+      toastOptions={{ closeButtonAriaLabel: t`Закрыть` }}
       className="toaster group"
       icons={ICONS}
       style={STYLE}

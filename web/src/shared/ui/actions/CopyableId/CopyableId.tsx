@@ -1,7 +1,6 @@
-import { useLingui } from "@lingui/react";
+import { useLingui } from "@lingui/react/macro";
 import { MachineValue } from "../../primitives";
 import { CopyButton } from "../CopyButton/CopyButton";
-import { DEFAULT_LABEL } from "./messages";
 
 const HEAD = 4;
 const TAIL = 4;
@@ -30,8 +29,8 @@ type CopyableIdProps = {
  * и в скрытом для глаза тексте; копируется всегда полное значение.
  */
 export function CopyableId({ value, full = false, label, marked = true }: CopyableIdProps) {
-  const { _ } = useLingui();
-  const copyLabel = label ?? _(DEFAULT_LABEL);
+  const { t } = useLingui();
+  const copyLabel = label ?? t`Скопировать ID`;
   const shown = full ? value : shorten(value);
   const shortened = shown !== value;
   return (

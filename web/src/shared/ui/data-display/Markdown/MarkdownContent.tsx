@@ -1,9 +1,8 @@
-import { useLingui } from "@lingui/react";
+import { useLingui } from "@lingui/react/macro";
 import type { ComponentProps } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { Link } from "../../primitives";
-import { MARKDOWN_NEW_TAB } from "../text/messages";
 
 const EXTERNAL = /^https?:\/\//i;
 
@@ -11,7 +10,7 @@ const REHYPE_PLUGINS = [rehypeSanitize];
 
 /** Текст недоверенный: ссылки идут через `Link` кита, внешние открываются в новой вкладке без `opener`. */
 function MarkdownLink({ href, children }: ComponentProps<"a">) {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   if (href === undefined) {
     return <span>{children}</span>;
   }
@@ -19,7 +18,7 @@ function MarkdownLink({ href, children }: ComponentProps<"a">) {
     return (
       <Link href={href} target="_blank" rel="noopener noreferrer" className="text-brand underline">
         {children}
-        <span className="sr-only">{_(MARKDOWN_NEW_TAB)}</span>
+        <span className="sr-only">{t` (откроется в новой вкладке)`}</span>
       </Link>
     );
   }

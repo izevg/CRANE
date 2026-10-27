@@ -1,7 +1,6 @@
-import { useLingui } from "@lingui/react";
+import { useLingui } from "@lingui/react/macro";
 import { lazy, Suspense } from "react";
 import { Skeleton } from "../../primitives";
-import { MARKDOWN_LOADING } from "../text/messages";
 
 // Разбор markdown и санитайзер тяжёлые: они уезжают в отдельный чанк и грузятся при первом показе.
 const MarkdownContent = lazy(() =>
@@ -14,9 +13,9 @@ type MarkdownProps = {
 };
 
 function MarkdownFallback() {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   return (
-    <div role="status" aria-label={_(MARKDOWN_LOADING)} className="flex flex-col gap-2">
+    <div role="status" aria-label={t`Загрузка текста`} className="flex flex-col gap-2">
       <Skeleton className="h-4 w-2/3" />
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-5/6" />

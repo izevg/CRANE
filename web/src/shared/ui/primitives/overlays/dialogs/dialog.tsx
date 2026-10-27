@@ -1,10 +1,9 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { useLingui } from "@lingui/react";
+import { useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
 import type * as React from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { Button } from "../../forms/toggle/button";
-import { CLOSE } from "../../text/messages";
 
 type DialogSize = "default" | "palette";
 
@@ -42,7 +41,7 @@ export function DialogContent({
   size?: DialogSize;
   flush?: boolean;
 }) {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop
@@ -71,7 +70,7 @@ export function DialogContent({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={_(CLOSE)}
+                aria-label={t`Закрыть`}
                 className="absolute top-4 right-4"
               />
             }

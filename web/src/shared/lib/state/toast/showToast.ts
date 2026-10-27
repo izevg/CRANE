@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
 import { toast } from "sonner";
 import { copyToClipboard } from "~/shared/lib/core";
-import { COPY_FAILED, COPY_REQUEST_ID } from "./messages";
 
 /** Успех пропадает сам; ошибка остаётся, пока пользователь её не закроет (patterns §30). */
 const SUCCESS_MS = 4000;
@@ -32,13 +32,13 @@ export const showToast = {
         : {
             description: `request_id: ${requestId}`,
             action: {
-              label: i18n._(COPY_REQUEST_ID),
+              label: i18n._(msg`Копировать request_id`),
               onClick: (event) => {
                 // тост остаётся на экране: по умолчанию sonner закрывает его после действия
                 event.preventDefault();
                 void copyToClipboard(requestId).then((copied) => {
                   if (!copied) {
-                    toast.error(i18n._(COPY_FAILED), {
+                    toast.error(i18n._(msg`Не удалось скопировать — выделите текст вручную`), {
                       duration: Number.POSITIVE_INFINITY,
                       closeButton: true,
                     });

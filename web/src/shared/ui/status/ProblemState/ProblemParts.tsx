@@ -1,26 +1,25 @@
-import { useLingui } from "@lingui/react";
+import { useLingui } from "@lingui/react/macro";
 import { CopyableId } from "~/shared/ui/actions";
-import { COPY_REQUEST_ID, contactLine, REQUEST_ID, ruleLine } from "./messages";
 
 export function RuleLine({ ruleId }: { ruleId: string }) {
-  const { _ } = useLingui();
-  return <p className="mt-2 text-body wrap-anywhere">{_(ruleLine(ruleId))}</p>;
+  const { t } = useLingui();
+  return <p className="mt-2 text-body wrap-anywhere">{t`Правило: ${ruleId}`}</p>;
 }
 
 export function RequestIdLine({ requestId }: { requestId: string }) {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   return (
     <p className="mt-3 flex max-w-full items-center gap-1 text-caption text-muted-foreground">
-      <span>{_(REQUEST_ID)}</span>
-      <CopyableId value={requestId} label={_(COPY_REQUEST_ID)} />
+      <span>{t`Идентификатор запроса:`}</span>
+      <CopyableId value={requestId} label={t`Скопировать идентификатор запроса`} />
     </p>
   );
 }
 
 export function ContactLine({ contact }: { contact: string }) {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   return (
-    <p className="mt-2 text-body text-muted-foreground wrap-anywhere">{_(contactLine(contact))}</p>
+    <p className="mt-2 text-body text-muted-foreground wrap-anywhere">{t`Контакт: ${contact}`}</p>
   );
 }
 

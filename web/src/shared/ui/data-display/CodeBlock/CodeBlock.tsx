@@ -1,9 +1,8 @@
-import { useLingui } from "@lingui/react";
+import { useLingui } from "@lingui/react/macro";
 import { useLayoutEffect, useRef } from "react";
 import { cx } from "~/shared/lib/core";
 import { CopyButton } from "../../actions";
 import { MachineValue } from "../../primitives";
-import { CODE_LABEL } from "../text/messages";
 
 type CodeBlockProps = {
   code: string;
@@ -29,7 +28,7 @@ export function CodeBlock({
   wrap = false,
   marked = false,
 }: CodeBlockProps) {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   const ref = useRef<HTMLPreElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: смена текста не меняет размер рамки, но меняет переполнение
   useLayoutEffect(() => {
@@ -62,7 +61,7 @@ export function CodeBlock({
       <pre
         ref={ref}
         role="region"
-        aria-label={label ?? _(CODE_LABEL)}
+        aria-label={label ?? t`Код`}
         className={cx(
           "m-0 max-h-64 min-w-0 flex-1 overflow-auto p-1 font-mono text-caption text-foreground",
           wrap ? "whitespace-pre-wrap wrap-anywhere" : "whitespace-pre",

@@ -1,11 +1,10 @@
-import { useLingui } from "@lingui/react";
+import { useLingui } from "@lingui/react/macro";
 import { FlexRender, type Header, type Row, type RowData } from "@tanstack/react-table";
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from "lucide-react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { cx } from "~/shared/lib/core";
 import { type Action, ActionMenu } from "../../actions";
 import { Checkbox, Skeleton } from "../../primitives";
-import { TABLE_ACTIONS, TABLE_LOADING, TABLE_SELECT_ALL } from "../text/messages";
 import {
   CELL,
   CHECKBOX_COLUMN,
@@ -97,7 +96,7 @@ export function HeadRow<TData extends RowData>({
   selection,
   hasActions,
 }: HeadRowProps<TData>) {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   const firstPin = selection ? HEAD_PIN_LEFT_AFTER_CHECKBOX : HEAD_PIN_LEFT;
   return (
     <tr aria-rowindex={1} className="h-10 border-b">
@@ -107,7 +106,7 @@ export function HeadRow<TData extends RowData>({
             checked={selection.allSelected}
             indeterminate={selection.someSelected && !selection.allSelected}
             onCheckedChange={selection.onToggleAll}
-            aria-label={_(TABLE_SELECT_ALL)}
+            aria-label={t`Выбрать все загруженные`}
           />
         </th>
       ) : null}
@@ -122,7 +121,7 @@ export function HeadRow<TData extends RowData>({
       ))}
       {hasActions ? (
         <th scope="col" data-pin="end" className={cx(HEAD, HEAD_PIN_RIGHT)}>
-          <span className="sr-only">{_(TABLE_ACTIONS)}</span>
+          <span className="sr-only">{t`Действия`}</span>
         </th>
       ) : null}
     </tr>
@@ -238,7 +237,7 @@ export function DataRow<TData extends RowData>({
 
 /** Скелетон повторяет сетку колонок, чтобы раскладка не прыгала при появлении данных. */
 export function SkeletonRows({ cells }: { cells: readonly { key: string; className: string }[] }) {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   return (
     <>
       {SKELETON_KEYS.map((rowKey, rowIndex) => (
@@ -246,7 +245,7 @@ export function SkeletonRows({ cells }: { cells: readonly { key: string; classNa
           {cells.map((cell, cellIndex) => (
             <td key={cell.key} className={cx(CELL, cell.className)}>
               {rowIndex === 0 && cellIndex === 0 ? (
-                <span className="sr-only">{_(TABLE_LOADING)}</span>
+                <span className="sr-only">{t`Загрузка`}</span>
               ) : null}
               <Skeleton className="h-4 w-full max-w-40" />
             </td>
