@@ -1,9 +1,8 @@
-import { Toolbar } from "@base-ui/react/toolbar";
 import { XIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { announce } from "~/shared/lib/a11y";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { buttonStyles } from "../../primitives";
+import { Button } from "../../primitives";
 import { ActionButton } from "../ActionButton/ActionButton";
 import type { Action } from "../ActionButton/action";
 import { useScrollPaddingBottom } from "./useScrollPaddingBottom";
@@ -16,7 +15,7 @@ type BulkActionBarProps = WithClassName<{
   onClear: () => void;
 }>;
 
-const REGION_LABEL = "Действия с выбранными";
+const REGION_LABEL = "Массовые действия";
 const CLEAR_LABEL = "Снять выделение";
 const SELECTED_PREFIX = "Выбрано ";
 
@@ -25,6 +24,8 @@ const SCROLL_PADDING_GAP = 32;
 
 /**
  * Плавающая панель массовых действий (поверх таблицы, снизу по центру; ниже `md` — на всю ширину).
+ * Это `group`, а не `toolbar`: кнопки действий (`ActionButton`) не регистрируются в roving tabindex Base UI,
+ * поэтому «Выбрано N», действия и «Снять выделение» идут в обычном Tab-порядке.
  * Пока панель смонтирована, документ резервирует `scroll-padding-bottom` под неё, чтобы она не
  * перекрывала последнюю строку и сфокусированный элемент (WCAG 2.4.11). Изменение числа выбранных
  * объявляется скринридеру через общий live-регион.
@@ -43,8 +44,10 @@ export function BulkActionBar({ count, actions, onClear, className }: BulkAction
     return null;
   }
   return (
-    <Toolbar.Root
+    // biome-ignore lint/a11y/useSemanticElements: <fieldset> — для форм; здесь плавающая панель, нужна именованная группа
+    <div
       ref={barRef}
+      role="group"
       aria-label={REGION_LABEL}
       className={cx(
         "sticky bottom-4 z-10 mx-auto flex w-full max-w-full flex-wrap items-center gap-3 bg-card px-4 py-2 text-body shadow-card transition-[opacity,translate] duration-(--dur-base) ease-(--ease-out) starting:translate-y-2 starting:opacity-0 motion-reduce:transition-none md:w-fit md:rounded-lg",
@@ -60,13 +63,9 @@ export function BulkActionBar({ count, actions, onClear, className }: BulkAction
           <ActionButton key={action.label} action={action} variant="secondary" />
         ))}
       </div>
-      <Toolbar.Button
-        aria-label={CLEAR_LABEL}
-        className={buttonStyles({ variant: "ghost", size: "icon-sm" })}
-        onClick={onClear}
-      >
+      <Button variant="ghost" size="icon-sm" aria-label={CLEAR_LABEL} onClick={onClear}>
         <XIcon aria-hidden="true" />
-      </Toolbar.Button>
-    </Toolbar.Root>
+      </Button>
+    </div>
   );
 }

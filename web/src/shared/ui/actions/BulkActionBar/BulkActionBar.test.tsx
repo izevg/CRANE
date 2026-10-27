@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveRegion } from "~/shared/lib/a11y";
 import { type Action, BulkActionBar } from "~/shared/ui/actions";
 
-const REGION = "Действия с выбранными";
+const REGION = "Массовые действия";
 const CLEAR = "Снять выделение";
 const ACTIONS: Action[] = [
   { label: "Принять VEX", run: { onSelect: vi.fn() } },
@@ -30,7 +30,7 @@ describe("BulkActionBar", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("показывает «Выбрано 3» в панели инструментов", () => {
+  it("показывает «Выбрано 3» в именованной группе", () => {
     // Arrange
     const count = 3;
 
@@ -38,7 +38,7 @@ describe("BulkActionBar", () => {
     render(<BulkActionBar count={count} actions={ACTIONS} onClear={vi.fn()} />);
 
     // Assert
-    const toolbar = screen.getByRole("toolbar", { name: REGION });
+    const toolbar = screen.getByRole("group", { name: REGION });
     expect(toolbar).toHaveTextContent("Выбрано 3");
   });
 
@@ -81,6 +81,20 @@ describe("BulkActionBar", () => {
 
     // Assert
     expect(screen.getByRole("button", { name: "Принять VEX" })).toHaveAccessibleDescription(reason);
+  });
+
+  it("все действия и «Снять выделение» достижимы по Tab", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    render(<BulkActionBar count={2} actions={ACTIONS} onClear={vi.fn()} />);
+    await user.tab();
+    await user.tab();
+
+    // Act
+    await user.tab();
+
+    // Assert
+    expect(screen.getByRole("button", { name: CLEAR })).toHaveFocus();
   });
 
   it("«Снять выделение» вызывает onClear", async () => {
