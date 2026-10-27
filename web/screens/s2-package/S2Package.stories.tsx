@@ -1,20 +1,23 @@
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { ChevronDownIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { expect, within } from "storybook/test";
-import { LIFECYCLE_STATE, type VersionState } from "~/shared/api";
+import { CLIENTS_BY_FORMAT, InstallBlock } from "~/features/install-snippet";
+import {
+  type InstallClient,
+  type InstallInstructions,
+  LIFECYCLE_STATE,
+  type VersionState,
+} from "~/shared/api";
 import { copyToClipboard } from "~/shared/lib/core";
 import { i18n } from "~/shared/lib/i18n";
 import { CopyableId } from "~/shared/ui/actions";
-import { CodeBlock, columnHelper, DataTable, KeyValueList } from "~/shared/ui/data-display";
-import { SegmentedControl } from "~/shared/ui/inputs";
+import { columnHelper, DataTable, KeyValueList } from "~/shared/ui/data-display";
 import { PageHeader } from "~/shared/ui/layout";
 import { StatChip, TimeSeriesChart } from "~/shared/ui/metrics";
 import {
   Badge,
-  Button,
   Card,
   CardContent,
   CardHeader,
@@ -31,22 +34,22 @@ import { Moment } from "../frame/Moment";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
 
-type Client = "npm" | "pnpm" | "yarn";
+// i18n-fixture: заголовки шагов приходят с сервера (InstallInstructions) — контент витрины, а не текст интерфейса
+function installInstructions(client: InstallClient): InstallInstructions {
+  const install: Partial<Record<InstallClient, string>> = {
+    npm: "npm i @acme/ui@1.4.2",
+    pnpm: "pnpm add @acme/ui@1.4.2",
+    yarn: "yarn add @acme/ui@1.4.2",
+  };
+  return {
+    client,
+    setup_steps: [{ title: "Вход и настройка npm", code: "cctl login\ncctl setup npm" }],
+    manual_config: { path: ".npmrc", code: `//crane.example/npm/:_authToken=\${CRANE_TOKEN}` },
+    install: { code: install[client] ?? "npm i @acme/ui@1.4.2" },
+    _links: { self: { href: "/api/v1/packages/npm/acme-ui/install" } },
+  };
+}
 
-const CLIENTS = [
-  { value: "npm", label: "npm" },
-  { value: "pnpm", label: "pnpm" },
-  { value: "yarn", label: "yarn" },
-] as const;
-
-const INSTALL: Record<Client, string> = {
-  npm: "npm i @acme/ui@1.4.2",
-  pnpm: "pnpm add @acme/ui@1.4.2",
-  yarn: "yarn add @acme/ui@1.4.2",
-};
-
-const SETUP = "cctl login\ncctl setup npm";
-const NPMRC = `//crane.example/npm/:_authToken=\${CRANE_TOKEN}`;
 const TARBALL_SHA = "9b3f1c7ad04e5b82c6f01d3a7e48b9250c1f6d8e3a47b05c9d2e18f4a6b7c3d1";
 
 type VersionRow = {
@@ -167,59 +170,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-// Спека волны 2: patterns §7 — будущий shared/ui/install-block (InstallBlock)
 function InstallSection() {
-  const { t } = useLingui();
-  const [client, setClient] = useState<Client>("npm");
-  const [manual, setManual] = useState(false);
-  const toggleManual = useCallback(() => setManual((value) => !value), []);
+  const [client, setClient] = useState<InstallClient>("npm");
   return (
-    <Section title={t`Установка`}>
-      <SegmentedControl
-        label={t`Клиент пакетов`}
-        items={CLIENTS}
-        value={client}
-        onValueChange={setClient}
-      />
-      <div className="flex flex-col gap-2">
-        <h3 className="text-body font-semibold">{t`Шаг 1. Однократная настройка`}</h3>
-        <CodeBlock
-          code={SETUP}
-          copyLabel={t`Копировать команды настройки`}
-          label={t`Команды настройки`}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-expanded={manual}
-          onClick={toggleManual}
-          className="self-start"
-        >
-          <ChevronDownIcon aria-hidden="true" className={manual ? "rotate-180" : ""} />
-          {t`Настроить вручную (.npmrc)`}
-        </Button>
-        {manual ? (
-          <>
-            <CodeBlock
-              code={NPMRC}
-              copyLabel={t`Копировать строку .npmrc`}
-              label={t`Файл .npmrc`}
-            />
-            <p className="text-caption text-muted-foreground">
-              {t`Токен не показывается: используйте cctl или переменную окружения.`}
-            </p>
-          </>
-        ) : null}
-      </div>
-      <div className="flex flex-col gap-2">
-        <h3 className="text-body font-semibold">{t`Шаг 2. Установка`}</h3>
-        <CodeBlock
-          code={INSTALL[client]}
-          copyLabel={t`Копировать команду установки`}
-          label={t`Команда установки`}
-        />
-      </div>
-    </Section>
+    <InstallBlock
+      format="npm"
+      clients={CLIENTS_BY_FORMAT.npm}
+      instructions={installInstructions(client)}
+      onClientChange={setClient}
+      envHref="/help/environment"
+    />
   );
 }
 
@@ -312,7 +272,7 @@ function RightColumn({ proxy }: { proxy: boolean }) {
 function S2Package({ proxy = false }: { proxy?: boolean }) {
   const { t } = useLingui();
   const copy = useCallback(() => {
-    void copyToClipboard(INSTALL.npm);
+    void copyToClipboard(installInstructions("npm").install.code);
   }, []);
   return (
     <ScreenFrame

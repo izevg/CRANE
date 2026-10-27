@@ -426,17 +426,8 @@ msgstr "By"
 msgid "Клиент"
 msgstr "Client"
 
-msgid "Клиент пакетов"
-msgstr "Package client"
-
 msgid "Команда"
 msgstr "Team"
-
-msgid "Команда установки"
-msgstr "Install command"
-
-msgid "Команды настройки"
-msgstr "Setup commands"
 
 msgid "Коммит"
 msgstr "Commit"
@@ -452,15 +443,6 @@ msgstr "Copy JSON"
 
 msgid "Копировать команду входа"
 msgstr "Copy sign-in command"
-
-msgid "Копировать команду установки"
-msgstr "Copy install command"
-
-msgid "Копировать команды настройки"
-msgstr "Copy setup commands"
-
-msgid "Копировать строку .npmrc"
-msgstr "Copy .npmrc line"
 
 msgid "Лимит: {ACTIVE_TOKENS} из {TOKEN_LIMIT}"
 msgstr "Limit: {ACTIVE_TOKENS} of {TOKEN_LIMIT}"
@@ -518,9 +500,6 @@ msgstr "Search"
 
 msgid "Настроить retention"
 msgstr "Configure retention"
-
-msgid "Настроить вручную (.npmrc)"
-msgstr "Set up manually (.npmrc)"
 
 msgid "Настройки"
 msgstr "Settings"
@@ -1092,9 +1071,6 @@ msgstr "Actor type"
 msgid "Токен crp_9f8e7d6c истекает через 3 дня"
 msgstr "Token crp_9f8e7d6c expires in 3 days"
 
-msgid "Токен не показывается: используйте cctl или переменную окружения."
-msgstr "The token is not shown: use cctl or an environment variable."
-
 msgid "Токен нужен пакетным менеджерам и CLI. Для входа из терминала хватит cctl login."
 msgstr "The token is for package managers and the CLI. For terminal sign-in, cctl login is enough."
 
@@ -1137,17 +1113,11 @@ msgstr "Delete…"
 msgid "Уменьшите пакет: уберите артефакты сборки и тестовые данные из файлов публикации"
 msgstr "Shrink the package: remove build artifacts and test data from the published files"
 
-msgid "Установка"
-msgstr "Install"
-
 msgid "Устарел"
 msgstr "Deprecated"
 
 msgid "Участники"
 msgstr "Members"
-
-msgid "Файл .npmrc"
-msgstr ".npmrc file"
 
 msgid "Файлы"
 msgstr "Files"
@@ -1193,12 +1163,6 @@ msgstr "Chain"
 
 msgid "Человек"
 msgstr "Human"
-
-msgid "Шаг 1. Однократная настройка"
-msgstr "Step 1. One-time setup"
-
-msgid "Шаг 2. Установка"
-msgstr "Step 2. Install"
 
 msgid "Экспорт"
 msgstr "Export"
