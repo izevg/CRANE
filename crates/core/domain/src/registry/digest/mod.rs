@@ -33,7 +33,7 @@ impl Sha256 {
         let mut bytes = [0u8; LEN];
         let (pairs, _) = digits.as_chunks::<2>();
         for (byte, [hi, lo]) in bytes.iter_mut().zip(pairs) {
-            *byte = (hi << 4) | lo;
+            *byte = (hi << 4) + lo;
         }
         Ok(Self(bytes))
     }

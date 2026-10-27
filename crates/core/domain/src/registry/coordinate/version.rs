@@ -231,4 +231,28 @@ mod tests {
         // Assert
         assert_eq!(result.unwrap_err(), VersionError::Unsupported(Format::PyPi));
     }
+
+    #[test]
+    fn different_versions_are_not_equal() {
+        // Arrange
+        let (a, b, rc) = (cargo("1.0.0"), cargo("1.0.1"), cargo("1.0.0-rc.1"));
+
+        // Act
+        let (patch_differs, pre_release_differs) = (a != b, rc != a);
+
+        // Assert
+        assert!(patch_differs && pre_release_differs);
+    }
+
+    #[test]
+    fn different_versions_have_different_hashes() {
+        // Arrange
+        let (a, b) = (cargo("1.0.0"), cargo("1.0.1"));
+
+        // Act
+        let (hash_a, hash_b) = (hash_of(&a), hash_of(&b));
+
+        // Assert
+        assert_ne!(hash_a, hash_b);
+    }
 }
