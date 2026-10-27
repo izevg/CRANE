@@ -22,7 +22,7 @@ crane-memory = { path = "../../adapters/persistence/memory" }
 crane-ports = { path = "../../core/ports" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
-tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "signal"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "signal", "io-util", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }
 uuid = { version = "1", features = ["v7"] }

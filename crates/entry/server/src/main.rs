@@ -1,6 +1,6 @@
-//! Composition root и точка входа сервера: роли serve, worker, analyze, all, migrate.
+//! Composition root и точка входа сервера: роли serve, all, migrate, healthcheck.
 //!
-//! Конфигурация только из окружения (`config`), логи JSON в stdout (раздел 16.6).
+//! Конфигурация: env поверх необязательного TOML (`config`), логи JSON в stdout (раздел 16.6).
 
 mod config;
 mod run;
@@ -14,13 +14,14 @@ use tracing_subscriber::EnvFilter;
 
 use crate::config::{Settings, Storage};
 
-const USAGE: &str = "использование: crane <serve|all|migrate>";
+const USAGE: &str = "использование: crane <serve|all|migrate|healthcheck>";
 const EXIT_USAGE: u8 = 2;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Role {
     Serve,
     Migrate,
+    Healthcheck,
 }
 
 impl Role {
@@ -30,6 +31,7 @@ impl Role {
             [role] => match role.as_str() {
                 "serve" | "all" => Some(Self::Serve),
                 "migrate" => Some(Self::Migrate),
+                "healthcheck" => Some(Self::Healthcheck),
                 _ => None,
             },
             _ => None,
@@ -61,6 +63,8 @@ fn execute(role: &Role) -> Result<(), run::RunError> {
         Role::Serve => run::serve(Settings::from_env(&var, &read_file)?),
         // Миграциям токен и публичный адрес не нужны.
         Role::Migrate => run::migrate(Storage::from_env(&var)?),
+        // Только порт admin: токен, адрес и хранилище пробе не нужны.
+        Role::Healthcheck => run::healthcheck(config::admin_port(&var)?),
     }
 }
 
@@ -117,12 +121,25 @@ mod tests {
     }
 
     #[test]
+    fn healthcheck_selects_the_healthcheck_role() {
+        // Arrange
+        let healthcheck = args(&["healthcheck"]);
+
+        // Act
+        let role = Role::parse(&healthcheck);
+
+        // Assert
+        assert_eq!(role, Some(Role::Healthcheck));
+    }
+
+    #[test]
     fn anything_but_exactly_one_known_role_is_rejected() {
         // Arrange
         let cases = [
             args(&[]),
             args(&["worker"]),
             args(&["serve", "migrate"]),
+            args(&["healthcheck", "extra"]),
             args(&[""]),
         ];
 
@@ -130,7 +147,7 @@ mod tests {
         let roles = cases.map(|case| Role::parse(&case));
 
         // Assert
-        assert_eq!(roles, [None, None, None, None]);
+        assert_eq!(roles, [None, None, None, None, None]);
     }
 
     #[test]

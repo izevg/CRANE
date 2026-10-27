@@ -67,6 +67,8 @@ services:
 | `CRANE_CARGO_REPOS` | `internal` | hosted cargo-репозитории через запятую |
 | `CRANE_MAX_PUBLISH_BYTES` | `10485760` | предел тела публикации cargo в байтах |
 
+`crane healthcheck` опрашивает `/healthz/ready` на `CRANE_ADMIN_PORT` и завершается с кодом 0 или 1 (для healthcheck в compose: в образе нет curl).
+
 ## 16.2 Kubernetes (Helm chart)
 
 ```mermaid

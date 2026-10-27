@@ -168,7 +168,7 @@ impl Settings {
     ) -> Result<Self, ConfigError> {
         Ok(Self {
             http_port: number(var, HTTP_PORT, DEFAULT_HTTP_PORT)?,
-            admin_port: number(var, ADMIN_PORT, DEFAULT_ADMIN_PORT)?,
+            admin_port: admin_port(var)?,
             public_url: public_url(var)?,
             token: token(var, read_file)?,
             cargo_repos: repos(var)?,
@@ -185,6 +185,11 @@ fn required(
     var(name)
         .filter(|value| !value.is_empty())
         .ok_or(ConfigError::Missing { var: name })
+}
+
+/// Отдельно от `Settings`: проба здоровья не должна требовать токен, адрес и хранилище.
+pub(crate) fn admin_port(var: &impl Fn(&str) -> Option<String>) -> Result<u16, ConfigError> {
+    number(var, ADMIN_PORT, DEFAULT_ADMIN_PORT)
 }
 
 fn number<T: std::str::FromStr>(
@@ -766,6 +771,30 @@ mod tests {
                 first: TOKEN,
                 second: TOKEN_FILE
             }
+        );
+    }
+
+    #[test]
+    fn admin_port_needs_nothing_else_and_defaults() {
+        // Arrange
+        let empty = env(&[]);
+        let custom = env(&[(ADMIN_PORT, "19464")]);
+        let broken = env(&[(ADMIN_PORT, "x")]);
+
+        // Act
+        let results = [admin_port(&empty), admin_port(&custom), admin_port(&broken)];
+
+        // Assert
+        assert_eq!(
+            results,
+            [
+                Ok(9464),
+                Ok(19464),
+                Err(ConfigError::Invalid {
+                    var: ADMIN_PORT,
+                    reason: "ожидалось целое число в допустимом диапазоне"
+                })
+            ]
         );
     }
 }

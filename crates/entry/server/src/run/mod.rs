@@ -1,5 +1,7 @@
 //! Роли процесса: запуск HTTP-серверов и миграции.
 
+mod health;
+
 use std::future::IntoFuture;
 use std::sync::Arc;
 
@@ -15,6 +17,7 @@ use tokio::runtime::Builder;
 
 use crate::config::{Blobs, Catalogs, Settings, Storage};
 use crate::system::{SystemClock, UuidV7Ids};
+pub(crate) use health::healthcheck;
 
 pub(crate) type RunError = Box<dyn std::error::Error + Send + Sync>;
 
