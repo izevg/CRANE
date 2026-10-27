@@ -9,14 +9,17 @@ use std::time::Duration;
 
 use crane_ports::proxy::{Cached, CachedState};
 use fred::clients::{Client, SubscriberClient, WithOptions};
-use fred::interfaces::ClientLike;
-use fred::types::config::{ConnectionConfig, Options, ReconnectPolicy};
+use fred::interfaces::{ClientLike, EventInterface};
+use fred::types::config::{ConnectionConfig, Options, ReconnectPolicy, UnresponsiveConfig};
 use moka::sync::Cache;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::task::JoinHandle;
+use tracing::{info, warn};
 
 pub use endpoint::{Endpoint, EndpointError};
 pub(crate) use waiters::Waiters;
 
+use crate::availability::{Link, LinkEvent, Notice, step};
 use crate::proxy::Releases;
 
 /// Условные накладные расходы записи сверх тела: ключ, счётчики, метки времени.
@@ -34,6 +37,17 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Таймаут установки TCP/TLS-соединения: недоступный хост не должен занимать попытку надолго.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Как часто fred проверяет, не завис ли кадр без ответа. Меньше половины `COMMAND_TIMEOUT`,
+/// как велит документация fred: зависание замечается за `COMMAND_TIMEOUT` плюс эту паузу.
+const UNRESPONSIVE_CHECK: Duration = Duration::from_millis(250);
+
+/// Верхняя граница возраста записи в L1. Инвалидации `inv` приходят по pub/sub; подписчик
+/// без кадров в ожидании не замечает молчащий Valkey (партиция одной реплики), и пропущенная
+/// инвалидация оставила бы устаревшую запись надолго. Теперь она стоит не больше этого окна.
+/// У записи есть и собственный срок свежести, его проверяет движок proxy: этот предел только
+/// сверху.
+const L1_MAX_AGE: Duration = Duration::from_secs(30);
 
 /// Реконнект: без лимита попыток, экспоненциально от 100 мс до 5 с (мс, мс, база).
 const RECONNECT_MIN_MS: u32 = 100;
@@ -86,6 +100,7 @@ impl Local {
         Self {
             l1: Cache::builder()
                 .max_capacity(l1_bytes)
+                .time_to_live(L1_MAX_AGE)
                 .weigher(|_name: &String, entry: &Cached| weight(entry))
                 .build(),
             waiters: Waiters::default(),
@@ -155,6 +170,17 @@ impl Valkey {
         config.fail_fast = false;
         let connection = ConnectionConfig {
             connection_timeout: CONNECT_TIMEOUT,
+            // Рукопожатие реконнекта против молчащего сервера не должно висеть 10 с по умолчанию.
+            internal_command_timeout: CONNECT_TIMEOUT,
+            // Таймаут команды сам соединение не рвёт: при `docker pause` или партиции клиент
+            // оставался бы `Connected`, и каждая команда ждала бы свою секунду бесконечно.
+            // Кадр без ответа дольше `COMMAND_TIMEOUT` рвёт соединение, клиент уходит из
+            // `Connected`, и `fail_fast` отказывает мгновенно, пока фоновый реконнект не получит
+            // ответ на рукопожатие (PING). Это и есть open/half-open, своей машины не нужно.
+            unresponsive: UnresponsiveConfig {
+                max_timeout: Some(COMMAND_TIMEOUT),
+                interval: UNRESPONSIVE_CHECK,
+            },
             ..ConnectionConfig::default()
         };
         let policy =
@@ -188,11 +214,47 @@ impl Valkey {
 
 /// Держит соединение командного клиента, пока жив узел: когда задача соединения fred
 /// завершилась (политика сдалась, отказ аутентификации), подключает клиента заново.
+/// Заодно пишет в журнал смену доступности Valkey, которую иначе не видно: при бесконечной
+/// политике реконнекта задача соединения не завершается.
+///
+/// `unresponsive_rx` не слушаем: в fred 10.1 событие нигде не отправляется. Зависшее
+/// соединение закрывается с ошибкой IO и приходит в `error_rx` как обычный обрыв.
 async fn hold_connection(client: Client) {
+    let mut lost = client.error_rx();
+    let mut restored = client.reconnect_rx();
+    let mut link = Link::Unavailable;
     loop {
         let mut connection = inbox::connect(&client).await;
-        inbox::connection_lost((&mut connection.0).await).await;
+        loop {
+            let event = tokio::select! {
+                received = lost.recv() => received.map(|_| LinkEvent::Lost),
+                received = restored.recv() => received.map(|_| LinkEvent::Restored),
+                outcome = &mut connection.0 => {
+                    inbox::connection_lost(outcome).await;
+                    break;
+                }
+            };
+            match event {
+                Ok(event) => link = record(link, event),
+                // Пропущенные события: состояние уточнит следующее.
+                Err(RecvError::Lagged(_)) => {}
+                Err(RecvError::Closed) => return,
+            }
+        }
     }
+}
+
+fn record(previous: Link, event: LinkEvent) -> Link {
+    let (next, notice) = step(previous, event);
+    match notice {
+        Some(Notice::Unavailable) => warn!(
+            valkey = "unavailable",
+            "Valkey: команды отказывают сразу до переподключения"
+        ),
+        Some(Notice::Available) => info!(valkey = "available", "Valkey: соединение установлено"),
+        None => {}
+    }
+    next
 }
 
 #[cfg(test)]
