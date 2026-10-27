@@ -19,11 +19,17 @@ msgstr "{count, plural, one {# непрочитанное} few {# непрочи
 msgid "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
 msgstr "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
 
+msgid "{count} из {minLength}"
+msgstr "{count} из {minLength}"
+
 msgid "{label}: {shown}"
 msgstr "{label}: {shown}"
 
 msgid "{label}: {shown}, {toneLabel}"
 msgstr "{label}: {shown}, {toneLabel}"
+
+msgid "{left, plural, one {Остался # символ} few {Осталось # символа} many {Осталось # символов} other {Осталось # символа}}"
+msgstr "{left, plural, one {Остался # символ} few {Осталось # символа} many {Осталось # символов} other {Осталось # символа}}"
 
 msgid "{shown}, уверенность {confidenceText}"
 msgstr "{shown}, уверенность {confidenceText}"
@@ -144,6 +150,9 @@ msgstr "Личное и справка"
 
 msgid "Массовые действия"
 msgstr "Массовые действия"
+
+msgid "Минимум {minLength} символов"
+msgstr "Минимум {minLength} символов"
 
 msgid "модель {model}"
 msgstr "модель {model}"
