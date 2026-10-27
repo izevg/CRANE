@@ -1,6 +1,7 @@
 import type { SearchItem } from "~/shared/api";
 
 /** Базовый результат поиска для тестов и stories: пакет без риска, typosquat и точного совпадения. */
+// i18n-fixture: описание и команда — контент пакета, а не текст интерфейса
 export const BASE_ITEM: SearchItem = {
   purl_base: "pkg:npm/%40acme/ui",
   name: { display: "@acme/ui", normalized: "@acme/ui" },
