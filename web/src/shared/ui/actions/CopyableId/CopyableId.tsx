@@ -29,7 +29,7 @@ export function CopyableId({ value, full = false, label = DEFAULT_LABEL }: Copya
   const shown = full ? value : shorten(value);
   const shortened = shown !== value;
   return (
-    <span className="inline-flex max-w-full min-w-0 items-center gap-0.5 tabular-nums">
+    <span className="inline-flex max-w-full min-w-0 items-center gap-0.5 font-mono tabular-nums">
       <span title={value} className="min-w-0 wrap-anywhere">
         <span aria-hidden={shortened || undefined}>{shown}</span>
         {shortened ? <span className="sr-only">{value}</span> : null}
