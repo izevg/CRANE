@@ -290,6 +290,29 @@ export function checkOffline(lines: Access[]): string[] {
     .map((line) => `${line.path}: status ${line.status}, cache ${line.cache ?? "-"}`);
 }
 
+const TREE_SUMMARY = /(\d+) files?\s*$/;
+
+/** Число файлов из последней строки `weed shell` `fs.tree` («N directories, M files»); не разобрали — `undefined`. */
+export function parseObjectCount(output: string): number | undefined {
+  const match = TREE_SUMMARY.exec(output.trim().split("\n").at(-1) ?? "");
+  return match?.[1] === undefined ? undefined : Number(match[1]);
+}
+
+/**
+ * Число объектов бакета до рестарта и после офлайн-фазы: CAS обязан лежать на S3 (больше нуля), а офлайн-сборка
+ * ничего не удаляет (после не меньше, чем до). Пустой результат — сошлось.
+ */
+export function checkBucketObjects(before: number, after: number): string[] {
+  const problems: string[] = [];
+  if (before <= 0) {
+    problems.push(`в бакете до рестарта ${before} объектов, ожидалось больше нуля`);
+  }
+  if (after < before) {
+    problems.push(`объектов в бакете стало меньше: было ${before}, стало ${after}`);
+  }
+  return problems;
+}
+
 const BAD_GATEWAY = 502;
 
 /**
