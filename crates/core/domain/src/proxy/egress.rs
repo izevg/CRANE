@@ -125,6 +125,12 @@ impl EgressPolicy {
 }
 
 impl UpstreamBase {
+    /// Нормализованный хост без скобок IPv6-литерала.
+    #[must_use]
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
     /// `{scheme}://{host}[:port]/{prefix}{path}`. Префикс пуст или оканчивается `/` и не начинается с `/`,
     /// поэтому путь всегда остаётся после authority и не может сменить хост.
     #[must_use]

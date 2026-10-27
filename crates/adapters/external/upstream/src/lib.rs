@@ -18,6 +18,7 @@ use futures_util::TryStreamExt;
 use reqwest::dns::Resolve;
 use reqwest::header::IF_NONE_MATCH;
 use reqwest::redirect;
+use reqwest::{Response, StatusCode};
 
 use guard::{GuardedResolver, Hop, hop, refusal};
 use headers::{Classified, classify};
@@ -87,34 +88,28 @@ fn unavailable(error: impl Into<Box<dyn Error + Send + Sync>>) -> UpstreamError 
     UpstreamError::Unavailable(error.into())
 }
 
-/// Пишет событие egress. `path` — путь upstream без query; `elapsed_ms` — время до получения заголовков.
+/// Пишет событие egress по уже классифицированному исходу. `path` — путь upstream без query;
+/// `elapsed_ms` — время до получения заголовков.
 fn record_egress(
-    url: &str,
+    host: &str,
     path: &str,
-    sent: &Result<reqwest::Response, reqwest::Error>,
+    outcome: Result<StatusCode, &UpstreamError>,
     elapsed: Duration,
 ) {
-    // У `UpstreamBase` нет доступа к хосту (поля приватны, наружу только `url()` в crane-domain), поэтому host
-    // берётся из уже собранного URL.
-    let host = reqwest::Url::parse(url)
-        .ok()
-        .and_then(|parsed| parsed.host_str().map(str::to_owned))
-        .unwrap_or_default();
     let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
-    match sent {
-        Ok(response) => tracing::info!(
+    match outcome {
+        Ok(status) => tracing::info!(
             target: EGRESS_TARGET,
             host,
             path,
-            status = response.status().as_u16(),
+            status = status.as_u16(),
             elapsed_ms,
             "выборка из upstream"
         ),
         Err(error) => {
-            let failure = if refusal(error).is_some() {
-                "refused"
-            } else {
-                "unavailable"
+            let failure = match error {
+                UpstreamError::Refused(_) => "refused",
+                UpstreamError::Unavailable(_) => "unavailable",
             };
             tracing::info!(
                 target: EGRESS_TARGET,
@@ -136,11 +131,17 @@ impl Upstream for HttpUpstream {
             call = call.header(IF_NONE_MATCH, etag.as_str());
         }
         let started = Instant::now();
-        let sent = call.send().await;
-        record_egress(&url, request.path.as_str(), &sent, started.elapsed());
-        let response = sent.map_err(|error| {
+        // Исход классифицируется один раз: по нему же пишется журнал egress.
+        let sent = call.send().await.map_err(|error| {
             refusal(&error).map_or_else(|| unavailable(error), UpstreamError::Refused)
-        })?;
+        });
+        record_egress(
+            request.base.host(),
+            request.path.as_str(),
+            sent.as_ref().map(Response::status),
+            started.elapsed(),
+        );
+        let response = sent?;
         match classify(response.status(), response.headers()) {
             Classified::Found { etag, max_age } => Ok(UpstreamResponse::Found {
                 body: Box::pin(response.bytes_stream().map_err(io::Error::other)),
