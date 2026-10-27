@@ -82,8 +82,8 @@ pub(crate) enum ConfigError {
         var: &'static str,
         reason: String,
     },
-    /// Имя ключа запроса `CRANE_BLOBS` с учётными данными; значение в ошибку не попадает.
-    BlobsCredential {
+    /// Ключ запроса `CRANE_BLOBS` вне списка несекретных параметров; значение в ошибку не попадает.
+    BlobsKey {
         key: String,
     },
     /// Каталог в PostgreSQL над blob в памяти после рестарта ссылался бы на потерянные blob.
@@ -124,9 +124,10 @@ impl fmt::Display for ConfigError {
             Self::SecretFile { var, reason } => {
                 write!(f, "не удалось прочитать {var}: {reason}")
             }
-            Self::BlobsCredential { key } => write!(
+            Self::BlobsKey { key } => write!(
                 f,
-                "{BLOBS}: ключ `{key}`: учётные данные S3 передаются только через переменные AWS_*"
+                "{BLOBS}: ключ `{key}` не из списка несекретных параметров; учётные данные и их \
+                 поставщики S3 задаются только переменными AWS_*"
             ),
             Self::MixedStorage => write!(
                 f,
@@ -212,33 +213,26 @@ fn blobs_url(value: &str) -> Result<Url, ConfigError> {
         var: BLOBS,
         reason: "ожидалось memory, file:///абсолютный/путь или s3://бакет",
     })?;
-    // Учётных данных в запросе нет (отвергаются здесь), поэтому URL не секрет,
-    // а текст ошибки `from_url` не может их процитировать.
-    if let Some(key) = url
-        .query_pairs()
-        .map(|(key, _)| key)
-        .find(|key| is_credential_key(key))
-    {
-        return Err(ConfigError::BlobsCredential {
-            key: key.into_owned(),
-        });
-    }
     match url.scheme() {
-        "file" | "s3" => Ok(url),
-        scheme => Err(ConfigError::Unsupported {
-            var: BLOBS,
-            scheme: scheme.to_owned(),
-        }),
+        "file" | "s3" => {}
+        scheme => {
+            return Err(ConfigError::Unsupported {
+                var: BLOBS,
+                scheme: scheme.to_owned(),
+            });
+        }
     }
-}
-
-fn is_credential_key(key: &str) -> bool {
-    let key = key.to_ascii_lowercase();
-    ["secret", "token", "password"]
-        .iter()
-        .any(|word| key.contains(word))
-        // `access_key_id` - псевдоним без префикса, его тоже понимает object_store.
-        || matches!(key.as_str(), "aws_access_key_id" | "access_key_id")
+    // Ключи проверяет адаптер теми же правилами, что разбирает: в URL остаются только
+    // несекретные параметры, поэтому ни URL, ни текст ошибки не процитируют секрет.
+    match url
+        .query_pairs()
+        .find(|(key, value)| !crane_objstore::is_public_s3_param(key, value))
+    {
+        Some((key, _)) => Err(ConfigError::BlobsKey {
+            key: key.into_owned(),
+        }),
+        None => Ok(url),
+    }
 }
 
 /// Секрет (токен, URL базы). Без `Debug` и `Display`: случайно попасть в журнал он не может.
@@ -894,14 +888,16 @@ mod tests {
     }
 
     #[test]
-    fn blobs_query_with_credentials_is_rejected_naming_only_the_key() {
+    fn blobs_query_accepts_only_public_keys_and_names_the_rejected_one() {
         // Arrange
         let cases = [
             "s3://b?endpoint=http://x:8333&aws_allow_http=true",
+            "s3://b?aws_server_side_encryption=aws:kms&aws_sse_kms_key_id=alias/crane",
             "s3://b?aws_secret_access_key=SECRETKEY",
-            "s3://b?AWS_SESSION_TOKEN=SECRETKEY",
-            "s3://b?aws_access_key_id=SECRETKEY",
-            "s3://b?access_key_id=SECRETKEY",
+            "s3://b?aws_session_token=SECRETKEY",
+            "s3://b?aws_sse_customer_key_base64=SECRETKEY",
+            "s3://b?endpoint=http://u:SECRETKEY@x:8333",
+            "s3://b?foo=1",
         ];
 
         // Act
@@ -914,17 +910,20 @@ mod tests {
         // Assert
         let rejected = |key: &str| {
             format!(
-                "CRANE_BLOBS: ключ `{key}`: учётные данные S3 передаются только через переменные AWS_*"
+                "CRANE_BLOBS: ключ `{key}` не из списка несекретных параметров; учётные данные и их \
+                 поставщики S3 задаются только переменными AWS_*"
             )
         };
         assert_eq!(
             results,
             [
                 "принято".to_owned(),
+                "принято".to_owned(),
                 rejected("aws_secret_access_key"),
-                rejected("AWS_SESSION_TOKEN"),
-                rejected("aws_access_key_id"),
-                rejected("access_key_id"),
+                rejected("aws_session_token"),
+                rejected("aws_sse_customer_key_base64"),
+                rejected("endpoint"),
+                rejected("foo"),
             ]
         );
     }

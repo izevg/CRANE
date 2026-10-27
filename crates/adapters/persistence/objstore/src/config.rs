@@ -56,6 +56,55 @@ fn local(url: &Url) -> Result<Arc<dyn ObjectStore>, Error> {
     ))
 }
 
+/// Основные имена несекретных ключей `s3://` (как их отдаёт `AmazonS3ConfigKey::as_ref`).
+/// Белый список: новый секретный ключ библиотеки (как `aws_sse_customer_key_base64`) не
+/// проскочит в URL, а значит, и в журнал. Учётные данные, их поставщики (роль, токены,
+/// metadata) и `proxy_url` (в нём бывает пароль) задаются только переменными AWS_*.
+const PUBLIC_S3_KEYS: [&str; 28] = [
+    "aws_region",
+    "aws_default_region",
+    "aws_bucket",
+    "aws_endpoint",
+    "aws_endpoint_url_s3",
+    "aws_virtual_hosted_style_request",
+    "aws_s3_express",
+    "aws_unsigned_payload",
+    "aws_checksum_algorithm",
+    "aws_skip_signature",
+    "aws_copy_if_not_exists",
+    "aws_conditional_put",
+    "aws_disable_tagging",
+    "aws_disable_bulk_delete",
+    "aws_request_payer",
+    "aws_server_side_encryption",
+    "aws_sse_kms_key_id",
+    "aws_sse_bucket_key_enabled",
+    "allow_http",
+    "allow_invalid_certificates",
+    "disable_system_certificates",
+    "connect_timeout",
+    "timeout",
+    "read_timeout",
+    "pool_idle_timeout",
+    "pool_max_idle_per_host",
+    "http1_only",
+    "user_agent",
+];
+
+/// Параметр запроса `s3://` можно держать в URL: ключ разобран самой библиотекой (её
+/// синонимы и регистр), он несекретный, а адрес endpoint не несёт логина и пароля.
+#[must_use]
+pub fn is_public_s3_param(key: &str, value: &str) -> bool {
+    let Ok(parsed) = key.parse::<AmazonS3ConfigKey>() else {
+        return false;
+    };
+    let name = parsed.as_ref();
+    let endpoint_has_credentials = matches!(name, "aws_endpoint" | "aws_endpoint_url_s3")
+        && Url::parse(value)
+            .is_ok_and(|url| !url.username().is_empty() || url.password().is_some());
+    PUBLIC_S3_KEYS.contains(&name) && !endpoint_has_credentials
+}
+
 fn s3(url: &Url) -> Result<Arc<dyn ObjectStore>, Error> {
     let bucket = url
         .host_str()
@@ -78,6 +127,52 @@ mod tests {
     use object_store::path::Path;
 
     use super::*;
+
+    #[test]
+    fn every_public_key_is_a_primary_name_known_to_the_library() {
+        // Arrange
+        let names = PUBLIC_S3_KEYS;
+
+        // Act
+        let reparsed = names.map(|name| {
+            name.parse::<AmazonS3ConfigKey>()
+                .map(|key| key.as_ref().to_owned())
+                .unwrap_or_default()
+        });
+
+        // Assert
+        assert_eq!(reparsed, names.map(str::to_owned));
+    }
+
+    #[test]
+    fn only_public_keys_without_credentials_in_the_endpoint_are_allowed() {
+        // Arrange
+        let cases = [
+            ("region", "ru-1"),
+            ("aws_allow_http", "true"),
+            ("aws_server_side_encryption", "aws:kms"),
+            ("endpoint", "http://seaweedfs:8333"),
+            ("endpoint", "http://u:SECRET@seaweedfs:8333"),
+            ("endpoint", "http://SECRETTOKEN@seaweedfs:8333"),
+            ("AWS_SERVER_SIDE_ENCRYPTION", "aws:kms"),
+            ("aws_sse_customer_key_base64", "SECRET"),
+            ("aws_secret_access_key", "SECRET"),
+            ("proxy_url", "http://proxy:3128"),
+            ("aws_role_arn", "arn:aws:iam::1:role/x"),
+            ("foo", "1"),
+        ];
+
+        // Act
+        let allowed = cases.map(|(key, value)| is_public_s3_param(key, value));
+
+        // Assert
+        assert_eq!(
+            allowed,
+            [
+                true, true, true, true, false, false, false, false, false, false, false, false
+            ]
+        );
+    }
 
     #[test]
     fn s3_prefix_roots_all_cas_keys() {
