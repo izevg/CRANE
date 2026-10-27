@@ -15,6 +15,7 @@ members = [
   "crates/adapters/persistence/pg",
   "crates/adapters/persistence/valkey",
   "crates/adapters/persistence/objstore",
+  "crates/adapters/persistence/memory",
   "crates/adapters/identity/keycloak",
   "crates/adapters/identity/gitlab",
   "crates/adapters/external/upstream",
