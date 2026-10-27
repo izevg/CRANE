@@ -1,0 +1,11 @@
+# ВРЕМЕННО, пока PR4 не подключил postgres:// и file:// к серверу: сегодня CRANE_DATABASE_URL и
+# CRANE_BLOBS принимают только `memory`. Когда сервер научится читать CRANE_DATABASE_URL_FILE
+# и работать с PostgreSQL, этот файл и CRANE_BLOBS=memory в стенде нужно удалить:
+# стенд обязан проверять боевую связку (postgres + том blobs), а не её заглушку.
+services:
+  crane:
+    environment:
+      CRANE_DATABASE_URL: memory
+  migrate:
+    environment:
+      CRANE_DATABASE_URL: memory

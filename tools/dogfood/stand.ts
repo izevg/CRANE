@@ -1,0 +1,231 @@
+// Одноразовый стенд: тот же docker-compose.yaml, что у оператора, с отдельным проектом, секретами,
+// подсетью и портами. Всё, что создано, снимается в down(), в том числе после сбоя.
+import { randomBytes } from "node:crypto";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { docker, log, MS_PER_SECOND, run, runOk, SECONDS_PER_MINUTE, warn } from "./exec.ts";
+
+export interface Stand {
+  id: string;
+  project: string;
+  image: string;
+  caddyId: string;
+  principal: string;
+  token: string;
+  wrongToken: string;
+  /** Секреты стенда для проверки утечек и редактирования сохранённых журналов. */
+  secrets: { name: string; value: string }[];
+  /** Журнал сервиса crane (NDJSON) без префиксов compose. */
+  cratesLogs(): string;
+  allLogs(): string;
+  saveLogs(path: string): void;
+  /** Идемпотентно, не бросает; возвращает ресурсы стенда, которые остались. */
+  down(): string[];
+}
+
+const SUBNET_ATTEMPTS = 8;
+const HEX_BYTES_SECRET = 32;
+const HEX_BYTES_ID = 4;
+const BUILD_TIMEOUT_MINUTES = 45;
+const BUILD_TIMEOUT_MS = BUILD_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
+const UP_TIMEOUT_SECONDS = 240;
+const DOWN_TIMEOUT_SECONDS = 5;
+// Второй октет подсети: 10.200–10.254, третий — любой.
+const SUBNET_SECOND_MIN = 200;
+const SUBNET_SECOND_SPAN = 55;
+const OCTET_VALUES = 256;
+const SECRET_MODE = 0o644;
+const DIR_MODE = 0o700;
+const OVERLAP = /Pool overlaps|invalid pool request/;
+const COMPOSE_FILES = ["docker-compose.yaml", "tools/dogfood/memory.compose.yaml"];
+
+const hex = (bytes: number): string => randomBytes(bytes).toString("hex");
+
+/** Случайная /24 из 10.200.0.0–10.254.255.0: вряд ли пересечётся с сетями хоста и соседних проектов. */
+function randomSubnet(): string {
+  const second = SUBNET_SECOND_MIN + (randomBytes(1).readUInt8(0) % SUBNET_SECOND_SPAN);
+  const third = randomBytes(1).readUInt8(0) % OCTET_VALUES;
+  return `10.${second}.${third}.0/24`;
+}
+
+export function up(root: string): Stand {
+  const id = hex(HEX_BYTES_ID);
+  const project = `crane-dogfood-${id}`;
+  const image = `crane-dogfood:${id}`;
+  const tmp = mkdtempSync(join(tmpdir(), `${project}-`));
+  const token = hex(HEX_BYTES_SECRET);
+  const wrongToken = hex(HEX_BYTES_SECRET);
+  const postgresPassword = hex(HEX_BYTES_SECRET);
+  const databaseUrl = `postgres://crane:${postgresPassword}@postgres:5432/crane`;
+  const principal = `dogfood-${id}`;
+  const secrets = [
+    { name: "токен", value: token },
+    { name: "неверный токен", value: wrongToken },
+    { name: "пароль PostgreSQL", value: postgresPassword },
+    { name: "URL каталога", value: databaseUrl },
+  ];
+
+  const overrides = join(tmp, "overrides.env");
+  const compose = [
+    "compose",
+    "-p",
+    project,
+    ...COMPOSE_FILES.flatMap((file) => ["-f", file]),
+    "--env-file",
+    ".env.dist",
+    "--env-file",
+    overrides,
+  ];
+  const composeRun = (args: string[]): string => docker([...compose, ...args], { cwd: root });
+
+  const down = (): string[] => {
+    const step = (what: string, action: () => void): void => {
+      try {
+        action();
+      } catch (error) {
+        warn(`down: ${what}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+    step("клиентские контейнеры", () => {
+      const ids = docker(["ps", "-aq", "--filter", `label=crane-dogfood=${project}`]).split("\n");
+      const present = ids.filter((line) => line.trim() !== "");
+      if (present.length > 0) {
+        docker(["rm", "-f", ...present]);
+      }
+    });
+    step("compose down", () => {
+      composeRun(["down", "-v", "--remove-orphans", "--timeout", String(DOWN_TIMEOUT_SECONDS)]);
+    });
+    step("образ", () => {
+      run("docker", ["image", "rm", image]);
+    });
+    step("временный каталог", () => {
+      rmSync(tmp, { recursive: true, force: true });
+    });
+    return leftovers(project, image);
+  };
+
+  const logs = (services: string[]): string =>
+    composeRun(["logs", "--no-log-prefix", "--no-color", ...services]);
+  const stand: Stand = {
+    id,
+    project,
+    image,
+    caddyId: "",
+    principal,
+    token,
+    wrongToken,
+    secrets,
+    cratesLogs: () => logs(["crane"]),
+    allLogs: () => logs([]),
+    saveLogs(path) {
+      let content = logs([]);
+      for (const secret of secrets) {
+        content = content.split(secret.value).join(`<${secret.name}>`);
+      }
+      runOk("mkdir", ["-p", dirname(path)]);
+      writeFileSync(path, content);
+    },
+    down,
+  };
+
+  try {
+    writeSecrets(tmp, { token, postgresPassword, databaseUrl });
+    log(`стенд ${project}: сборка образа ${image}`);
+    docker(["build", "-t", image, root], { timeoutMs: BUILD_TIMEOUT_MS });
+    startCompose(tmp, overrides, id, principal, composeRun);
+    stand.caddyId = composeRun(["ps", "-q", "caddy"]).trim();
+    if (stand.caddyId === "") {
+      throw new Error("контейнер caddy не найден");
+    }
+    return stand;
+  } catch (error) {
+    try {
+      stand.saveLogs(join(root, "out", "dogfood", `${project}.log`));
+    } catch {
+      // журналов может не быть, если упала сборка образа
+    }
+    down();
+    throw error;
+  }
+}
+
+/** Файлы 0644 в каталоге 0700: на Linux bind-монтируемый секрет читает uid 65532, а не владелец хоста. */
+function writeSecrets(
+  tmp: string,
+  values: { token: string; postgresPassword: string; databaseUrl: string },
+): void {
+  chmodSync(tmp, DIR_MODE);
+  const files: [string, string][] = [
+    ["crane_token", values.token],
+    ["postgres_password", values.postgresPassword],
+    ["database_url", values.databaseUrl],
+  ];
+  for (const [name, value] of files) {
+    writeFileSync(join(tmp, name), value, { mode: SECRET_MODE });
+    chmodSync(join(tmp, name), SECRET_MODE);
+  }
+}
+
+function startCompose(
+  tmp: string,
+  overrides: string,
+  id: string,
+  principal: string,
+  composeRun: (args: string[]) => string,
+): void {
+  for (let attempt = 1; ; attempt += 1) {
+    const subnet = randomSubnet();
+    // Только отличия от .env.dist. Порты caddy: loopback и свободный порт хоста ("127.0.0.1::80").
+    // CRANE_BLOBS=memory временно: см. memory.compose.yaml.
+    const lines = [
+      "CRANE_IMAGE=crane-dogfood",
+      `CRANE_VERSION=${id}`,
+      `CRANE_TOKEN_SECRET=${join(tmp, "crane_token")}`,
+      `POSTGRES_PASSWORD_SECRET=${join(tmp, "postgres_password")}`,
+      `CRANE_DATABASE_URL_SECRET=${join(tmp, "database_url")}`,
+      `CRANE_TOKEN_PRINCIPAL=${principal}`,
+      `CRANE_EDGE_SUBNET=${subnet}`,
+      "CADDY_HTTP_PORT=127.0.0.1:",
+      "CADDY_HTTPS_PORT=127.0.0.1:",
+      "CRANE_BLOBS=memory",
+    ];
+    writeFileSync(overrides, `${lines.join("\n")}\n`);
+    try {
+      log(`compose up (подсеть ${subnet})`);
+      composeRun(["up", "-d", "--wait", "--wait-timeout", String(UP_TIMEOUT_SECONDS)]);
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt >= SUBNET_ATTEMPTS || !OVERLAP.test(message)) {
+        throw error;
+      }
+      warn(`подсеть ${subnet} занята, пробую другую`);
+      composeRun(["down", "-v", "--remove-orphans", "--timeout", String(DOWN_TIMEOUT_SECONDS)]);
+    }
+  }
+}
+
+/** Всё, что относится к стенду и ещё существует. */
+function leftovers(project: string, image: string): string[] {
+  const byProject = ["--filter", `label=com.docker.compose.project=${project}`];
+  const list = (args: string[]): string[] =>
+    run("docker", args)
+      .stdout.split("\n")
+      .filter((line) => line.trim() !== "");
+  return [
+    ...list(["ps", "-a", ...byProject, "--format", "container {{.Names}}"]),
+    ...list([
+      "ps",
+      "-a",
+      "--filter",
+      `label=crane-dogfood=${project}`,
+      "--format",
+      "container {{.Names}}",
+    ]),
+    ...list(["volume", "ls", ...byProject, "--format", "volume {{.Name}}"]),
+    ...list(["network", "ls", ...byProject, "--format", "network {{.Name}}"]),
+    ...list(["image", "ls", "--format", "image {{.Repository}}:{{.Tag}}", image]),
+  ];
+}
