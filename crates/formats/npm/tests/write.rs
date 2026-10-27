@@ -269,6 +269,14 @@ fn classify_publish_refuses_dependencies_that_leave_the_registry() {
         "npm:@s/n@https://x.example/a",
         "npm:a/b@1.0.0",
         "npm:",
+        "foo.tgz",
+        "foo.TGZ",
+        "foo.tar",
+        "foo.tar.gz",
+        "..\\x",
+        "C:x",
+        "npm:left-pad@1.0.0.tgz",
+        "npm:left-pad@x.TAR.GZ",
     ];
     let cases = specs.map(|spec| with_manifest(|m| m["dependencies"] = json!({"dep": spec})));
 

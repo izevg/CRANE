@@ -18,6 +18,8 @@ use crate::route::tarball_file;
 /// Зависимости, которые ставит потребитель; `devDependencies` он не ставит, их не проверяем.
 const INSTALLED_DEPENDENCIES: [&str; 3] =
     ["dependencies", "optionalDependencies", "peerDependencies"];
+/// Расширения, по которым npm принимает спецификацию за файл-архив.
+const FILE_SUFFIXES: [&str; 3] = [".tgz", ".tar", ".tar.gz"];
 /// Ключи `_*` (служебные поля реестра) не хранятся, кроме этого.
 const KEPT_UNDERSCORE: &str = "_hasShrinkwrap";
 /// `publishConfig` может нести URL чужого реестра.
@@ -181,7 +183,11 @@ fn check_dependencies(manifest: &Fields<'_>) -> Result<(), WriteError> {
 /// Спецификация внутри реестра: диапазон или тег без `:` и `/`, либо `npm:<имя>@<диапазон или тег>`.
 /// Всё остальное (URL, git, `user/repo`, file:, link:, workspace:) уводит установку мимо реестра.
 fn registry_spec(spec: &str) -> bool {
-    let plain = |s: &str| !s.contains([':', '/']);
+    // `foo.tgz`/`foo.tar`/`foo.tar.gz` npm-package-arg читает как локальный файл, `\` — как путь Windows.
+    let plain = |s: &str| {
+        let lower = s.to_ascii_lowercase();
+        !s.contains([':', '/', '\\']) && !FILE_SUFFIXES.iter().any(|suffix| lower.ends_with(suffix))
+    };
     match spec.strip_prefix("npm:") {
         None => plain(spec),
         Some(alias) => {

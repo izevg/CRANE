@@ -377,3 +377,17 @@ fn render_hosted_without_versions_is_not_a_document() {
     // Assert
     assert_eq!(actual, Err(DocError::NoVersions));
 }
+
+#[test]
+fn render_upstream_drops_dist_tags_pointing_at_dropped_versions() {
+    // Arrange
+    let mut doc = upstream_doc();
+    doc["dist-tags"] =
+        json!({"latest": "1.0.0", "next": "1.0.2", "junk": "not a version", "ghost": "9.9.9"});
+
+    // Act
+    let actual = render(&doc, View::Full).map(|out| out["dist-tags"].clone());
+
+    // Assert
+    assert_eq!(actual, Ok(json!({"latest": "1.0.0"})));
+}

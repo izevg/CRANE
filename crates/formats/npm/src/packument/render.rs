@@ -77,7 +77,23 @@ pub fn render_upstream(
         fields.insert("dist".into(), dist);
         doc.versions.insert(key, fields);
     }
+    retain_present_tags(&mut doc)?;
     finish(doc, view)
+}
+
+/// Тег на отброшенную версию ломает `npm i pkg@tag`; `latest` для upstream не придумываем.
+fn retain_present_tags(doc: &mut Packument<'_>) -> Result<(), DocError> {
+    let Some(tags) = doc.fields.get("dist-tags").and_then(Raw::as_object) else {
+        return Ok(());
+    };
+    let present: BTreeMap<&str, String> = tags
+        .iter()
+        .filter_map(|(tag, target)| Some((tag.as_ref(), target.as_string()?)))
+        .filter(|(_, version)| doc.versions.contains_key(version.as_str()))
+        .collect();
+    let filtered = Raw::owned(&present)?;
+    doc.fields.insert("dist-tags".into(), filtered);
+    Ok(())
 }
 
 fn hosted_version<'a>(
