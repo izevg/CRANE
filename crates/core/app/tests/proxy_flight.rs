@@ -345,3 +345,25 @@ fn follower_fetches_itself_when_the_negative_entry_expired_before_settling() {
     assert_eq!(served.result, CacheResult::Miss);
     assert_eq!(upstream_b.call_count(), 1);
 }
+
+#[test]
+fn dropped_leader_does_not_block_the_next_request_for_the_key() {
+    // Arrange
+    let (upstream_a, gate) = FakeUpstream::gated([Step::Found(b"v1", None)]);
+    let world = World::with_upstream(upstream_a);
+    let replica = world.replica(FakeUpstream::new([Step::Found(b"v2", None)]));
+    let (doc, policy) = (path(DOC), policy());
+    let mut abandoned = Box::pin(world.engine.metadata(&world.origin, &doc, &policy));
+    let _ = poll_once(abandoned.as_mut());
+    drop(abandoned);
+    gate.open();
+
+    // Act
+    let outcome = poll_once(pin!(replica.metadata(&world.origin, &doc, &policy)));
+
+    // Assert
+    let Poll::Ready(Ok(served)) = outcome else {
+        panic!("запрос завис на lease брошенного лидера: {outcome:?}");
+    };
+    assert_eq!(served.result, CacheResult::Miss);
+}

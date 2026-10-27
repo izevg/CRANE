@@ -57,6 +57,7 @@ pub async fn fetch_leases_contract<L: FetchLeases>(new: impl Fn() -> L) {
     claim_of_free_key_leads(&new()).await;
     second_claim_waits_for_release_and_then_settles(&new()).await;
     claim_after_release_leads_again(&new()).await;
+    release_takes_effect_without_being_polled(&new()).await;
     different_keys_are_independent(&new()).await;
     consecutive_leaders_get_different_tokens(&new()).await;
 }
@@ -238,6 +239,27 @@ async fn claim_after_release_leads_again<L: FetchLeases>(leases: &L) {
     assert!(
         matches!(result.expect("claim 2"), Claim::Lead(_)),
         "после release ключ свободен: следующий претендент снова лидер"
+    );
+}
+
+async fn release_takes_effect_without_being_polled<L: FetchLeases>(leases: &L) {
+    // Arrange
+    let Claim::Lead(first) = leases
+        .claim(&key(), LEASE, PATIENCE)
+        .await
+        .expect("claim 1")
+    else {
+        panic!("первый claim свободного ключа обязан стать лидером");
+    };
+    drop(leases.release(first));
+
+    // Act
+    let result = leases.claim(&key(), LEASE, PATIENCE).await;
+
+    // Assert
+    assert!(
+        matches!(result.expect("claim 2"), Claim::Lead(_)),
+        "снятие начинается при вызове: брошенный (неопрошенный) future release ключ освобождает"
     );
 }
 

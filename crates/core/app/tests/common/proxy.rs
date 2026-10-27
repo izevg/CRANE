@@ -261,8 +261,9 @@ impl FetchLeases for SharedLeases {
         self.inner.claim(key, lease, patience).await
     }
 
-    async fn release(&self, lease: Lease) -> Result<(), LeaseError> {
-        self.inner.release(lease).await
+    // Не `async fn`: обёртка обязана сохранить eager-снятие порта, иначе брошенный future ничего не снимет.
+    fn release(&self, lease: Lease) -> impl Future<Output = Result<(), LeaseError>> + Send {
+        self.inner.release(lease)
     }
 }
 

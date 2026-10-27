@@ -7,7 +7,7 @@ use crane_domain::proxy::{
 };
 use crane_domain::registry::Sha256;
 use crane_ports::proxy::{
-    Cached, CachedState, Claim, ETag, FetchLeases, ProxyCache, Upstream, UpstreamError,
+    Cached, CachedState, Claim, ETag, FetchLeases, Lease, ProxyCache, Upstream, UpstreamError,
     UpstreamRequest, UpstreamResponse,
 };
 use crane_ports::registry::{BlobError, BlobStore, ByteStream};
@@ -99,6 +99,30 @@ fn prev_document(job: &Job) -> Option<(&Bytes, Option<&ETag>, u32)> {
     }
 }
 
+/// Владение lease. Лидера могут бросить посреди выборки (клиент оборвал запрос), а `Drop` не умеет `await`:
+/// снятие начинается синхронно при вызове `release` (контракт порта), поэтому future можно не опрашивать.
+struct Held<'a, L: FetchLeases> {
+    leases: &'a L,
+    lease: Option<Lease>,
+}
+
+impl<L: FetchLeases> Held<'_, L> {
+    async fn release(mut self) {
+        if let Some(lease) = self.lease.take() {
+            // Ошибка release не влияет на результат: lease истечёт сам.
+            let _ = self.leases.release(lease).await;
+        }
+    }
+}
+
+impl<L: FetchLeases> Drop for Held<'_, L> {
+    fn drop(&mut self) {
+        if let Some(lease) = self.lease.take() {
+            drop(self.leases.release(lease));
+        }
+    }
+}
+
 /// Выборка лидером: межрепликовый lease, затем сама выборка.
 ///
 /// Недоступный координатор не ошибка запроса (10.2): реплики тогда ходят в upstream независимо.
@@ -112,9 +136,12 @@ pub(super) async fn lead<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStor
         .await
     {
         Ok(Claim::Lead(lease)) => {
+            let held = Held {
+                leases: &inner.leases,
+                lease: Some(lease),
+            };
             let outcome = fetch(&inner, &job).await;
-            // Ошибка release не влияет на результат: lease истечёт сам.
-            let _ = inner.leases.release(lease).await;
+            held.release().await;
             outcome
         }
         Ok(Claim::Settled) => match settled(&inner, &job).await {
