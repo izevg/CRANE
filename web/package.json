@@ -11,7 +11,7 @@
     "fsd": "steiger ./src",
     "unused": "knip",
     "deps": "depcruise src --config .dependency-cruiser.ts",
-    "check": "pnpm run typecheck && pnpm run fsd && pnpm run unused && pnpm run deps && pnpm run i18n:check && node ../tools/lint-i18n/index.ts",
+    "check": "pnpm run typecheck && pnpm run fsd && pnpm run unused && pnpm run deps && pnpm run i18n:check && node ../tools/lint-i18n/index.ts && node ../tools/lint-motion/index.ts",
     "test": "vitest run --passWithNoTests",
     "mutate": "stryker run",
     "storybook": "storybook dev -p 6006",

@@ -277,6 +277,10 @@
   &[data-ending-style] {
     opacity: 0;
   }
+  /* Подсказка рядом с уже показанной (Base UI ставит data-instant): без перехода, иначе при переводе курсора мигает */
+  &[data-instant] {
+    transition-duration: 0s;
+  }
 }
 @utility anim-dialog {
   transition-property: opacity, transform;
@@ -363,4 +367,13 @@
 :root[data-motion="reduce"] :is(.anim-popup, .anim-dialog, .anim-sheet)[data-starting-style],
 :root[data-motion="reduce"] :is(.anim-popup, .anim-dialog, .anim-sheet)[data-ending-style] {
   transform: none;
+}
+
+/*
+ * Sonner сам отключает анимации по prefers-reduced-motion, но не знает про data-motion="reduce" (тулбар Storybook).
+ * Его 400 мс — осознанное исключение из токенов движения (спека, OPEN): библиотека держит траекторию стека тостов.
+ */
+:root[data-motion="reduce"] [data-sonner-toast] {
+  transition: none;
+  animation: none;
 }

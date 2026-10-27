@@ -105,3 +105,25 @@ export const Dark: Story = {
   name: "Тёмная тема",
   globals: { theme: "dark" },
 };
+
+const INSTANT_MAX_SECONDS = 0.1;
+
+function seconds(value: string): number {
+  return Math.max(...value.split(",").map((part) => parseFloat(part)));
+}
+
+/** Палитру открывают по Ctrl+K десятки раз: без анимации входа/выхода (spec 2), в отличие от диалога. */
+export const NoMotion: Story = {
+  name: "Движение: палитра без анимации",
+  play: async () => {
+    await within(document.body).findByRole("combobox");
+    const popup = document.querySelector("[data-slot=dialog-content]");
+    if (!(popup instanceof HTMLElement)) {
+      throw new Error("нет окна палитры");
+    }
+    await expect(seconds(getComputedStyle(popup).transitionDuration)).toBeLessThanOrEqual(
+      INSTANT_MAX_SECONDS,
+    );
+    await expect(getComputedStyle(popup).transform).not.toContain("0.9");
+  },
+};
