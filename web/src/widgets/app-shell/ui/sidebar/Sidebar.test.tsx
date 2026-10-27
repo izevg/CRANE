@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PackageIcon } from "lucide-react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 import { Sidebar, type SidebarProps } from "./Sidebar";
 
 const THEME_BUTTON = /^Тема:/;
@@ -118,6 +118,15 @@ describe("Sidebar", () => {
 
     // Assert
     expect(screen.getByRole("button", { name: "Тема: Светлая" })).toBeInTheDocument();
+  });
+
+  it("helpHref обязателен по типу: сайдбар без справки не собирается", () => {
+    // Arrange
+    // Act
+    const helpHref = expectTypeOf<SidebarProps["helpHref"]>();
+
+    // Assert
+    helpHref.toEqualTypeOf<string>();
   });
 
   it("слот account выводится в нижнем блоке", () => {
