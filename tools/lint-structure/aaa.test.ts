@@ -23,6 +23,7 @@ const rules: Rules = {
   unlimitedDirs: [],
   serviceFiles: [],
   testFiles: ["*.test.*"],
+  storyFiles: ["*.stories.*"],
   entryFiles: [],
   rustLayers: {},
   aaa: { roots: ["crates", "web"], exemptDirs: ["e2e"] },
@@ -478,6 +479,17 @@ it("e2e, ignoredDirs и отсутствующие корни пропускаю
 
   // Assert
   assert.deepEqual(actual, ["crates/a/tests/bad.rs:2"]);
+});
+
+it("stories не проверяются на AAA: это витрина, а не юнит-тесты", () => {
+  // Arrange
+  const root = writeTree({ "web/src/Button.stories.tsx": BAD_TS });
+
+  // Act
+  const actual = checkAaaTree(root, rules);
+
+  // Assert
+  assert.deepEqual(actual, []);
 });
 
 it("TS проверяется только в файлах *.test.*", () => {

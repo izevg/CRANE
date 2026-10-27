@@ -21,8 +21,9 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "types": ["vite/client"],
     "paths": { "~/*": ["./src/*"], "~test/*": ["./test/*"], "~brand/*": ["../brand/*"] }
   },
-  "include": ["src", "test", "*.config.ts"]
+  "include": ["src", "test", ".storybook", "*.config.ts"]
 }

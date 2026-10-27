@@ -1,5 +1,25 @@
 @import "tailwindcss";
 
+/*
+ * motion-safe и motion-reduce дополнены атрибутом data-motion="reduce" на <html> (его ставит тулбар Storybook,
+ * см. shared/styles/motion.css). Без атрибута варианты работают как стандартные, по media-запросу.
+ */
+@custom-variant motion-safe {
+  @media (prefers-reduced-motion: no-preference) {
+    &:where(:root:not([data-motion="reduce"]) *) {
+      @slot;
+    }
+  }
+}
+@custom-variant motion-reduce {
+  @media (prefers-reduced-motion: reduce) {
+    @slot;
+  }
+  &:where(:root[data-motion="reduce"] *) {
+    @slot;
+  }
+}
+
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
@@ -322,4 +342,13 @@
 }
 @utility animate-status-pulse {
   animation: status-pulse 1.6s linear 3;
+}
+
+/*
+ * Зеркало media-блоков `prefers-reduced-motion` у anim-popup, anim-dialog и anim-sheet для атрибута
+ * data-motion="reduce" (его ставит тулбар Storybook). Стоит в конце файла: специфичность выше правил утилит.
+ */
+:root[data-motion="reduce"] :is(.anim-popup, .anim-dialog, .anim-sheet)[data-starting-style],
+:root[data-motion="reduce"] :is(.anim-popup, .anim-dialog, .anim-sheet)[data-ending-style] {
+  transform: none;
 }

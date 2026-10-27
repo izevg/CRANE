@@ -78,8 +78,15 @@ tasks:
     desc: typecheck, Steiger, knip, depcruise
     cmds: [pnpm --filter web run check]
   web:test:
-    desc: Vitest
+    desc: Vitest — проекты unit (jsdom) и storybook (Chromium; один раз `pnpm --filter web exec playwright install chromium`)
     cmds: [pnpm --filter web run test]
+
+  web:storybook:
+    desc: Storybook (dev, порт 6006)
+    cmds: [pnpm --filter web run storybook]
+  web:storybook:build:
+    desc: Статическая сборка Storybook (web/storybook-static)
+    cmds: [pnpm --filter web run build-storybook]
 
   deploy:check:
     desc: Compose-файлы и Helm-чарт (docker compose config, helm lint, helm template)

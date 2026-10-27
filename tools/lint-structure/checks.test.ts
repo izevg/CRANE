@@ -14,6 +14,7 @@ const rules: Rules = {
   unlimitedDirs: ["tests"],
   serviceFiles: ["Cargo.toml"],
   testFiles: ["*.test.*"],
+  storyFiles: ["*.stories.*"],
   entryFiles: ["lib.rs", "index.ts"],
   rustLayers: { domain: [], ports: ["domain"], adapters: ["domain", "ports"] },
   aaa: { roots: [], exemptDirs: [] },
@@ -61,6 +62,20 @@ const structureCases: StructureCase[] = [
   {
     name: "файл теста не создаёт смешанность",
     spec: { "src/a.test.ts": 0, "src/d": 1 },
+    expected: 0,
+  },
+  {
+    name: "stories не считаются в лимит файлов и не создают смешанность",
+    spec: {
+      ...files(["a.ts", "b.ts", "c.ts", "d.ts"]),
+      "src/a.stories.tsx": 0,
+      "src/b.stories.tsx": 0,
+    },
+    expected: 0,
+  },
+  {
+    name: "файл story не создаёт смешанность",
+    spec: { "src/a.stories.tsx": 0, "src/d": 1 },
     expected: 0,
   },
   {

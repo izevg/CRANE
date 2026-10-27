@@ -17,6 +17,7 @@
     "biome.json*"
   ],
   "testFiles": ["*.test.*", "*.spec.*"],
+  "storyFiles": ["*.stories.*"],
   "entryFiles": ["lib.rs", "main.rs", "mod.rs", "index.ts", "index.tsx"],
   "aaa": { "roots": ["crates", "web", "cli", "tools"], "exemptDirs": ["e2e"] },
   "rustLayers": {
