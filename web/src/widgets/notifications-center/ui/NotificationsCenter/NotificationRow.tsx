@@ -1,11 +1,9 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react/macro";
 import { useCallback } from "react";
 import { cx } from "~/shared/lib/core";
 import { Link, TONE_TEXT, toneGlyph } from "~/shared/ui/primitives";
 import { RelativeTime } from "~/shared/ui/status";
 import type { NotificationItem } from "../../lib/model";
-
-const UNREAD_HINT = "Непрочитано. ";
 
 type Props = {
   item: NotificationItem;
@@ -14,6 +12,7 @@ type Props = {
 
 /** Строка ведёт на объект. Непрочитанная выделена фоном и маркером, а скринридеру об этом говорит текст. */
 export function NotificationRow({ item, onOpen }: Props) {
+  const { t } = useLingui();
   const handleClick = useCallback(() => onOpen(item), [onOpen, item]);
   const Icon = toneGlyph(item.tone);
   return (
@@ -29,7 +28,7 @@ export function NotificationRow({ item, onOpen }: Props) {
         <Icon aria-hidden="true" className={cx("mt-0.5 size-4 shrink-0", TONE_TEXT[item.tone])} />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className={cx("break-words", item.unread && "font-semibold")}>
-            {item.unread ? <span className="sr-only">{UNREAD_HINT}</span> : null}
+            {item.unread ? <span className="sr-only">{t`Непрочитано.`} </span> : null}
             {item.title}
           </span>
           {item.caption === undefined ? null : (

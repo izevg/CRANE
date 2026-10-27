@@ -67,6 +67,8 @@ const UPSTREAM_LINK = /Upstream npmjs/;
 const markRead = fn();
 const readAll = fn();
 
+const SECURITY_EN = /Security/;
+
 const meta = {
   title: "Шелл/Уведомления/Центр",
   component: NotificationsCenter,
@@ -176,5 +178,21 @@ export const Dark: Story = {
   play: async ({ canvasElement }) => {
     const body = await openCenter(canvasElement);
     await body.findByRole("tab", { name: SECURITY_TAB });
+  },
+};
+
+export const English: Story = {
+  name: "EN: подписи на английском",
+  args: { onReadAll: readAll },
+  globals: { locale: "en" },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole("button", { name: "Notifications, 3 unread" }),
+    );
+    const body = within(document.body);
+    const popup = await body.findByRole("dialog", { name: "Notifications" });
+    await waitFor(() => expect(popup).toContainElement(document.activeElement as HTMLElement));
+    await expect(body.getByRole("tab", { name: SECURITY_EN })).toBeInTheDocument();
+    await expect(body.getByRole("button", { name: "Mark all as read" })).toBeInTheDocument();
   },
 };

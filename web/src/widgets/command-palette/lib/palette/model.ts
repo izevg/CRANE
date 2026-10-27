@@ -1,6 +1,3 @@
-// i18n: не мигрирован
-import type { MessageDescriptor } from "@lingui/core";
-import { msg, plural } from "@lingui/core/macro";
 import type { Action } from "~/shared/ui/actions";
 
 export type NavigationEntry = { id: string; label: string; href: string; hint?: string };
@@ -19,12 +16,10 @@ export type PaletteOption =
   | { kind: "package"; key: string; entry: PackageHit }
   | { kind: "action"; key: string; entry: Action };
 
-/** Группа в форме, которую понимает Base UI: `value` — заголовок, `items` — пункты. */
-export type PaletteGroup = { value: string; items: PaletteOption[] };
+export type GroupId = "navigation" | "packages" | "actions";
 
-const GROUP_NAVIGATION = "Перейти";
-const GROUP_PACKAGES = "Пакеты";
-const GROUP_ACTIONS = "Действия";
+/** Группа в форме, которую понимает Base UI: `value` — идентификатор группы (заголовок подбирает UI), `items` — пункты. */
+export type PaletteGroup = { value: GroupId; items: PaletteOption[] };
 
 function matches(text: string, needle: string): boolean {
   return text.toLocaleLowerCase("ru").includes(needle);
@@ -47,17 +42,17 @@ export function buildGroups({ query, navigation, packages, actions }: BuildInput
   const keep = (text: string) => needle === "" || matches(text, needle);
   const groups: PaletteGroup[] = [
     {
-      value: GROUP_NAVIGATION,
+      value: "navigation",
       items: navigation
         .filter((entry) => keep(entry.label))
         .map((entry) => ({ kind: "navigation", key: `nav:${entry.id}`, entry })),
     },
     {
-      value: GROUP_PACKAGES,
+      value: "packages",
       items: packages.map((entry) => ({ kind: "package", key: `pkg:${entry.id}`, entry })),
     },
     {
-      value: GROUP_ACTIONS,
+      value: "actions",
       items: actions
         .filter((action) => keep(action.label))
         .map((entry) => ({ kind: "action", key: `act:${entry.label}`, entry })),
@@ -83,25 +78,28 @@ export function pickTarget(option: PaletteOption): { href: string } | { run: () 
   return "href" in run ? { href: run.href } : { run: run.onSelect };
 }
 
+/** Что сказать скринридеру в живом регионе поиска: идёт поиск, число результатов или ничего. */
+export type PaletteStatus = { kind: "searching" } | { kind: "results"; total: number } | null;
+
 /**
- * Итог поиска для скринридера (в живой регион `Status`). Пустой ввод не объявляется: при открытии палитры
- * шум не нужен. Пустой результат не дублируем: «Ничего не найдено» объявляет сам `Autocomplete.Empty`.
+ * Итог поиска для скринридера. Пустой ввод не объявляется: при открытии палитры шум не нужен.
+ * Пустой результат не дублируем: «Ничего не найдено» объявляет сам `Autocomplete.Empty`.
  */
-export function resultsStatus({
+export function paletteStatus({
   query,
   groups,
+  loading,
 }: {
   query: string;
   groups: readonly PaletteGroup[];
-}): MessageDescriptor | null {
+  loading: boolean;
+}): PaletteStatus {
+  if (loading) {
+    return { kind: "searching" };
+  }
   const total = groups.reduce((sum, group) => sum + group.items.length, 0);
   if (query.trim() === "" || total === 0) {
     return null;
   }
-  return msg`${plural(total, {
-    one: "Результатов: #",
-    few: "Результатов: #",
-    many: "Результатов: #",
-    other: "Результатов: #",
-  })}`;
+  return { kind: "results", total };
 }

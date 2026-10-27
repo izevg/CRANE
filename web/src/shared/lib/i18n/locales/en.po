@@ -25,11 +25,65 @@ msgstr "{total, plural, other {Results: #}}"
 msgid "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
 msgstr "{unread, plural, one {Notifications, # unread} other {Notifications, # unread}}"
 
+msgid "Безопасность"
+msgstr "Security"
+
+msgid "Все"
+msgstr "All"
+
+msgid "выбор"
+msgstr "select"
+
+msgid "Действия"
+msgstr "Actions"
+
+msgid "Доступ"
+msgstr "Access"
+
+msgid "закрыть"
+msgstr "close"
+
+msgid "Ищем пакеты…"
+msgstr "Searching packages…"
+
+msgid "Командная палитра"
+msgstr "Command palette"
+
 msgid "Массовые действия"
 msgstr "Bulk actions"
 
 msgid "Не удалось скопировать — выделите текст вручную"
 msgstr "Could not copy. Select the text and copy it manually"
+
+msgid "Непрочитано."
+msgstr "Unread."
+
+msgid "Ничего не найдено"
+msgstr "Nothing found"
+
+msgid "Новых уведомлений нет"
+msgstr "No new notifications"
+
+msgid "открыть"
+msgstr "open"
+
+msgid "Пакеты"
+msgstr "Packages"
+
+msgid "Перейти"
+msgstr "Go to"
+
+msgid "Перейти, найти пакет или действие"
+msgstr "Go to, find a package or an action"
+
+msgid "Перейти, найти пакет или действие…"
+msgstr "Go to, find a package or an action…"
+
+msgid "Платформа"
+msgstr "Platform"
+
+msgid "Прочитать все"
+msgstr "Mark all as read"
 
 msgid "Скопировано"
 msgstr "Copied"

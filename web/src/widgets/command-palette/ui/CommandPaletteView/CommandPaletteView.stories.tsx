@@ -127,3 +127,16 @@ export const NoMotion: Story = {
     await expect(getComputedStyle(popup).transform).not.toContain("0.9");
   },
 };
+
+export const English: Story = {
+  name: "EN: подписи на английском",
+  globals: { locale: "en" },
+  play: async () => {
+    const body = within(document.body);
+    await expect(
+      await body.findByRole("combobox", { name: "Go to, find a package or an action" }),
+    ).toBeInTheDocument();
+    await expect(body.getByRole("dialog", { name: "Command palette" })).toBeInTheDocument();
+    await expect(body.getByText("Go to")).toBeInTheDocument();
+  },
+};

@@ -1,34 +1,25 @@
-// i18n: не мигрирован
 import { Autocomplete } from "@base-ui/react/autocomplete";
-import { useLingui } from "@lingui/react";
+import { plural } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { useCallback, useMemo, useState } from "react";
 import type { Action } from "~/shared/ui/actions";
 import { Dialog, DialogContent, DialogTitle, Skeleton } from "~/shared/ui/primitives";
 import { Kbd } from "~/shared/ui/status";
 import {
   buildGroups,
+  type GroupId,
   type NavigationEntry,
   optionText,
   type PackageHit,
   type PaletteGroup,
   type PaletteOption,
+  type PaletteStatus,
+  paletteStatus,
   pickTarget,
-  resultsStatus,
 } from "../../lib/palette/model";
 import { PaletteRow } from "./PaletteRow";
 
-const TITLE = "Командная палитра";
-const INPUT_LABEL = "Перейти, найти пакет или действие";
-const PLACEHOLDER = "Перейти, найти пакет или действие…";
-const EMPTY = "Ничего не найдено";
-const SEARCHING = "Ищем пакеты…";
 const INPUT_CHANGE = "input-change";
-
-const HINTS = [
-  { keys: "↑↓", label: "выбор" },
-  { keys: "Enter", label: "открыть" },
-  { keys: "Esc", label: "закрыть" },
-] as const;
 
 const SKELETON_ROWS = ["first", "second", "third"] as const;
 
@@ -62,26 +53,57 @@ function Skeletons() {
   );
 }
 
+function Hint({ keys, children }: { keys: string; children: string }) {
+  return (
+    <span className="flex items-center gap-1">
+      <Kbd>{keys}</Kbd>
+      {children}
+    </span>
+  );
+}
+
 function Hints() {
+  const { t } = useLingui();
   return (
     <div className="flex items-center gap-4 border-t border-border px-3 py-2 text-caption text-muted-foreground">
-      {HINTS.map((hint) => (
-        <span key={hint.keys} className="flex items-center gap-1">
-          <Kbd>{hint.keys}</Kbd>
-          {hint.label}
-        </span>
-      ))}
+      <Hint keys="↑↓">{t`выбор`}</Hint>
+      <Hint keys="Enter">{t`открыть`}</Hint>
+      <Hint keys="Esc">{t`закрыть`}</Hint>
     </div>
   );
 }
 
+/** Модель решает, что сказать; здесь это произносится на активной локали. */
+function StatusText({ status }: { status: PaletteStatus }) {
+  const { t } = useLingui();
+  if (status === null) {
+    return null;
+  }
+  if (status.kind === "searching") {
+    return t`Ищем пакеты…`;
+  }
+  const { total } = status;
+  return t`${plural(total, {
+    one: "Результатов: #",
+    few: "Результатов: #",
+    many: "Результатов: #",
+    other: "Результатов: #",
+  })}`;
+}
+
 function Groups({ onPick }: { onPick: (option: PaletteOption) => void }) {
+  const { t } = useLingui();
+  const titles = {
+    navigation: t`Перейти`,
+    packages: t`Пакеты`,
+    actions: t`Действия`,
+  } satisfies Record<GroupId, string>;
   return (
     <Autocomplete.List className="max-h-[min(22.5rem,60vh)] overflow-y-auto overscroll-contain p-1 outline-0 data-empty:p-0">
       {(group: PaletteGroup) => (
         <Autocomplete.Group key={group.value} items={group.items} className="block pb-1 last:pb-0">
           <Autocomplete.GroupLabel className="px-2 py-1.5 text-caption font-semibold text-muted-foreground">
-            {group.value}
+            {titles[group.value]}
           </Autocomplete.GroupLabel>
           <Autocomplete.Collection>
             {(option: PaletteOption) => (
@@ -109,7 +131,7 @@ export function CommandPaletteView({
   actions,
   onNavigate,
 }: Props) {
-  const { _ } = useLingui();
+  const { t } = useLingui();
   const [ownQuery, setOwnQuery] = useState("");
   const value = query ?? ownQuery;
   const groups = useMemo(
@@ -158,13 +180,12 @@ export function CommandPaletteView({
     [onNavigate, handleOpenChange],
   );
 
-  const results = resultsStatus({ query: value, groups });
-  const statusText = packagesLoading ? SEARCHING : results === null ? null : _(results);
+  const status = paletteStatus({ query: value, groups, loading: packagesLoading });
   const showSkeletons = packagesLoading && packages.length === 0;
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent showCloseButton={false} size="palette" flush className="overflow-hidden">
-        <DialogTitle className="sr-only">{TITLE}</DialogTitle>
+        <DialogTitle className="sr-only">{t`Командная палитра`}</DialogTitle>
         <Autocomplete.Root
           inline
           open
@@ -176,16 +197,18 @@ export function CommandPaletteView({
           itemToStringValue={optionText}
         >
           <Autocomplete.Input
-            aria-label={INPUT_LABEL}
-            placeholder={PLACEHOLDER}
+            aria-label={t`Перейти, найти пакет или действие`}
+            placeholder={t`Перейти, найти пакет или действие…`}
             className="h-12 w-full border-b border-border bg-transparent px-4 text-body text-foreground placeholder:text-hint focus-visible:-outline-offset-2"
           />
-          <Autocomplete.Status className="sr-only">{statusText}</Autocomplete.Status>
+          <Autocomplete.Status className="sr-only">
+            <StatusText status={status} />
+          </Autocomplete.Status>
           <Groups onPick={handlePick} />
           {showSkeletons ? <Skeletons /> : null}
           {packagesLoading ? null : (
             <Autocomplete.Empty className="px-4 py-6 text-center text-body text-muted-foreground empty:hidden">
-              {EMPTY}
+              {t`Ничего не найдено`}
             </Autocomplete.Empty>
           )}
         </Autocomplete.Root>
