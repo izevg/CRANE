@@ -1,6 +1,8 @@
 # Single node (раздел 16.1 docs/product): caddy, crane (роль all), postgres, локальный том blobs.
-# Запуск: cp .env.dist .env && docker compose up -d
+# Запуск: cp .env.dist .env, создать файлы секретов (см. .env.dist), затем docker compose up -d
 # Значения только из .env; пропущенная переменная останавливает запуск.
+# Секреты (токен, пароль PostgreSQL, URL каталога) лежат в файлах и монтируются в /run/secrets:
+# ни в переменных окружения, ни в этом файле их нет.
 # Профили: cache (valkey), scan (analyzer + trivy), s3 (seaweedfs вместо тома).
 name: crane
 
@@ -11,8 +13,10 @@ x-crane: &crane
   tmpfs: [/tmp]
   security_opt: ["no-new-privileges:true"]
   cap_drop: [ALL]
+  # URL каталога целиком (с паролем) лежит в секрете; сервер читает его через CRANE_DATABASE_URL_FILE.
+  secrets: [database_url]
   environment: &crane-env
-    CRANE_DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?}
+    CRANE_DATABASE_URL_FILE: /run/secrets/database_url
     CRANE_CACHE: ${CRANE_CACHE:?}
     CRANE_BLOBS: ${CRANE_BLOBS:?}
 
@@ -20,6 +24,7 @@ services:
   caddy:
     image: ${CADDY_IMAGE:?}
     restart: unless-stopped
+    networks: [edge]
     ports: ["${CADDY_HTTP_PORT:?}:80", "${CADDY_HTTPS_PORT:?}:443"]
     environment:
       CRANE_HOST: ${CRANE_HOST:?}
@@ -40,6 +45,17 @@ services:
   crane:
     <<: *crane
     command: ["all"]
+    # CRANE_TOKEN рядом с CRANE_TOKEN_FILE задавать нельзя: сервер не стартует.
+    environment:
+      <<: *crane-env
+      # Caddy обслуживает ровно это имя, поэтому адрес выводится из CRANE_HOST.
+      CRANE_PUBLIC_URL: https://${CRANE_HOST:?}
+      CRANE_TOKEN_FILE: /run/secrets/crane_token
+      CRANE_TOKEN_PRINCIPAL: ${CRANE_TOKEN_PRINCIPAL:?}
+      # Сеть edge делят только caddy и crane: из неё верим X-Forwarded-For. Порт admin не публикуется.
+      CRANE_TRUSTED_PROXIES: ${CRANE_EDGE_SUBNET:?}
+    secrets: [database_url, crane_token]
+    networks: [default, edge]
     volumes: [blobs:/data/blobs]
     deploy:
       resources:
@@ -77,8 +93,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: ${POSTGRES_DB:?}
+    secrets: [postgres_password]
     volumes: [pg:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
@@ -102,6 +119,18 @@ services:
 networks:
   scan:
     internal: true
+  # Только caddy и crane: подсеть фиксирована, потому что это же значение CRANE_TRUSTED_PROXIES.
+  edge:
+    ipam:
+      config: [{ subnet: "${CRANE_EDGE_SUBNET:?задайте CRANE_EDGE_SUBNET}" }]
+
+secrets:
+  crane_token:
+    file: ${CRANE_TOKEN_SECRET:?задайте CRANE_TOKEN_SECRET}
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_SECRET:?задайте POSTGRES_PASSWORD_SECRET}
+  database_url:
+    file: ${CRANE_DATABASE_URL_SECRET:?задайте CRANE_DATABASE_URL_SECRET}
 
 volumes:
   pg:

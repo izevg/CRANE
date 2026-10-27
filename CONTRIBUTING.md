@@ -64,6 +64,7 @@ out/                 собранные артефакты, в git не попа
 
 - **Единая точка входа:** `task check` (подробнее в `AGENTS.md`). Хуки `lefthook` ставятся при `pnpm install`; не обходите их.
 - **Архитектура кода:** Rust — DDD + hexagonal + clean architecture, web — Feature-Sliced Design ([раздел 8](docs/product/08-c4-l4-code.md), [раздел 15](docs/product/15-frontend.md)).
+- **Секреты для compose и тестов PostgreSQL:** `cp .env.dist .env`, затем `task secrets:init` создаёт файлы секретов в `./secrets/` (каталог в `.gitignore`, существующие файлы не перезаписываются).
 - **Правило четырёх:** не больше 4 файлов и 8 подпапок в папке, смешанные папки (файлы и подпапки) запрещены. Проверяет `task structure`.
 - **TypeScript везде, где можно:** скрипты и конфиги на `.ts`; файлы `.mjs` в репозитории не принимаются.
 - **Rust:** стабильный toolchain; `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo test` проходят без замечаний. Стиль — «скучный Rust» из [раздела 3](docs/product/03-load-forecast-rust-vs-fastapi.md): без собственных процедурных макросов и сложной магии типов.
