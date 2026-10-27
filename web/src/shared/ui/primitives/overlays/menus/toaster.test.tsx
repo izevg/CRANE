@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { afterEach, describe, expect, it } from "vitest";
 import { Toaster } from "~/shared/ui/primitives";
 
-const NOTIFICATIONS = /Notifications/;
+const CONTAINER_NAME = /Оповещения/;
 
 afterEach(() => {
   act(() => {
@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("Toaster", () => {
-  it("показывает тост и объявляет его как регион уведомлений", async () => {
+  it("показывает тост и объявляет его как регион с русским именем «Оповещения»", async () => {
     // Arrange
     render(<Toaster />);
 
@@ -24,7 +24,7 @@ describe("Toaster", () => {
 
     // Assert
     expect(await screen.findByText("Сохранено")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: NOTIFICATIONS })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: CONTAINER_NAME })).toBeInTheDocument();
   });
 
   it("показывает не больше трёх тостов одновременно", async () => {
@@ -41,5 +41,33 @@ describe("Toaster", () => {
     // Assert
     expect(await screen.findByText("Тост 5")).toBeInTheDocument();
     expect(document.querySelectorAll('[data-sonner-toast][data-visible="true"]')).toHaveLength(3);
+  });
+
+  it("кнопка закрытия тоста называется по-русски", async () => {
+    // Arrange
+    render(<Toaster />);
+
+    // Act
+    act(() => {
+      toast("Сбой", { closeButton: true });
+    });
+
+    // Assert
+    expect(await screen.findByRole("button", { name: "Закрыть" })).toBeInTheDocument();
+  });
+
+  it("у предупреждения и ошибки в тосте есть иконка из общего модуля тона", async () => {
+    // Arrange
+    render(<Toaster />);
+
+    // Act
+    act(() => {
+      toast.warning("Деградация");
+      toast.error("Недоступен");
+    });
+
+    // Assert
+    await screen.findByText("Недоступен");
+    expect(document.querySelectorAll("[data-sonner-toast] [data-icon] svg")).toHaveLength(2);
   });
 });

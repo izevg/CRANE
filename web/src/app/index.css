@@ -107,6 +107,17 @@
   --font-weight-heading: 600;
 }
 
+/*
+ * Стили sonner подключаются без слоя и гасят outline (`outline: none`), поэтому общий :focus-visible из
+ * @layer base до тостов не доходит. Селекторы специфичнее правил sonner, цвет и толщина те же, что у кита.
+ */
+[data-sonner-toaster] [data-sonner-toast]:focus-visible,
+[data-sonner-toaster] [data-sonner-toast] [data-button]:focus-visible,
+[data-sonner-toaster] [data-sonner-toast] [data-close-button]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 @layer base {
   html,
   body {
