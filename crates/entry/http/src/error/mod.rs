@@ -91,10 +91,6 @@ impl IntoResponse for ClientError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Dialect {
     Cargo,
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "монтируется роутером npm в следующем коммите")
-    )]
     Npm,
 }
 

@@ -20,7 +20,7 @@ struct Shared<C, B> {
 }
 
 /// Маршруты hosted-репозитория без слоя аутентификации: его накладывает `api_router`.
-pub(super) fn hosted_router<C: Catalog + 'static, B: BlobStore + 'static>(
+pub(crate) fn hosted_router<C: Catalog + 'static, B: BlobStore + 'static>(
     registry: Arc<Registry<C, B>>,
     settings: CargoSettings,
 ) -> Router {

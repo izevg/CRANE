@@ -30,6 +30,7 @@ tracing = "0.1"
 uuid = { version = "1", features = ["v7"] }
 
 [dev-dependencies]
+base64 = "0.22"
 crane-memory = { path = "../../adapters/persistence/memory" }
 crane-siem = { path = "../../adapters/external/siem" }
 http-body-util = "0.1"

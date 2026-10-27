@@ -2,13 +2,15 @@
 
 use std::sync::Arc;
 
-use axum::Router;
 use crane_app::proxy::{ProxyEngine, ProxyLimits};
 use crane_domain::proxy::{EgressPolicy, Origin};
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_format_cargo::{DL_HOST, INDEX_HOST};
 use crane_format_npm::REGISTRY_HOST;
-use crane_http::{CargoProxyOrigins, CargoSettings, cargo_proxy_router};
+use crane_http::{
+    CargoProxyOrigins, CargoSettings, NpmSettings, ProxyRouters, cargo_proxy_router,
+    npm_proxy_router,
+};
 use crane_ports::registry::{BlobStore, Catalog};
 use crane_ports::system::IdGen;
 use crane_upstream::HttpUpstream;
@@ -46,7 +48,7 @@ async fn register<C: Catalog>(
     Ok(stored)
 }
 
-/// Регистрирует репозитории в каталоге и строит router для каждого имени.
+/// Регистрирует репозитории в каталоге и строит router для каждого имени каждого формата.
 ///
 /// Движок один на все форматы (общие singleflight, кэш и лимиты) и создаётся, только если настроен
 /// хотя бы один proxy-репозиторий любого формата: выключенный proxy ничего не стоит.
@@ -55,15 +57,17 @@ pub(super) async fn proxies<C: Catalog, B: BlobStore + 'static>(
     ids: &dyn IdGen,
     blobs: Arc<B>,
     proxy: Proxy,
-    settings: &CargoSettings,
-) -> Result<Vec<(String, Router)>, RunError> {
+    cargo_settings: &CargoSettings,
+    npm_settings: &NpmSettings,
+) -> Result<ProxyRouters, RunError> {
     if proxy.repos.is_empty() {
-        return Ok(Vec::new());
+        return Ok(ProxyRouters::default());
     }
     // Хосты upstream зашиты в форматы: proxy ходит только на них, и только по https.
     let policy = EgressPolicy::new([INDEX_HOST, DL_HOST, REGISTRY_HOST], false);
     let index = policy.admit("https", INDEX_HOST, None, "")?;
     let dl = policy.admit("https", DL_HOST, None, "")?;
+    let registry = policy.admit("https", REGISTRY_HOST, None, "")?;
     // Один бэкенд на оба порта: кэш и lease выбираются вместе (`CRANE_CACHE`).
     let shared = cache::backend(proxy.cache);
     let engine = ProxyEngine::new(
@@ -77,7 +81,7 @@ pub(super) async fn proxies<C: Catalog, B: BlobStore + 'static>(
             ..ProxyLimits::DEFAULT
         },
     );
-    let mut routers = Vec::new();
+    let mut routers = ProxyRouters::default();
     for name in proxy.repos.names(Format::Cargo) {
         let stored = register(catalog, ids, Format::Cargo, name).await?;
         // Индекс и архивы под одним id: ключи не пересекаются (первый сегмент `crates` не бывает у индекса).
@@ -91,14 +95,22 @@ pub(super) async fn proxies<C: Catalog, B: BlobStore + 'static>(
                 base: dl.clone(),
             },
         };
-        routers.push((
+        routers.cargo.push((
             name.clone(),
-            cargo_proxy_router(engine.clone(), origins, settings, name),
+            cargo_proxy_router(engine.clone(), origins, cargo_settings, name),
         ));
     }
-    // Репозитории npm регистрируются (и проверяются на занятость) уже сейчас; монтирование — отдельным шагом.
     for name in proxy.repos.names(Format::Npm) {
-        register(catalog, ids, Format::Npm, name).await?;
+        let stored = register(catalog, ids, Format::Npm, name).await?;
+        // Документы и архивы под одним id: ключи не пересекаются (архивы всегда содержат `/-/`).
+        let origin = Origin {
+            repository: stored.id,
+            base: registry.clone(),
+        };
+        routers.npm.push((
+            name.clone(),
+            npm_proxy_router(engine.clone(), origin, npm_settings, name),
+        ));
     }
     Ok(routers)
 }
@@ -144,7 +156,14 @@ mod tests {
             .unwrap();
     }
 
-    async fn build(catalog: &MemoryCatalog) -> Result<Vec<(String, Router)>, RunError> {
+    fn npm_settings() -> NpmSettings {
+        NpmSettings {
+            public_url: "https://crane.example".to_owned(),
+            max_publish_bytes: 1,
+        }
+    }
+
+    async fn build(catalog: &MemoryCatalog) -> Result<ProxyRouters, RunError> {
         proxies(
             catalog,
             &SequentialIdGen::default(),
@@ -155,11 +174,12 @@ mod tests {
                 max_artifact_bytes: ProxyLimits::DEFAULT.max_artifact_bytes,
             },
             &settings(),
+            &npm_settings(),
         )
         .await
     }
 
-    async fn build_npm(catalog: &MemoryCatalog) -> Result<Vec<(String, Router)>, RunError> {
+    async fn build_npm(catalog: &MemoryCatalog) -> Result<ProxyRouters, RunError> {
         proxies(
             catalog,
             &SequentialIdGen::default(),
@@ -170,6 +190,7 @@ mod tests {
                 max_artifact_bytes: ProxyLimits::DEFAULT.max_artifact_bytes,
             },
             &settings(),
+            &npm_settings(),
         )
         .await
     }
@@ -205,7 +226,11 @@ mod tests {
         let routers = block_on(build(&catalog)).unwrap();
 
         // Assert
-        let names: Vec<&str> = routers.iter().map(|(name, _)| name.as_str()).collect();
+        let names: Vec<&str> = routers
+            .cargo
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
         assert_eq!(names, [NAME]);
         let stored = block_on(catalog.find_repository(Format::Cargo, NAME))
             .unwrap()

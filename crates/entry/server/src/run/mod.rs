@@ -11,7 +11,9 @@ use std::time::Duration;
 use axum::Router;
 use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
-use crane_http::{CargoSettings, StaticToken, admin_router, api_router};
+use crane_http::{
+    CargoSettings, FormatSettings, NpmSettings, StaticToken, admin_router, api_router,
+};
 use crane_memory::{MemoryBlobStore, MemoryCatalog};
 use crane_objstore::ObjectBlobStore;
 use crane_pg::PgCatalog;
@@ -92,6 +94,10 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         }
     }
     let cargo = CargoSettings {
+        public_url: settings.public_url.clone(),
+        max_publish_bytes: settings.max_publish_bytes,
+    };
+    let npm = NpmSettings {
         public_url: settings.public_url,
         max_publish_bytes: settings.max_publish_bytes,
     };
@@ -103,6 +109,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         Arc::clone(&blobs),
         settings.proxy,
         &cargo,
+        &npm,
     )
     .await?;
     // Один приёмник на use cases и на слой auth; в v0.4.0 действия записи уйдут в журнал PG.
@@ -120,7 +127,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     drop(settings.token);
     let api = api_router(
         registry,
-        cargo,
+        FormatSettings { cargo, npm },
         token,
         settings.trusted_proxies,
         audit,
