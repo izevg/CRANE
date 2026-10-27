@@ -5,8 +5,8 @@ const config: StorybookConfig = {
   // Stories лежат рядом с компонентом: Component.stories.tsx
   stories: [
     "../src/**/*.stories.@(ts|tsx)",
-    // Экраны-макеты из компонентов кита (вне src: правило четырёх, Steiger и depcruise их не проверяют)
-    "./screens/**/*.stories.@(ts|tsx)",
+    // Экраны-макеты из компонентов кита: обычная папка web/screens вне src (не слои FSD) — dot-папку watcher не обходит
+    "../screens/**/*.stories.@(ts|tsx)",
   ],
   addons: ["@storybook/addon-a11y", "@storybook/addon-vitest"],
   // Телеметрия выключена: репозиторий не отправляет данные о работе разработчиков наружу.
