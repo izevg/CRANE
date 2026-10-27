@@ -1,6 +1,6 @@
 [package]
 name = "crane-app"
-description = "Use cases ядра: publish, fetch, promote, evaluate, search."
+description = "Use cases ядра реестра: публикация, получение и yank версий поверх портов."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,3 +9,14 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+crane-domain = { path = "../domain" }
+crane-ports = { path = "../ports" }
+thiserror = "2"
+
+[dev-dependencies]
+bytes = "1"
+crane-memory = { path = "../../adapters/persistence/memory" }
+futures-executor = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }

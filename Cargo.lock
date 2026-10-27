@@ -49,6 +49,15 @@ version = "0.0.0"
 [[package]]
 name = "crane-app"
 version = "0.0.0"
+dependencies = [
+ "bytes",
+ "crane-domain",
+ "crane-memory",
+ "crane-ports",
+ "futures-executor",
+ "futures-util",
+ "thiserror",
+]
 
 [[package]]
 name = "crane-domain"
