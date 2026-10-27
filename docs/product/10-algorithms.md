@@ -45,7 +45,7 @@ fn fetch(repo, key):                                    // key = нормали�
           200 metadata   => body = format.rewrite_upstream(resp); store(key, body, ttl(key))
           200 blob       => tee(resp.stream → client, → blob_store staging); verify; commit CAS
           404            => store_negative(key, neg_ttl(key))
-          5xx | timeout  => if e: return e.stale_if_error() else 502 с диагностикой
+          5xx | timeout  => if e: return e.stale_if_error() else 502 с диагностикой   // после фильтра served(), см. ниже
         publish("inv", "px:"+key)
     })
 ```
@@ -55,6 +55,32 @@ fn fetch(repo, key):                                    // key = нормали�
 Внутри одного процесса singleflight реализуется через общий `Shared<Future>`, поэтому сотни одновременных запросов одного архива ждут один поток байт. L1 внутри Valkey-адаптера когерентна между репликами: каждая запись в кэш и снятие lease публикуют имя ключа в канал `inv`, подписчик сбрасывает L1; ждущий подписан на `inv` (одна подписка на процесс) и регистрируется до `SET NX`, поэтому снятие lease между `SET NX` и ожиданием не теряется. Между репликами работает блокировка Valkey; при её недоступности реплики ходят в upstream независимо, это безопасно, потому что запись в CAS идемпотентна.
 
 Ограничение v0.2.0: исходящий HTTP(S)_PROXY не поддерживается (клиент upstream игнорирует переменные прокси, иначе резолв ушёл бы за пределы проверки адреса); при поддержке прокси guard проверяет хост, а адрес — дело прокси.
+
+### Видимость версий proxy
+
+```rust
+fn served(v, rules, now, caller) -> Result<(), Unavailable>:   // одно правило видимости для hosted и proxy
+    if r = rules.deny(v.format, v.name, v.version):            // активные emergency_block и MAL-* (не отозванные)
+        if !(artifact_path and break_glass(caller, v)): return Blocked(r)
+    if v.row and v.row.state != Released: return v.row.state  // hold, ручная блокировка, удаление
+    if v.repo.kind == proxy and !v.promoted
+       and in_window(upstream_published_at(v), policy.quarantine_age, now):
+        return Quarantined(until)
+    Ok(())
+
+fn document(repo, name):                                       // md: — после фильтра, px: — сырой upstream
+    md.get_or_render(repo, name, || render(px.fetch(repo, name), served),
+        ttl = min(ttl(px), до ближайшего конца окна карантина среди версий))
+```
+
+-   Это расширение существующей функции видимости `served()` (единственное правило видимости каталога), а не вторая функция.
+-   **Документ.** Версии, которым `served()` отказал, убираются из строк индекса cargo и из `versions` и `time` packument. Dist-tag, указывающий на скрытую версию, переводится на наибольшую отдаваемую версию не выше версии тега и не pre-release (если тег указывал на стабильную), иначе тег убирается.
+-   **Артефакт.** `served()` проверяется на пути скачивания независимо от документа: lockfile с `resolved` идёт мимо packument. Координату (name, version) CRANE вписывает в URL файлов при переписывании документа; разбор имени файла остаётся запасным путём для старых URL.
+-   **stale-if-error.** Фильтр стоит после `px:`, поэтому stale-документ проходит тот же `served()`: заблокированная версия не отдаётся ни из свежего, ни из stale-кэша.
+-   **Индекс правил deny** живёт в памяти реплики и перестраивается по событию в канале `inv` (`deny(format, name)`, `decision(repo, name)`), как префиксное дерево namespaces; подписчик сбрасывает `md:*:<name>` формата. Полная перезагрузка по таймеру страхует от потерянного сообщения. Срок вступления блокировки в силу на всех репликах не больше 5 с (как у отзыва, 10.4), в худшем случае — период страховочной перезагрузки.
+-   **Время публикации upstream** читает адаптер формата: `upstream_published_at(doc, version) -> Option<время>`. Источники: npm `time[версия]`; PyPI `upload-time` (PEP 700); NuGet registration `published`; Cargo — необязательное поле `pubtime` строки sparse-индекса ([registry index](https://doc.rust-lang.org/cargo/reference/registry-index.html); у старых версий отсутствует); Maven — `Last-Modified` файла. `None` обрабатывает настройка политики `unknown_age: quarantine | release`, без подстановки времени первой выдачи.
+-   **Commit артефакта proxy** — это хвост `publish` из 10.1 с принципалом `upstream`: строки `package_version`, `asset` и `blob` в одной транзакции, задача `attestation.verify` ставится там же (10.6.1 получает свою версию). Поэтому GC (10.9) и `crane restore verify` видят proxy-объекты.
+-   Если одна purl есть в двух proxy-репозиториях, у неё две строки; finding группируется по (advisory, purl) (14.7).
 
 ## 10.3 Защита внутренних имён
 
@@ -155,7 +181,7 @@ Promotion меняет только строку в БД: digest и байты �
 
 ### 10.6.1 Проверка upstream attestations (proxy)
 
-Задача `attestation.verify` ставится после commit CAS и идёт вне горячего пути: скачивание клиенту не ждёт проверки; состояние версии до результата определяет политика репозитория (quarantine новых версий из upstream, 14.2). Источник зависит от формата:
+Задача `attestation.verify` ставится после commit CAS и идёт вне горячего пути: скачивание клиенту не ждёт проверки; состояние версии до результата определяет политика репозитория (quarantine новых версий из upstream, 14.2): окно карантина по возрасту применяет `served()` (10.2), hold по регрессии пишется в строку версии. Источник зависит от формата:
 
 | Формат | Где брать | Что приходит |
 | --- | --- | --- |
@@ -273,6 +299,8 @@ gc.sweep():
         if still_unreferenced(b) FOR UPDATE: blob_store.delete(b); delete row
     UPDATE blob SET gc_mark = NULL WHERE снова есть ссылка   // воскрешение
 ```
+
+Proxy-объекты достижимы через `asset` строк proxy-репозитория и собираются так же; класс `proxy-cache` может иметь свой retention.
 
 ## 10.10 Поиск: гибридное ранжирование
 

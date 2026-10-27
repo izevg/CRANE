@@ -42,7 +42,7 @@ CREATE TYPE ver_state  AS ENUM ('quarantined','released','blocked','deleted');
 CREATE TABLE repository (
   id uuid PRIMARY KEY, workspace_id uuid NOT NULL REFERENCES workspace,
   format pkg_format NOT NULL, kind repo_kind NOT NULL, name text NOT NULL,
-  upstream_url text,                 -- только proxy, из allowlist экземпляра; смена — через /protection
+  upstream_url text,                 -- только proxy; задаётся при создании из allowlist; смена — через /protection
   config jsonb NOT NULL DEFAULT '{}', -- эксплуатационные: TTL, лимиты, delivery, класс хранения; защитные (mutable, dev_skip_quarantine) — только через /protection
   UNIQUE (format, name));
 
@@ -178,7 +178,11 @@ Evidence расширяется строками, а не колонками. Н
 
 `metadata` имеет тип `json`, а не `jsonb`: `jsonb` переписывает текст (порядок ключей, пробелы), а metadata формата — непрозрачные байты для индекса Cargo и ETag, они должны вернуться побайтно.
 
-Настройки репозитория делятся на эксплуатационные (TTL, лимиты, delivery, класс хранения) и защитные. Эксплуатационные меняет owner. Защитные: `mutable` (только Maven SNAPSHOT), `dev_skip_quarantine` (только hosted dev, для proxy запрещён) и `upstream_url` (из allowlist экземпляра). При создании репозитория защитные настройки принимают только значения по умолчанию; меняет их отдельная операция `PUT /repositories/{format}/{repository}/protection` со step-up: `mutable` и `dev_skip_quarantine` — appsec, `upstream_url` — platform-admin. Изменение — событие SIEM «Ослабление политики» (14.9) до применения.
+Строки proxy-репозиториев. Строки `package`, `package_version`, `asset` и `blob` создаются при первой выдаче артефакта proxy, в той же транзакции, что commit в CAS (хвост `publish` из 10.1 с системным принципалом `upstream`; `published_by` — он). `published_at` — время публикации upstream, если оно известно, иначе время commit; `served()` эту колонку не читает. Документы (packument с тысячами версий) строк не создают. Отдельной колонки происхождения нет: строка proxy-репозитория — это `repository.kind = 'proxy'`. У такой строки `state` хранит только решения о конкретной версии: hold по регрессии attestation, ручную блокировку, удаление. Новая строка рождается `released`: у CRANE нет возражений. Карантин по возрасту и блокировки по диапазонам в строки не пишутся, их применяет `served()` при каждой выдаче (10.2). Поэтому они действуют и на версии без строки, а снятие блокировки ничего не восстанавливает. Досрочный выпуск из окна карантина — строка `promotion`, как у hosted. Флаги `yanked` и `deprecated_msg` у proxy-строк — снимок upstream на момент материализации; при выдаче они не читаются, документ рендерится из `px:`.
+
+Групповых репозиториев нет. Клиент настраивает два источника: hosted и proxy. Безопасность не зависит ни от порядка источников, ни от того, сливает ли клиент версии из нескольких индексов (pip `--extra-index-url`, NuGet, `maven-metadata.xml`): имя внутреннее, если его покрывает паттерн namespace или у него есть строка `package` в hosted-репозитории того же формата; proxy на внутреннее имя отвечает 404 (10.3). Строка `package` создаётся вместе с первой версией в одной транзакции и не удаляется, поэтому у каждого имени ровно один источник версий.
+
+Настройки репозитория делятся на эксплуатационные (TTL, лимиты, delivery, класс хранения) и защитные. Эксплуатационные меняет owner. Защитные: `mutable` (только Maven SNAPSHOT), `dev_skip_quarantine` (только hosted dev, для proxy запрещён) и `upstream_url` (из allowlist экземпляра). В контракте они вынесены из `Repository.settings` (только эксплуатационные) в отдельный `Repository.protection`. `upstream_url` задаётся при создании (`POST /repositories`, обязателен для proxy, хост из allowlist экземпляра); `mutable` и `dev_skip_quarantine` при создании всегда имеют значения по умолчанию (false). После создания все три меняет только отдельная операция `PUT /repositories/{format}/{repository}/protection` со step-up: `mutable` и `dev_skip_quarantine` — appsec, `upstream_url` — platform-admin. Изменение — событие SIEM «Ослабление политики» (14.9) до применения.
 
 ### Эмбеддинги пакетов
 
@@ -258,6 +262,8 @@ CREATE TABLE asset (
 
 **Экстраполяция на L:** 10–100 млн версий, то есть ×1–×10 к замеру, ≈ 6–60 ГБ, а пакетов 1–5 млн (×1–×5 для `package`). Сверху добавится рост `metadata`: реальная metadata cargo крупнее 96 Б, а значения больше ~2 КБ уходят в TOAST (сжатие, отдельная relation, в строке остаётся указатель). Число asset на версию в других форматах больше одного (Maven), тогда `asset` растёт пропорционально. Blob после дедупликации не больше числа asset.
 
+Индекс правил deny (10.2) живёт в памяти реплики и ключуется по (format, name_norm). Записей `MAL-*` в OSV сотни тысяч, но по одной на имя, поэтому порядок объёма — десятки МБ (оценка, не замер).
+
 **Планы запросов** (`EXPLAIN (ANALYZE, BUFFERS)`, тот же набор):
 
 | Запрос | План |
@@ -325,7 +331,7 @@ CREATE INDEX ON download_event_YYYYMMDD (actor, ts);                  -- «чт�
 CREATE INDEX ON download_event_YYYYMMDD USING brin (ts);              -- почасовой дайджест читает час, а не сутки
 ```
 
--   Ключ — `purl`, а не `version_id`: скачивание из proxy не создаёт строки `package_version` (10.2, `proxy_entry`), а `purl` переживает удаление версии и архивирование.
+-   Ключ — `purl`, а не `version_id`: скачивание из proxy создаёт строку `package_version` только при первой выдаче артефакта (10.2), а `purl` переживает удаление версии и архивирование.
 -   Запрос «кто скачал версию X между T1 и T2» — отсечение партиций по `ts` и префиксный скан по `(purl, ts)`; префикс без версии (`pkg:npm/event-stream@`) даёт любую версию пакета.
 -   Поиск по `blob_sha256` (совпадение с индикатором компрометации) — скан окна хранения: индекса нет намеренно, запрос редкий, а индекс удорожил бы каждую вставку.
 -   Нет FK и нет хэш-цепочки на каждую строку: это дорого на таком потоке. Целостность обеспечивает почасовое событие `audit.download_digest` в цепочке журнала (подробности в 14.13). Его пишет та же почасовая задача, что и `audit.anchor` (10.13): в h+15 мин она записывает дайджест часа h, затем якорь, так что дайджест сразу попадает в WORM. Реплики отбрасывают строки старше 10 мин (запас 5 мин на расхождение часов до дайджеста в 15 мин); такие строки считаются потерянными.
@@ -382,7 +388,6 @@ RETURNING id, kind, payload, attempts;
 | Безопасность | `evidence`, `finding` (приоритет, SLA, источник), `exception`, `license_decision`, `license_policy`, `promotion`, `approval` |
 | Уязвимости и скоринг | `advisory`, `feed_cursor`, `risk_score`, `vex_statement`, `emergency_block`, `break_glass_grant` |
 | Граф | `dependency_edge`, `usage_evidence`, `consumer` (проект, сборка, деплой) |
-| Proxy | `proxy_entry` (ключ upstream, etag, fetched\_at, expires\_at, negative, blob) |
 | Эксплуатация | `job`, `job_dead`, `outbox`, `webhook_subscription`, `webhook_delivery`, `idempotency_key`, `retention_rule`, `retention_hold`, `quota_usage`, `audit_event`, `download_event`, `siem_sink`, `siem_cursor` |
 
 ## Жизненный цикл версии
@@ -420,7 +425,7 @@ stateDiagram-v2
 
 | Ключ | Значение и TTL |
 | --- | --- |
-| `md:<repo>:<name>` | Отрендеренная metadata (сжатая zstd) + ETag; TTL по эвристике 11.1; инвалидация по событию. |
+| `md:<repo>:<name>` | Отрендеренная metadata (сжатая zstd) + ETag; TTL по эвристике 11.1; инвалидация по событию. Для proxy — документ после фильтра `served()`; сырой документ upstream — в `px:`. |
 | `px:<repo>:<path>` | Запись proxy-кэша: факты (время получения; тело, ETag и max-age документа; дайджесты артефакта или счётчик 404), ручной бинарный формат с байтом версии. TTL = `keep_for` из политики; у артефактов TTL нет. |
 | `sf:<repo>:<path>` | Lease singleflight: `SET NX PX` с токеном-фенсингом, снимается Lua-скриптом только своим токеном. |
 | `rl:<principal>:<bucket>` | Теоретическое время прибытия GCRA; Lua-скрипт атомарно. |
