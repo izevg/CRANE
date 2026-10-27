@@ -11,6 +11,7 @@ import {
   cacheDistribution,
   checkCollapse,
   checkOffline,
+  checkUpstreamDown,
   type Expected,
   egressLines,
 } from "./audit.ts";
@@ -47,6 +48,8 @@ const minutes = (value: number): number => value * SECONDS_PER_MINUTE * MS_PER_S
 const COLD_CRATE = "ferris-says";
 const COLD_PATH = "fe/rr/ferris-says";
 const PARALLEL = 8;
+// Проба недоступности: тоже вне графа CRANE, e2e и схлопывания, поэтому в кэше её ключа нет.
+const PROBE_PATH = "co/ws/cowsay";
 
 // Закреплён тегом и digest (v0.2.0 п.7): нужен только `ip`.
 const BUSYBOX =
@@ -266,17 +269,47 @@ function run(stand: Stand, client: CargoClient, { root, repo }: FullOptions): Ex
       "-c",
       DROP_ROUTES,
     ]);
-    const mark = accessLines(stand.craneLogs()).length;
+    // Обе отметки берутся вместе: egress-строки до них относятся к прогреву.
+    const marked = stand.craneLogs();
+    const mark = { access: accessLines(marked).length, egress: egressLines(marked).length };
     must(["rm", "-rf", `${INSTALL_HOME}/registry`], { home: INSTALL_HOME, timeoutMs: minutes(1) });
     // Тот же CARGO_TARGET_DIR: перекомпиляции быть не должно; --force: без него cargo молча ничего не делает.
     install(["--force"]);
-    const lines = proxyLines(mark);
+    const lines = proxyLines(mark.access);
     log(
       `офлайн: ответов proxy ${lines.length}, cache: ${JSON.stringify(cacheDistribution(lines))}`,
     );
     const problems = checkOffline(lines);
     if (problems.length > 0) {
       throw new Error(`офлайн: ${problems.join("; ")}`);
+    }
+    // Попадания в кэш в upstream не ходят: недоступность доказывает только проба ключа, которого в кэше нет.
+    const probe = client.exec(
+      [
+        "curl",
+        "-sS",
+        "--cacert",
+        ROOT_CERT,
+        "-K",
+        "-",
+        "-o",
+        "/dev/null",
+        `${proxyUrl}/index/${PROBE_PATH}`,
+      ],
+      { input: `header = "Authorization: ${stand.token}"\n` },
+    );
+    if (probe.status !== 0) {
+      throw new Error(`curl -> ${probe.status}\n${tail(probe.stderr)}`);
+    }
+    const after = stand.craneLogs();
+    const down = checkUpstreamDown(
+      accessLines(after)
+        .slice(mark.access)
+        .filter((line) => line.path === `${base}/index/${PROBE_PATH}`),
+      egressLines(after).slice(mark.egress),
+    );
+    if (down.length > 0) {
+      throw new Error(`upstream недоступен: ${down.join("; ")}`);
     }
   });
 

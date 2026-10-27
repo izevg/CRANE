@@ -268,6 +268,36 @@ export function checkOffline(lines: Access[]): string[] {
     .map((line) => `${line.path}: status ${line.status}, cache ${line.cache ?? "-"}`);
 }
 
+const BAD_GATEWAY = 502;
+
+/**
+ * Улика недоступности upstream. Ответы из кэша в upstream не ходят, поэтому сами по себе её не дают.
+ * Нужны оба факта: проба холодного ключа получила 502 с `upstream_failure=unavailable`, а в egress-журнале
+ * с отметки офлайна нет ни одной успешной выборки (строки со `status`) и есть хотя бы одна неудачная.
+ * `probe` и `egress` взяты после отметки. Пустой результат — сошлось.
+ */
+export function checkUpstreamDown(probe: Access[], egress: Egress[]): string[] {
+  const problems: string[] = [];
+  if (probe.length !== 1) {
+    problems.push(`access-строк пробы ${probe.length}, ожидалась одна`);
+  }
+  for (const line of probe) {
+    if (line.status !== BAD_GATEWAY || line.failure !== "unavailable") {
+      problems.push(
+        `проба: ожидались 502 и upstream_failure=unavailable, получено ${line.status}/${line.failure ?? "-"}`,
+      );
+    }
+  }
+  const succeeded = egress.filter((line) => line.status !== undefined);
+  if (succeeded.length > 0) {
+    problems.push(`успешных выборок из upstream после отключения: ${succeeded.length}`);
+  }
+  if (!egress.some((line) => line.failure !== undefined)) {
+    problems.push("в egress-журнале нет ни одной неудачной выборки");
+  }
+  return problems;
+}
+
 /** Распределение значений `cache` для лога; строки без значения считаются как «-». */
 export function cacheDistribution(lines: Access[]): Record<string, number> {
   return Object.fromEntries(counts(lines.map((line) => line.cache ?? "-")));

@@ -94,6 +94,8 @@ fn record_egress(
     sent: &Result<reqwest::Response, reqwest::Error>,
     elapsed: Duration,
 ) {
+    // У `UpstreamBase` нет доступа к хосту (поля приватны, наружу только `url()` в crane-domain), поэтому host
+    // берётся из уже собранного URL.
     let host = reqwest::Url::parse(url)
         .ok()
         .and_then(|parsed| parsed.host_str().map(str::to_owned))

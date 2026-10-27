@@ -6,6 +6,7 @@ import {
   cacheDistribution,
   checkCollapse,
   checkOffline,
+  checkUpstreamDown,
   type Egress,
   type Expected,
   egressLines,
@@ -529,5 +530,82 @@ describe("cacheDistribution", () => {
 
     // Assert
     assert.deepEqual(distribution, { hit: 2, stale: 1, "-": 1 });
+  });
+});
+
+describe("checkUpstreamDown", () => {
+  const probeLine = (status: number, failure: string | undefined): Access => ({
+    path: "/cargo/r/index/co/ws/cowsay",
+    status,
+    cache: undefined,
+    failure,
+  });
+  const refusedFetch: Egress = { path: "co/ws/cowsay", status: undefined, failure: "unavailable" };
+
+  it("accepts a 502 probe with an unavailable fetch and no successful fetches", () => {
+    // Arrange
+    const probe = [probeLine(BAD_GATEWAY, "unavailable")];
+
+    // Act
+    const problems = checkUpstreamDown(probe, [refusedFetch]);
+
+    // Assert
+    assert.deepEqual(problems, []);
+  });
+
+  it("rejects a successful upstream fetch after the cut-off", () => {
+    // Arrange
+    const probe = [probeLine(BAD_GATEWAY, "unavailable")];
+    const egress = [refusedFetch, fetched()];
+
+    // Act
+    const problems = checkUpstreamDown(probe, egress);
+
+    // Assert
+    assert.equal(problems.length, 1);
+  });
+
+  it("rejects a probe that was answered instead of failing", () => {
+    // Arrange
+    const probe = [probeLine(OK, undefined)];
+
+    // Act
+    const problems = checkUpstreamDown(probe, [refusedFetch]);
+
+    // Assert
+    assert.equal(problems.length, 1);
+  });
+
+  it("rejects a probe that failed for another reason", () => {
+    // Arrange
+    const probe = [probeLine(BAD_GATEWAY, "refused")];
+
+    // Act
+    const problems = checkUpstreamDown(probe, [refusedFetch]);
+
+    // Assert
+    assert.equal(problems.length, 1);
+  });
+
+  it("rejects the absence of any failed fetch", () => {
+    // Arrange
+    const probe = [probeLine(BAD_GATEWAY, "unavailable")];
+
+    // Act
+    const problems = checkUpstreamDown(probe, []);
+
+    // Assert
+    assert.deepEqual(problems, ["в egress-журнале нет ни одной неудачной выборки"]);
+  });
+
+  it("rejects a missing probe line", () => {
+    // Arrange
+    const probe: Access[] = [];
+
+    // Act
+    const problems = checkUpstreamDown(probe, [refusedFetch]);
+
+    // Assert
+    assert.deepEqual(problems, ["access-строк пробы 0, ожидалась одна"]);
   });
 });
