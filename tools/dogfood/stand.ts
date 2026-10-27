@@ -39,6 +39,11 @@ export interface Stand {
   down(): string[];
 }
 
+/**
+ * Резервирования стенда (`CRANE_NAMESPACES`): собственные крейты CRANE лежат под платформенным префиксом,
+ * поэтому полный сценарий не спрашивает crates.io о каждом из них при публикации.
+ */
+export const NAMESPACES = ["cargo:crane-*"];
 const SUBNET_ATTEMPTS = 8;
 const HEX_BYTES_SECRET = 32;
 const HEX_BYTES_ID = 4;
@@ -259,6 +264,7 @@ function startCompose(
       "CRANE_CACHE=valkey://valkey:6379",
       "CRANE_NPM_REPOS=internal",
       `CRANE_NPM_PROXY_REPOS=${npmProxyRepo}`,
+      `CRANE_NAMESPACES=${NAMESPACES.join(",")}`,
       `CRANE_EDGE_SUBNET=${subnet}`,
       "CADDY_HTTP_PORT=127.0.0.1:",
       "CADDY_HTTPS_PORT=127.0.0.1:",

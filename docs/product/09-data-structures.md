@@ -51,11 +51,12 @@ CREATE TABLE repository (
   UNIQUE (format, name));
 
 CREATE TABLE namespace (
-  id uuid PRIMARY KEY, workspace_id uuid NOT NULL, format pkg_format NOT NULL,
-  pattern text NOT NULL,             -- '@acme/*', 'com.acme.*', 'acme-*'
-  pattern_kind text NOT NULL,        -- exact | prefix | scope
-  reserved boolean NOT NULL DEFAULT true,  -- запрет fallback в upstream
-  UNIQUE (format, pattern));
+  id uuid PRIMARY KEY,
+  workspace_id uuid NOT NULL,        -- владелец; FK на workspace появляется в v0.4.0
+  format pkg_format NOT NULL,
+  pattern text NOT NULL,             -- нормализован: точное имя или префикс, оканчивающийся разделителем формата и '*' ('acme_*', 'com.acme.*', '@acme/*')
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (format, pattern));         -- вид (точное имя или префикс) следует из завершающего '*'; резервируют все namespaces
 
 CREATE TABLE package (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- внутренний ключ, наружу не выдаётся
@@ -326,11 +327,11 @@ CREATE TABLE asset (
   FOREIGN KEY (store_id, blob_sha256) REFERENCES blob (store_id, sha256));
 ```
 
-*Рис. 9.3. Срез схемы v0.1.0 плюс миграция 0002 (`deprecated`, `dist_tag`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД.
+*Рис. 9.3. Срез схемы v0.1.0 плюс миграция 0002 (`deprecated`, `dist_tag`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД. Миграция 0003 `namespace` (expand, только `CREATE TABLE`) добавляет таблицу `namespace` в виде, показанном выше; история заявок на имена в БД не хранится, она живёт только в событиях аудита.
 
 | Отложено | Когда добавляется |
 | --- | --- |
-| `namespace`, `package.namespace_id`, `workspace_id` | Защита от dependency confusion и workspaces (v0.2.0 и позже) |
+| `package.namespace_id`, `package.owner_workspace_id` (с CHECK), FK `namespace.workspace_id` и `repository.workspace_id` на `workspace` | v0.4.0, вместе с командами и workspaces. Таблица `namespace` уже есть (миграция 0003, 10.3) |
 | `purl`, `sort_key`, `mutable`, `published_by` | Появление потребителя (граф, сортировка, аудит публикаций) |
 | `sha512`, `sha1`, `md5`, `media_type` | Форматы, которым нужны эти дайджесты и типы |
 | таблица `blob_store` | Второе физическое хранилище; пока `store_id` — текст без FK |

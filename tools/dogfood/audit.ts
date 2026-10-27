@@ -1,5 +1,6 @@
 // Проверка журнала crane после сценария: события аудита (OCSF, плоские ключи) и утечки секретов.
 // Чистые функции: вход — текст журнала и ожидания, выход — список расхождений.
+import * as ns from "./namespaces.ts";
 
 export type Operation = "publish" | "yank" | "unyank" | "delete" | "deprecate" | "tag" | "untag";
 
@@ -8,6 +9,7 @@ export type Outcome = "Success" | "Failure";
 export type Expected =
   /** `outcome` по умолчанию `Success`; отказ (например, повторная публикация tombstone) задаётся явно. */
   | { kind: "api"; agent: string; operation: Operation; purl: string; outcome?: Outcome }
+  | ns.NamespaceExpected
   /** Не меньше одного отказа аутентификации от этого клиента (число попыток cargo не детерминировано). */
   | { kind: "authFailure"; agent: string };
 
@@ -21,6 +23,8 @@ export interface Options {
   principal: string;
   /** Адреса, с которых клиент ходил в Caddy: `src_endpoint.ip` обязан быть одним из них. */
   loopback: string[];
+  /** Сколько резервирований из `CRANE_NAMESPACES` сервер аудирует на старте (актор `crane:config`). */
+  configReservations?: number;
 }
 
 export interface Secret {
@@ -77,7 +81,8 @@ interface Route {
 // Любой подходящий маршрут годится: одна операция может прийти разными запросами (у npm unpublish это
 // PUT документа и DELETE тарболла), а точные пути npm-маршрутов сверяют их собственные тесты сервера.
 const NPM_PATH = /^\/npm\/[^/]+\//;
-const ROUTES: Record<Operation, Route[]> = {
+const ROUTES: Record<string, Route[]> = {
+  ...ns.NAMESPACE_ROUTES,
   publish: [
     { method: "PUT", path: /\/api\/v1\/crates\/new$/ },
     { method: "PUT", path: NPM_PATH },
@@ -183,7 +188,7 @@ function checkApiEvent(line: Line, access: Map<string, Line>, options: Options):
     fail("access", `статус запроса ${String(code)} не соответствует исходу ${String(line.status)}`);
   }
   const operation = text(line["api.operation"]);
-  const routes: Route[] | undefined = ROUTES[operation as Operation];
+  const routes: Route[] | undefined = operation === undefined ? undefined : ROUTES[operation];
   const path = text(entry.path) ?? "";
   if (!routes?.some((route) => entry.method === route.method && route.path.test(path))) {
     fail("access", `запрос ${String(entry.method)} ${path} не соответствует операции`);
@@ -359,7 +364,8 @@ export function verify(craneNdjson: string, expected: Expected[], options: Optio
       access.set(id, line);
     }
   }
-  const api = lines.filter((line) => line.class_uid === API_ACTIVITY);
+  const apiLines = lines.filter((line) => line.class_uid === API_ACTIVITY);
+  const api = ns.takeConfigEvents(apiLines, options.configReservations ?? 0, mismatches);
   const auth = lines.filter((line) => line.class_uid === AUTHENTICATION);
   const agents = [...new Set(expected.map((e) => e.agent))];
   const ownedBy = (agent: string) => (line: Line) => userAgent(line).startsWith(agent);
@@ -373,11 +379,7 @@ export function verify(craneNdjson: string, expected: Expected[], options: Optio
     }
   }
   for (const agent of agents) {
-    const wanted = expected.flatMap((e) =>
-      e.kind === "api" && e.agent === agent
-        ? [`${e.operation} ${e.purl} ${e.outcome ?? "Success"}`]
-        : [],
-    );
+    const wanted = expected.filter((e) => e.agent === agent).flatMap(ns.expectedKeys);
     const mine = api.filter(ownedBy(agent));
     mismatches.push(...diff(`6003 ${agent}`, wanted, mine.map(eventKey)));
     for (const line of mine) {

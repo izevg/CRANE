@@ -3,13 +3,13 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Expected, leaks, verify } from "./audit.ts";
-import { scenario, startCargo } from "./cargo.ts";
+import { hostedName, scenario, startCargo } from "./cargo.ts";
 import { docker, log, MS_PER_SECOND, timed, warn } from "./exec.ts";
 import { fullScenario } from "./full.ts";
 import { npmScenario } from "./npm.scenario.ts";
 import { startNpm } from "./npm.ts";
 import { proxyScenario } from "./proxy.ts";
-import { describeStand, proxyRepo, type Stand } from "./stand.ts";
+import { describeStand, NAMESPACES, proxyRepo, type Stand } from "./stand.ts";
 import { parseArgs, parseCargo, type Which } from "./versions.ts";
 
 const ROOT = join(fileURLToPath(import.meta.url), "..", "..", "..");
@@ -59,7 +59,15 @@ function exercise(stand: Stand, targets: Target[], root: string, full: boolean):
       versions.push(client.version);
       expected.push(...scenario(stand, client, target.minor));
       log(`${target.image}: сценарий пройден`);
-      proxyScenario(stand, client, target.minor, proxyRepo(index));
+      expected.push(
+        ...proxyScenario(
+          stand,
+          client,
+          target.minor,
+          proxyRepo(index),
+          hostedName(stand, target.minor),
+        ),
+      );
       log(`${target.image}: proxy crates.io пройден`);
     } finally {
       client.stop();
@@ -80,6 +88,7 @@ function exercise(stand: Stand, targets: Target[], root: string, full: boolean):
   const mismatches = verify(stand.craneLogs(), expected, {
     principal: stand.principal,
     loopback: LOOPBACK,
+    configReservations: NAMESPACES.length,
   });
   const leaked = leaks(stand.allLogs(), stand.secrets);
   for (const m of mismatches) {

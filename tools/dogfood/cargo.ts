@@ -105,6 +105,9 @@ const dep = (name: string, requirement: string): string =>
 const fn = (name: string, body: string): string =>
   `pub fn ${name}() -> &'static str {\n    ${body}\n}\n`;
 
+/** Имя первого крейта сценария: по нему же проверяется, что hosted побеждает proxy. */
+export const hostedName = (stand: Stand, minor: number): string => `dfa_${stand.id}_${minor}`;
+
 /** Всё, что нужно шагам сценария: запуск cargo, запись крейтов и учёт ожидаемых событий аудита. */
 interface Kit {
   agent: string;
@@ -124,7 +127,7 @@ interface Kit {
 
 function scenarioKit(stand: Stand, client: CargoClient, minor: number): Kit {
   const suffix = `${stand.id}_${minor}`;
-  const a = `dfa_${suffix}`;
+  const a = hostedName(stand, minor);
   const b = `dfb_${suffix}`;
   const agent = `cargo/${client.version}`;
   const main = "/tmp/h-main";
@@ -175,9 +178,15 @@ function scenarioKit(stand: Stand, client: CargoClient, minor: number): Kit {
     version,
     files: { "src/lib.rs": fn("version", `"${version}"`) },
   });
+  const published = new Set<string>();
   const publish = (crate: Crate): void => {
     write(crate);
     must(crate.name, main, ["publish", "--registry", REGISTRY]);
+    // Первая публикация нового имени (его нет ни у upstream, ни в hosted) становится его резервированием.
+    if (!published.has(crate.name)) {
+      published.add(crate.name);
+      events.push({ kind: "reserve", agent });
+    }
     audited("publish", crate.name, crate.version);
   };
 
