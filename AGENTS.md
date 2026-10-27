@@ -31,7 +31,11 @@ All work is done in separate git worktrees, not in the main working directory:
 - The location and the way of creating a worktree are defined by the settings of your IDE or agent environment; paths are not hardcoded in the repository (Claude Code uses `.claude/worktrees/`, others use their own directories; worktree roots are in `.gitignore`).
 - After creating a worktree, run `task install` (every worktree has its own `node_modules` and lefthook hooks).
 - Do not use the shared `git stash` (the stack is shared by all worktrees); set work aside with a WIP commit.
-- After the branch is merged, remove the worktree and the branch: `git worktree remove <path>`.
+- **Automatic cleanup.** Before starting any task, and again whenever a PR you opened has been merged, remove the worktrees whose branch was merged through a PR into `main` or a `release/*` branch:
+  - Determine the PR state through `gh` (`gh pr list --head <branch> --state merged --json number,baseRefName,headRefOid`) or the GitHub MCP, never through `git branch --merged`: a squash merge leaves the branch "unmerged" from git's point of view.
+  - Remove a worktree only if its PR is `MERGED` into `main` or `release/*`, the worktree is clean, and its `HEAD` equals the PR's `headRefOid` (no commits after the merge). Never remove the main directory, the current worktree, `main` or `release/*` worktrees, or a detached `HEAD`.
+  - Removal deletes the worktree and its local branch (`git worktree remove <path>` and `git branch -D <branch>`; the remote branch is deleted by GitHub on merge).
+  - `task worktrees:prune` does exactly this: dry-run by default, `task worktrees:prune -- --apply` to remove.
 
 ## Commands
 
@@ -45,6 +49,7 @@ The single entry point is the [Taskfile](Taskfile.yml) (`task --list`).
 | Web: types, Biome, Steiger, knip, depcruise | `task web:check` · unit tests: `task web:test` |
 | File structure and crate layers | `task structure` |
 | Full gate before a PR to `release/*` | `task gate` (unit tests + cargo-mutants and Stryker mutations + Playwright) |
+| Prune worktrees of merged branches | `task worktrees:prune` (dry-run) · `task worktrees:prune -- --apply` |
 | Version bump, CHANGELOG, guidebook | `task bump TAG=vX.Y.Z` · `task changelog` · `task guidebook` |
 
 ## Code architecture
@@ -78,6 +83,8 @@ Not counted: manifests and configs (`Cargo.toml`, `package.json`, `tsconfig*.jso
 - Mutation testing: `cargo-mutants` and Stryker. The critical path (format protocols, access control, CAS and publishing, tokens) must hold the threshold. The full gate runs **locally** (`task gate`) before a PR to `release/*`; it is not run in CI. Playwright and Storybook tests are also local.
 
 ## Git flow
+
+The full description (branch diagram, versioning, tag rules, release procedure) is in [GITFLOW.md](GITFLOW.md); below is the short version.
 
 - `main` is the primary (production) branch. `release/vX.Y.Z` and feature branches are created from it.
 - A feature branch from `main` → PR to `release/vX.Y.Z`, merged with **squash**. The PR title is a Conventional Commit (it becomes the squash message). The PR description contains the output of `task gate` (`Gate: passed`, `Gate-SHA`).
