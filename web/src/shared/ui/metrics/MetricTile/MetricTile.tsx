@@ -228,10 +228,7 @@ export function MetricTile(props: MetricTileProps) {
       href={href}
       aria-label={linkName(label, value, tone?.label)}
       aria-describedby={footerId}
-      className={cx(
-        "block rounded-xl outline-offset-2 transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-ring",
-        className,
-      )}
+      className={cx("block rounded-xl transition-shadow hover:shadow-md", className)}
     >
       {card}
     </Link>

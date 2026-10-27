@@ -82,7 +82,6 @@
   --shadow-card:
     0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -2px rgba(0, 0, 0, 0.03),
     0 0 0 1px rgba(229, 230, 232, 0.8);
-  --focus-ring: 0 0 0 2px #f9f1f7, 0 0 0 4px #951b81;
 
   /* семантические токены кита, 42 §3 */
   --highlight: var(--brand-container);
@@ -195,5 +194,4 @@
   --shadow-card:
     0 4px 6px -1px rgba(0, 0, 0, 0.35), 0 2px 4px -2px rgba(0, 0, 0, 0.35),
     0 0 0 1px rgba(52, 58, 72, 0.9);
-  --focus-ring: 0 0 0 2px #1a1e26, 0 0 0 4px #e07acb;
 }

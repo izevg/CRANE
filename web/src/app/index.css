@@ -119,10 +119,14 @@
   * {
     border-color: var(--border);
   }
+  /*
+   * Индикатор фокуса (WCAG 2.4.7) — outline, а не box-shadow: утилиты shadow-*, ring-* и inset-ring
+   * в слое utilities перебивали бы тень, а outline с ними не конфликтует. В forced-colors браузер сам
+   * подменяет цвет outline системным.
+   */
   :focus-visible {
-    outline: 2px solid transparent;
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
-    box-shadow: var(--focus-ring);
   }
   html {
     scroll-padding-top: var(--topbar-height);
