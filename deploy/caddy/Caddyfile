@@ -1,0 +1,6 @@
+# TLS: для публичного имени сертификат выдаёт ACME, для localhost — внутренний CA Caddy.
+# Обе переменные приходят из environment сервиса caddy, без дефолтов.
+{$CRANE_HOST} {
+	encode zstd gzip
+	reverse_proxy crane:{$CRANE_HTTP_PORT}
+}

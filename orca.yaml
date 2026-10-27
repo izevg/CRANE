@@ -1,0 +1,14 @@
+# Подготовка worktree, созданных Orca (orca worktree create). Схема: onorca.dev/docs/model/orca-yaml.
+scripts:
+  # Графы graft и graphify локальные (вне git), поэтому строятся в каждом worktree заново.
+  setup: |
+    if command -v graft >/dev/null; then graft build; fi
+    if command -v graphify >/dev/null; then graphify update .; fi
+# Агент стартует только после того, как графы построены.
+setupAgentStartupPolicy: wait-for-setup
+worktree:
+  # Ссылки на зависимости основного каталога вместо pnpm install в каждом worktree.
+  # Новая зависимость в ветке ставится явным pnpm install и меняет общий каталог.
+  sharedDirectories:
+    - node_modules
+    - web/node_modules

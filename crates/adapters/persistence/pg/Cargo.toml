@@ -1,0 +1,24 @@
+[package]
+name = "crane-pg"
+description = "Адаптер PostgreSQL."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+crane-domain = { path = "../../../core/domain" }
+crane-ports = { path = "../../../core/ports" }
+# TLS на aws-lc-rs: тот же криптопровайдер, что у object_store[aws]. Без json и макросов, запросы пишутся вручную.
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "migrate", "uuid", "time", "tls-rustls-aws-lc-rs"] }
+time = "0.3"
+uuid = "1"
+
+[dev-dependencies]
+crane-ports = { path = "../../../core/ports", features = ["contract"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+uuid = { version = "1", features = ["v4"] }

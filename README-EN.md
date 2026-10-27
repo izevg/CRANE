@@ -168,10 +168,10 @@ helm install crane oci://example.org/charts/crane \
 **Developer:**
 
 ```bash
-crane login                                   # sign in via Keycloak (device flow, MFA)
-crane setup npm pip maven gradle nuget cargo        # tokens and package manager configuration
+cctl login                                    # sign in via Keycloak (device flow, MFA)
+cctl setup npm pip maven gradle nuget cargo         # tokens and package manager configuration
 npm install @acme/ui                          # business as usual from here
-crane diag <request-id>                       # why it was denied and how to fix it
+cctl diag <request-id>                        # why it was denied and how to fix it
 ```
 
 **GitLab CI, no stored secrets:**
@@ -201,7 +201,7 @@ The documentation is currently in Russian; an English translation is planned.
 
 ## Roadmap
 
-Effort is estimated in agent-hours, calibrated against a measured real project ([section 18](docs/product/18-plan-team-budget.md)); the baseline scenario is about 760 agent-hours.
+Effort is estimated in agent-hours, calibrated against a measured real project ([section 18](docs/product/18-plan-team-budget.md)); the baseline scenario is about 770 agent-hours.
 
 - [x] Solution architecture and guidebook
 - [x] Effort estimate and roadmap

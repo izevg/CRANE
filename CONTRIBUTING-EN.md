@@ -64,12 +64,13 @@ These take effect with the first code.
 
 - **Single entry point:** `task check` (see `AGENTS.md`). `lefthook` hooks are installed by `pnpm install`; do not bypass them.
 - **Code architecture:** Rust is DDD + hexagonal + clean architecture, web is Feature-Sliced Design ([section 8](docs/product/08-c4-l4-code.md), [section 15](docs/product/15-frontend.md)).
+- **Secrets for compose and PostgreSQL tests:** `cp .env.dist .env`, then `task secrets:init` creates the secret files in `./secrets/` (gitignored; existing files are never overwritten).
 - **Rule of four:** at most 4 files and 8 subfolders per folder; mixed folders (files plus subfolders) are forbidden. Checked by `task structure`.
 - **TypeScript wherever possible:** scripts and configs are `.ts`; `.mjs` files are not accepted in the repository.
 - **Rust:** stable toolchain; `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and `cargo test` pass cleanly. The style is the "boring Rust" of [section 3](docs/product/03-load-forecast-rust-vs-fastapi.md): no custom procedural macros, no clever type gymnastics.
 - **Dependencies:** permissive licenses only; `cargo deny check` (licenses and advisories) is mandatory. Justify every new dependency in the pull request description.
 - **Frontend:** strict TypeScript; the linter and tests (Vitest, Testing Library, Playwright) pass cleanly.
-- **Tests.** Every behavior change comes with a test. The critical path (format protocols, access control, CAS and publishing, tokens) is additionally covered by mutation testing (cargo-mutants, Stryker). The full gate `task gate` runs locally before a PR to `release/*`.
+- **Tests.** Every behavior change comes with a test. Tests follow strict AAA (`// Arrange`, `// Act`, `// Assert`, a single statement in Act; several assertions only as facets of one outcome) and cover logic only, not code: no tests for getters, `Debug`/`Display`, or tests that exist only to kill a mutant in code without logic. `task structure` checks compliance; the full rules are in [AGENTS.md](AGENTS.md). The critical path (format protocols, access control, CAS and publishing, tokens) is additionally covered by mutation testing (cargo-mutants, Stryker). The full gate `task gate` runs locally before a PR to `release/*`.
 - **Security.** No secrets in code, fixtures or logs; secrets are wrapped in a type that cannot be printed. Untrusted data (package contents, metadata, model output) never influences permissions.
 - **Compatibility.** Protocol changes are checked against the matrix of real clients; database schema changes follow expand / migrate / contract (section 16.4).
 
@@ -87,7 +88,7 @@ These take effect with the first code.
 3. All CI checks are green.
 4. A maintainer approval is required; changes to access control, tokens, cryptography, protocols or audit need two, one of them from the security owner.
 5. Review comments are discussed in the pull request, and the decision is recorded there.
-6. Merges into `release/*` are squashed; the PR title follows Conventional Commits and the description carries the `task gate` result.
+6. Merges into `release/*` are squashed; the PR title follows Conventional Commits and the description carries a manual mutants table; the full `task gate` runs before the release PR to `main`.
 7. After the release is approved, the `release/vX.Y.Z` → `main` PR is merged with a merge commit; the `release` workflow sets versions, CHANGELOG and the `vX.Y.Z` tag ([section 16.7](docs/product/16-deployment.md)).
 
 ## Contribution license

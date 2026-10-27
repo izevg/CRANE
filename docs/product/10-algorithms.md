@@ -21,7 +21,7 @@ fn publish(principal, repo, upload):
       for f: store.commit(upload_id, f.sha256)            // идемпотентный copy в CAS этого хранилища
              insert blob ON CONFLICT DO NOTHING
       insert package ON CONFLICT DO NOTHING; insert package_version(state = initial_state(policy))
-      insert assets; insert outbox('version.published'); enqueue(analyze.package)
+      insert assets; insert job('analyze.package'); NOTIFY job   // задача в той же транзакции, без outbox
       insert audit_event
     tx.commit()                                          // точка видимости
     cache.invalidate(md:{repo}:{name})                    // + pub/sub на все реплики
@@ -105,16 +105,17 @@ fn exchange(id_token):
     return issue("crci_", scopes, ttl, provenance = {project, commit, pipeline, job})
 ```
 
-Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Это закрывает требование связи публикации с project, commit, pipeline и job.
+Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Эти claims пишутся и как evidence (`predicate_type = https://slsa.dev/provenance/v1`, `kind = jwt`, `trust = crane`, `signer_issuer` = `iss` токена, `signer_san` = `project_path` без ref (ref законно меняется от версии к версии), `facts` = `repo` (тот же `project_path`), commit, pipeline, job), поэтому gate provenance и правило регрессии (10.6.1) читают один источник и для hosted. Такая provenance выпущена CRANE, а не подписана сборочной платформой, поэтому сама по себе не означает SLSA Build L2; L2 дают attestations из CI (`trust = publisher`). Это закрывает требование связи публикации с project, commit, pipeline и job.
 
 ## 10.6 Promotion и gates
 
 ```rust
 fn evaluate(version, target_stage):
     gates = policy.gates_for(version.repo, target_stage)  // cve, license, provenance, quality
-    results = gates.map(|g| match evidence.latest(version.digest, g.kind):
+    results = gates.map(|g| match evidence.latest(version.id, g.predicate_types):
         None                      => Missing             // «проверка отсутствует»
-        Some(e) if e.failed       => AnalysisError       // «ошибка анализа»
+        Some(e) if e.invalid      => Deny                // подпись или subject не сошлись
+        Some(e) if e.unverifiable => AnalysisError       // «ошибка анализа»: сбой скана, нет trust root, нет сети
         Some(e) if stale(e, g)    => Stale
         Some(e)                   => g.judge(e, exceptions.active(version)))
     verdict = combine(results)      // любой Deny → Deny; Missing/Stale → по политике gate
@@ -123,7 +124,49 @@ fn evaluate(version, target_stage):
     return verdict                   // всегда с перечнем причин для UI
 ```
 
+Gate не знает видов доказательств: он объявляет, какие `predicate_types` читает (раздел 9). Provenance читает SLSA Provenance, а `trust` отличает claims CRANE от подписанной provenance CI и upstream; cve читает vulns и VEX; license читает CycloneDX и SPDX; quality читает quality gate SonarQube. Требование «без валидной attestation не продвигать» — настройка gate provenance по репозиторию и стадии: какие `trust` он принимает (`publisher`, `upstream`, `crane` для claims) и требует ли `valid`. Версия без подходящего evidence не уходит дальше quarantine.
+
 Promotion меняет только строку в БД: digest и байты те же. Повторная оценка запускается событиями «новое evidence», «новая версия базы уязвимостей», «истекло исключение», «изменилась политика».
+
+### 10.6.1 Проверка upstream attestations (proxy)
+
+Задача `attestation.verify` ставится после commit CAS и идёт вне горячего пути: скачивание клиенту не ждёт проверки; состояние версии до результата определяет политика репозитория (quarantine новых версий из upstream, 14.2). Источник зависит от формата:
+
+| Формат | Где брать | Что приходит |
+| --- | --- | --- |
+| npm | `dist.attestations` в packument; `GET /-/npm/v1/attestations/<name>@<version>` | SLSA provenance и publish attestation в Sigstore bundle |
+| PyPI | Integrity API: `GET /integrity/<project>/<version>/<filename>/provenance` | PEP 740: in-toto Statement в DSSE, издатель Trusted Publishing |
+| Maven Central | `.asc` (PGP) и `.sigstore.json` рядом с файлом, где опубликован | Подпись файла; Sigstore bundle опционален, PGP обязателен |
+
+NuGet и Cargo в v1.1.0 не проверяются.
+
+Общий шаг 1: `subject` digest (у подписи файла — сам подписанный файл) равен SHA-256 blob; иначе `invalid`. Остальное зависит от вида подписи.
+
+Sigstore bundle (`kind = sigstore`: npm, PyPI, `.sigstore.json` в Maven):
+
+2. Цепочка сертификата Fulcio и его SAN и issuer; они кладутся в `signer_*` и в `facts` (builder, repo, commit, run).
+3. Inclusion proof и signed entry timestamp Rekor берутся из самого bundle, без обращения к журналу: проверка работает офлайн.
+4. Trust root — `trusted_root.json` Sigstore, обновляется через TUF; версия корня пишется в `verify_detail`.
+
+PGP (`kind = pgp`, Maven `.asc`): подпись проверяется по публичному ключу издателя, отпечаток ключа ложится в `signer_subject`, `tlog` NULL; Fulcio, Rekor и TUF не участвуют. `valid` означает, что подпись сходится с ключом, который берётся из того же места, что и файл; доверие к ключу даёт история версий, а смену ключа ловит правило регрессии.
+
+Ошибка самой проверки (нет trust root, upstream недоступен, незнакомый формат bundle) даёт `unverifiable`, а не `invalid`: иначе сбой инфраструктуры блокировал бы чужие релизы.
+
+```rust
+on attestation_verified(new_version):                     // attestation.verify → правило регрессии
+    past = previous_versions(new_version.package)
+    signer(x) = match x.kind { pgp => x.signer_subject,                  // отпечаток ключа
+                               _   => (x.signer_issuer, x.signer_san) }  // Sigstore, jwt
+    for prev in evidence.latest_valid_per_type(past):      // каждый predicate_type, что был valid раньше
+        e = evidence.latest(new_version.id, [prev.predicate_type])
+        if e.is_none() or e.invalid or signer(e) != signer(prev) or e.facts.repo != prev.facts.repo:
+            hold(new_version, quarantine | blocked)        // по политике репозитория
+            siem(SupplyChainSignal(new_version, prev, e)); break   // сигнал захвата аккаунта maintainer'а
+```
+
+Регрессия — главный практический сигнал: у прошлых версий была валидная attestation или подпись, а у новой её нет, она `invalid` или сменились издатель и репозиторий. Так может выглядеть публикация с украденным токеном мимо CI. Карточка версии показывает «собрано в <CI> из <repo>@<commit>» из `facts`.
+
+**Attestations из своего CI (hosted).** CI прикладывает in-toto/SLSA provenance и другие attestations к версии рядом с SBOM. Их проверяет тот же верификатор; они ложатся в evidence с `trust = publisher`, а `subject` сверяется с blob при приёме. Цель — SLSA Build L2 (hosted build platform, подписанная provenance); L3 при hardened builders остаётся документированной целью, а не гарантией.
 
 ## 10.7 Уязвимости: сопоставление, воздействие и приоритет
 
@@ -136,7 +179,7 @@ on advisory_changed(adv):                                 // advisory.sync → a
         if format(adv.ecosystem).in_ranges(v.version, adv.ranges):
             upsert_finding(adv, v, fixed = adv.nearest_fix(v.version))
 on trivy_db_updated(new_db):                              // раз в несколько часов
-    for sbom in evidence.sboms_by_recency(): enqueue(scan.sbom(sbom, new_db))
+    for sbom in evidence.by_types([CYCLONEDX, SPDX]): enqueue(scan.sbom(sbom, new_db))   // по recency
 on finding_new_or_changed(f):
     impact = graph.upstream_closure(f.purl)               // рекурсивный CTE ниже
     scores = scorer.score_all(f, impact).ok()             // systemone; None → только правила
@@ -217,7 +260,7 @@ fn search(q, principal, filters):
 
 ## 10.11 Outbox и webhooks
 
-Событие записывается в `outbox` в той же транзакции. Relay выбирает пачки через `FOR UPDATE SKIP LOCKED`, создаёт доставки по подпискам и помечает событие. Доставка подписывается заголовком `Crane-Signature: t=<unix>,v1=HMAC-SHA256(secret, t + "." + body)`, несёт `Crane-Event-Id` для дедупликации и повторяется с экспоненциальной задержкой и jitter (10 с … 1 ч) в течение 24 часов, после чего попадает в DLQ с возможностью ручного повтора из UI.
+Outbox служит только внешней доставке (webhooks, SIEM; решается в P2 / v1.1.0); внутренние задачи идут строкой `job` в транзакции данных (раздел 9). Событие записывается в `outbox` в той же транзакции. Relay выбирает пачки через `FOR UPDATE SKIP LOCKED`, создаёт доставки по подпискам и помечает событие. Доставка подписывается заголовком `Crane-Signature: t=<unix>,v1=HMAC-SHA256(secret, t + "." + body)`, несёт `Crane-Event-Id` для дедупликации и повторяется с экспоненциальной задержкой и jitter (10 с … 1 ч) в течение 24 часов, после чего попадает в DLQ с возможностью ручного повтора из UI.
 
 ## 10.12 Rate limiting (GCRA)
 

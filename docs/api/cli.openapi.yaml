@@ -1,0 +1,268 @@
+openapi: 3.1.0
+info:
+  title: CRANE CLI API (cctl)
+  version: 0.1.0
+  summary: Целевая спека (design-first).
+  description: |
+    Что вызывает консольный клиент `cctl`. Префикс `/api/v1`, аутентификация `Authorization: Bearer` (JWT Keycloak с `aud: crane` либо `crp_`, `crr_`, `crci_`). Общие операции берутся из `common.yaml` (они же есть в admin-спеке).
+
+    ## Статус документа
+
+    Целевая спека (design-first): контракт написан до кода. Раздел 13 говорит, что спека генерируется из кода (utoipa); контракт-тест сверит вывод utoipa с этим документом. Какой из источников главный в итоге, решает продукт.
+
+    ## Фазы и версии
+
+    Каждая операция несёт `x-crane-phase` и `x-crane-since`: P0 = v0.4.0 (доступ, базовый UI, CLI; часть в v0.5.0), P1 = v0.6.0, P2 = v1.1.0, P3 = v1.2.0.
+
+    ## Расширения операции
+
+    | Расширение | Смысл |
+    | --- | --- |
+    | `x-crane-phase`, `x-crane-since` | Фаза и версия поставки |
+    | `x-crane-action` | Действие Cedar `<контекст>:<глагол>` (для журнала `audit:read`, `audit:reveal_pii`, `audit:export`, как в 14.12) |
+    | `x-crane-step-up` | Требует MFA (`acr`); без него 401 с `WWW-Authenticate` по RFC 9470 |
+    | `x-crane-audit` | `{event, ocsf_class}` или `null` для чтений без аудита (классы 14.9: 3002, 3001, 6003, 2002, 2003, 2004) |
+    | `x-crane-open-question` | Неясность продукта, решение за владельцем |
+
+    ## Адресация
+
+    Пакет: `/packages/{format}/{repository}/{name}`. `name` - один сегмент с percent-encoding (`@acme/ui` -> `%40acme%2Fui`), ingress не должен декодировать `%2F`. Версия - каноническая форма: `/versions/{version}`. Внутренний bigint id наружу не выдаётся. GET по неканоническому имени отвечает 308 на канонический путь. В ответах: `name{display, normalized}`, `version{canonical, display}`, `purl` (версии) или `purl_base` (пакет), `repository{name, format, kind, workspace}`.
+
+    ## Списки
+
+    Курсор: `cursor` (непрозрачная строка) и `limit` (по умолчанию 50, максимум 200). Следующая страница - `_links.next.href`, `prev` аналогично; offset, page и total на горячих списках нет. Счётчики - только отдельные агрегаты: `stats.versions_by_state`, `GET /findings/summary`, фасеты поиска `{value, count, capped}` (потолок 1000), `GET /audit/summary`. Сортировка: `sort=-published_at` (минус - по убыванию, ключи через запятую). Множества фильтров - повторяемые параметры (`priority=P0&priority=P1`). `fields` - частичный ответ (поиск, версии, находки, журнал). Время - RFC 3339 UTC с миллисекундами; числа сырые (байты, мс, доли 0..1); enum - машинные коды; человеческий текст только в `problem.detail` и `remediation`. Деградации явные: `stale{since, reason, served_until}`; плитка без данных - `null`, не 0.
+
+    ## Ошибки
+
+    Ошибки - `application/problem+json` (RFC 9457), схема `Problem`. Скрытый и несуществующий ресурс дают одинаковый 404 (`…/problems/not-found`, «Не найдено или нет доступа», без `rule_id`, `remediation`, `contact`, `reasons`; время ответа не различается, потому что авторизация Cedar на уровне репозитория или workspace выполняется до поиска). 403 - только для ресурса, который вызывающий видит, но действие ему запрещено. Трасса решения - только `GET /diagnostics/{request_id}`. 401 с MFA: `StepUpRequired` и `WWW-Authenticate: Bearer error="insufficient_user_authentication", acr_values="mfa"`. 410 - истёкший план (`plan-expired`); 503 - read-only, деградация, ИИ недоступен (`…/ai-unavailable`).
+
+    ## Заголовки и условные запросы
+
+    Каждый ответ несёт `X-Request-Id`. Мутации принимают `Idempotency-Key` (обязателен для POST; хранится 24 часа вместе с хэшем запроса; повтор с другим телом - 422 `idempotency-key-reuse`). Кэшируемые GET отдают `ETag` и принимают `If-None-Match` (304). Изменение политик и настроек требует `If-Match` (412).
+
+    ## Права строк
+
+    Права строк коллекции считаются полностью (роль, область и состояние), а не только по состоянию: кэш решений Cedar ключуется по (principal, epoch, action, scope_key) уровня репозитория или workspace (раздел 10.4); на странице до 200 строк это единицы различных ключей, стоимость пренебрежима. Ссылки-действия строки лежат в `_links` элемента.
+
+    ## Секреты и персональные данные
+
+    Секрет возвращают только 201 выпуска токена, credential робота и вебхука (схемы `*Created`, `Cache-Control: no-store`). Везде иначе - только `prefix` (префикс и 8 символов). Ключи интеграций - `{is_set, updated_at}`. Журнал всегда маскирован (`actor.pseudonym`, `src_ip_masked` /24); полные данные - только `POST /audit/events/{event_id}/reveal`. ФИО из Keycloak вне журнала допустимы. Тексты промптов LLM, заголовки Authorization и байты пакетов через /api не отдаются.
+
+    ## Представление
+
+    Отдельного plain-JSON представления нет: одно представление без согласования содержимого, поля HAL (`_links`, `_embedded`) аддитивны. Ресурсы - `application/hal+json`; `cctl` игнорирует `_links`, кроме `_links.next` для пагинации. Протокольные ответы (`/auth/config`, `/tokens/exchange`) - обычный `application/json`.
+
+    ## Вход
+
+    Device flow идёт в Keycloak напрямую, не в CRANE. Последовательность: (1) `cctl login` вызывает `GET /auth/config` (без аутентификации) и узнаёт `issuer`, `client_id` (`crane-cli`), `audience`, `device_authorization_endpoint`, `token_endpoint`; (2) запрашивает код устройства у Keycloak (RFC 8628); (3) пользователь входит в браузере, при необходимости с MFA; (4) `cctl` получает access и refresh токены и кладёт refresh в системное хранилище секретов; (5) `cctl login --refresh` и `cctl setup` вызывают `POST /tokens`.
+
+    ## Токены и клиенты
+
+    `cctl setup <клиенты>` вызывает `POST /tokens {kind: session}` (12 часов) и записывает токен:
+
+    | Клиент | Куда пишется токен |
+    | --- | --- |
+    | npm, pnpm, yarn | `~/.npmrc` (`_authToken`) |
+    | pip, uv, poetry | `~/.netrc` или keyring, пользователь `__token__` |
+    | Maven | `~/.m2/settings.xml`, `<server>` |
+    | Gradle | `~/.gradle/gradle.properties`, `craneToken` |
+    | dotnet, NuGet | credential provider `crane` |
+    | cargo | `~/.cargo/config.toml` и credential provider |
+
+    Обмен токена платформы (CI): `POST /tokens/exchange` по RFC 8693, ошибки по RFC 6749 §5.2.
+
+    ## Команды и вызовы
+
+    | Команда | Вызов |
+    | --- | --- |
+    | `cctl tokens` | `/tokens` |
+    | `cctl robots` | `/robots` |
+    | `cctl diag <request_id>` | `/diagnostics/{request_id}` и `/status` |
+    | `cctl readiness <файл>` | `POST /readiness` |
+    | `cctl warm` | `POST /cache/warmups` |
+    | `cctl promote` | `POST …/versions/{version}/promotions` |
+    | `cctl audit verify <файл>` | `GET /audit/anchors` (проверка на клиенте) |
+    | `cctl export` | `/audit/exports` |
+
+    `cctl publish` идёт протоколом формата (npm, PyPI, Maven, NuGet, cargo), а не через `/api`.
+
+    ## Step-up
+
+    401 `StepUpRequired` с `WWW-Authenticate` по RFC 9470: `cctl` повторяет device flow с `acr_values=mfa`.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+- url: https://crane.example/api/v1
+  description: Экземпляр CRANE
+security:
+- bearer: []
+tags:
+- name: session
+  description: 'Вход и сессия BFF: Authorization Code + PKCE, cookie, step-up, конфигурация входа для CLI.'
+- name: catalog
+  description: 'Поиск, пакеты и версии: карточки, состояния, флаги формата, deprecate, yank, удаление.'
+- name: access
+  description: Токены, роботы, trust policies, пространства имён, доступ команды, обмен токенов.
+- name: promotion
+  description: Продвижение версий, гейты, approvals, evidence.
+- name: audit
+  description: Журнал действий, экспорт, целостность, SIEM, правила обнаружения, SoD, отчёты.
+- name: platform
+  description: Статус, обзор, хранилища, репозитории, upstream, квоты, retention, целостность, задачи, бэкапы, импорт,
+    workspaces, интеграции, вебхуки.
+- name: cache
+  description: Готовность lockfile и SBOM к офлайну, прогрев кэша.
+- name: diagnostics
+  description: Трасса решения по request_id.
+paths:
+  /status:
+    $ref: ./common.yaml#/components/pathItems/Status
+  /tokens:
+    $ref: ./common.yaml#/components/pathItems/Tokens
+  /tokens/policy:
+    $ref: ./common.yaml#/components/pathItems/TokensPolicy
+  /tokens/{token_id}:
+    $ref: ./common.yaml#/components/pathItems/TokensTokenId
+  /tokens/{token_id}/revoke:
+    $ref: ./common.yaml#/components/pathItems/TokensTokenIdRevoke
+  /diagnostics/{request_id}:
+    $ref: ./common.yaml#/components/pathItems/DiagnosticsRequestId
+  /search:
+    $ref: ./common.yaml#/components/pathItems/Search
+  /packages/{format}/{repository}/{name}:
+    $ref: ./common.yaml#/components/pathItems/PackagesFormatRepositoryName
+  /packages/{format}/{repository}/{name}/versions:
+    $ref: ./common.yaml#/components/pathItems/PackagesFormatRepositoryNameVersions
+  /packages/{format}/{repository}/{name}/versions/{version}:
+    $ref: ./common.yaml#/components/pathItems/PackagesFormatRepositoryNameVersionsVersion
+  /packages/{format}/{repository}/{name}/versions/{version}/deletion:
+    $ref: ./common.yaml#/components/pathItems/PackagesFormatRepositoryNameVersionsVersionDeletion
+  /packages/{format}/{repository}/{name}/versions/{version}/promotion:
+    $ref: ./common.yaml#/components/pathItems/PackagesFormatRepositoryNameVersionsVersionPromotion
+  /packages/{format}/{repository}/{name}/versions/{version}/promotions:
+    $ref: ./common.yaml#/components/pathItems/PackagesFormatRepositoryNameVersionsVersionPromotions
+  /robots:
+    $ref: ./common.yaml#/components/pathItems/Robots
+  /robots/{robot_id}:
+    $ref: ./common.yaml#/components/pathItems/RobotsRobotId
+  /robots/{robot_id}/credentials:
+    $ref: ./common.yaml#/components/pathItems/RobotsRobotIdCredentials
+  /robots/{robot_id}/disable:
+    $ref: ./common.yaml#/components/pathItems/RobotsRobotIdDisable
+  /readiness:
+    $ref: ./common.yaml#/components/pathItems/Readiness
+  /cache/warmups:
+    $ref: ./common.yaml#/components/pathItems/CacheWarmups
+  /audit/exports:
+    $ref: ./common.yaml#/components/pathItems/AuditExports
+  /audit/exports/{export_id}:
+    $ref: ./common.yaml#/components/pathItems/AuditExportsExportId
+  /audit/anchors:
+    $ref: ./common.yaml#/components/pathItems/AuditAnchors
+  /auth/config:
+    get:
+      tags:
+      - session
+      summary: Конфигурация входа для cctl
+      description: |-
+        Без аутентификации. Device flow идёт в Keycloak напрямую, не в CRANE.
+
+        Роли: не требуется.
+      operationId: getAuthConfig
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: auth:read_config
+      x-crane-step-up: false
+      x-crane-audit: null
+      x-crane-protocol: true
+      security: []
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IfNoneMatch
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+            ETag:
+              $ref: ./common.yaml#/components/headers/ETag
+            Cache-Control:
+              $ref: ./common.yaml#/components/headers/CacheControl
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/AuthConfig
+        '304':
+          $ref: ./common.yaml#/components/responses/NotModified
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+  /tokens/exchange:
+    post:
+      tags:
+      - access
+      summary: Обмен токена (RFC 8693)
+      description: |-
+        Для CI-сценариев (P1): JWT платформы -> `crci_`. Ошибки по RFC 6749 §5.2, не problem+json. Trust policy задаёт издателя, claims и scopes.
+
+        Роли: аутентифицирует сам `subject_token`.
+      operationId: exchangeToken
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: token:exchange
+      x-crane-step-up: false
+      x-crane-audit:
+        event: token.exchanged
+        ocsf_class: 3002
+      x-crane-protocol: true
+      x-crane-open-question: В 12-sequence-diagrams.md путь `/api/v1/auth/gitlab` противоречит разделу 13; принят
+        `/tokens/exchange`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: ./common.yaml#/components/schemas/TokenExchangeRequest
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+            Cache-Control:
+              $ref: ./common.yaml#/components/headers/CacheControlNoStore
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/TokenExchangeResponse
+        '400':
+          description: Ошибка по RFC 6749 §5.2.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/OAuthError
+        '401':
+          description: Ошибка по RFC 6749 §5.2 (`invalid_grant`, `unauthorized_client`).
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/OAuthError
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+components:
+  securitySchemes:
+    session:
+      $ref: ./common.yaml#/components/securitySchemes/session
+    bearer:
+      $ref: ./common.yaml#/components/securitySchemes/bearer

@@ -1,0 +1,46 @@
+[package]
+name = "crane-server"
+description = "Composition root и точка входа сервера: роли serve, worker, analyze, all, migrate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "crane"
+path = "src/main.rs"
+
+[dependencies]
+crane-app = { path = "../../core/app" }
+crane-domain = { path = "../../core/domain" }
+crane-http = { path = "../http" }
+crane-memory = { path = "../../adapters/persistence/memory" }
+# Постоянные хранилища: каталог в PostgreSQL и blob в объектном хранилище.
+crane-objstore = { path = "../../adapters/persistence/objstore" }
+crane-pg = { path = "../../adapters/persistence/pg" }
+crane-ports = { path = "../../core/ports" }
+crane-siem = { path = "../../adapters/external/siem" }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+# Пул соединений и разбор параметров подключения: PgCatalog принимает готовый PgPool.
+# Версия и фичи те же, что у crane-pg, чтобы в lock остался один sqlx.
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-aws-lc-rs"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "signal", "io-util", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }
+# Разбор CRANE_BLOBS в URL: ObjectBlobStore::from_url принимает url::Url.
+url = "2"
+uuid = { version = "1", features = ["v7"] }
+toml = { version = "1.1.8", default-features = false, features = ["parse", "serde", "std"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
+serde_json = "1"
+sha2 = "0.10"
+tower = { version = "0.5", default-features = false, features = ["util"] }
+# Временный каталог под file:// blob-хранилище в тесте сборки сервера; удаляется при drop.
+tempfile = "3"

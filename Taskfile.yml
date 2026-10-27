@@ -20,20 +20,21 @@ tasks:
       - task: rust:check
       - task: web:check
       - task: web:test
+      - task: deploy:check
 
   structure:
-    desc: Правило четырёх и слои крейтов
+    desc: Правило четырёх, слои крейтов, AAA в тестах
     cmds: [node tools/lint-structure/index.ts]
 
   lint:
     desc: Biome на весь репозиторий (tools, конфиги, web)
-    cmds: [pnpm exec biome check .]
+    cmds: [pnpm exec biome check --error-on-warnings .]
 
   tools:check:
     desc: Типы и тесты tools/ и конфигов в корне
     cmds:
       - pnpm exec tsc -p tsconfig.json
-      - node --test tools/lint-structure/checks.test.ts
+      - node --test "tools/**/*.test.ts"
 
   rust:fmt:
     desc: cargo fmt --check
@@ -47,6 +48,24 @@ tasks:
   rust:deny:
     desc: Лицензии и advisories
     cmds: [cargo deny check]
+  secrets:init:
+    desc: "Создать недостающие файлы секретов для compose (нужен .env); существующие не трогает"
+    dotenv: [".env"]
+    cmds: [node tools/secrets-init.ts]
+
+  rust:test:pg:
+    desc: "Тесты адаптера PostgreSQL на живой БД (нужны Docker и .env из .env.dist)"
+    deps: [secrets:init]
+    # .env читается только здесь: остальные задачи не должны неявно получать CRANE_TEST_DATABASE_URL.
+    dotenv: [".env"]
+    # Здесь отсутствие БД - ошибка, а не повод пропустить тесты.
+    env:
+      CRANE_TEST_REQUIRE_DB: "1"
+    cmds:
+      - docker compose -f docker-compose.dev.yaml up -d --wait postgres
+      - >-
+        CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
+        cargo test -p crane-pg
   rust:check:
     desc: fmt, clippy, test, deny
     cmds:
@@ -62,19 +81,56 @@ tasks:
     desc: Vitest
     cmds: [pnpm --filter web run test]
 
+  deploy:check:
+    desc: Compose-файлы и Helm-чарт (docker compose config, helm lint, helm template)
+    cmds:
+      - docker compose --env-file .env.dist --profile cache --profile scan --profile s3 config -q
+      - docker compose --env-file .env.dist -f docker-compose.dev.yaml --profile s3 --profile scan config -q
+      - helm lint deploy/helm/crane --set existingSecret=crane-env
+      - helm template crane deploy/helm/crane --set existingSecret=crane-env --set ingress.enabled=true >/dev/null
+
+  dogfood:
+    desc: "Dogfood: временный стенд compose + настоящий cargo (последняя стабильная)"
+    cmds: [node tools/dogfood/index.ts]
+
+  e2e:
+    desc: "E2E: стенд compose + cargo двух последних стабильных версий (нужен Docker)"
+    cmds: ["node tools/dogfood/index.ts --cargo latest,previous"]
+
   gate:
-    desc: "Полный гейт перед PR в release/* (юниты, мутации, Playwright). В CI не запускается"
+    desc: "Полный гейт перед PR release/* → main (юниты, e2e, мутации по дифу релиза, Playwright). В CI не запускается"
     vars:
       BASE: '{{.BASE | default "origin/main"}}'
+    # .env и флаг видны только шагам самого gate (в подзадачи они не передаются): мутационному
+    # прогону нужна БД, иначе все тесты крейта-адаптера пропускаются и мутанты выживают.
+    dotenv: [".env"]
+    env:
+      CRANE_TEST_REQUIRE_DB: "1"
     cmds:
       - task: check
+      # Поднимает PostgreSQL: шаг cargo mutants ниже рассчитывает, что БД уже работает.
+      - task: rust:test:pg
+      - task: e2e
       - mkdir -p out
       - git diff {{.BASE}}...HEAD > out/gate.diff
-      - "[ ! -s out/gate.diff ] || cargo mutants --workspace --in-diff out/gate.diff"
-      - pnpm --filter web run mutate
+      - >-
+        [ ! -s out/gate.diff ] ||
+        CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
+        cargo mutants --workspace --in-diff out/gate.diff
+      - |
+        if find web/src -name '*.test.*' | grep -q .; then
+          pnpm --filter web run mutate
+        else
+          echo "web: тестов пока нет, мутационное тестирование Stryker пропущено"
+        fi
       - "! pnpm --filter web exec playwright --version >/dev/null 2>&1 || pnpm --filter web run e2e"
       - |
         printf 'Gate: passed\nGate-SHA: %s\nGate-Date: %s\n' "$(git rev-parse HEAD)" "$(date -u +%Y-%m-%dT%H:%MZ)" | tee out/gate-report.md
+
+  worktrees:prune:
+    desc: "Удалить worktree влитых веток (dry-run; удаление: task worktrees:prune -- --apply)"
+    cmds:
+      - node tools/prune-worktrees.ts {{.CLI_ARGS}}
 
   bump:
     desc: "Бамп версий: task bump TAG=v0.1.0"

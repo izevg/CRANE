@@ -1,0 +1,60 @@
+# Линтер контрактов API CRANE.
+# Запуск: npx -y @redocly/cli@2.0.8 lint --config docs/api/redocly.yaml docs/api/admin.openapi.yaml docs/api/cli.openapi.yaml
+extends:
+  - recommended
+
+rules:
+  # Обоснование: потоки OIDC в BFF (login, callback, step-up) по определению отвечают только 302,
+  # 2xx у них нет. Остальные операции имеют 2xx, это проверяет общая схема ответов.
+  operation-2xx-response: off
+
+  # Каждая операция несёт обязательные расширения CRANE и идентификатор.
+  rule/operation-crane-extensions:
+    subject:
+      type: Operation
+    assertions:
+      required:
+        - x-crane-phase
+        - x-crane-since
+        - x-crane-action
+        - x-crane-step-up
+        - x-crane-audit
+        - tags
+        - operationId
+    message: Операция должна иметь x-crane-phase, x-crane-since, x-crane-action, x-crane-step-up, x-crane-audit, tags и operationId
+    severity: error
+
+  rule/crane-phase-enum:
+    subject:
+      type: Operation
+      property: x-crane-phase
+    assertions:
+      enum: [P0, P1, P2, P3]
+    message: x-crane-phase должен быть одним из P0, P1, P2, P3
+    severity: error
+
+  rule/crane-since-enum:
+    subject:
+      type: Operation
+      property: x-crane-since
+    assertions:
+      enum: [v0.4.0, v0.6.0, v1.1.0, v1.2.0]
+    message: x-crane-since должен быть одним из v0.4.0, v0.6.0, v1.1.0, v1.2.0
+    severity: error
+
+  rule/crane-action-format:
+    subject:
+      type: Operation
+      property: x-crane-action
+    assertions:
+      pattern: '/^[a-z_]+:[a-z_]+$/'
+    message: x-crane-action должен иметь формат <контекст>:<глагол>
+    severity: error
+
+  # Не выражается правилами Redocly 2.0.8 и проверяется скриптом по bundle (см. отчёт):
+  #  - у каждой POST-операции с непустым security есть параметр Idempotency-Key
+  #    (assertion `required` не работает на массиве parameters, `ref` не видит элементы);
+  #  - у 2xx-ответов операций без x-crane-protocol content type только application/hal+json
+  #    (matchParentKeys видит ключ 'content', а не код ответа; where не отличает requestBody от ответа).
+  # Протокольные операции (RFC 8693, config device flow, raw metadata, README, содержимое evidence)
+  # помечены x-crane-protocol: true.

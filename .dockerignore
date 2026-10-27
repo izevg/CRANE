@@ -1,0 +1,7 @@
+# Белый список: в контекст сборки попадает только исходный код сервера.
+# rust-toolchain.toml намеренно исключён: иначе rustup в builder доустанавливает stable с clippy и rustfmt.
+*
+!Cargo.toml
+!Cargo.lock
+!crates/
+crates/**/target

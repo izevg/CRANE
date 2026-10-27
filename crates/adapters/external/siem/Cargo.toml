@@ -1,0 +1,17 @@
+[package]
+name = "crane-siem"
+description = "Адаптер SIEM."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+crane-domain = { path = "../../../core/domain" }
+crane-ports = { path = "../../../core/ports" }
+tracing = "0.1"
+uuid = "1"

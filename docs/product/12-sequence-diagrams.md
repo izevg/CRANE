@@ -20,8 +20,8 @@ sequenceDiagram
   A->>S: stream в staging + sha512/sha256
   A->>P: BEGIN, advisory lock, проверка версии
   A->>S: commit в CAS (идемпотентно)
-  A->>P: INSERT version (quarantined), assets, outbox, job, audit
-  A->>P: COMMIT
+  A->>P: INSERT version (quarantined), assets, job, audit
+  A->>P: COMMIT (NOTIFY job)
   A->>V: PUBLISH inv md:npm-hosted:@acme/ui
   A-->>J: 201 Created + request id
   Note over A,P: Worker забирает analyze.package и scan.sbom асинхронно
@@ -119,7 +119,7 @@ sequenceDiagram
   participant SQ as SonarQube
   participant P as PostgreSQL
   SQ->>A: webhook quality gate (commit SHA)
-  A->>P: evidence quality_gate, trust = integration
+  A->>P: evidence quality-gate, trust = integration
   W->>P: promotion.evaluate(version)
   P-->>W: cve ok, license review, provenance ok, quality ok
   W->>P: verdict pending approval (license review)

@@ -1,7 +1,34 @@
 [workspace]
 resolver = "3"
-# Крейты добавляются явно: группы каталогов (core/, formats/, adapters/*) сами не пакеты.
-members = ["crates/core/domain"]
+# Крейты добавляются явно: группы каталогов (core/, formats/, adapters/*/) не являются пакетами.
+# Имена: core/X, adapters/*/X, entry/X → crane-X; formats/X → crane-format-X.
+members = [
+  "crates/core/domain",
+  "crates/core/ports",
+  "crates/core/app",
+  "crates/core/access",
+  "crates/formats/maven",
+  "crates/formats/npm",
+  "crates/formats/pypi",
+  "crates/formats/nuget",
+  "crates/formats/cargo",
+  "crates/adapters/persistence/pg",
+  "crates/adapters/persistence/valkey",
+  "crates/adapters/persistence/objstore",
+  "crates/adapters/persistence/memory",
+  "crates/adapters/identity/keycloak",
+  "crates/adapters/identity/gitlab",
+  "crates/adapters/external/upstream",
+  "crates/adapters/external/trivy",
+  "crates/adapters/external/feeds",
+  "crates/adapters/external/siem",
+  "crates/adapters/intelligence/systemone",
+  "crates/adapters/intelligence/llm",
+  "crates/entry/http",
+  "crates/entry/worker",
+  "crates/entry/analyzer",
+  "crates/entry/server",
+]
 
 [workspace.package]
 version = "0.0.0"

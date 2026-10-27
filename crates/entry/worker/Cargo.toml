@@ -1,0 +1,11 @@
+[package]
+name = "crane-worker"
+description = "Планировщик и обработчики фоновых задач."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

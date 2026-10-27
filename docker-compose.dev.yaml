@@ -1,0 +1,58 @@
+# Локальная разработка: только зависимости, сам CRANE запускается с хоста (`cargo run`).
+# Значения берутся из .env (cp .env.dist .env); порты публикуются на ${DEV_BIND}.
+# Пароль PostgreSQL лежит в файле POSTGRES_PASSWORD_SECRET и в окружение не попадает.
+#   docker compose -f docker-compose.dev.yaml up -d
+#   export CRANE_DATABASE_URL="postgres://${POSTGRES_USER}:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
+name: crane-dev
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    secrets: [postgres_password]
+    ports: ["${DEV_BIND:?}:${POSTGRES_PORT:?}:5432"]
+    volumes: [pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  valkey:
+    image: ${VALKEY_IMAGE:?}
+    # Кэш эфемерный: персистентность не нужна.
+    command: ["--save", "", "--appendonly", "no"]
+    ports: ["${DEV_BIND:?}:${VALKEY_PORT:?}:6379"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # S3-совместимое хранилище blobs. Без профиля не нужно: достаточно CRANE_BLOBS=file://./.data/blobs.
+  seaweedfs:
+    profiles: [s3]
+    image: ${SEAWEEDFS_IMAGE:?}
+    command: ["server", "-dir=/data", "-s3", "-s3.port=8333"]
+    ports: ["${DEV_BIND:?}:${SEAWEEDFS_S3_PORT:?}:8333"]
+    volumes: [blobs:/data]
+
+  # Сервер Trivy для analyzer.
+  trivy:
+    profiles: [scan]
+    image: ${TRIVY_IMAGE:?}
+    command: ["server", "--listen", "0.0.0.0:4954"]
+    ports: ["${DEV_BIND:?}:${TRIVY_PORT:?}:4954"]
+    volumes: [trivy:/root/.cache/trivy]
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_SECRET:?задайте POSTGRES_PASSWORD_SECRET}
+
+volumes:
+  pg:
+  blobs:
+  trivy:

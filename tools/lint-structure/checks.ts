@@ -2,6 +2,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
+// 64 МиБ: вывод `cargo metadata` для крупного workspace не помещается в дефолтные 1 МиБ.
+const CARGO_METADATA_MAX_BUFFER = 67_108_864;
+
 export interface Rules {
   scope: string[];
   limits: { files: number; dirs: number };
@@ -11,6 +14,7 @@ export interface Rules {
   testFiles: string[];
   entryFiles: string[];
   rustLayers: Record<string, string[]>;
+  aaa: { roots: string[]; exemptDirs: string[] };
 }
 
 export interface CargoPackage {
@@ -28,7 +32,7 @@ type Matcher = (name: string) => boolean;
 const globToRegExp = (glob: string): RegExp =>
   new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
 
-const matcher = (globs: string[]): Matcher => {
+export const matcher = (globs: string[]): Matcher => {
   const regs = globs.map(globToRegExp);
   return (name) => regs.some((r) => r.test(name));
 };
@@ -44,12 +48,14 @@ function list(dir: string, rules: Rules): Listing {
   const listing: Listing = { files: [], dirs: [] };
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const { name } = entry;
-    if (name.startsWith(".")) continue;
+    if (name.startsWith(".")) {
+      continue;
+    }
     if (entry.isDirectory()) {
-      if (!rules.ignoredDirs.includes(name) && !rules.unlimitedDirs.includes(name)) {
+      if (!(rules.ignoredDirs.includes(name) || rules.unlimitedDirs.includes(name))) {
         listing.dirs.push(name);
       }
-    } else if (!isService(name) && !isTest(name)) {
+    } else if (!(isService(name) || isTest(name))) {
       listing.files.push(name);
     }
   }
@@ -105,7 +111,9 @@ export function checkRustLayers(root: string, rules: Rules, metadata: CargoMetad
     }
     for (const dep of pkg.dependencies) {
       const target = byName.get(dep.name);
-      if (dep.kind === "dev" || !target) continue;
+      if (dep.kind === "dev" || !target) {
+        continue;
+      }
       const depLayer = layerOf(target.manifest_path, root);
       if (!allowed.includes(depLayer)) {
         violations.push(`${pkg.name} (${layer}) не может зависеть от ${dep.name} (${depLayer})`);
@@ -116,11 +124,13 @@ export function checkRustLayers(root: string, rules: Rules, metadata: CargoMetad
 }
 
 export function cargoMetadata(root: string): CargoMetadata {
-  if (!existsSync(join(root, "Cargo.toml"))) return { packages: [] };
+  if (!existsSync(join(root, "Cargo.toml"))) {
+    return { packages: [] };
+  }
   const out = execFileSync("cargo", ["metadata", "--format-version", "1", "--no-deps"], {
     cwd: root,
     encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
+    maxBuffer: CARGO_METADATA_MAX_BUFFER,
   });
   return JSON.parse(out) as CargoMetadata;
 }

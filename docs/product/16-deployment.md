@@ -53,6 +53,30 @@ services:
   valkey:   { image: valkey/valkey:8, command: ["--save", "", "--appendonly", "no"] }
 ```
 
+**Конфигурация (v0.1.0).** Источники: переменные окружения и необязательный файл TOML, путь к которому задаёт только `CRANE_CONFIG`. Приоритет: переменная окружения, затем файл, затем значение по умолчанию. Ключ файла — имя переменной без префикса `CRANE_` в нижнем регистре (`CRANE_HTTP_PORT` — `http_port`); значение — строка или целое число, а для любого ключа допустим ещё и массив строк (склеивается запятыми). Неизвестный ключ — ошибка запуска. Значения `memory` пишутся явно.
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `CRANE_CONFIG` | нет файла | путь к файлу TOML; только из окружения |
+| `CRANE_DATABASE_URL` или `CRANE_DATABASE_URL_FILE` | одна из двух | каталог: `memory` (данные теряются при рестарте) или `postgres://…` (`postgresql://…`); файл читается без завершающего перевода строки |
+| `CRANE_BLOBS` | обязательна | хранилище blob: `memory`, `file:///абсолютный/путь` или `s3://bucket[/prefix]?endpoint=…` |
+| `CRANE_PUBLIC_URL` | обязательна | внешний адрес (`http://` или `https://`), попадает в `config.json` cargo |
+| `CRANE_TOKEN` или `CRANE_TOKEN_FILE` | одна из двух | временный статический токен до v0.4.0; файл читается без завершающего перевода строки |
+| `CRANE_TOKEN_PRINCIPAL` | `crane` | имя личности токена (тип «робот»): попадает в журнал аудита, `access`-журнал и ответ cargo `owners` |
+| `CRANE_TRUSTED_PROXIES` | пусто | IP-адреса и CIDR (IPv4, IPv6) через запятую, чьим `X-Forwarded-For` и `X-Request-Id` верить; compose обязан указать сеть Caddy, иначе во всех событиях будет адрес прокси |
+| `CRANE_HTTP_PORT` | `8080` | порт API |
+| `CRANE_ADMIN_PORT` | `9464` | порт проб `/healthz/live` и `/healthz/ready` |
+| `CRANE_CARGO_REPOS` | `internal` | hosted cargo-репозитории через запятую |
+| `CRANE_MAX_PUBLISH_BYTES` | `10485760` | предел тела публикации cargo в байтах |
+
+`memory` нельзя смешивать с постоянным хранилищем: пара `CRANE_DATABASE_URL` и `CRANE_BLOBS` либо вся в памяти, либо вся постоянная. Иначе каталог в PostgreSQL после рестарта ссылался бы на потерянные blob, и сервер отказывается стартовать. Адрес базы с паролем в журналы и тексты ошибок не попадает. При недоступной БД `crane serve` падает на старте, `crane migrate` применяет миграции и идемпотентен.
+
+`/healthz/ready` проверяет PostgreSQL и хранилище blob и укладывается в 1,5 с: на отказ или таймаут он отвечает 503, а `/healthz/live` хранилищ не трогает. Учётные данные в query `CRANE_BLOBS` запрещены (только `AWS_*`). Учётной записи S3 нужно право `s3:ListBucket`: без него отсутствующий ключ даёт 403 вместо 404, и готовность остаётся неуспешной.
+
+`crane healthcheck` опрашивает `/healthz/ready` на `CRANE_ADMIN_PORT` и завершается с кодом 0 или 1 (для healthcheck в compose: в образе нет curl).
+
+**Секреты и сети в compose.** Токен, пароль PostgreSQL и URL каталога (с паролем) лежат в файлах, пути к которым задают `CRANE_TOKEN_SECRET`, `POSTGRES_PASSWORD_SECRET` и `CRANE_DATABASE_URL_SECRET`; compose монтирует их в `/run/secrets`, а сервер читает через `CRANE_TOKEN_FILE` и `CRANE_DATABASE_URL_FILE`. Ни в переменных окружения, ни в compose-файле, ни в `.env` значений секретов нет. Сеть `edge` с фиксированной подсетью `CRANE_EDGE_SUBNET` соединяет только caddy и crane; та же подсеть передаётся как `CRANE_TRUSTED_PROXIES`, поэтому в аудите виден адрес клиента, а не Caddy. PostgreSQL в `edge` не входит, порт admin наружу не публикуется.
+
 ## 16.2 Kubernetes (Helm chart)
 
 ```mermaid
@@ -130,7 +154,7 @@ CRANE отдаёт телеметрию только в открытых фор�
 | `GET /healthz/live` | служебный | Процесс жив и event loop не завис | Kubelet |
 | `GET /healthz/ready` | служебный | Готов принимать трафик: PostgreSQL и хранилище доступны; Valkey и upstream на готовность не влияют | Kubelet, балансировщик |
 | `GET /healthz/startup` | служебный | Миграции применены, кэши прогреты | Kubelet |
-| `GET /api/v1/status` | основной | Версия, режим (normal, read-only, degraded), состояние компонентов и фидов, отставание экспорта в SIEM | Пользователи, CLI `crane diag`, внешние статус-страницы |
+| `GET /api/v1/status` | основной | Версия, режим (normal, read-only, degraded), состояние компонентов и фидов, отставание экспорта в SIEM | Пользователи, CLI `cctl diag`, внешние статус-страницы |
 | OTLP export | исходящий | Трассы, журналы и, по желанию, метрики в OpenTelemetry Collector (gRPC или HTTP) | Настраивается endpoint и заголовки |
 
 ### Каталог метрик
@@ -143,7 +167,7 @@ CRANE отдаёт телеметрию только в открытых фор�
 | Кэш и proxy | `cache_requests_total`, `singleflight_coalesced_total`, `upstream_requests_total`, `upstream_duration_seconds`, `upstream_up` | `layer` (l1, l2), `result` (hit, miss, stale), `upstream` |
 | Публикация и хранилище | `publish_total`, `publish_bytes_total`, `blob_objects`, `blob_bytes`, `gc_reclaimed_bytes_total`, `integrity_failures_total`, `storage_move_bytes_total`, `quota_usage_ratio` | `format`, `result`, `store`, `class`, `workspace` (top N + `other`) |
 | Доступ | `authz_decisions_total`, `auth_failures_total`, `authz_epoch_invalidations_total`, `credentials_expiring` | `decision`, `method`, `days` (7, 14, 30) |
-| Очереди и события | `jobs_queued`, `job_oldest_age_seconds`, `job_duration_seconds`, `outbox_lag_seconds`, `webhook_deliveries_total` | `kind`, `outcome` |
+| Очереди и события | `jobs_queued`, `job_oldest_age_seconds` (`now() - min(run_at)` среди видимых задач), `job_dead_total` (рост `job_dead`), `job_duration_seconds`, `outbox_lag_seconds` (только внешняя доставка), `webhook_deliveries_total` | `kind`, `outcome` |
 | Уязвимости | `findings_open`, `findings_sla_breached`, `advisories_ingested_total`, `feed_lag_seconds`, `detection_time_seconds` (histogram: advisory → finding), `emergency_blocks_active`, `exceptions_expiring`, `vuln_db_age_seconds` | `priority`, `feed`, `scanner`, `days` |
 | AI и скоринг | `ai_requests_total`, `ai_duration_seconds`, `ai_tokens_total`, `ai_fallback_total`, `score_value` (histogram), `score_overrides_total` | `role` (score, chat, embed, rerank), `provider`, `kind`, `direction` |
 | A2A | `a2a_tasks_total`, `a2a_confirmations_total`, `a2a_task_duration_seconds` | `skill`, `state`, `outcome` |
@@ -176,7 +200,8 @@ SLI считаются из метрик, а алерты строятся по 
 | `CraneReadOnlyMode` | Сервис в режиме read-only больше 5 минут | page |
 | `CraneUpstreamDown` | `upstream_up == 0` 10 минут | ticket |
 | `CraneQueueBacklog` | Возраст старейшей задачи больше 10 минут | ticket |
-| `CraneOutboxLag` | Отставание outbox больше 5 минут | page |
+| `CraneJobDeadGrowth` | Рост `job_dead` за 15 минут | ticket |
+| `CraneOutboxLag` | Отставание outbox внешней доставки (webhooks, SIEM) больше 5 минут | page |
 | `CraneFeedLagging` | Фид уязвимостей не синхронизировался 30 минут | page |
 | `CraneP0WithoutAction` | P0 открыт больше 1 часа без блокировки или решения | page |
 | `CraneVulnDbStale` | База сканера старше 24 часов | ticket |
@@ -209,7 +234,7 @@ flowchart LR
 *Рис. 16.7. Ветвление и выпуск.*
 
 - `main` — основная ветка (production). Feature-ветки создаются от `main`, сливаются в `release/vX.Y.Z` через PR со **squash**; заголовок PR следует Conventional Commits и проверяется commitlint.
-- Перед PR в `release/*` разработчик локально запускает `task gate`: юниты, мутационное тестирование (cargo-mutants, Stryker) и Playwright. Результат (`Gate: passed`, `Gate-SHA`) вставляется в описание PR. В CI полный гейт не гоняется; на PR в `main` идут юнит-тесты backend и frontend, линтеры и проверки структуры.
+- PR в `release/*` проходит `task check`, тесты затронутой части и ручные мутанты ревью (таблица в описании PR). Перед PR `release/*` → `main` владелец релиза локально запускает полный `task gate` по всему дифу релиза: юниты, e2e, мутационное тестирование (cargo-mutants, Stryker) и Playwright. Результат (`Gate: passed`, `Gate-SHA`) вставляется в описание релизного PR. В CI полный гейт не гоняется; на PR в `main` идут юнит-тесты backend и frontend, линтеры и проверки структуры.
 - После одобрения владельцем открывается PR `release/vX.Y.Z` → `main` со слиянием **merge commit**: история коммитов нужна для CHANGELOG.
 - После слияния workflow `release` от имени GitHub App (bypass защиты `main`) бампит версии в `Cargo.toml`, `package.json` и `Chart.yaml`, пересобирает `CHANGELOG.md` по Conventional Commits (окно сборки — между тегами), коммитит `chore(release): vX.Y.Z` и ставит тег `vX.Y.Z`.
 - Тег запускает workflow `publish`: он создаёт GitHub Release с заметками из CHANGELOG. Первый коммит выпущен с тегом `v0.0.0`. Сборка образов в ghcr пока не входит в процесс.

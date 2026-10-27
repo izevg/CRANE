@@ -11,7 +11,7 @@
   "scripts": {
     "prepare": "lefthook install",
     "lint:structure": "node tools/lint-structure/index.ts",
-    "test:tools": "node --test tools/lint-structure/checks.test.ts",
+    "test:tools": "node --test \"tools/**/*.test.ts\"",
     "commitlint": "commitlint"
   },
   "devDependencies": {

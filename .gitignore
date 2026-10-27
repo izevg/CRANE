@@ -12,19 +12,23 @@ mutants.out*/
 reports/
 
 # Зависимости
-node_modules/
+# Без косой черты: Orca подключает node_modules в worktree символической ссылкой, а не каталогом.
+node_modules
 .pnpm-store/
 
 # Окружение и секреты
 .env
 .env.*
 !.env.example
+!.env.dist
+/secrets/
 *.pem
 *.key
 *.p12
 
 # Локальные настройки агентов и IDE
-.claude/settings.local.json
+.claude/
+.cursor/
 .idea/
 .vscode/
 *.swp
@@ -35,3 +39,12 @@ node_modules/
 # Гайдбук собирается локально (tools/build-guidebook.sh), в git не хранится
 guidebook/
 __pycache__/
+
+# Граф graft строится локально (`graft build`), в git не хранится.
+/graft/
+
+# Граф graphify строится локально (`graphify update .`), в git не хранится.
+/graphify-out/
+
+# Сгенерированные макеты Stitch — рабочий материал, в git не хранится.
+/docs/ui/mocks/

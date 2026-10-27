@@ -1,0 +1,5 @@
+# Карточки graft вне git, но должны находиться поиском: ripgrep читает
+# .ignore раньше .gitignore, поэтому дерево возвращается только в поиск.
+!graft/
+graft/.cache/
+graft/.graph/

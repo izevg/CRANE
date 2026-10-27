@@ -1,0 +1,45 @@
+{{- $ctx := dict "root" . "component" "api" "role" "serve" }}
+{{- $pod := include "crane.podspec" $ctx | fromYaml }}
+{{- $c := index $pod.containers 0 }}
+{{- $_ := set $c "ports" (list (dict "name" "http" "containerPort" .Values.ports.http) (dict "name" "admin" "containerPort" .Values.ports.admin)) }}
+{{- $_ := set $c "resources" .Values.api.resources }}
+{{- $_ := set $c "startupProbe" (dict "httpGet" (dict "path" "/healthz/startup" "port" "admin") "failureThreshold" 30 "periodSeconds" 2) }}
+{{- $_ := set $c "readinessProbe" (dict "httpGet" (dict "path" "/healthz/ready" "port" "admin") "periodSeconds" 5) }}
+{{- $_ := set $c "livenessProbe" (dict "httpGet" (dict "path" "/healthz/live" "port" "admin") "periodSeconds" 10) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "crane.fullname" . }}-api
+  labels: {{ include "crane.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels: {{ include "crane.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels: {{ include "crane.selector" $ctx | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- toYaml $pod | nindent 6 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "crane.fullname" . }}
+  labels: {{ include "crane.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector: {{ include "crane.selector" $ctx | nindent 4 }}
+  ports:
+    - { name: http, port: {{ .Values.service.port }}, targetPort: http }

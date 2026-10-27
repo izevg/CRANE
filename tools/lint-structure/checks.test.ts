@@ -2,25 +2,29 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test as it } from "node:test";
 import { type CargoMetadata, checkRustLayers, checkStructure, type Rules } from "./checks.ts";
+
+const MAX_DIRS = 8;
 
 const rules: Rules = {
   scope: ["src"],
-  limits: { files: 4, dirs: 8 },
+  limits: { files: 4, dirs: MAX_DIRS },
   ignoredDirs: ["node_modules"],
   unlimitedDirs: ["tests"],
   serviceFiles: ["Cargo.toml"],
   testFiles: ["*.test.*"],
   entryFiles: ["lib.rs", "index.ts"],
   rustLayers: { domain: [], ports: ["domain"], adapters: ["domain", "ports"] },
+  aaa: { roots: [], exemptDirs: [] },
 };
 
 const tree = (spec: Record<string, 0 | 1>): string => {
   const root = mkdtempSync(join(tmpdir(), "ls-"));
   for (const [path, isDir] of Object.entries(spec)) {
-    if (isDir) mkdirSync(join(root, path), { recursive: true });
-    else {
+    if (isDir) {
+      mkdirSync(join(root, path), { recursive: true });
+    } else {
       mkdirSync(join(root, path, ".."), { recursive: true });
       writeFileSync(join(root, path), "");
     }
@@ -28,31 +32,56 @@ const tree = (spec: Record<string, 0 | 1>): string => {
   return root;
 };
 
-test("4 файла в папке допустимы, 5 — нарушение", () => {
-  const ok = tree({ "src/a.ts": 0, "src/b.ts": 0, "src/c.ts": 0, "src/d.ts": 0 });
-  assert.deepEqual(checkStructure(ok, rules), []);
-  const bad = tree({ "src/a.ts": 0, "src/b.ts": 0, "src/c.ts": 0, "src/d.ts": 0, "src/e.ts": 0 });
-  assert.equal(checkStructure(bad, rules).length, 1);
-});
+const dirs = (n: number): Record<string, 0 | 1> =>
+  Object.fromEntries(Array.from({ length: n }, (_, i) => [`src/d${i}`, 1]));
+const files = (names: string[]): Record<string, 0 | 1> =>
+  Object.fromEntries(names.map((n) => [`src/${n}`, 0]));
 
-test("8 подпапок допустимы, 9 — нарушение", () => {
-  const dirs = (n: number): Record<string, 0 | 1> =>
-    Object.fromEntries(Array.from({ length: n }, (_, i) => [`src/d${i}`, 1]));
-  assert.deepEqual(checkStructure(tree(dirs(8)), rules), []);
-  assert.equal(checkStructure(tree(dirs(9)), rules).length, 1);
-});
+interface StructureCase {
+  name: string;
+  spec: Record<string, 0 | 1>;
+  expected: number;
+}
 
-test("смешанное наполнение запрещено, файл-вход и тесты — нет", () => {
-  assert.equal(checkStructure(tree({ "src/a.ts": 0, "src/d": 1 }), rules).length, 1);
-  assert.deepEqual(checkStructure(tree({ "src/index.ts": 0, "src/d": 1 }), rules), []);
-  assert.deepEqual(checkStructure(tree({ "src/a.test.ts": 0, "src/d": 1 }), rules), []);
-});
+const structureCases: StructureCase[] = [
+  { name: "4 файла в папке допустимы", spec: files(["a.ts", "b.ts", "c.ts", "d.ts"]), expected: 0 },
+  {
+    name: "5 файлов в папке — нарушение",
+    spec: files(["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"]),
+    expected: 1,
+  },
+  { name: "8 подпапок допустимы", spec: dirs(MAX_DIRS), expected: 0 },
+  { name: "9 подпапок — нарушение", spec: dirs(MAX_DIRS + 1), expected: 1 },
+  { name: "смешанное наполнение запрещено", spec: { "src/a.ts": 0, "src/d": 1 }, expected: 1 },
+  {
+    name: "файл-вход не создаёт смешанность",
+    spec: { "src/index.ts": 0, "src/d": 1 },
+    expected: 0,
+  },
+  {
+    name: "файл теста не создаёт смешанность",
+    spec: { "src/a.test.ts": 0, "src/d": 1 },
+    expected: 0,
+  },
+  {
+    name: "служебные файлы и tests/ не считаются",
+    spec: { ...files(["a.ts", "b.ts", "c.ts", "d.ts"]), "src/Cargo.toml": 0, "src/tests/x.ts": 0 },
+    expected: 0,
+  },
+];
 
-test("служебные файлы и tests/ не считаются", () => {
-  const files = Object.fromEntries(["a", "b", "c", "d"].map((n) => [`src/${n}.ts`, 0]));
-  const root = tree({ ...files, "src/Cargo.toml": 0, "src/tests/x.ts": 0 });
-  assert.deepEqual(checkStructure(root, rules), []);
-});
+for (const c of structureCases) {
+  it(`правило четырёх: ${c.name}`, () => {
+    // Arrange
+    const root = tree(c.spec);
+
+    // Act
+    const actual = checkStructure(root, rules).length;
+
+    // Assert
+    assert.equal(actual, c.expected);
+  });
+}
 
 const meta = (root: string, pkgs: [string, string, string[]][]): CargoMetadata => ({
   packages: pkgs.map(([name, path, deps]) => ({
@@ -62,17 +91,36 @@ const meta = (root: string, pkgs: [string, string, string[]][]): CargoMetadata =
   })),
 });
 
-test("domain не зависит от ports, adapters зависит от ports", () => {
-  const root = "/r";
-  const bad = meta(root, [
-    ["d", "core/domain", ["p"]],
-    ["p", "core/ports", []],
-  ]);
-  assert.equal(checkRustLayers(root, rules, bad).length, 1);
-  const ok = meta(root, [
-    ["d", "core/domain", []],
-    ["p", "core/ports", ["d"]],
-    ["pg", "adapters/persistence/pg", ["p", "d"]],
-  ]);
-  assert.deepEqual(checkRustLayers(root, rules, ok), []);
-});
+const layerCases = [
+  {
+    name: "domain не может зависеть от ports",
+    pkgs: [
+      ["d", "core/domain", ["p"]],
+      ["p", "core/ports", []],
+    ] as [string, string, string[]][],
+    expected: 1,
+  },
+  {
+    name: "adapters может зависеть от ports и domain",
+    pkgs: [
+      ["d", "core/domain", []],
+      ["p", "core/ports", ["d"]],
+      ["pg", "adapters/persistence/pg", ["p", "d"]],
+    ] as [string, string, string[]][],
+    expected: 0,
+  },
+];
+
+for (const c of layerCases) {
+  it(`слои крейтов: ${c.name}`, () => {
+    // Arrange
+    const root = "/r";
+    const metadata = meta(root, c.pkgs);
+
+    // Act
+    const actual = checkRustLayers(root, rules, metadata).length;
+
+    // Assert
+    assert.equal(actual, c.expected);
+  });
+}
