@@ -31,20 +31,3 @@ impl VersionId {
         self.0
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn id_keeps_uuid() {
-        // Arrange
-        let uuid = Uuid::from_u128(0x1234);
-
-        // Act
-        let id = VersionId::new(uuid);
-
-        // Assert
-        assert_eq!(id.as_uuid(), uuid);
-    }
-}

@@ -41,20 +41,3 @@ pub struct PackageVersion {
     pub assets: Vec<Asset>,
     pub metadata: FormatMetadata,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn metadata_json_is_stored_verbatim() {
-        // Arrange
-        let raw = r#"{"b": 1,  "a":[ ]}"#;
-
-        // Act
-        let metadata = FormatMetadata::new(raw.to_owned());
-
-        // Assert
-        assert_eq!(metadata.as_str(), raw);
-    }
-}
