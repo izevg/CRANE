@@ -2,8 +2,9 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 import { DiffViewer } from "~/shared/ui/data-display";
 
-const ADDED = /\^4\.17\.21/;
-const REMOVED = /\^4\.17\.20/;
+const ADDED = /clsx/;
+const REMOVED = /moment/;
+const CHANGED = /изменено: было "\^4\.17\.20", стало "\^4\.17\.21"/;
 
 const meta = {
   title: "Данные/DiffViewer",
@@ -12,11 +13,11 @@ const meta = {
     label: "Изменения манифеста 1.4.1 → 1.4.2",
     rows: [
       { kind: "same", path: "name", text: '"name": "@acme/ui"' },
-      { kind: "remove", path: "version", text: '"version": "1.4.1"' },
-      { kind: "add", path: "version", text: '"version": "1.4.2"' },
-      { kind: "remove", path: "dependencies.lodash", text: '"lodash": "^4.17.20"' },
-      { kind: "add", path: "dependencies.lodash", text: '"lodash": "^4.17.21"' },
+      { kind: "change", path: "version", before: '"1.4.1"', after: '"1.4.2"' },
+      { kind: "change", path: "dependencies.lodash", before: '"^4.17.20"', after: '"^4.17.21"' },
       { kind: "same", path: "dependencies.react", text: '"react": "^19.0.0"' },
+      { kind: "add", path: "dependencies.clsx", text: '"clsx": "^2.1.1"' },
+      { kind: "remove", path: "dependencies.moment", text: '"moment": "^2.30.1"' },
     ],
   },
 } satisfies Meta<typeof DiffViewer>;
@@ -32,6 +33,7 @@ export const Inline: Story = {
     await expect(added).toHaveTextContent("+");
     await expect(added).toHaveTextContent("добавлено");
     await expect(canvas.getByRole("row", { name: REMOVED })).toHaveTextContent("удалено");
+    await expect(canvas.getByRole("row", { name: CHANGED })).toBeVisible();
   },
 };
 
@@ -39,7 +41,10 @@ export const Split: Story = {
   name: "Рядом (split)",
   args: { mode: "split" },
   play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).getByRole("columnheader", { name: "Стало" })).toBeVisible();
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("columnheader", { name: "Стало" })).toBeVisible();
+    // Изменённое поле — одна строка: имя поля не повторяется
+    await expect(canvas.getAllByText("dependencies.lodash")).toHaveLength(1);
   },
 };
 

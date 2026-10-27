@@ -3,7 +3,12 @@ import { useMemo } from "react";
 import { cx } from "~/shared/lib/core";
 
 /** Строка диффа, посчитанного сервером. `path` — поле или номер строки, если он есть. */
-export type DiffRow = { kind: "add" | "remove" | "same"; text: string; path?: string };
+export type DiffRow =
+  | { kind: "add" | "remove" | "same"; text: string; path?: string }
+  /** Изменённое поле: одна строка со старым и новым значением, а не пара «удалено + добавлено». */
+  | { kind: "change"; before: string; after: string; path?: string };
+
+type LineKind = "add" | "remove" | "same";
 
 type DiffViewerProps = {
   rows: readonly DiffRow[];
@@ -23,21 +28,24 @@ const MARKER = {
   add: { sign: "+", text: "добавлено" },
   remove: { sign: "−", text: "удалено" },
   same: { sign: "", text: "" },
-} satisfies Record<DiffRow["kind"], { sign: string; text: string }>;
+} satisfies Record<LineKind, { sign: string; text: string }>;
 
 const TONE = {
   add: "bg-(--diff-add-bg) text-(--diff-add-fg)",
   remove: "bg-(--diff-del-bg) text-(--diff-del-fg)",
   same: "",
-} satisfies Record<DiffRow["kind"], string>;
+} satisfies Record<LineKind, string>;
 
 const CELL = "px-3 py-1 align-top font-mono text-caption whitespace-pre-wrap wrap-anywhere";
 const PATH =
   "px-3 py-1 text-left align-top text-caption font-normal text-muted-foreground wrap-anywhere";
+const CHANGED = "изменено: было ";
+const CHANGED_TO = ", стало ";
+
 const SIGN_COLUMN = "w-8 px-2 py-1 text-center align-top font-mono text-caption font-semibold";
 
 /** Знак + скрытый текст: изменение не передаётся только цветом (WCAG 1.4.1). */
-function Marker({ kind }: { kind: DiffRow["kind"] }) {
+function Marker({ kind }: { kind: LineKind }) {
   const { sign, text } = MARKER[kind];
   if (sign === "") {
     return null;
@@ -58,7 +66,39 @@ function PathCell({ row }: { row: DiffRow }) {
   );
 }
 
+/** Для скринридера изменённое поле читается одной фразой; визуальные строки скрыты (`aria-hidden`), чтобы не дублировать. */
+function ChangeSummary({ before, after }: { before: string; after: string }) {
+  return (
+    <span className="sr-only">
+      {CHANGED}
+      {before}
+      {CHANGED_TO}
+      {after}
+    </span>
+  );
+}
+
 function InlineRow({ row, withPath }: { row: DiffRow; withPath: boolean }) {
+  if (row.kind === "change") {
+    return (
+      <tr>
+        <td className={SIGN_COLUMN}>
+          <span aria-hidden="true" className="flex flex-col">
+            <span className={TONE.remove}>{MARKER.remove.sign}</span>
+            <span className={TONE.add}>{MARKER.add.sign}</span>
+          </span>
+        </td>
+        {withPath ? <PathCell row={row} /> : null}
+        <td className="p-0">
+          <ChangeSummary before={row.before} after={row.after} />
+          <span aria-hidden="true" className="flex flex-col">
+            <span className={cx(CELL, TONE.remove)}>{row.before}</span>
+            <span className={cx(CELL, TONE.add)}>{row.after}</span>
+          </span>
+        </td>
+      </tr>
+    );
+  }
   return (
     <tr className={TONE[row.kind]}>
       <td className={SIGN_COLUMN}>
@@ -70,8 +110,26 @@ function InlineRow({ row, withPath }: { row: DiffRow; withPath: boolean }) {
   );
 }
 
-/** Слева остаются неизменные и удалённые строки, справа неизменные и добавленные. */
+/** Слева остаются неизменные и удалённые строки, справа неизменные и добавленные; изменённое поле занимает одну строку. */
 function SplitRow({ row, withPath }: { row: DiffRow; withPath: boolean }) {
+  if (row.kind === "change") {
+    return (
+      <tr>
+        {withPath ? <PathCell row={row} /> : null}
+        <td className={cx(CELL, TONE.remove)}>
+          <ChangeSummary before={row.before} after={row.after} />
+          <span aria-hidden="true">
+            {MARKER.remove.sign}
+            {row.before}
+          </span>
+        </td>
+        <td aria-hidden="true" className={cx(CELL, TONE.add)}>
+          {MARKER.add.sign}
+          {row.after}
+        </td>
+      </tr>
+    );
+  }
   const left = row.kind !== "add";
   const right = row.kind !== "remove";
   return (

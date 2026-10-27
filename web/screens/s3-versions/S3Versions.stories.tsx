@@ -205,10 +205,8 @@ const LIFECYCLE = [
 
 const DIFF_ROWS = [
   { kind: "same", path: "name", text: '"name": "@acme/ui"' },
-  { kind: "remove", path: "version", text: '"version": "1.4.1"' },
-  { kind: "add", path: "version", text: '"version": "1.4.2"' },
-  { kind: "remove", path: "dependencies.lodash", text: '"lodash": "^4.17.20"' },
-  { kind: "add", path: "dependencies.lodash", text: '"lodash": "^4.17.21"' },
+  { kind: "change", path: "version", before: '"1.4.1"', after: '"1.4.2"' },
+  { kind: "change", path: "dependencies.lodash", before: '"^4.17.20"', after: '"^4.17.21"' },
   { kind: "same", path: "dependencies.react", text: '"react": "^19.0.0"' },
 ] as const;
 
