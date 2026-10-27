@@ -202,7 +202,9 @@ pub fn render_hosted(
         .insert("dist-tags".into(), Raw::owned(&dist_tags)?);
     doc.fields.insert("time".into(), Raw::owned(&time)?);
     if view == View::Full {
-        // Производный от состояния, а не счётчик записей: одинаковое состояние — одинаковый `_rev`.
+        // `_rev` = число отдаваемых версий и время последней публикации. Устаревание и теги его не меняют:
+        // сервер `_rev` при записи не сверяет (PUT ничего не разрушает), клиенту он нужен лишь как
+        // детерминированная метка документа, и этой пары для неё достаточно.
         let millis = modified
             .duration_since(UNIX_EPOCH)
             .unwrap_or(Duration::ZERO)
