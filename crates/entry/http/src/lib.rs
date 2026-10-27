@@ -10,4 +10,4 @@ mod error;
 
 pub use admin::admin_router;
 pub use cargo::{CargoSettings, StaticToken, api_router};
-pub use context::{ProxyParseError, TrustedProxies};
+pub use context::{ACCESS_TARGET, ProxyParseError, TrustedProxies};

@@ -48,11 +48,14 @@ impl AuditSink for OcsfLogSink {
     }
 }
 
+/// Цель `tracing` событий аудита. Сборка сервера держит её включённой при любом `RUST_LOG`.
+pub const AUDIT_TARGET: &str = "crane::audit";
+
 fn emit(r: &OcsfRecord) {
     let actor = r.actor.as_ref();
     let user = r.user.as_ref();
     tracing::info!(
-        target: "crane::audit",
+        target: AUDIT_TARGET,
         class_uid = r.class_uid,
         category_uid = r.category_uid,
         activity_id = r.activity_id,

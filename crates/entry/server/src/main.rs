@@ -68,15 +68,17 @@ fn execute(role: &Role) -> Result<(), run::RunError> {
     }
 }
 
-/// Журнал ИБ не глушится уровнем логов: оператор, снизивший шум через `RUST_LOG`, не должен
-/// молча потерять события аудита. Директива идёт последней и перекрывает ту же цель из `RUST_LOG`.
-const AUDIT_ALWAYS_ON: &str = "crane::audit=info";
+/// Цели журнала ИБ v0.1.0 (раздел 14.9): аудит и лог доступа. Уровень логов их не глушит:
+/// оператор, снизивший шум через `RUST_LOG`, не должен молча потерять журнал безопасности.
+const SECURITY_TARGETS: [&str; 2] = [crane_siem::AUDIT_TARGET, crane_http::ACCESS_TARGET];
 
+/// Директивы целей ИБ идут последними и перекрывают те же цели из `RUST_LOG`.
 fn log_filter(env: Option<&str>) -> EnvFilter {
     let base = env
         .filter(|value| EnvFilter::try_new(value).is_ok())
         .unwrap_or("info");
-    EnvFilter::new(format!("{base},{AUDIT_ALWAYS_ON}"))
+    let pinned = SECURITY_TARGETS.map(|target| format!("{target}=info"));
+    EnvFilter::new(format!("{base},{}", pinned.join(",")))
 }
 
 fn init_logging() {
@@ -164,68 +166,49 @@ mod tests {
         assert_eq!(roles, [None, None, None, None, None]);
     }
 
-    /// Пишет события в буфер под заданным фильтром и возвращает вывод.
-    fn logged_under(filter: EnvFilter) -> String {
-        let buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let sink = std::sync::Arc::clone(&buffer);
-        let subscriber = tracing_subscriber::fmt()
-            .with_env_filter(filter)
-            .with_writer(move || Writer(std::sync::Arc::clone(&sink)))
-            .finish();
-        tracing::subscriber::with_default(subscriber, || {
-            tracing::info!(target: "crane::audit", "событие аудита");
-            tracing::info!(target: "crane::access", "строка доступа");
-        });
-        let bytes = buffer.lock().map(|b| b.clone()).unwrap_or_default();
-        String::from_utf8_lossy(&bytes).into_owned()
-    }
-
-    struct Writer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
-
-    impl std::io::Write for Writer {
-        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
-            if let Ok(mut buffer) = self.0.lock() {
-                buffer.extend_from_slice(data);
+    /// Включена ли запись `info` для цели под заданным фильтром.
+    fn info_enabled(filter: EnvFilter, target: &'static str) -> bool {
+        let subscriber = tracing_subscriber::fmt().with_env_filter(filter).finish();
+        tracing::subscriber::with_default(subscriber, || match target {
+            crane_siem::AUDIT_TARGET => {
+                tracing::enabled!(target: crane_siem::AUDIT_TARGET, tracing::Level::INFO)
             }
-            Ok(data.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
+            crane_http::ACCESS_TARGET => {
+                tracing::enabled!(target: crane_http::ACCESS_TARGET, tracing::Level::INFO)
+            }
+            _ => tracing::enabled!(target: "crane::other", tracing::Level::INFO),
+        })
     }
 
     #[test]
-    fn audit_survives_rust_log_that_silences_info_and_audit_itself() {
+    fn security_journal_survives_any_rust_log() {
         // Arrange
-        let cases = [
+        let envs = [
             Some("warn"),
-            Some("crane::audit=off"),
+            Some("crane::audit=off,crane::access=off"),
             Some("off"),
             Some("неразборчиво=="),
             None,
         ];
 
         // Act
-        let outputs = cases.map(|env| logged_under(log_filter(env)));
+        let enabled =
+            envs.map(|env| SECURITY_TARGETS.map(|target| info_enabled(log_filter(env), target)));
 
         // Assert
-        assert!(
-            outputs.iter().all(|out| out.contains("событие аудита")),
-            "{outputs:?}"
-        );
+        assert_eq!(enabled, [[true, true]; 5]);
     }
 
     #[test]
-    fn rust_log_still_controls_everything_except_audit() {
+    fn rust_log_still_controls_other_targets() {
         // Arrange
         let env = Some("warn");
 
         // Act
-        let output = logged_under(log_filter(env));
+        let enabled = info_enabled(log_filter(env), "crane::other");
 
         // Assert
-        assert!(!output.contains("строка доступа"), "{output}");
+        assert!(!enabled);
     }
 
     #[test]
