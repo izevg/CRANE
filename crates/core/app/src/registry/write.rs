@@ -11,6 +11,13 @@ use crane_ports::registry::{BlobStore, Catalog, CatalogError, NewVersion};
 
 use super::{Publish, Registry, RegistryError, Upload};
 
+/// Отказ по правилу формата: код стабилен, причина безопасна для журнала аудита.
+#[derive(Debug)]
+pub struct Refusal {
+    pub code: &'static str,
+    pub reason: String,
+}
+
 impl<C: Catalog, B: BlobStore> Registry<C, B> {
     /// Публикует версию атомарно: blob становится видимым в CAS раньше записи каталога,
     /// а запись каталога — точка фиксации. Записи, указывающей на незакоммиченный blob,
@@ -52,6 +59,12 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         if repository.kind != RepositoryKind::Hosted {
             return Err(RegistryError::NotHosted);
         }
+
+        // Политика формата проверяется до любых обращений к хранилищам: отказ ничего не пишет.
+        let metadata = metadata.map_err(|refusal| RegistryError::Rejected {
+            code: refusal.code,
+            reason: refusal.reason,
+        })?;
 
         let claim = self
             .admit_publication(&repository, coordinate.format, &coordinate.package)

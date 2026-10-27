@@ -30,6 +30,7 @@ fn event(action: AuditAction, outcome: Outcome) -> AuditEvent {
 fn failure(error: &RegistryError) -> Outcome {
     Outcome::Failure {
         reason: error.to_string(),
+        code: None,
     }
 }
 

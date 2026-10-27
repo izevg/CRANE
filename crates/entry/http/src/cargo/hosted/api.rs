@@ -73,6 +73,7 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
                 request: caller.request.clone(),
                 action: AuditAction::Publish(coordinate),
                 outcome: Outcome::Failure {
+                    code: None,
                     reason: format!(
                         "сторонний реестр: зависимость {:?}, registry {:?}",
                         foreign.dependency, foreign.registry
@@ -120,7 +121,7 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
                     // Cargo хэш не присылает: cksum берётся из CAS.
                     declared: Vec::new(),
                 },
-                metadata,
+                metadata: Ok(metadata),
                 tags: Vec::new(),
             },
         )

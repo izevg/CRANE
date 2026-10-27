@@ -26,7 +26,7 @@ fn broken_body_request() -> Publish {
             body: Box::pin(stream::iter(items)),
             declared: Vec::new(),
         },
-        metadata: FormatMetadata::new(crate::common::METADATA.to_owned()),
+        metadata: Ok(FormatMetadata::new(crate::common::METADATA.to_owned())),
         tags: Vec::new(),
     }
 }

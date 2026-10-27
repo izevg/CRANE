@@ -135,7 +135,7 @@ pub(crate) fn publish_request(
             body: body(chunks),
             declared,
         },
-        metadata: FormatMetadata::new(METADATA.to_owned()),
+        metadata: Ok(FormatMetadata::new(METADATA.to_owned())),
         tags: Vec::new(),
     }
 }

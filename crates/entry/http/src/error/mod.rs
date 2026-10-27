@@ -215,7 +215,7 @@ fn describe(error: &RegistryError) -> ClientError {
         RegistryError::DigestMismatch { .. } | RegistryError::UnscopedName => {
             StatusCode::UNPROCESSABLE_ENTITY
         }
-        RegistryError::Body(_) => StatusCode::BAD_REQUEST,
+        RegistryError::Body(_) | RegistryError::Rejected { .. } => StatusCode::BAD_REQUEST,
         RegistryError::Unreachable(_) => return ClientError::unreachable(error),
         // Внутреннее имя для клиента неотличимо от отсутствующего: причину не раскрываем.
         RegistryError::Shadowed => {

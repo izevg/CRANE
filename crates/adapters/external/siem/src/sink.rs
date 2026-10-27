@@ -64,6 +64,7 @@ fn emit(r: &OcsfRecord) {
         status_id = r.status_id,
         status = r.status,
         status_detail = r.status_detail.as_deref(),
+        status_code = r.status_code.as_deref(),
         severity_id = r.severity_id,
         metadata.uid = %r.event_id,
         metadata.correlation_uid = r.correlation_uid.as_str(),

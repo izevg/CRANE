@@ -30,5 +30,6 @@ fn event(action: AuditAction, outcome: Outcome) -> AuditEvent {
 fn failure(reason: &str) -> Outcome {
     Outcome::Failure {
         reason: reason.to_owned(),
+        code: None,
     }
 }

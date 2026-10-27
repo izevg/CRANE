@@ -102,6 +102,7 @@ pub(crate) async fn require_token(
             action: AuditAction::Authenticate,
             outcome: Outcome::Failure {
                 reason: "токен отвергнут".to_owned(),
+                code: None,
             },
         });
         return ClientError::new(StatusCode::FORBIDDEN, "токен отвергнут").into_response();

@@ -71,6 +71,7 @@ fn shadow() -> AuditAction {
 fn failure() -> Outcome {
     Outcome::Failure {
         reason: "причина".to_owned(),
+        code: None,
     }
 }
 

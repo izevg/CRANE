@@ -49,7 +49,7 @@ pub(super) async fn put<C: Catalog + 'static, B: BlobStore + 'static>(
                             body: Box::pin(stream::once(ready(tarball))),
                             declared: publish.declared,
                         },
-                        metadata: publish.metadata,
+                        metadata: Ok(publish.metadata),
                         tags: vec![publish.tag],
                     },
                 )
