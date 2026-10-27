@@ -145,8 +145,14 @@ msgstr "Skip to content"
 msgid "Карантин"
 msgstr "Quarantine"
 
+msgid "Клиент пакетов"
+msgstr "Package client"
+
 msgid "Код"
 msgstr "Code"
+
+msgid "Команда установки"
+msgstr "Install command"
 
 msgid "Командная палитра"
 msgstr "Command palette"
@@ -154,11 +160,20 @@ msgstr "Command palette"
 msgid "Контакт: {contact}"
 msgstr "Contact: {contact}"
 
+msgid "Копировать {path}"
+msgstr "Copy {path}"
+
 msgid "Копировать JSON"
 msgstr "Copy JSON"
 
 msgid "Копировать request_id"
 msgstr "Copy request_id"
+
+msgid "Копировать команду настройки"
+msgstr "Copy setup command"
+
+msgid "Копировать команду установки"
+msgstr "Copy install command"
 
 msgid "Копировать токен"
 msgstr "Copy token"
@@ -183,6 +198,9 @@ msgstr "Breadcrumbs"
 
 msgid "Навигация по разделам реестра"
 msgstr "Navigate the registry sections"
+
+msgid "Настроить вручную ({path})"
+msgstr "Configure manually ({path})"
 
 msgid "Не найдено или нет доступа"
 msgstr "Not found or no access"
@@ -249,6 +267,9 @@ msgstr "Go to, find a package or an action"
 
 msgid "Перейти, найти пакет или действие…"
 msgstr "Go to, find a package or an action…"
+
+msgid "Переменные окружения"
+msgstr "Environment variables"
 
 msgid "Платформа"
 msgstr "Platform"
@@ -358,6 +379,9 @@ msgstr "Theme: {modeLabel}"
 msgid "Тёмная"
 msgstr "Dark"
 
+msgid "Токен не показывается: используйте cctl или переменную окружения."
+msgstr "The token is not shown: use cctl or an environment variable."
+
 msgid "Уведомления"
 msgstr "Notifications"
 
@@ -370,8 +394,20 @@ msgstr "Deleted"
 msgid "удалено"
 msgstr "removed"
 
+msgid "Установка"
+msgstr "Install"
+
 msgid "Устарел"
 msgstr "Deprecated"
+
+msgid "Файл {path}"
+msgstr "File {path}"
+
+msgid "Шаг 1. Однократная настройка"
+msgstr "Step 1. One-time setup"
+
+msgid "Шаг 2. Установка"
+msgstr "Step 2. Install"
 
 msgid "Экстренно"
 msgstr "Emergency"
