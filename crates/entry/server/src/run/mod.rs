@@ -79,15 +79,17 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     // Параметры подключения с паролем нужны были только для подключения.
     drop(settings.storage);
     let ids = Arc::new(UuidV7Ids);
-    for name in &settings.cargo_repos {
-        catalog
-            .ensure_repository(Repository {
-                id: RepositoryId::new(ids.generate()),
-                format: Format::Cargo,
-                kind: RepositoryKind::Hosted,
-                name: name.clone(),
-            })
-            .await?;
+    for (format, names) in settings.repos.iter() {
+        for name in names {
+            catalog
+                .ensure_repository(Repository {
+                    id: RepositoryId::new(ids.generate()),
+                    format,
+                    kind: RepositoryKind::Hosted,
+                    name: name.clone(),
+                })
+                .await?;
+        }
     }
     let cargo = CargoSettings {
         public_url: settings.public_url,
@@ -95,7 +97,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     };
     // Registry и движок делят один CAS: скачанные архивы лежат там же, где опубликованные.
     let blobs = Arc::new(blobs);
-    let proxy_repos = proxy::cargo_proxies(
+    let proxy_repos = proxy::proxies(
         &catalog,
         ids.as_ref(),
         Arc::clone(&blobs),
@@ -129,8 +131,10 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
 
 async fn serve_async(settings: Settings) -> Result<(), RunError> {
     let (http_port, admin_port) = (settings.http_port, settings.admin_port);
-    let repos = settings.cargo_repos.clone();
-    let proxy_repos = settings.proxy.cargo_repos.clone();
+    let repos = settings.repos.names(Format::Cargo).to_vec();
+    let proxy_repos = settings.proxy.repos.names(Format::Cargo).to_vec();
+    let npm_repos = settings.repos.names(Format::Npm).to_vec();
+    let npm_proxy_repos = settings.proxy.repos.names(Format::Npm).to_vec();
     let (api, admin) = routers(settings).await?;
 
     let api_listener = bind(http_port).await?;
@@ -140,6 +144,8 @@ async fn serve_async(settings: Settings) -> Result<(), RunError> {
         admin_port,
         repos = ?repos,
         proxy_repos = ?proxy_repos,
+        npm_repos = ?npm_repos,
+        npm_proxy_repos = ?npm_proxy_repos,
         "сервер запущен"
     );
 

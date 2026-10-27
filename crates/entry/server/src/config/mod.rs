@@ -7,6 +7,7 @@
 
 mod file;
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::io;
 use std::path::Path;
@@ -14,6 +15,7 @@ use std::str::FromStr;
 
 use crane_app::proxy::ProxyLimits;
 use crane_domain::access::{Principal, PrincipalKind};
+use crane_domain::registry::Format;
 use crane_http::TrustedProxies;
 pub(crate) use file::layered;
 use sqlx::postgres::PgConnectOptions;
@@ -38,6 +40,8 @@ const PUBLIC_URL: &str = "CRANE_PUBLIC_URL";
 const TOKEN: &str = "CRANE_TOKEN";
 const TOKEN_FILE: &str = "CRANE_TOKEN_FILE";
 const CARGO_REPOS: &str = "CRANE_CARGO_REPOS";
+const NPM_REPOS: &str = "CRANE_NPM_REPOS";
+const NPM_PROXY_REPOS: &str = "CRANE_NPM_PROXY_REPOS";
 const MAX_PUBLISH_BYTES: &str = "CRANE_MAX_PUBLISH_BYTES";
 const TOKEN_PRINCIPAL: &str = "CRANE_TOKEN_PRINCIPAL";
 const TRUSTED_PROXIES: &str = "CRANE_TRUSTED_PROXIES";
@@ -48,7 +52,7 @@ const PROXY_MAX_ARTIFACT_BYTES: &str = "CRANE_PROXY_MAX_ARTIFACT_BYTES";
 
 /// Единственный список имён переменных. Ключи файла выводятся из него (`file::variable`),
 /// отдельного перечня в файле нет. `CRANE_CONFIG` сюда не входит намеренно.
-pub(super) const VARS: [&str; 16] = [
+pub(super) const VARS: [&str; 18] = [
     HTTP_PORT,
     ADMIN_PORT,
     PUBLIC_URL,
@@ -62,10 +66,69 @@ pub(super) const VARS: [&str; 16] = [
     DATABASE_URL_FILE,
     BLOBS,
     CARGO_PROXY_REPOS,
+    NPM_REPOS,
+    NPM_PROXY_REPOS,
     CACHE,
     CACHE_FILE,
     PROXY_MAX_ARTIFACT_BYTES,
 ];
+
+/// Переменные списков репозиториев формата. Новый формат — одна строка здесь и ни одной новой функции.
+struct RepoVars {
+    format: Format,
+    hosted: &'static str,
+    proxy: &'static str,
+    /// Hosted-репозиторий по умолчанию; `None` — по умолчанию репозиториев нет.
+    hosted_default: Option<&'static str>,
+}
+
+const REPO_VARS: [RepoVars; 2] = [
+    RepoVars {
+        format: Format::Cargo,
+        hosted: CARGO_REPOS,
+        proxy: CARGO_PROXY_REPOS,
+        hosted_default: Some(DEFAULT_REPOS),
+    },
+    RepoVars {
+        format: Format::Npm,
+        hosted: NPM_REPOS,
+        proxy: NPM_PROXY_REPOS,
+        hosted_default: None,
+    },
+];
+
+/// Имя переменной со списком proxy-репозиториев формата (для сообщений об ошибках).
+pub(crate) fn proxy_var(format: Format) -> &'static str {
+    REPO_VARS
+        .iter()
+        .find(|vars| vars.format == format)
+        .map_or("CRANE_<FORMAT>_PROXY_REPOS", |vars| vars.proxy)
+}
+
+/// Имена репозиториев по форматам.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct FormatRepos(BTreeMap<Format, Vec<String>>);
+
+impl FormatRepos {
+    #[cfg(test)]
+    pub(crate) fn of(format: Format, names: Vec<String>) -> Self {
+        Self(BTreeMap::from([(format, names)]))
+    }
+
+    pub(crate) fn names(&self, format: Format) -> &[String] {
+        self.0.get(&format).map_or(&[], Vec::as_slice)
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (Format, &[String])> {
+        self.0
+            .iter()
+            .map(|(format, names)| (*format, names.as_slice()))
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.values().all(Vec::is_empty)
+    }
+}
 
 /// Ошибка конфигурации. Значения секретных переменных в тексте не появляются никогда.
 #[derive(Debug, PartialEq, Eq)]
@@ -296,7 +359,8 @@ pub(crate) struct Settings {
     pub(crate) admin_port: u16,
     pub(crate) public_url: String,
     pub(crate) token: Secret,
-    pub(crate) cargo_repos: Vec<String>,
+    /// Hosted-репозитории по форматам.
+    pub(crate) repos: FormatRepos,
     pub(crate) max_publish_bytes: usize,
     pub(crate) storage: Storage,
     pub(crate) proxy: Proxy,
@@ -304,8 +368,8 @@ pub(crate) struct Settings {
 
 /// Настройки proxy-движка. Без `Debug`, как `Cache`: в адресе Valkey бывает пароль.
 pub(crate) struct Proxy {
-    /// Имена proxy-репозиториев crates.io; пустой список — proxy выключен.
-    pub(crate) cargo_repos: Vec<String>,
+    /// Имена proxy-репозиториев по форматам; пусто везде — proxy выключен.
+    pub(crate) repos: FormatRepos,
     pub(crate) cache: Cache,
     /// Потолок размера одного проксируемого артефакта в байтах.
     pub(crate) max_artifact_bytes: u64,
@@ -316,9 +380,9 @@ impl Settings {
         var: &impl Fn(&str) -> Option<String>,
         read_file: &impl Fn(&Path) -> io::Result<String>,
     ) -> Result<Self, ConfigError> {
-        let cargo_repos = repos(var)?;
+        let (hosted, proxied) = format_repos(var)?;
         let proxy = Proxy {
-            cargo_repos: proxy_repos(var, &cargo_repos)?,
+            repos: proxied,
             cache: Cache::from_env(var, read_file)?,
             max_artifact_bytes: proxy_max_artifact_bytes(var)?,
         };
@@ -329,7 +393,7 @@ impl Settings {
             admin_port: admin_port(var)?,
             public_url: public_url(var)?,
             token: secret(var, read_file, TOKEN, TOKEN_FILE)?,
-            cargo_repos,
+            repos: hosted,
             max_publish_bytes: max_publish_bytes(var)?,
             storage: Storage::from_env(var, read_file)?,
             proxy,
@@ -470,46 +534,36 @@ fn trusted_proxies(var: &impl Fn(&str) -> Option<String>) -> Result<TrustedProxi
     })
 }
 
-fn repos(var: &impl Fn(&str) -> Option<String>) -> Result<Vec<String>, ConfigError> {
-    let raw = var(CARGO_REPOS).unwrap_or_else(|| DEFAULT_REPOS.to_owned());
-    raw.split(',')
-        .map(|item| {
-            let item = item.trim();
-            if item.is_empty() {
-                Err(ConfigError::Invalid {
-                    var: CARGO_REPOS,
-                    reason: "пустое имя репозитория в списке",
-                })
-            } else {
-                Ok(item.to_owned())
-            }
-        })
-        .collect()
-}
-
-/// Имя попадает в путь `/cargo/<имя>`, поэтому набор символов ограничен: `{`, `}` и `/` сломали бы маршрутизацию.
-fn proxy_name_is_valid(name: &str) -> bool {
+/// Имя попадает в путь `/<формат>/<имя>`, поэтому набор символов ограничен: `{`, `}` и `/` сломали бы маршрутизацию.
+fn repo_name_is_valid(name: &str) -> bool {
     name.chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
-/// Пустая переменная (compose передаёт `""`) и отсутствующая — пустой список.
-fn proxy_repos(
+/// Hosted- и proxy-списки всех форматов.
+fn format_repos(
     var: &impl Fn(&str) -> Option<String>,
-    hosted: &[String],
-) -> Result<Vec<String>, ConfigError> {
-    let raw = var(CARGO_PROXY_REPOS).unwrap_or_default();
-    if raw.trim().is_empty() {
-        return Ok(Vec::new());
+) -> Result<(FormatRepos, FormatRepos), ConfigError> {
+    let mut hosted = BTreeMap::new();
+    let mut proxied = BTreeMap::new();
+    for vars in &REPO_VARS {
+        let own = hosted_list(var, vars)?;
+        proxied.insert(vars.format, proxy_list(var, vars, &own)?);
+        hosted.insert(vars.format, own);
     }
+    Ok((FormatRepos(hosted), FormatRepos(proxied)))
+}
+
+/// Разбирает список имён: непустые, допустимые, без повторов; `taken` — имена, которые занимать нельзя.
+fn names(var: &'static str, raw: &str, taken: &[String]) -> Result<Vec<String>, ConfigError> {
     let mut names: Vec<String> = Vec::new();
     for item in raw.split(',') {
         let name = item.trim();
         let reason = if name.is_empty() {
             Some("пустое имя репозитория в списке")
-        } else if !proxy_name_is_valid(name) {
+        } else if !repo_name_is_valid(name) {
             Some("имя может содержать только буквы, цифры, `-`, `_` и `.`")
-        } else if hosted.iter().any(|hosted| hosted == name) {
+        } else if taken.iter().any(|other| other == name) {
             Some("имя совпадает с hosted-репозиторием")
         } else if names.iter().any(|seen| seen == name) {
             Some("имя повторяется в списке")
@@ -517,14 +571,38 @@ fn proxy_repos(
             None
         };
         if let Some(reason) = reason {
-            return Err(ConfigError::Invalid {
-                var: CARGO_PROXY_REPOS,
-                reason,
-            });
+            return Err(ConfigError::Invalid { var, reason });
         }
         names.push(name.to_owned());
     }
     Ok(names)
+}
+
+/// Без значения действует умолчание формата; у форматов без умолчания пустое значение — пустой список.
+fn hosted_list(
+    var: &impl Fn(&str) -> Option<String>,
+    vars: &RepoVars,
+) -> Result<Vec<String>, ConfigError> {
+    let raw = match (var(vars.hosted), vars.hosted_default) {
+        (Some(raw), Some(_)) => raw,
+        (Some(raw), None) if !raw.trim().is_empty() => raw,
+        (None, Some(default)) => default.to_owned(),
+        (Some(_) | None, None) => return Ok(Vec::new()),
+    };
+    names(vars.hosted, &raw, &[])
+}
+
+/// Пустая переменная (compose передаёт `""`) и отсутствующая — пустой список.
+fn proxy_list(
+    var: &impl Fn(&str) -> Option<String>,
+    vars: &RepoVars,
+    hosted: &[String],
+) -> Result<Vec<String>, ConfigError> {
+    let raw = var(vars.proxy).unwrap_or_default();
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    names(vars.proxy, &raw, hosted)
 }
 
 fn unsupported(var: &'static str, value: &str) -> ConfigError {
@@ -610,7 +688,14 @@ mod tests {
         ];
 
         // Act
-        let actual = cases.map(|pairs| parse(&pairs).unwrap().proxy.cargo_repos);
+        let actual = cases.map(|pairs| {
+            parse(&pairs)
+                .unwrap()
+                .proxy
+                .repos
+                .names(Format::Cargo)
+                .to_vec()
+        });
 
         // Assert
         assert_eq!(
@@ -656,6 +741,90 @@ mod tests {
     }
 
     #[test]
+    fn npm_repos_default_to_none_and_are_parsed_per_variable() {
+        // Arrange
+        let cases = [
+            with(&[]),
+            with(&[(NPM_REPOS, ""), (NPM_PROXY_REPOS, "")]),
+            with(&[(NPM_REPOS, " web , libs.2 "), (NPM_PROXY_REPOS, "npmjs")]),
+        ];
+
+        // Act
+        let actual = cases.map(|pairs| {
+            let settings = parse(&pairs).unwrap();
+            (
+                settings.repos.names(Format::Npm).to_vec(),
+                settings.proxy.repos.names(Format::Npm).to_vec(),
+                settings.repos.names(Format::Cargo).to_vec(),
+            )
+        });
+
+        // Assert
+        let internal = vec!["internal".to_owned()];
+        assert_eq!(
+            actual,
+            [
+                (vec![], vec![], internal.clone()),
+                (vec![], vec![], internal.clone()),
+                (
+                    vec!["web".to_owned(), "libs.2".to_owned()],
+                    vec!["npmjs".to_owned()],
+                    internal,
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn invalid_npm_repos_are_rejected_with_variable_and_reason() {
+        // Arrange
+        let cases = [
+            with(&[(NPM_REPOS, "web,,libs")]),
+            with(&[(NPM_REPOS, "a/b")]),
+            with(&[(NPM_REPOS, "web,web")]),
+            with(&[(NPM_PROXY_REPOS, "web"), (NPM_REPOS, "web")]),
+            with(&[(NPM_PROXY_REPOS, "a{b}")]),
+            with(&[(NPM_PROXY_REPOS, "p,p")]),
+        ];
+
+        // Act
+        let actual = cases.map(|pairs| error_of(&pairs));
+
+        // Assert
+        let invalid = |var, reason| ConfigError::Invalid { var, reason };
+        let charset = "имя может содержать только буквы, цифры, `-`, `_` и `.`";
+        assert_eq!(
+            actual,
+            [
+                invalid(NPM_REPOS, "пустое имя репозитория в списке"),
+                invalid(NPM_REPOS, charset),
+                invalid(NPM_REPOS, "имя повторяется в списке"),
+                invalid(NPM_PROXY_REPOS, "имя совпадает с hosted-репозиторием"),
+                invalid(NPM_PROXY_REPOS, charset),
+                invalid(NPM_PROXY_REPOS, "имя повторяется в списке"),
+            ]
+        );
+    }
+
+    #[test]
+    fn same_name_may_be_hosted_in_one_format_and_proxy_in_another() {
+        // Arrange
+        let pairs = with(&[(CARGO_REPOS, "shared"), (NPM_PROXY_REPOS, "shared")]);
+
+        // Act
+        let settings = parse(&pairs).unwrap();
+
+        // Assert
+        assert_eq!(
+            (
+                settings.repos.names(Format::Cargo),
+                settings.proxy.repos.names(Format::Npm)
+            ),
+            (&["shared".to_owned()][..], &["shared".to_owned()][..])
+        );
+    }
+
+    #[test]
     fn minimal_env_gets_defaults() {
         // Arrange
         let pairs = with(&[]);
@@ -666,7 +835,7 @@ mod tests {
         // Assert
         assert_eq!(settings.http_port, 8080);
         assert_eq!(settings.admin_port, 9464);
-        assert_eq!(settings.cargo_repos, ["internal"]);
+        assert_eq!(settings.repos.names(Format::Cargo), ["internal"]);
         assert_eq!(settings.max_publish_bytes, 10 * 1024 * 1024);
         assert_eq!(settings.public_url, "https://crane.example");
         assert_eq!(settings.token.expose(), "t");
@@ -953,7 +1122,10 @@ mod tests {
         let settings = parse(&pairs).unwrap();
 
         // Assert
-        assert_eq!(settings.cargo_repos, ["alpha", "beta", "gamma"]);
+        assert_eq!(
+            settings.repos.names(Format::Cargo),
+            ["alpha", "beta", "gamma"]
+        );
     }
 
     #[test]

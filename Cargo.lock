@@ -508,6 +508,7 @@ dependencies = [
  "crane-app",
  "crane-domain",
  "crane-format-cargo",
+ "crane-format-npm",
  "crane-http",
  "crane-memory",
  "crane-objstore",
