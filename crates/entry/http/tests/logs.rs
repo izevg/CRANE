@@ -11,12 +11,10 @@ mod common;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use axum::body::Body;
-use axum::http::{Method, Request};
-use common::{Api, REPO, Reply, SharedBuf, TOKEN, request};
+use axum::http::Method;
+use common::{Api, REPO, TOKEN, capture_logs, request};
 use crane_memory::{ManualClock, MemoryAudit, SequentialIdGen};
 use crane_siem::OcsfLogSink;
-use tracing_subscriber::fmt;
 
 const CRATE: &[u8] = b"bytes";
 const SECRET_WRONG: &str = "SUPERSECRET-wrong";
@@ -31,15 +29,6 @@ fn real_sink_api() -> Api {
     Api::build("", sink, Arc::new(MemoryAudit::default()))
 }
 
-/// Перехваченный вывод JSON-журнала, как его пишет сервер (`flatten_event`).
-fn capturing(buffer: &SharedBuf) -> impl tracing::Subscriber + Send + Sync + use<> {
-    fmt()
-        .json()
-        .flatten_event(true)
-        .with_writer(buffer.clone())
-        .finish()
-}
-
 /// Какие из фрагментов встречаются в выводе, в исходном порядке.
 fn contained<'a>(output: &str, needles: &[&'a str]) -> Vec<&'a str> {
     needles
@@ -49,19 +38,9 @@ fn contained<'a>(output: &str, needles: &[&'a str]) -> Vec<&'a str> {
         .collect()
 }
 
-/// Один вызов на всю последовательность запросов под перехватом журнала.
-fn run_requests<const N: usize>(
-    subscriber: impl tracing::Subscriber + Send + Sync,
-    api: &Api,
-    requests: [Request<Body>; N],
-) -> [Reply; N] {
-    tracing::subscriber::with_default(subscriber, || requests.map(|r| api.send(r)))
-}
-
 #[test]
 fn logs_never_contain_presented_credentials_but_do_contain_audit_events() {
     // Arrange
-    let buffer = SharedBuf::default();
     let api = real_sink_api();
     let publish_uri = format!("/cargo/{REPO}/api/v1/crates/new");
     let requests = [
@@ -89,11 +68,10 @@ fn logs_never_contain_presented_credentials_but_do_contain_audit_events() {
     ];
 
     // Act
-    let replies = run_requests(capturing(&buffer), &api, requests);
+    let (replies, output) = capture_logs(|| requests.map(|r| api.send(r)));
 
     // Assert
     assert_eq!(replies.map(|r| r.status.as_u16()), [403, 403, 200]);
-    let output = buffer.text();
     let leaked = contained(
         &output,
         &["SUPERSECRET", "PASSWORD", "dXNlcjpQQVNTV09SRA==", TOKEN],
@@ -113,7 +91,6 @@ fn logs_never_contain_presented_credentials_but_do_contain_audit_events() {
 #[test]
 fn access_line_has_path_without_query_and_the_authenticated_actor() {
     // Arrange
-    let buffer = SharedBuf::default();
     let api = Api::new();
     let requests = [request(
         Method::GET,
@@ -124,11 +101,10 @@ fn access_line_has_path_without_query_and_the_authenticated_actor() {
     )];
 
     // Act
-    let replies = run_requests(capturing(&buffer), &api, requests);
+    let (replies, output) = capture_logs(|| requests.map(|r| api.send(r)));
 
     // Assert
     assert_eq!(replies[0].status, 200);
-    let output = buffer.text();
     assert_eq!(contained(&output, &["LEAK", TOKEN]), Vec::<&str>::new());
     let expected = [
         r#""target":"crane::access""#,
