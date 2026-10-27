@@ -23,7 +23,7 @@ export function ActionContent({ action }: { action: Action }) {
       {action.label}
       {action.stepUp ? (
         <>
-          <Badge variant="outline">{MFA}</Badge>
+          <Badge variant="inherit">{MFA}</Badge>
           <span className="sr-only">{STEP_UP_HINT}</span>
         </>
       ) : null}

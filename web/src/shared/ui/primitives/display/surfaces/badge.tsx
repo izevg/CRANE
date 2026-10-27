@@ -3,13 +3,15 @@ import { useRender } from "@base-ui/react/use-render";
 import { cx } from "~/shared/lib/core";
 import { TONE_SURFACE } from "../tone/tone";
 
-type BadgeVariant = "default" | "secondary" | "outline" | "destructive";
+type BadgeVariant = "default" | "secondary" | "outline" | "destructive" | "inherit";
 
 const VARIANT = {
   default: "bg-primary text-primary-foreground",
   secondary: "bg-secondary text-secondary-foreground",
   outline: "border-border text-foreground",
   destructive: TONE_SURFACE.error,
+  // цвет и рамка берутся у родителя: метка на заливке кнопки (primary, destructive) остаётся читаемой
+  inherit: "border-current text-current",
 } satisfies Record<BadgeVariant, string>;
 
 type BadgeProps = useRender.ComponentProps<"span"> & { variant?: BadgeVariant };
