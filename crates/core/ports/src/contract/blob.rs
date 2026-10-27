@@ -207,8 +207,8 @@ async fn broken_body_is_reported_as_body_error<B: BlobStore>(store: &B) {
 
     // Assert
     assert!(
-        matches!(result, Err(BlobError::Body(_))),
-        "обрыв входного потока даёт BlobError::Body, а не успех и не Backend"
+        matches!(&result, Err(BlobError::Body(error)) if error.to_string() == "обрыв"),
+        "обрыв входного потока даёт BlobError::Body с исходной ошибкой потока, а не успех и не Backend"
     );
 }
 

@@ -89,6 +89,8 @@ pub(crate) enum Step {
     Found(&'static [u8], Option<&'static str>),
     /// 200 с объявленным `Cache-Control: max-age`.
     FoundWithMaxAge(&'static [u8], Option<&'static str>, Duration),
+    /// 200, тело приходит несколькими чанками.
+    FoundChunks(&'static [&'static [u8]]),
     NotFound,
     Refused(EgressRefusal),
     Unavailable,
@@ -180,6 +182,16 @@ impl Upstream for FakeUpstream {
                 body: stream_of(vec![Ok(Bytes::from_static(body))]),
                 etag: etag.map(|etag| ETag::new(etag.to_owned())),
                 max_age: Some(max_age),
+            }),
+            Some(Step::FoundChunks(chunks)) => Ok(UpstreamResponse::Found {
+                body: stream_of(
+                    chunks
+                        .iter()
+                        .map(|chunk| Ok(Bytes::from_static(chunk)))
+                        .collect(),
+                ),
+                etag: None,
+                max_age: None,
             }),
             Some(Step::NotFound) => Ok(UpstreamResponse::NotFound),
             Some(Step::Refused(refusal)) => Err(UpstreamError::Refused(refusal)),

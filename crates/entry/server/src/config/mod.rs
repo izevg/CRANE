@@ -12,6 +12,7 @@ use std::io;
 use std::path::Path;
 use std::str::FromStr;
 
+use crane_app::proxy::ProxyLimits;
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_http::TrustedProxies;
 pub(crate) use file::layered;
@@ -43,10 +44,11 @@ const TRUSTED_PROXIES: &str = "CRANE_TRUSTED_PROXIES";
 const CARGO_PROXY_REPOS: &str = "CRANE_CARGO_PROXY_REPOS";
 const CACHE: &str = "CRANE_CACHE";
 const CACHE_FILE: &str = "CRANE_CACHE_FILE";
+const PROXY_MAX_ARTIFACT_BYTES: &str = "CRANE_PROXY_MAX_ARTIFACT_BYTES";
 
 /// Единственный список имён переменных. Ключи файла выводятся из него (`file::variable`),
 /// отдельного перечня в файле нет. `CRANE_CONFIG` сюда не входит намеренно.
-pub(super) const VARS: [&str; 15] = [
+pub(super) const VARS: [&str; 16] = [
     HTTP_PORT,
     ADMIN_PORT,
     PUBLIC_URL,
@@ -62,6 +64,7 @@ pub(super) const VARS: [&str; 15] = [
     CARGO_PROXY_REPOS,
     CACHE,
     CACHE_FILE,
+    PROXY_MAX_ARTIFACT_BYTES,
 ];
 
 /// Ошибка конфигурации. Значения секретных переменных в тексте не появляются никогда.
@@ -294,11 +297,18 @@ pub(crate) struct Settings {
     pub(crate) public_url: String,
     pub(crate) token: Secret,
     pub(crate) cargo_repos: Vec<String>,
-    /// Имена proxy-репозиториев crates.io; пустой список — proxy выключен.
-    pub(crate) cargo_proxy_repos: Vec<String>,
     pub(crate) max_publish_bytes: usize,
     pub(crate) storage: Storage,
+    pub(crate) proxy: Proxy,
+}
+
+/// Настройки proxy-движка. Без `Debug`, как `Cache`: в адресе Valkey бывает пароль.
+pub(crate) struct Proxy {
+    /// Имена proxy-репозиториев crates.io; пустой список — proxy выключен.
+    pub(crate) cargo_repos: Vec<String>,
     pub(crate) cache: Cache,
+    /// Потолок размера одного проксируемого артефакта в байтах.
+    pub(crate) max_artifact_bytes: u64,
 }
 
 impl Settings {
@@ -307,7 +317,11 @@ impl Settings {
         read_file: &impl Fn(&Path) -> io::Result<String>,
     ) -> Result<Self, ConfigError> {
         let cargo_repos = repos(var)?;
-        let cargo_proxy_repos = proxy_repos(var, &cargo_repos)?;
+        let proxy = Proxy {
+            cargo_repos: proxy_repos(var, &cargo_repos)?,
+            cache: Cache::from_env(var, read_file)?,
+            max_artifact_bytes: proxy_max_artifact_bytes(var)?,
+        };
         Ok(Self {
             principal: principal(var)?,
             trusted_proxies: trusted_proxies(var)?,
@@ -316,10 +330,9 @@ impl Settings {
             public_url: public_url(var)?,
             token: secret(var, read_file, TOKEN, TOKEN_FILE)?,
             cargo_repos,
-            cargo_proxy_repos,
             max_publish_bytes: max_publish_bytes(var)?,
             storage: Storage::from_env(var, read_file)?,
-            cache: Cache::from_env(var, read_file)?,
+            proxy,
         })
     }
 }
@@ -357,6 +370,22 @@ fn max_publish_bytes(var: &impl Fn(&str) -> Option<String>) -> Result<usize, Con
     if limit == 0 {
         return Err(ConfigError::Invalid {
             var: MAX_PUBLISH_BYTES,
+            reason: "предел должен быть больше нуля",
+        });
+    }
+    Ok(limit)
+}
+
+fn proxy_max_artifact_bytes(var: &impl Fn(&str) -> Option<String>) -> Result<u64, ConfigError> {
+    let limit = number(
+        var,
+        PROXY_MAX_ARTIFACT_BYTES,
+        ProxyLimits::DEFAULT.max_artifact_bytes,
+    )?;
+    // Нулевой предел отклонял бы любой архив.
+    if limit == 0 {
+        return Err(ConfigError::Invalid {
+            var: PROXY_MAX_ARTIFACT_BYTES,
             reason: "предел должен быть больше нуля",
         });
     }
@@ -581,7 +610,7 @@ mod tests {
         ];
 
         // Act
-        let actual = cases.map(|pairs| parse(&pairs).unwrap().cargo_proxy_repos);
+        let actual = cases.map(|pairs| parse(&pairs).unwrap().proxy.cargo_repos);
 
         // Assert
         assert_eq!(
@@ -709,6 +738,45 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn proxy_artifact_limit_defaults_and_accepts_explicit_value() {
+        // Arrange
+        let cases = [with(&[]), with(&[(PROXY_MAX_ARTIFACT_BYTES, "4096")])];
+
+        // Act
+        let actual = cases.map(|pairs| parse(&pairs).unwrap().proxy.max_artifact_bytes);
+
+        // Assert
+        assert_eq!(actual, [2_147_483_648, 4096]);
+    }
+
+    #[test]
+    fn invalid_proxy_artifact_limit_is_rejected_naming_the_variable() {
+        // Arrange
+        let cases = [
+            with(&[(PROXY_MAX_ARTIFACT_BYTES, "0")]),
+            with(&[(PROXY_MAX_ARTIFACT_BYTES, "abc")]),
+        ];
+
+        // Act
+        let actual = cases.map(|pairs| error_of(&pairs));
+
+        // Assert
+        assert_eq!(
+            actual,
+            [
+                ConfigError::Invalid {
+                    var: PROXY_MAX_ARTIFACT_BYTES,
+                    reason: "предел должен быть больше нуля"
+                },
+                ConfigError::Invalid {
+                    var: PROXY_MAX_ARTIFACT_BYTES,
+                    reason: "ожидалось целое число в допустимом диапазоне"
+                }
+            ]
+        );
     }
 
     #[test]

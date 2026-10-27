@@ -14,7 +14,7 @@ use crane_upstream::HttpUpstream;
 
 use super::RunError;
 use crate::cache;
-use crate::config::Cache;
+use crate::config::Proxy;
 use crate::system::SystemClock;
 
 /// Регистрирует репозитории в каталоге и строит router для каждого имени.
@@ -24,11 +24,10 @@ pub(super) async fn cargo_proxies<C: Catalog, B: BlobStore + 'static>(
     catalog: &C,
     ids: &dyn IdGen,
     blobs: Arc<B>,
-    cache: Cache,
-    names: &[String],
+    proxy: Proxy,
     settings: &CargoSettings,
 ) -> Result<Vec<(String, Router)>, RunError> {
-    if names.is_empty() {
+    if proxy.cargo_repos.is_empty() {
         return Ok(Vec::new());
     }
     // Хосты crates.io зашиты в формат: proxy ходит только на них, и только по https.
@@ -36,17 +35,20 @@ pub(super) async fn cargo_proxies<C: Catalog, B: BlobStore + 'static>(
     let index = policy.admit("https", INDEX_HOST, None, "")?;
     let dl = policy.admit("https", DL_HOST, None, "")?;
     // Один бэкенд на оба порта: кэш и lease выбираются вместе (`CRANE_CACHE`).
-    let shared = cache::backend(cache);
+    let shared = cache::backend(proxy.cache);
     let engine = ProxyEngine::new(
         HttpUpstream::new(policy)?,
         shared.clone(),
         shared,
         blobs,
         Arc::new(SystemClock),
-        ProxyLimits::DEFAULT,
+        ProxyLimits {
+            max_artifact_bytes: proxy.max_artifact_bytes,
+            ..ProxyLimits::DEFAULT
+        },
     );
-    let mut routers = Vec::with_capacity(names.len());
-    for name in names {
+    let mut routers = Vec::with_capacity(proxy.cargo_repos.len());
+    for name in &proxy.cargo_repos {
         let stored = catalog
             .ensure_repository(Repository {
                 id: RepositoryId::new(ids.generate()),
@@ -96,6 +98,7 @@ mod tests {
     use tokio::runtime::Builder;
 
     use super::*;
+    use crate::config::Cache;
 
     const NAME: &str = "crates-io";
 
@@ -124,8 +127,11 @@ mod tests {
             catalog,
             &SequentialIdGen::default(),
             Arc::new(MemoryBlobStore::default()),
-            Cache::Memory,
-            &[NAME.to_owned()],
+            Proxy {
+                cargo_repos: vec![NAME.to_owned()],
+                cache: Cache::Memory,
+                max_artifact_bytes: ProxyLimits::DEFAULT.max_artifact_bytes,
+            },
             &settings(),
         )
         .await

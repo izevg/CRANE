@@ -26,10 +26,11 @@ use futures_util::FutureExt;
 use self::flight::{Flight, Flights, Invariant};
 use self::lead::{Job, Target, lead};
 
-/// Пределы движка. Умолчания — 10.2 (lease 30 с, ожидание 25 с) плюс защита памяти от гигантского документа.
+/// Пределы движка. Умолчания — 10.2 (lease 30 с, ожидание 25 с) плюс потолки размера документа (память) и архива (диск staging).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProxyLimits {
     pub max_document_bytes: u64,
+    pub max_artifact_bytes: u64,
     pub lease: Duration,
     pub patience: Duration,
 }
@@ -38,6 +39,9 @@ impl ProxyLimits {
     pub const DEFAULT: Self = Self {
         // 64 МиБ.
         max_document_bytes: 67_108_864,
+        // 2 ГиБ: предохранитель от сбежавшего потока, а не политика формата;
+        // запас над колёсами PyPI класса torch.
+        max_artifact_bytes: 2_147_483_648,
         lease: Duration::from_secs(30),
         patience: Duration::from_secs(25),
     };
@@ -124,7 +128,7 @@ pub enum ProxyError {
     Upstream(#[from] UpstreamFailure),
     #[error("sha256 не совпал: ожидался {expected}, получен {actual}")]
     DigestMismatch { expected: Sha256, actual: Sha256 },
-    #[error("документ upstream больше {limit} байт")]
+    #[error("ответ upstream больше {limit} байт")]
     TooLarge { limit: u64 },
     #[error("ошибка бэкенда")]
     Backend(#[source] Arc<dyn std::error::Error + Send + Sync>),

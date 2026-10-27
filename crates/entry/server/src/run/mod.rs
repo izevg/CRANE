@@ -99,8 +99,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         &catalog,
         ids.as_ref(),
         Arc::clone(&blobs),
-        settings.cache,
-        &settings.cargo_proxy_repos,
+        settings.proxy,
         &cargo,
     )
     .await?;
@@ -131,7 +130,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
 async fn serve_async(settings: Settings) -> Result<(), RunError> {
     let (http_port, admin_port) = (settings.http_port, settings.admin_port);
     let repos = settings.cargo_repos.clone();
-    let proxy_repos = settings.cargo_proxy_repos.clone();
+    let proxy_repos = settings.proxy.cargo_repos.clone();
     let (api, admin) = routers(settings).await?;
 
     let api_listener = bind(http_port).await?;

@@ -74,7 +74,8 @@ pub enum BlobError {
 /// Сверка с дайджестом, заявленным клиентом, не дело стора: это правило use case.
 pub trait BlobStore: Send + Sync {
     /// Сохраняет поток во временную зону и считает дайджесты.
-    /// Обрыв потока даёт `BlobError::Body`; staged-объект при этом не создаётся.
+    /// Обрыв потока даёт `BlobError::Body` с ошибкой потока без изменений (вызывающий различает по ней причину);
+    /// staged-объект при этом не создаётся.
     fn stage(&self, body: ByteStream) -> impl Future<Output = Result<Staged, BlobError>> + Send;
 
     /// Переносит staged-объект в CAS по его SHA-256.
