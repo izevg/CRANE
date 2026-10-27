@@ -71,7 +71,7 @@ crane/
 pub trait FormatProtocol {
     const FORMAT: Format;                              // Maven | Npm | PyPi | NuGet | Cargo
     fn version_policy(&self) -> MutabilityRules;       // SNAPSHOT, yank, unlist, deprecate
-    fn parse_upload(&self, body: Bytes) -> Result<UploadPlan, FormatError>;
+    fn parse_upload(&self, req: UploadRequest<'_>) -> Result<UploadPlan, FormatError>; // путь, Content-Type и тело; без HTTP-типов
     fn render_metadata(&self, pkg: &PackageView, base: &BaseUrl) -> Result<Rendered, FormatError>;
     fn rewrite_upstream(&self, body: Bytes, base: &BaseUrl) -> Result<Bytes, FormatError>; // ссылки → CRANE
     fn render_error(&self, e: &Diagnosed) -> Rendered;  // тело ошибки в форме клиента; статус ставит entry
@@ -79,7 +79,9 @@ pub trait FormatProtocol {
 // Грамматики имён и версий живут в domain, а не в трейте: формат вызывает
 // PackageName::parse(Self::FORMAT, raw) и Version::parse(Self::FORMAT, raw).
 // В коде трейта пока нет: Cargo реализован свободными функциями `crates/formats/cargo`;
-// трейт появится со вторым форматом.
+// трейт появится со вторым форматом. Трейт живёт в `formats`, вызывает его `entry/http`;
+// `app` о форматах не знает. `entry` обобщён по типу формата: из-за `const FORMAT` трейт
+// не годится для `dyn`, так и задумано.
 
 /// Неизменяемое content-addressable хранилище.
 pub trait BlobStore: Send + Sync {
@@ -167,6 +169,9 @@ pub trait SiemSink: Send + Sync {
 ```mermaid
 classDiagram
   direction LR
+  class HttpEntry {
+    +route(request)
+  }
   class PublishService {
     +begin(principal, repo, coord) UploadSession
     +commit(session) VersionId
@@ -215,11 +220,12 @@ classDiagram
   class PolicyEngine {
     +evaluate(gate, evidence) Verdict
   }
-  PublishService --> FormatProtocol
+  HttpEntry --> FormatProtocol
+  HttpEntry --> PublishService
+  HttpEntry --> ProxyService
   PublishService --> BlobStore
   PublishService --> Catalog
   PublishService --> AccessEvaluator
-  ProxyService --> FormatProtocol
   ProxyService --> BlobStore
   ProxyService --> Catalog
   ProxyService --> Singleflight
