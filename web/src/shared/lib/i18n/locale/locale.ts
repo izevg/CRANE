@@ -1,13 +1,13 @@
 import { i18n } from "@lingui/core";
 
-const LOCALES = ["ru", "en"] as const;
+export const LOCALES = ["ru", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
 
 /** Русский — исходный язык сообщений и язык по умолчанию. */
 const DEFAULT_LOCALE: Locale = "ru";
 const STORAGE_KEY = "crane.locale";
 
-function isLocale(value: unknown): value is Locale {
+export function isLocale(value: unknown): value is Locale {
   return typeof value === "string" && (LOCALES as readonly string[]).includes(value);
 }
 

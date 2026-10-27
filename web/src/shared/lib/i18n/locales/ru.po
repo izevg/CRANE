@@ -324,3 +324,9 @@ msgstr "удалено"
 
 msgid "Я сохранил токен"
 msgstr "Я сохранил токен"
+
+msgid "Язык интерфейса"
+msgstr "Язык интерфейса"
+
+msgid "Язык: {current}"
+msgstr "Язык: {current}"

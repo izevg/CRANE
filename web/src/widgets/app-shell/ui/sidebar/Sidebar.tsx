@@ -4,6 +4,7 @@ import { useId } from "react";
 import { cx } from "~/shared/lib/core";
 import { Link, Tooltip, TooltipContent, TooltipTrigger } from "~/shared/ui/primitives";
 import { initialsOf } from "../../lib/sidebar";
+import { LocaleMenu } from "../locale/LocaleMenu";
 import { Logo } from "./Logo";
 import { ThemeMenu } from "./ThemeMenu";
 
@@ -202,6 +203,7 @@ export function Sidebar({
             ))}
           </ul>
         </nav>
+        <LocaleMenu collapsed={collapsed} />
         <ThemeMenu collapsed={collapsed} />
         {account ? <SidebarUser {...account} collapsed={collapsed} /> : null}
       </div>
