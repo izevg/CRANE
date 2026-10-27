@@ -3,8 +3,9 @@
 
 Эталон замерен по git-истории и файлам (непустые строки, без lock-файлов,
 сгенерированного кода, импортированных спецификаций и бинарных файлов).
-Запуск: python3 tools/estimate-agent-hours.py [--start ГГГГ-ММ-ДД]
-С --start печатает календарь релизов (рабочие дни, праздники РФ) по трём сценариям.
+Запуск: python3 tools/estimate-agent-hours.py [--start ГГГГ-ММ-ДД] [--holidays ГГГГ-ММ-ДД ...] [--gantt]
+С --start печатает календарь релизов по трём сценариям (рабочие дни пн–пт, нерабочие даты задаются --holidays).
+С --gantt дополнительно печатает диаграмму Ганта (Mermaid) для базового сценария.
 """
 
 import argparse
@@ -62,14 +63,13 @@ EXTRA = [
     ("Интеграция с реальными Keycloak, GitLab, Trivy, S3 на стенде", "P1", 30),
     ("Нагрузочный стенд и оптимизация горячего пути", "P0", 25),
     ("Исправление замечаний security review", "P2", 30),
-    ("Подключение SIEM и SOAR пилотной организации", "P2", 15),
+    ("Подключение SIEM и SOAR на стенде", "P2", 15),
 ]
 # этапы календаря, которые не ускоряются агентами (рабочие дни)
 CALENDAR = [
     ("Нагрузочный PoC на целевом железе", "P0", 3),
     ("Security review и пентест", "P2", 7),
-    ("Пилот с командами", "P1", 10),
-    ("Миграция из Nexus волнами по командам", "P1", 10),
+    ("Release candidate: стабилизация и обратная связь", "P1", 5),  # допущение, уточняется по ходу
 ]
 SCENARIO_COMPLEXITY = {"low": 0.9, "base": 1.0, "high": 1.25}
 PARALLEL = 4             # одновременно работающих агентов
@@ -90,7 +90,7 @@ RELEASES = [
      [("Доступ:", 1), ("Наблюдаемость:", 1), ("SPA: каркас", 1), ("CLI: login", 1)]),
     ("v0.5.0", "P0", "Полное ядро: матрица клиентов, нагрузка, поставка",
      [("Матрица реальных клиентов", 1), ("Нагрузочный стенд", 1)]),
-    ("v0.6.0", "P1", "Удобство: GitLab, диагностика, классы хранения, импорт из Nexus",
+    ("v0.6.0", "P1", "Удобство: GitLab, диагностика, классы хранения, импорт из других реестров",
      [("GitLab", 1), ("Диагностика", 1), ("Импорт", 1), ("Классы", 1), ("CLI: diag", 1),
       ("SPA: рабочие столы ролей", 1), ("Интеграция с реальными", 1)]),
     ("v1.1.0", "P2", "Безопасность цепочки поставки",
@@ -100,8 +100,8 @@ RELEASES = [
     ("v1.2.0", "P3", "Развитие: граф, поиск и LLM, A2A",
      [("Граф", 1), ("Поиск", 1), ("A2A", 1), ("SPA: AI", 1)]),
 ]
-# производственный календарь РФ: нерабочие праздничные дни в горизонте плана
-HOLIDAYS = {dt.date(2026, 11, 4)} | {dt.date(2027, 1, d) for d in range(1, 9)}
+# нерабочие даты сверх выходных; задаются через --holidays
+HOLIDAYS = set()
 
 
 def estimate(scn):
@@ -195,31 +195,57 @@ def schedule(scn, start):
     row("v0.5.0", title, h, b, t, "нагрузочный PoC на железе идёт параллельно")
     title, h, b, p1 = dev("v0.6.0", t)
     row("v0.6.0", title, h, b, p1)
-    ga = math.ceil(p1) + cal["Пилот с командами"]
-    row("v1.0.0", "Промышленный релиз (P0 + P1 после пилота)", 0, p1, ga, "пилот с командами")
+    ga = math.ceil(p1) + cal["Release candidate: стабилизация и обратная связь"]
+    row("v1.0.0", "Релиз 1.0 (P0 + P1)", 0, p1, ga, "release candidate")
     title, h, b, p2 = dev("v1.1.0", p1)
     sec = max(math.ceil(p2) + cal["Security review и пентест"], ga)
     row("v1.1.0", title, h, b, sec, "security review и пентест")
     title, h, b, p3 = dev("v1.2.0", p2)
     row("v1.2.0", title, h, b, max(p3, sec))
-    mig = ga + cal["Миграция из Nexus волнами по командам"]
-    row("—", "Миграция из Nexus волнами по командам", 0, ga, mig, "после v1.0.0")
     return rows
 
 
 def print_schedule(start):
     for scn in ("low", "base", "high"):
-        print(f"\nКалендарь [{scn}] от {start.isoformat()} (4 агента × 8 ч, рабочие дни, праздники РФ):")
+        print(f"\nКалендарь [{scn}] от {start.isoformat()} (4 агента × 8 ч, рабочие дни пн–пт):")
         for version, title, h, b, e, note in schedule(scn, start):
             hrs = f"{h:4.0f} агент-ч" if h else " " * 11
             tail = f"  ({note})" if note else ""
             print(f"  {version:7} {b.isoformat()} → {e.isoformat()}  {hrs}  {title}{tail}")
 
 
+def print_gantt(start):
+    """Диаграмма Ганта (Mermaid) для базового сценария."""
+    sections = {"P0": "P0 ядро", "P1": "P1 удобство", "P2": "P2 безопасность", "P3": "P3 развитие"}
+    stage = {v: st for v, st, _, _ in RELEASES}
+    stage["v1.0.0"] = "P1"
+    print("```mermaid")
+    print('%%{init: {"gantt": {"fontSize": 14, "sectionFontSize": 14, "barHeight": 26, "barGap": 6, "leftPadding": 150}}}%%')
+    print("gantt\n  todayMarker off\n  dateFormat YYYY-MM-DD\n  axisFormat %d.%m\n  excludes weekends")
+    current = None
+    for version, title, _, b, e, note in schedule("base", start):
+        if stage[version] != current:
+            current = stage[version]
+            print(f"  section {sections[current]}")
+        label = f"{version} {title.split(':')[0]}".replace(":", " ").replace("(", "").replace(")", "")
+        days, day = 0, b
+        while day <= e:  # Mermaid с excludes weekends считает только рабочие дни
+            days += day.weekday() < 5 and day not in HOLIDAYS
+            day += dt.timedelta(days=1)
+        print(f"  {label} :{b.isoformat()}, {max(days, 1)}d")
+    print("```")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--start", type=dt.date.fromisoformat, help="дата старта, ГГГГ-ММ-ДД")
+    parser.add_argument("--holidays", type=dt.date.fromisoformat, nargs="*", default=[],
+                        help="нерабочие даты сверх выходных")
+    parser.add_argument("--gantt", action="store_true", help="диаграмма Ганта (Mermaid), нужен --start")
     args = parser.parse_args()
+    HOLIDAYS.update(args.holidays)
     main()
     if args.start:
         print_schedule(args.start)
+        if args.gantt:
+            print_gantt(args.start)
