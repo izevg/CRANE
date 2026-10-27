@@ -70,7 +70,7 @@ cosign verify <CRANE image> \
   --certificate-oidc-issuer '<OIDC issuer>'
 ```
 
-Exact values will be published with the first release.
+Exact values will be published with the first public release (v0.5.0).
 
 ## Cyber Resilience Act
 
