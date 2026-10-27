@@ -111,10 +111,12 @@ pub struct Decision { pub allow: bool, pub rules: Vec<PolicyId>, pub reason: Rea
 ///
 /// Задача может выполниться повторно после истечения lease, поэтому обработчики идемпотентны.
 pub trait JobQueue: Send + Sync {
-    async fn claim(&self, kinds: &[JobKind], n: usize, lease: Duration) -> Result<Vec<Job>>;
-    async fn complete(&self, id: JobId, attempt: u32) -> Result<()>;            // attempt — токен владения
-    async fn fail(&self, id: JobId, attempt: u32, error: &str) -> Result<()>;   // повтор с backoff или job_dead
+    async fn claim(&self, kinds: &[JobKind], n: usize, lease: Duration) -> Result<Vec<Claimed>>;
+    async fn complete(&self, job: Claimed) -> Result<()>;                // потребляет токен
+    async fn fail(&self, job: Claimed, error: &str) -> Result<()>;       // повтор с backoff или job_dead
 }
+// Claimed не Clone и несёт id, kind, payload и attempt (токен владения): тот же приём, что
+// Staged -> commit(Staged). Перепутать id и attempt или завершить задачу дважды нельзя.
 // Типа транзакции (Tx) в портах нет. Каталог принимает задачи данными:
 // publish_version(new, jobs: &[NewJob]), адаптер пишет данные и строки job в одной транзакции.
 // Параметр jobs появится вместе с первой задачей (не в v0.1.0).
@@ -194,9 +196,9 @@ classDiagram
   }
   class JobQueue {
     <<trait>>
-    +claim()
-    +complete()
-    +fail()
+    +claim() Claimed
+    +complete(Claimed)
+    +fail(Claimed, error)
   }
   class Worker {
     +run(kinds)

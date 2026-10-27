@@ -231,7 +231,7 @@ CREATE TABLE job (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   kind text NOT NULL, payload json NOT NULL,
   attempts int NOT NULL DEFAULT 0,
-  run_at timestamptz NOT NULL,       -- «невидима до»: срок lease или время повтора
+  run_at timestamptz NOT NULL DEFAULT now(),  -- «невидима до»: срок lease или время повтора; новая задача видна сразу, если производитель не задал позже
   claimed_at timestamptz,            -- без индекса, для наблюдаемости
   last_error text);
 CREATE INDEX job_run_at ON job (run_at);   -- единственный индекс, кроме PK
@@ -247,12 +247,12 @@ RETURNING id, kind, payload, attempts;
 
 | Событие | Операция |
 | --- | --- |
-| Успех | `DELETE FROM job WHERE id = $1 AND attempts = $2`: завершённые задачи удаляются, а не помечаются |
-| Ошибка | `UPDATE job SET run_at = now() + backoff, last_error = $3 WHERE id = $1 AND attempts = $2` |
+| Успех | `complete(Claimed)`: `DELETE FROM job WHERE id = $1 AND attempts = $2` (id и attempts берутся из `Claimed`); завершённые задачи удаляются, а не помечаются |
+| Ошибка | `fail(Claimed, error)`: `UPDATE job SET run_at = now() + backoff, last_error = $3 WHERE id = $1 AND attempts = $2` |
 | Исчерпаны попытки | Строка переезжает в append-only `job_dead` (партиции по `died_at`, если таблица растёт) |
 | Просрочен lease | Задача снова видна по `run_at <= now()` и берётся другим воркером |
 
--   **`attempts` — токен владения.** Воркер с истёкшим lease не перезапишет задачу, которую уже взял другой: его `complete` и `fail` не совпадут по `attempts`. Поэтому обработчики идемпотентны.
+-   **`attempts` — токен владения.** Воркер с истёкшим lease не перезапишет задачу, которую уже взял другой: его `complete` и `fail` не совпадут по `attempts` из `Claimed`. Поэтому обработчики идемпотентны.
 -   **Горячая таблица маленькая**: только невыполненные и выполняемые задачи.
 -   **autovacuum агрессивный** из-за churn от DELETE и UPDATE: например, `autovacuum_vacuum_scale_factor = 0.01` и малая задержка cost. fillfactor не настраивается: claim меняет индексированный `run_at`, HOT невозможен.
 -   **Пробуждение воркеров:** `NOTIFY` в той же транзакции, что и вставка, плюс периодический опрос как запасной путь. `LISTEN` требует отдельного прямого соединения и не работает через PgBouncer в transaction mode.
