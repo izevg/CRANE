@@ -147,6 +147,12 @@ export const Narrow: Story = {
     );
     const list = canvas.getByRole("list", { name: "Жизненный цикл версии 1.4.2" });
     await expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+    // Мета, деталь и ссылка начинаются от левого края заголовка, а не от колонки точки (±1 px)
+    const left = title.getBoundingClientRect().left;
+    const meta = (canvas.getAllByText("Trivy")[0] as HTMLElement).closest("div") as HTMLElement;
+    const link = canvas.getByRole("link", { name: "CVE-2026-31337" });
+    await expect(Math.abs(meta.getBoundingClientRect().left - left)).toBeLessThanOrEqual(1);
+    await expect(Math.abs(link.getBoundingClientRect().left - left)).toBeLessThanOrEqual(1);
   },
 };
 

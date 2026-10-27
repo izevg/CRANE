@@ -35,7 +35,7 @@ export function AlertDialogContent({
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         className={cx(
-          "anim-dialog fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-[calc(100%-2rem)] flex-col -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-6 text-body text-popover-foreground shadow-card outline-none",
+          "anim-dialog fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-[calc(100%-2rem)] flex-col -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover [--timeline-surface:var(--popover)] p-6 text-body text-popover-foreground shadow-card outline-none",
           SIZE[size],
           className,
         )}

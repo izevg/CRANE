@@ -89,3 +89,21 @@ export const IndicatorMotion: Story = {
     await expect(getComputedStyle(indicator).transitionProperty).not.toMatch(LAYOUT_OR_ALL);
   },
 };
+
+/** При reduced motion индикатор не скользит: переход нулевой длины, а не укороченный до 150 мс. */
+export const IndicatorReducedMotion: Story = {
+  ...IndicatorMotion,
+  name: "Индикатор line: при reduced motion без перехода",
+  play: async ({ canvasElement }) => {
+    const indicator = canvasElement.querySelector("[data-slot=tabs-indicator]");
+    if (!(indicator instanceof HTMLElement)) {
+      throw new Error("нет индикатора");
+    }
+    document.documentElement.setAttribute("data-motion", "reduce");
+    try {
+      await expect(getComputedStyle(indicator).transitionDuration).toBe("0s");
+    } finally {
+      document.documentElement.removeAttribute("data-motion");
+    }
+  },
+};

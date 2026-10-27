@@ -41,7 +41,9 @@ const NBSP = " ";
 
 // Классы записаны целиком: Tailwind находит их по тексту исходников.
 // Порог узкого режима (20rem) считается по ширине самой ленты (`@container/timeline` на `<ol>`).
-const ROW_START = "col-start-2 col-span-2 @max-[20rem]/timeline:col-span-1";
+// Строки меты, детали и ссылки занимают колонки со 2-й до последней в обоих режимах: без переопределения span,
+// иначе `col-span-1` сбрасывает `col-start-2` и строка падает в колонку точки.
+const ROW_START = "col-[2/-1]";
 // StatusBadge выравнивает флекс-элементы по центру, и его базовая линия берётся от иконки, а не от текста (на 3px выше).
 // Чип центрируется на первой строке заголовка (24px против строки 20px → смещение −2px): разница базовых линий ≤ 1px.
 const STATUS_CELL =
@@ -134,7 +136,7 @@ export function Timeline({ items, label }: TimelineProps) {
         >
           <span
             aria-hidden="true"
-            className="absolute top-[10px] -bottom-[26px] left-[5.5px] w-px bg-border group-last/item:hidden"
+            className="absolute top-[10px] -bottom-[10px] left-[5.5px] w-px bg-border group-last/item:hidden"
           />
           <span
             aria-hidden="true"

@@ -56,7 +56,7 @@ export function DialogContent({
         className={cx(
           // Палитра открывается по Ctrl+K много раз за сессию: без анимации входа и выхода (spec 2), в отличие от диалога
           size === "palette" ? "" : "anim-dialog",
-          "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] flex-col -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-body text-popover-foreground shadow-card outline-none",
+          "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] flex-col -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover [--timeline-surface:var(--popover)] text-body text-popover-foreground shadow-card outline-none",
           SIZE[size],
           flush ? FLUSH : PADDED,
           className,

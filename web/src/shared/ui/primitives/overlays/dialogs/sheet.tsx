@@ -38,7 +38,7 @@ export function SheetContent({
         data-slot="sheet-content"
         data-side={side}
         className={cx(
-          "anim-sheet fixed z-50 flex max-h-dvh flex-col gap-4 bg-popover text-body text-popover-foreground shadow-card outline-none",
+          "anim-sheet fixed z-50 flex max-h-dvh flex-col gap-4 bg-popover [--timeline-surface:var(--popover)] text-body text-popover-foreground shadow-card outline-none",
           SIDE[side],
           className,
         )}

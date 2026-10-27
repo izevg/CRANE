@@ -53,7 +53,7 @@ const SCALE_OK = "supports-[scale:calc(10px/1px)]:";
  * в CSS размер меняется скачком, а скользит только `translate`. Токены движения короче при reduced motion (motion.css).
  */
 const INDICATOR = [
-  "pointer-events-none absolute bg-brand transition-[translate,scale] duration-(--dur-base) ease-(--ease-out) forced-colors:bg-[Highlight]",
+  "pointer-events-none absolute bg-brand transition-[translate,scale] duration-(--dur-base) ease-(--ease-out) motion-reduce:duration-0 in-data-[motion=reduce]:duration-0 forced-colors:bg-[Highlight]",
   `${H}bottom-0 ${H}left-0 ${H}h-0.5 ${H}origin-left ${H}w-(--active-tab-width) ${H}translate-x-(--active-tab-left)`,
   `${H}${SCALE_OK}w-px ${H}${SCALE_OK}scale-x-[calc(var(--active-tab-width)/1px)]`,
   `${V}top-0 ${V}right-0 ${V}w-0.5 ${V}origin-top ${V}h-(--active-tab-height) ${V}translate-y-(--active-tab-top)`,
