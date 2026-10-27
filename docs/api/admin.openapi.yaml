@@ -905,7 +905,7 @@ paths:
       - catalog
       summary: Команды установки
       description: |-
-        Без секрета: токен подставляется как `${CRANE_TOKEN}`. Клиент, несовместимый с форматом пакета (матрица в InstallClient), даёт 400.
+        Без секрета: токен подставляется как `${CRANE_TOKEN}`. Клиент, недоступный для репозитория (матрица в InstallClient), не ошибка: сервер отдаёт инструкции клиента по умолчанию, а фактический клиент указан в `client` ответа. 400 - только для значения вне перечисления.
 
         Роли: reader, developer, maintainer, owner, appsec, secops, platform-admin.
       operationId: getInstallInstructions
