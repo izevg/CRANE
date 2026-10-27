@@ -242,4 +242,5 @@ async fn terminate() {
 }
 
 #[cfg(test)]
+#[path = "tests/stack.rs"]
 mod stack_tests;
