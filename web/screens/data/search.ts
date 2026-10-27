@@ -18,7 +18,7 @@ type Draft = {
   risk?: { priority: "P0" | "P1" | "P2" | "P3"; findings: number };
 };
 
-export type ResultRow = { id: string; item: SearchItem };
+export type ResultRow = { id: string; item: SearchItem; typosquatHref?: string };
 
 const PROXY_SUFFIX = /proxy$/;
 const TYPOSQUAT_DISTANCE = 1;
@@ -226,10 +226,19 @@ const DRAFTS: readonly Draft[] = [
   },
 ];
 
-export const RESULTS: readonly ResultRow[] = DRAFTS.map((draft) => ({
-  id: draft.id,
-  item: toItem(draft),
-}));
+function typosquatHref(draft: Draft): string | undefined {
+  const original = DRAFTS.find((candidate) => candidate.name === draft.typosquatOf);
+  return original === undefined ? undefined : `/packages/${original.id}`;
+}
+
+export const RESULTS: readonly ResultRow[] = DRAFTS.map((draft) => {
+  const href = typosquatHref(draft);
+  return {
+    id: draft.id,
+    item: toItem(draft),
+    ...(href === undefined ? {} : { typosquatHref: href }),
+  };
+});
 
 const FORMAT_COUNTS = { npm: 21, pypi: 8, maven: 5, nuget: 3, cargo: 1 } as const satisfies Record<
   Format,

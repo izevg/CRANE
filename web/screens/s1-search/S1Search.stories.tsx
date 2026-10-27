@@ -171,8 +171,13 @@ function ResultsList() {
       <p role="status" className="text-caption text-muted-foreground tabular-nums">
         {t`38 результатов · 74 мс`}
       </p>
-      {RESULTS.map(({ id, item }) => (
-        <SearchResultCard key={id} item={item} href={`/packages/${id}`} />
+      {RESULTS.map(({ id, item, typosquatHref }) => (
+        <SearchResultCard
+          key={id}
+          item={item}
+          href={`/packages/${id}`}
+          {...(typosquatHref === undefined ? {} : { typosquatHref })}
+        />
       ))}
     </section>
   );

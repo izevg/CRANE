@@ -26,18 +26,26 @@ function TyposquatNotice({ typosquat, href }: { typosquat: Typosquat; href: stri
   const { t } = useLingui();
   const { similar_to: similarTo, distance } = typosquat;
   return (
-    <Callout tone="warning" className="py-1 text-caption">
-      {t`${plural(distance, {
-        one: `Похоже на ${similarTo} — # символ (возможный typosquat).`,
-        few: `Похоже на ${similarTo} — # символа (возможный typosquat).`,
-        many: `Похоже на ${similarTo} — # символов (возможный typosquat).`,
-        other: `Похоже на ${similarTo} — # символа (возможный typosquat).`,
-      })}`}{" "}
-      {href === undefined ? null : (
-        <Link href={href} className="underline">
+    <Callout
+      tone="warning"
+      className="flex w-fit max-w-full flex-wrap items-baseline gap-x-1 py-1 text-caption"
+    >
+      <span>{t`Похоже на`}</span>
+      {href === undefined ? (
+        <span className="font-mono wrap-anywhere">{similarTo}</span>
+      ) : (
+        <Link href={href} className="font-mono underline wrap-anywhere">
           {similarTo}
         </Link>
       )}
+      <span>
+        {t`— отличается на ${plural(distance, {
+          one: "# символ",
+          few: "# символа",
+          many: "# символов",
+          other: "# символа",
+        })} (возможный typosquat)`}
+      </span>
     </Callout>
   );
 }

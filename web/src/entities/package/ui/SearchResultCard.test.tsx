@@ -5,7 +5,7 @@ import { BASE_ITEM } from "./fixtures";
 import { SearchResultCard } from "./SearchResultCard";
 
 const PILL = /^P\d · /;
-const SQUAT = /Похоже на @acme\/ui — 1 символ/;
+const SQUAT = /отличается на 1 символ/;
 const ANY_DOWNLOADS = /загрузок за 30 дн/;
 const DOWNLOADS = /12\s?340 загрузок за 30 дн/;
 
@@ -95,6 +95,16 @@ describe("SearchResultCard", () => {
       "/packages/real-acme-ui",
       "/packages/acme-ui",
     ]);
+  });
+
+  it("typosquat без typosquatHref называет пакет без ссылки", () => {
+    // Arrange
+    // Act
+    card({ typosquat: { similar_to: "@acme/ui", distance: 1 } });
+
+    // Assert
+    expect(screen.getByText(SQUAT)).toBeVisible();
+    expect(screen.getAllByRole("link")).toHaveLength(1);
   });
 
   it("ссылка в карточке одна — на имени пакета", () => {

@@ -123,5 +123,5 @@ export const Dark: Story = {
   },
 };
 
-const SQUAT = /Похоже на @acme\/ui — 1 символ/;
+const SQUAT = /отличается на 1 символ/;
 const DOWNLOADS_EN = /12,340 downloads in 30 d/;

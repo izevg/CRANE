@@ -10,6 +10,9 @@ msgstr ""
 msgid " (откроется в новой вкладке)"
 msgstr " (откроется в новой вкладке)"
 
+msgid "— отличается на {distance, plural, one {# символ} few {# символа} many {# символов} other {# символа}} (возможный typosquat)"
+msgstr "— отличается на {distance, plural, one {# символ} few {# символа} many {# символов} other {# символа}} (возможный typosquat)"
+
 msgid ", требуется подтверждение входа"
 msgstr ", требуется подтверждение входа"
 
@@ -24,9 +27,6 @@ msgstr "{count, plural, one {Выбрана # строка} few {Выбрано 
 
 msgid "{count} из {minLength}"
 msgstr "{count} из {minLength}"
-
-msgid "{distance, plural, one {Похоже на {similarTo} — # символ (возможный typosquat).} few {Похоже на {similarTo} — # символа (возможный typosquat).} many {Похоже на {similarTo} — # символов (возможный typosquat).} other {Похоже на {similarTo} — # символа (возможный typosquat).}}"
-msgstr "{distance, plural, one {Похоже на {similarTo} — # символ (возможный typosquat).} few {Похоже на {similarTo} — # символа (возможный typosquat).} many {Похоже на {similarTo} — # символов (возможный typosquat).} other {Похоже на {similarTo} — # символа (возможный typosquat).}}"
 
 msgid "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
 msgstr "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
@@ -306,6 +306,9 @@ msgstr "После подтверждения вы вернётесь к дей�
 
 msgid "Последняя"
 msgstr "Последняя"
+
+msgid "Похоже на"
+msgstr "Похоже на"
 
 msgid "Правило: {ruleId}"
 msgstr "Правило: {ruleId}"
