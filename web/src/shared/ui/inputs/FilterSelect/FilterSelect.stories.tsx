@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 import { FilterSelect } from "~/shared/ui/inputs";
 
 const REPOSITORIES = [
@@ -48,16 +48,20 @@ export const Repositories: Story = {
   args: { label: "Репозиторий", allLabel: "Все репозитории", options: REPOSITORIES, initial: null },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const body = within(document.body);
     const trigger = canvas.getByRole("combobox", { name: "Репозиторий" });
-    await expect(trigger).toHaveTextContent("Все репозитории");
+    // Повторно открывать список можно только после того, как закрылся предыдущий (exit-анимация): иначе
+    // `findByRole("option")` может попасть в закрывающийся список.
+    const listClosed = () => waitFor(() => expect(body.queryByRole("listbox")).toBeNull());
+    await waitFor(() => expect(trigger).toHaveTextContent("Все репозитории"));
     await userEvent.click(trigger);
-    await userEvent.click(await within(document.body).findByRole("option", { name: "pypi-proxy" }));
-    await expect(trigger).toHaveTextContent("pypi-proxy");
+    await userEvent.click(await body.findByRole("option", { name: "pypi-proxy" }));
+    await waitFor(() => expect(trigger).toHaveTextContent("pypi-proxy"));
+    await listClosed();
     await userEvent.click(trigger);
-    await userEvent.click(
-      await within(document.body).findByRole("option", { name: "Все репозитории" }),
-    );
-    await expect(trigger).toHaveTextContent("Все репозитории");
+    await userEvent.click(await body.findByRole("option", { name: "Все репозитории" }));
+    await waitFor(() => expect(trigger).toHaveTextContent("Все репозитории"));
+    await listClosed();
   },
 };
 
