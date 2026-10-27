@@ -1,7 +1,11 @@
 //! Помощники интеграционных тестов с реальным Valkey.
 //!
-//! `CRANE_TEST_VALKEY_URL` - адрес сервера без номера БД (например `valkey://127.0.0.1:6379`).
-//! Без переменной тесты сообщают о пропуске и завершаются успешно, чтобы обычный `cargo test`
+//! `CRANE_TEST_VALKEY_URL` - адрес сервера без номера БД, под тем пользователем, под которым
+//! работает продукт (например `valkey://crane:пароль@127.0.0.1:6379`). Экземпляры адаптера идут под ним.
+//! `CRANE_TEST_VALKEY_ADMIN_URL` - необязательный адрес для `FLUSHDB` и `CLIENT LIST`, которые
+//! прод-ACL запрещает (например `valkey://crane-test:пароль@127.0.0.1:6379`); без неё админ-клиент
+//! подключается по `CRANE_TEST_VALKEY_URL` (локальный Valkey без ACL).
+//! Без `CRANE_TEST_VALKEY_URL` тесты сообщают о пропуске и завершаются успешно, чтобы обычный `cargo test`
 //! работал без Docker.
 //!
 //! `CRANE_TEST_REQUIRE_VALKEY=1` запрещает пропуск: без `CRANE_TEST_VALKEY_URL` тест падает.
@@ -30,6 +34,7 @@ use fred::types::{ClusterHash, CustomCommand};
 use uuid::Uuid;
 
 const URL_ENV: &str = "CRANE_TEST_VALKEY_URL";
+const ADMIN_URL_ENV: &str = "CRANE_TEST_VALKEY_ADMIN_URL";
 const REQUIRE_ENV: &str = "CRANE_TEST_REQUIRE_VALKEY";
 
 /// Бюджет L1 тестовых экземпляров, байт: хватает с большим запасом.
@@ -41,6 +46,7 @@ const POLL_STEP: Duration = Duration::from_millis(10);
 
 pub(crate) struct TestServer {
     base: String,
+    admin_base: String,
 }
 
 /// Выполняет `body` на рантайме с несколькими потоками; без `CRANE_TEST_VALKEY_URL` пропускает
@@ -58,9 +64,10 @@ pub(crate) fn run(body: impl AsyncFnOnce(&TestServer)) {
         .enable_all()
         .build()
         .expect("runtime тестов");
-    let server = TestServer {
-        base: base.trim_end_matches('/').to_owned(),
-    };
+    let base = base.trim_end_matches('/').to_owned();
+    let admin_base = std::env::var(ADMIN_URL_ENV)
+        .map_or_else(|_| base.clone(), |url| url.trim_end_matches('/').to_owned());
+    let server = TestServer { base, admin_base };
     runtime.block_on(body(&server));
 }
 
@@ -88,6 +95,10 @@ async fn await_commands(valkey: &Valkey) {
 impl TestServer {
     fn url(&self, db: u8) -> String {
         format!("{}/{db}", self.base)
+    }
+
+    fn admin_url(&self, db: u8) -> String {
+        format!("{}/{db}", self.admin_base)
     }
 
     fn start(&self, db: u8) -> Valkey {
@@ -155,7 +166,8 @@ impl TestServer {
     }
 
     async fn admin(&self, db: u8) -> Client {
-        let config = Config::from_url(&self.url(db)).expect("CRANE_TEST_VALKEY_URL валиден");
+        let config =
+            Config::from_url(&self.admin_url(db)).expect("адрес администратора Valkey валиден");
         let client = Client::new(config, None, None, None);
         client.init().await.expect("подключение администратора");
         client

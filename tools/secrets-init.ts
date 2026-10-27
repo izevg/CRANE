@@ -1,4 +1,4 @@
-// Создаёт недостающие файлы секретов для compose: токен, пароль PostgreSQL, URL каталога, ключ S3.
+// Создаёт недостающие файлы секретов для compose: токен, пароли PostgreSQL и Valkey, URL каталога и кэша, ключ S3.
 // Идемпотентно: существующие файлы не перезаписываются. Значения нигде не печатаются.
 // Использование: task secrets:init (пути и имена берутся из .env).
 import { randomBytes } from "node:crypto";
@@ -15,6 +15,8 @@ const REQUIRED = [
   "CRANE_TOKEN_SECRET",
   "POSTGRES_PASSWORD_SECRET",
   "CRANE_DATABASE_URL_SECRET",
+  "VALKEY_PASSWORD_SECRET",
+  "CRANE_CACHE_URL_SECRET",
   "POSTGRES_USER",
   "POSTGRES_DB",
 ];
@@ -59,6 +61,8 @@ export function initSecrets(env: Env, root: string, random = randomHex): string[
     ensure("S3_ACCESS_KEY_ID_SECRET", random);
     ensure("S3_SECRET_ACCESS_KEY_SECRET", random);
   }
+  const valkeyPassword = ensure("VALKEY_PASSWORD_SECRET", random);
+  ensure("CRANE_CACHE_URL_SECRET", () => `valkey://crane:${valkeyPassword}@valkey:6379`);
   return created;
 }
 

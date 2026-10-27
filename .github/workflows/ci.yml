@@ -75,7 +75,7 @@ jobs:
         run: pnpm run lint:structure
       - name: Compose-файлы и Helm-чарт
         run: |
-          docker compose --env-file .env.dist --profile cache --profile scan --profile s3 config -q
+          docker compose --env-file .env.dist -f docker-compose.yaml -f docker-compose.cache.yaml --profile scan --profile s3 config -q
           docker compose --env-file .env.dist -f docker-compose.dev.yaml --profile s3 --profile scan config -q
           helm lint deploy/helm/crane --set existingSecret=crane-env
           helm template crane deploy/helm/crane --set existingSecret=crane-env --set ingress.enabled=true >/dev/null
