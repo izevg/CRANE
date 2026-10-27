@@ -85,7 +85,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     // Параметры подключения с паролем нужны были только для подключения.
     drop(settings.storage);
     let ids = Arc::new(UuidV7Ids);
-    for (format, names) in settings.repos.iter() {
+    for (format, names) in settings.repos.of_kind(RepositoryKind::Hosted) {
         for name in names {
             catalog
                 .ensure_repository(Repository {
@@ -97,13 +97,15 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
                 .await?;
         }
     }
-    let cargo = CargoSettings {
-        public_url: settings.public_url.clone(),
-        max_publish_bytes: settings.max_publish_bytes,
-    };
-    let npm = NpmSettings {
-        public_url: settings.public_url,
-        max_publish_bytes: settings.max_publish_bytes,
+    let formats = FormatSettings {
+        cargo: CargoSettings {
+            public_url: settings.public_url.clone(),
+            max_publish_bytes: settings.max_publish_bytes,
+        },
+        npm: NpmSettings {
+            public_url: settings.public_url,
+            max_publish_bytes: settings.max_publish_bytes,
+        },
     };
     // Registry и движок делят один CAS: скачанные архивы лежат там же, где опубликованные.
     let blobs = Arc::new(blobs);
@@ -111,9 +113,9 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         &catalog,
         ids.as_ref(),
         Arc::clone(&blobs),
+        &settings.repos,
         settings.proxy,
-        &cargo,
-        &npm,
+        &formats,
     )
     .await?;
     // Один приёмник на use cases и на слой auth; в v0.4.0 действия записи уйдут в журнал PG.
@@ -131,7 +133,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     drop(settings.token);
     let api = api_router(
         registry,
-        FormatSettings { cargo, npm },
+        formats,
         token,
         settings.trusted_proxies,
         audit,
@@ -142,10 +144,11 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
 
 async fn serve_async(settings: Settings) -> Result<(), RunError> {
     let (http_port, admin_port) = (settings.http_port, settings.admin_port);
-    let repos = settings.repos.names(Format::Cargo).to_vec();
-    let proxy_repos = settings.proxy.repos.names(Format::Cargo).to_vec();
-    let npm_repos = settings.repos.names(Format::Npm).to_vec();
-    let npm_proxy_repos = settings.proxy.repos.names(Format::Npm).to_vec();
+    let names = |format, kind| settings.repos.names(format, kind).to_vec();
+    let repos = names(Format::Cargo, RepositoryKind::Hosted);
+    let proxy_repos = names(Format::Cargo, RepositoryKind::Proxy);
+    let npm_repos = names(Format::Npm, RepositoryKind::Hosted);
+    let npm_proxy_repos = names(Format::Npm, RepositoryKind::Proxy);
     let (api, admin) = routers(settings).await?;
 
     let api_listener = bind(http_port).await?;
@@ -239,4 +242,5 @@ async fn terminate() {
 }
 
 #[cfg(test)]
+#[path = "tests/stack.rs"]
 mod stack_tests;

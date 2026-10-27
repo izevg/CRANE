@@ -10,7 +10,7 @@ use bytes::Bytes;
 use crane_domain::registry::{Checksum, Format, FormatMetadata, PackageName, Sha1, Version};
 use serde::{Deserialize, Serialize};
 
-use super::{Body, WriteError, parse_tag, string_field};
+use super::{Attachment, Body, WriteError, parse_tag, string_field};
 use crate::packument::{Fields, Raw};
 use crate::route::tarball_file;
 use crate::sri::{parse_sri, sha512_of};
@@ -83,7 +83,7 @@ pub(super) fn publish(package: &PackageName, body: Body<'_>) -> Result<NpmPublis
         return Err(WriteError::NotSingleVersion);
     };
     let mut versions = versions.into_iter();
-    let (Some((key, mut manifest)), None) = (versions.next(), versions.next()) else {
+    let (Some((key, manifest)), None) = (versions.next(), versions.next()) else {
         return Err(WriteError::NotSingleVersion);
     };
     let mut attachments = attachments.into_iter();
@@ -111,6 +111,22 @@ pub(super) fn publish(package: &PackageName, body: Body<'_>) -> Result<NpmPublis
     let tag = single_tag(body.dist_tags, &key)?;
     check_dependencies(&manifest)?;
 
+    let tarball = decode_attachment(&attachment)?;
+    let declared = declared_sums(&manifest)?;
+    let metadata = stored_metadata(manifest, &declared)?;
+
+    Ok(NpmPublish {
+        version,
+        file: expected_file,
+        tarball: Bytes::from(tarball),
+        declared: declared.sums,
+        tag,
+        metadata,
+    })
+}
+
+/// Вложение: base64 и, если клиент заявил длину, её совпадение с фактической.
+fn decode_attachment(attachment: &Attachment<'_>) -> Result<Vec<u8>, WriteError> {
     let tarball = STANDARD
         .decode(attachment.data.as_bytes())
         .map_err(|_| WriteError::Base64)?;
@@ -120,39 +136,52 @@ pub(super) fn publish(package: &PackageName, body: Body<'_>) -> Result<NpmPublis
             return Err(WriteError::LengthMismatch { declared, actual });
         }
     }
+    Ok(tarball)
+}
 
+/// Суммы, заявленные клиентом в `dist`.
+struct DeclaredSums {
+    integrity: String,
+    shasum: Option<String>,
+    /// Из `integrity` (sha512 обязательна) плюс sha1 из `shasum`, если её там не было.
+    sums: Vec<Checksum>,
+}
+
+fn declared_sums(manifest: &Fields<'_>) -> Result<DeclaredSums, WriteError> {
     let sent: SentDist = match manifest.get("dist") {
         Some(dist) => serde_json::from_str(dist.get())?,
         None => return Err(WriteError::MissingIntegrity),
     };
     let integrity = sent.integrity.ok_or(WriteError::MissingIntegrity)?;
-    let mut declared = parse_sri(&integrity).map_err(|_| WriteError::BadIntegrity)?;
-    sha512_of(&declared).ok_or(WriteError::MissingSha512)?;
+    let mut sums = parse_sri(&integrity).map_err(|_| WriteError::BadIntegrity)?;
+    sha512_of(&sums).ok_or(WriteError::MissingSha512)?;
     if let Some(shasum) = &sent.shasum {
         let sha1 = Checksum::Sha1(Sha1::from_hex(shasum).map_err(|_| WriteError::BadShasum)?);
-        if !declared.contains(&sha1) {
-            declared.push(sha1);
+        if !sums.contains(&sha1) {
+            sums.push(sha1);
         }
     }
+    Ok(DeclaredSums {
+        integrity,
+        shasum: sent.shasum,
+        sums,
+    })
+}
 
+/// Манифест для хранения: служебные поля убраны, `dist` сведён к суммам.
+fn stored_metadata(
+    mut manifest: Fields<'_>,
+    declared: &DeclaredSums,
+) -> Result<FormatMetadata, WriteError> {
     let stored = StoredDist {
-        integrity: &integrity,
-        shasum: sent.shasum.as_deref(),
+        integrity: &declared.integrity,
+        shasum: declared.shasum.as_deref(),
     };
     manifest.retain(|key, _| {
         (!key.starts_with('_') || key == KEPT_UNDERSCORE) && !DROPPED.contains(&key.as_ref())
     });
     manifest.insert("dist".into(), Raw::owned(&stored)?);
-    let metadata = FormatMetadata::new(serde_json::to_string(&manifest)?);
-
-    Ok(NpmPublish {
-        version,
-        file: expected_file,
-        tarball: Bytes::from(tarball),
-        declared,
-        tag,
-        metadata,
-    })
+    Ok(FormatMetadata::new(serde_json::to_string(&manifest)?))
 }
 
 /// Ровно один тег, и он указывает на публикуемую версию.

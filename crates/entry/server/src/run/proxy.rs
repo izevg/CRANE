@@ -8,8 +8,7 @@ use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_format_cargo::{DL_HOST, INDEX_HOST};
 use crane_format_npm::REGISTRY_HOST;
 use crane_http::{
-    CargoProxyOrigins, CargoSettings, NpmSettings, ProxyRouters, cargo_proxy_router,
-    npm_proxy_router,
+    CargoProxyOrigins, FormatSettings, ProxyRouters, cargo_proxy_router, npm_proxy_router,
 };
 use crane_ports::registry::{BlobStore, Catalog};
 use crane_ports::system::IdGen;
@@ -17,7 +16,7 @@ use crane_upstream::HttpUpstream;
 
 use super::RunError;
 use crate::cache;
-use crate::config::{Proxy, proxy_var};
+use crate::config::{Proxy, Repos, proxy_var};
 use crate::system::SystemClock;
 
 /// Регистрирует proxy-репозиторий; hosted с тем же именем молча превращать в proxy нельзя,
@@ -56,11 +55,11 @@ pub(super) async fn proxies<C: Catalog, B: BlobStore + 'static>(
     catalog: &C,
     ids: &dyn IdGen,
     blobs: Arc<B>,
+    repos: &Repos,
     proxy: Proxy,
-    cargo_settings: &CargoSettings,
-    npm_settings: &NpmSettings,
+    formats: &FormatSettings,
 ) -> Result<ProxyRouters, RunError> {
-    if proxy.repos.is_empty() {
+    if !repos.any(RepositoryKind::Proxy) {
         return Ok(ProxyRouters::default());
     }
     // Хосты upstream зашиты в форматы: proxy ходит только на них, и только по https.
@@ -82,7 +81,7 @@ pub(super) async fn proxies<C: Catalog, B: BlobStore + 'static>(
         },
     );
     let mut routers = ProxyRouters::default();
-    for name in proxy.repos.names(Format::Cargo) {
+    for name in repos.names(Format::Cargo, RepositoryKind::Proxy) {
         let stored = register(catalog, ids, Format::Cargo, name).await?;
         // Индекс и архивы под одним id: ключи не пересекаются (первый сегмент `crates` не бывает у индекса).
         let origins = CargoProxyOrigins {
@@ -97,10 +96,10 @@ pub(super) async fn proxies<C: Catalog, B: BlobStore + 'static>(
         };
         routers.cargo.push((
             name.clone(),
-            cargo_proxy_router(engine.clone(), origins, cargo_settings, name),
+            cargo_proxy_router(engine.clone(), origins, &formats.cargo, name),
         ));
     }
-    for name in proxy.repos.names(Format::Npm) {
+    for name in repos.names(Format::Npm, RepositoryKind::Proxy) {
         let stored = register(catalog, ids, Format::Npm, name).await?;
         // Документы и архивы под одним id: ключи не пересекаются (архивы всегда содержат `/-/`).
         let origin = Origin {
@@ -109,7 +108,7 @@ pub(super) async fn proxies<C: Catalog, B: BlobStore + 'static>(
         };
         routers.npm.push((
             name.clone(),
-            npm_proxy_router(engine.clone(), origin, npm_settings, name),
+            npm_proxy_router(engine.clone(), origin, &formats.npm, name),
         ));
     }
     Ok(routers)
@@ -128,7 +127,9 @@ mod tests {
     use tokio::runtime::Builder;
 
     use super::*;
-    use crate::config::{Cache, FormatRepos};
+    use crane_http::{CargoSettings, NpmSettings};
+
+    use crate::config::{Cache, Repos};
 
     const NAME: &str = "crates-io";
 
@@ -168,13 +169,15 @@ mod tests {
             catalog,
             &SequentialIdGen::default(),
             Arc::new(MemoryBlobStore::default()),
+            &Repos::of(Format::Cargo, RepositoryKind::Proxy, vec![NAME.to_owned()]),
             Proxy {
-                repos: FormatRepos::of(Format::Cargo, vec![NAME.to_owned()]),
                 cache: Cache::Memory,
                 max_artifact_bytes: ProxyLimits::DEFAULT.max_artifact_bytes,
             },
-            &settings(),
-            &npm_settings(),
+            &FormatSettings {
+                cargo: settings(),
+                npm: npm_settings(),
+            },
         )
         .await
     }
@@ -184,13 +187,15 @@ mod tests {
             catalog,
             &SequentialIdGen::default(),
             Arc::new(MemoryBlobStore::default()),
+            &Repos::of(Format::Npm, RepositoryKind::Proxy, vec![NAME.to_owned()]),
             Proxy {
-                repos: FormatRepos::of(Format::Npm, vec![NAME.to_owned()]),
                 cache: Cache::Memory,
                 max_artifact_bytes: ProxyLimits::DEFAULT.max_artifact_bytes,
             },
-            &settings(),
-            &npm_settings(),
+            &FormatSettings {
+                cargo: settings(),
+                npm: npm_settings(),
+            },
         )
         .await
     }

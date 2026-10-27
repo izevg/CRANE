@@ -12,9 +12,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::http::{Method, StatusCode};
+use common::capture::capture_logs;
 use common::npm::{TARBALL, bearer, integrity};
 use common::proxy::{FakeUpstream, NPM_NAME, NpmProxy, Step};
-use common::{Api, PUBLIC_URL, Reply, capture_logs};
+use common::{Api, PUBLIC_URL, Reply};
 use crane_memory::ManualClock;
 use serde_json::{Value, json};
 

@@ -111,18 +111,7 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
   );
 
   const overrides = join(tmp, "overrides.env");
-  // Режимы в базовой команде: up, logs и down (в том числе повторный после смены подсети) видят valkey,
-  // seaweedfs, сеть и том s3.
-  const compose = [
-    "compose",
-    "-p",
-    project,
-    ...COMPOSE_MODES,
-    "--env-file",
-    ENV_DIST,
-    "--env-file",
-    overrides,
-  ];
+  const compose = composeCommand(project, overrides);
   const composeRun = (args: string[]): string => docker([...compose, ...args], { cwd: root });
   const logs = (services: string[]): string =>
     composeRun(["logs", "--no-log-prefix", "--no-color", ...services]);
@@ -163,60 +152,85 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
         composeRun,
       );
     },
-    restartCrane() {
-      // `restart`, а не пересоздание: контейнер тот же, журнал compose сохраняется, а память процесса
-      // обнулена. Клиент не делает запросов до `healthy`: пока crane не готов, Caddy отвечает 502.
-      composeRun(["restart", "--timeout", String(DOWN_TIMEOUT_SECONDS), "crane"]);
-      // После restart docker сбрасывает статус healthcheck в `starting`, поэтому `--wait` ждёт новую проверку.
-      // `--no-recreate --no-deps` не дают up тронуть контейнер и соседние сервисы.
-      composeRun([
-        "up",
-        "-d",
-        "--wait",
-        "--wait-timeout",
-        String(UP_TIMEOUT_SECONDS),
-        "--no-recreate",
-        "--no-deps",
-        "crane",
-      ]);
-    },
+    restartCrane: () => restartCrane(composeRun),
     craneLogs: () => logs(["crane"]),
     allLogs: () => logs([]),
     saveLogs(path) {
-      let content = logs([]);
-      for (const secret of secrets) {
-        content = content.split(secret.value).join(`<${secret.name}>`);
-      }
+      const content = redact(logs([]), secrets);
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, content);
     },
-    down() {
-      const attempt = (what: string, action: () => void): void => {
-        try {
-          action();
-        } catch (error) {
-          warn(`down: ${what}: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      };
-      attempt("клиентские контейнеры", () => {
-        const ids = docker(["ps", "-aq", "--filter", `label=crane-dogfood=${project}`]).split("\n");
-        const present = ids.filter((line) => line.trim() !== "");
-        if (present.length > 0) {
-          docker(["rm", "-f", ...present]);
-        }
-      });
-      attempt("compose down", () => {
-        composeRun(["down", "-v", "--remove-orphans", "--timeout", String(DOWN_TIMEOUT_SECONDS)]);
-      });
-      attempt("образ", () => {
-        run("docker", ["image", "rm", image]);
-      });
-      attempt("временный каталог", () => {
-        rmSync(tmp, { recursive: true, force: true });
-      });
-      return leftovers(project, image);
-    },
+    down: () => removeStand({ project, image, tmp }, composeRun),
   };
+}
+
+/** Базовая команда compose: режимы в ней, чтобы up, logs и down (в том числе повторный после смены подсети) видели valkey, seaweedfs, сеть и том s3. */
+function composeCommand(project: string, overrides: string): string[] {
+  return [
+    "compose",
+    "-p",
+    project,
+    ...COMPOSE_MODES,
+    "--env-file",
+    ENV_DIST,
+    "--env-file",
+    overrides,
+  ];
+}
+
+function restartCrane(composeRun: (args: string[]) => string): void {
+  // `restart`, а не пересоздание: контейнер тот же, журнал compose сохраняется, а память процесса
+  // обнулена. Клиент не делает запросов до `healthy`: пока crane не готов, Caddy отвечает 502.
+  composeRun(["restart", "--timeout", String(DOWN_TIMEOUT_SECONDS), "crane"]);
+  // После restart docker сбрасывает статус healthcheck в `starting`, поэтому `--wait` ждёт новую проверку.
+  // `--no-recreate --no-deps` не дают up тронуть контейнер и соседние сервисы.
+  composeRun([
+    "up",
+    "-d",
+    "--wait",
+    "--wait-timeout",
+    String(UP_TIMEOUT_SECONDS),
+    "--no-recreate",
+    "--no-deps",
+    "crane",
+  ]);
+}
+
+/** Журнал без секретов: значение каждого заменено на `<имя>`. */
+function redact(content: string, secrets: { name: string; value: string }[]): string {
+  return secrets.reduce((acc, secret) => acc.split(secret.value).join(`<${secret.name}>`), content);
+}
+
+/** Уборка стенда: каждый шаг независим, сбой одного не мешает остальным. Возвращает то, что осталось. */
+function removeStand(
+  target: { project: string; image: string; tmp: string },
+  composeRun: (args: string[]) => string,
+): string[] {
+  const { project, image, tmp } = target;
+  const attempt = (what: string, action: () => void): void => {
+    try {
+      action();
+    } catch (error) {
+      warn(`down: ${what}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+  attempt("клиентские контейнеры", () => {
+    const ids = docker(["ps", "-aq", "--filter", `label=crane-dogfood=${project}`]).split("\n");
+    const present = ids.filter((line) => line.trim() !== "");
+    if (present.length > 0) {
+      docker(["rm", "-f", ...present]);
+    }
+  });
+  attempt("compose down", () => {
+    composeRun(["down", "-v", "--remove-orphans", "--timeout", String(DOWN_TIMEOUT_SECONDS)]);
+  });
+  attempt("образ", () => {
+    run("docker", ["image", "rm", image]);
+  });
+  attempt("временный каталог", () => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+  return leftovers(project, image);
 }
 
 function readSecret(paths: Record<string, string>, variable: string): string {

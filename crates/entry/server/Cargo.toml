@@ -35,6 +35,7 @@ axum = { version = "0.8", default-features = false, features = ["http1", "tokio"
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-aws-lc-rs"] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "signal", "io-util", "time"] }
+thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }
 # Разбор CRANE_BLOBS в URL: ObjectBlobStore::from_url принимает url::Url.

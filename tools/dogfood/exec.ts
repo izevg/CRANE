@@ -79,3 +79,12 @@ export function log(message: string): void {
 export function warn(message: string): void {
   process.stderr.write(`${message}\n`);
 }
+
+/** Шаг сценария: сбой получает имя шага в тексте ошибки. */
+export const step = (name: string, body: () => void): void => {
+  try {
+    body();
+  } catch (error) {
+    throw new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
