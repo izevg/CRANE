@@ -3823,7 +3823,7 @@ paths:
         in: query
         description: Статус.
         schema:
-          type: string
+          $ref: ./common.yaml#/components/schemas/FindingStatus
       - name: sort
         in: query
         description: 'Сортировка: ключи через запятую, минус перед ключом - по убыванию.'
@@ -5618,7 +5618,7 @@ paths:
         in: query
         description: Состояние.
         schema:
-          type: string
+          $ref: ./common.yaml#/components/schemas/ApprovalState
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
@@ -6481,7 +6481,7 @@ paths:
         in: query
         description: Состояние плана.
         schema:
-          type: string
+          $ref: ./common.yaml#/components/schemas/PlanState
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
