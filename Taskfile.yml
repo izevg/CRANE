@@ -28,6 +28,10 @@ tasks:
     desc: Правило четырёх, слои крейтов, AAA в тестах
     cmds: [node tools/lint-structure/index.ts]
 
+  structure:report:
+    desc: Размеры файлов - самые большие и все от порога предупреждения (не блокирует)
+    cmds: [node tools/lint-structure/index.ts --report]
+
   lint:
     desc: Biome на весь репозиторий (tools, конфиги, web)
     cmds: [pnpm exec biome check --error-on-warnings .]
