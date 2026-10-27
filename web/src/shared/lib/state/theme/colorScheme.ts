@@ -4,8 +4,10 @@
  * Выбор пользователя хранится в localStorage под ключом `crane.colorScheme`. На `<html data-theme>` всегда лежит
  * РАЗРЕШЁННОЕ значение (light | dark): для `system` оно вычисляется из `prefers-color-scheme` и следует за ним.
  * Начальное значение до загрузки бандла ставит `public/theme-init.js`, `initColorScheme()` подхватывает его в React.
- * Любой сбой storage или matchMedia деградирует в `system` / light без исключений.
+ * Чтение и запись — через `storage/storage.ts`. Любой сбой storage или matchMedia деградирует в `system` / light без исключений.
  */
+
+import { readStored, type StorageSource, writeStored } from "../storage/storage";
 
 export const COLOR_SCHEME_STORAGE_KEY = "crane.colorScheme";
 
@@ -20,36 +22,12 @@ export function isColorMode(value: unknown): value is ColorMode {
   return typeof value === "string" && (COLOR_MODES as readonly string[]).includes(value);
 }
 
-function safeStorage(): Storage | undefined {
-  try {
-    return typeof window !== "undefined" ? window.localStorage : undefined;
-  } catch {
-    return undefined;
-  }
+export function readStoredMode(source: StorageSource = "local"): ColorMode {
+  return readStored(source, COLOR_SCHEME_STORAGE_KEY, isColorMode) ?? "system";
 }
 
-export function readStoredMode(storage: Storage | undefined = safeStorage()): ColorMode {
-  try {
-    const value = storage?.getItem(COLOR_SCHEME_STORAGE_KEY);
-    return isColorMode(value) ? value : "system";
-  } catch {
-    return "system";
-  }
-}
-
-export function writeStoredMode(
-  mode: ColorMode,
-  storage: Storage | undefined = safeStorage(),
-): boolean {
-  try {
-    if (storage === undefined) {
-      return false;
-    }
-    storage.setItem(COLOR_SCHEME_STORAGE_KEY, mode);
-    return true;
-  } catch {
-    return false;
-  }
+export function writeStoredMode(mode: ColorMode, source: StorageSource = "local"): boolean {
+  return writeStored(source, COLOR_SCHEME_STORAGE_KEY, mode);
 }
 
 function systemQuery(): MediaQueryList | undefined {
