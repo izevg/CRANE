@@ -10,30 +10,41 @@ pub struct RepositoryId(Uuid);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VersionId(Uuid);
 
-macro_rules! uuid_id {
-    ($name:ident) => {
-        impl $name {
-            #[must_use]
-            pub const fn new(id: Uuid) -> Self {
-                Self(id)
-            }
+impl RepositoryId {
+    #[must_use]
+    pub const fn new(id: Uuid) -> Self {
+        Self(id)
+    }
 
-            #[must_use]
-            pub const fn as_uuid(&self) -> Uuid {
-                self.0
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                self.0.fmt(f)
-            }
-        }
-    };
+    #[must_use]
+    pub const fn as_uuid(&self) -> Uuid {
+        self.0
+    }
 }
 
-uuid_id!(RepositoryId);
-uuid_id!(VersionId);
+impl fmt::Display for RepositoryId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl VersionId {
+    #[must_use]
+    pub const fn new(id: Uuid) -> Self {
+        Self(id)
+    }
+
+    #[must_use]
+    pub const fn as_uuid(&self) -> Uuid {
+        self.0
+    }
+}
+
+impl fmt::Display for VersionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 #[cfg(test)]
 mod tests {

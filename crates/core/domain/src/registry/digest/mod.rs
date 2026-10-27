@@ -23,11 +23,16 @@ impl Sha256 {
         if len != HEX_LEN {
             return Err(DigestError::InvalidLength(len));
         }
+        let mut digits = [0u8; HEX_LEN];
+        for (slot, c) in digits.iter_mut().zip(s.chars()) {
+            *slot = c
+                .to_digit(16)
+                .and_then(|d| u8::try_from(d).ok())
+                .ok_or(DigestError::InvalidChar(c))?;
+        }
         let mut bytes = [0u8; LEN];
-        let mut chars = s.chars();
-        for byte in &mut bytes {
-            let hi = nibble(chars.next())?;
-            let lo = nibble(chars.next())?;
+        let (pairs, _) = digits.as_chunks::<2>();
+        for (byte, [hi, lo]) in bytes.iter_mut().zip(pairs) {
             *byte = (hi << 4) | lo;
         }
         Ok(Self(bytes))
@@ -37,13 +42,6 @@ impl Sha256 {
     pub const fn as_bytes(&self) -> &[u8; LEN] {
         &self.0
     }
-}
-
-fn nibble(c: Option<char>) -> Result<u8, DigestError> {
-    let c = c.ok_or(DigestError::InvalidLength(0))?;
-    c.to_digit(16)
-        .and_then(|d| u8::try_from(d).ok())
-        .ok_or(DigestError::InvalidChar(c))
 }
 
 impl From<[u8; LEN]> for Sha256 {
@@ -140,6 +138,21 @@ mod tests {
 
         // Assert
         assert_eq!(result.unwrap_err(), DigestError::InvalidChar('g'));
+    }
+
+    #[test]
+    fn bytes_below_0x10_are_zero_padded_and_round_trip() {
+        // Arrange
+        let digest = Sha256::from([0x0f; 32]);
+
+        // Act
+        let printed = digest.to_string();
+
+        // Assert
+        assert_eq!(
+            (printed.len(), Sha256::from_hex(&printed)),
+            (64, Ok(digest))
+        );
     }
 
     #[test]
