@@ -48,7 +48,16 @@ describe("SearchResultCard", () => {
     expect(screen.getByText("P1 · 1 находка")).toBeVisible();
   });
 
-  it("число находок склоняется: 2 — находки, 5 — находок", () => {
+  it("две находки склоняются как «находки»", () => {
+    // Arrange
+    // Act
+    card({ risk: { max_open_priority: "P2", open_count: 2 } });
+
+    // Assert
+    expect(screen.getByText("P2 · 2 находки")).toBeVisible();
+  });
+
+  it("пять находок склоняются как «находок»", () => {
     // Arrange
     // Act
     card({ risk: { max_open_priority: "P2", open_count: 5 } });
