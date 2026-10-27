@@ -1955,7 +1955,7 @@ paths:
       - platform
       summary: Создать репозиторий
       description: |-
-        Защитные поля при создании принимают только значения по умолчанию (`mutable: false`, `dev_skip_quarantine: false`), иначе 422 `protected-setting`; `upstream_url` - из allowlist экземпляра.
+        Защитные настройки создаются по умолчанию (`mutable: false`, `dev_skip_quarantine: false`); меняет их только `PUT …/protection`.
 
         Роли: owner, platform-admin.
       operationId: createRepository
@@ -2046,7 +2046,7 @@ paths:
       - platform
       summary: Изменить репозиторий
       description: |-
-        Только эксплуатационные настройки (TTL, лимиты, delivery, класс хранения). Защитные поля (`mutable`, `dev_skip_quarantine`, `upstream_url`) здесь не меняются: 422 `protected-setting`, их меняет `PUT …/protection`.
+        Только эксплуатационные настройки; защитные - `PUT …/protection`.
 
         Роли: owner, platform-admin.
       operationId: updateRepository
@@ -2310,7 +2310,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '409':
@@ -2395,7 +2395,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '404':
@@ -2438,7 +2438,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '404':
@@ -3742,7 +3742,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '409':
@@ -4368,7 +4368,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '409':
@@ -5489,7 +5489,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '409':
@@ -5578,7 +5578,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '409':
@@ -5670,7 +5670,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '409':
@@ -5894,7 +5894,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '404':
@@ -6064,7 +6064,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '409':
@@ -6118,7 +6118,7 @@ paths:
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
+          $ref: ./common.yaml#/components/responses/StepUpRequired
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
         '404':
@@ -6605,6 +6605,7 @@ paths:
       x-crane-audit:
         event: agent.plan_confirmed
         ocsf_class: 6003
+      x-crane-step-up-when: skill = create_exception
       x-crane-rel: crane:confirm-plan
       security:
       - session: []

@@ -1375,7 +1375,7 @@ components:
       enum:
       - rule
       - emergency
-      description: Вид блокировки.
+      description: 'Вид блокировки: значения `kind` вариантов BlockReason (словари UI).'
     BlockReasonRule:
       title: BlockReasonRule
       type: object
@@ -5233,16 +5233,12 @@ components:
     RepositorySettings:
       title: RepositorySettings
       type: object
-      description: Настройки репозитория (config в 09).
+      description: Эксплуатационные настройки репозитория (config в 09).
       properties:
         ttl:
           $ref: '#/components/schemas/RepositoryTtl'
         limits:
           $ref: '#/components/schemas/RepositoryLimits'
-        mutable:
-          type: boolean
-        dev_skip_quarantine:
-          type: boolean
         delivery:
           type: string
           enum:
@@ -5250,15 +5246,9 @@ components:
           - presigned
         storage_class:
           type: string
-        upstream_url:
-          type: string
-          format: uri
-          description: Только для proxy.
       required:
       - ttl
       - limits
-      - mutable
-      - dev_skip_quarantine
       - delivery
       - storage_class
     Repository:
@@ -5278,6 +5268,8 @@ components:
           format: date-time
         settings:
           $ref: '#/components/schemas/RepositorySettings'
+        protection:
+          $ref: '#/components/schemas/RepositoryProtection'
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, crane:update-repository, crane:update-repository-protection, crane:purge-cache'
@@ -5288,6 +5280,7 @@ components:
       - workspace
       - created_at
       - settings
+      - protection
       - _links
     RepositoryPage:
       title: RepositoryPage
@@ -5323,6 +5316,10 @@ components:
           type: string
         settings:
           $ref: '#/components/schemas/RepositorySettings'
+        upstream_url:
+          type: string
+          format: uri
+          description: Обязателен для proxy, запрещён для hosted; хост из allowlist экземпляра.
       required:
       - name
       - format
@@ -5340,12 +5337,15 @@ components:
           type: boolean
           description: Только hosted dev-репозиторий; для proxy - 422 (quarantine новых upstream-версий не отключается).
         upstream_url:
-          type: string
+          type:
+          - string
+          - 'null'
           format: uri
-          description: Только proxy; хост из allowlist экземпляра (16.8).
+          description: Только proxy (у hosted - null); хост из allowlist экземпляра (16.8).
       required:
       - mutable
       - dev_skip_quarantine
+      - upstream_url
     RepositoryPatch:
       title: RepositoryPatch
       type: object
@@ -7538,7 +7538,7 @@ components:
         description: |-
           Выпуск `session` (12 ч, но не дольше сессии IdP; это `cctl setup` и `cctl login --refresh`, заменяет `/tokens/session` из раздела 13) или `personal` (до 90 дней по политике, только со step-up). Секрет есть только в этом ответе (`Cache-Control: no-store`).
 
-          Выпускать токены может только человек со своей интерактивной сессией IdP: cookie BFF или JWT IdP, полученный входом пользователя (authorization code + PKCE, в том числе loopback, или device code) и его продлением. Токен CRANE (`crp_`, `crr_`, `crci_`) и JWT сервисного аккаунта (client credentials) выпуск не проходят: 403 `interactive-login-required`. Scopes нового токена не шире текущих прав человека; запрос шире даёт 403 `scope-exceeds-principal`. Команда атрибуции фиксируется при выпуске: 14.15.
+          Выпускать токены может только человек со своей интерактивной сессией IdP: cookie BFF или JWT IdP, полученный входом пользователя (authorization code + PKCE, в том числе loopback, или device code) и его продлением. Токен CRANE (`crp_`, `crr_`, `crci_`) и JWT сервисного аккаунта (client credentials) выпуск не проходят: 403 `interactive-login-required`. Scopes нового токена не шире текущих прав человека; запрос шире даёт 403 `scope-exceeds-principal`. Команда атрибуции фиксируется при выпуске: 14.15. 401 `StepUpRequired` возможен только для `kind = personal`.
 
           Роли: любой аутентифицированный человек.
         operationId: createToken
@@ -7579,7 +7579,7 @@ components:
           '400':
             $ref: '#/components/responses/BadRequest'
           '401':
-            $ref: '#/components/responses/Unauthorized'
+            $ref: '#/components/responses/StepUpRequired'
           '403':
             $ref: '#/components/responses/Forbidden'
           '409':
@@ -8343,7 +8343,7 @@ components:
           '400':
             $ref: '#/components/responses/BadRequest'
           '401':
-            $ref: '#/components/responses/Unauthorized'
+            $ref: '#/components/responses/StepUpRequired'
           '403':
             $ref: '#/components/responses/Forbidden'
           '404':
