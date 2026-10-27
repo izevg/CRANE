@@ -49,7 +49,8 @@ jobs:
 
   gate-mark:
     name: gate-mark
-    if: startsWith(github.base_ref, 'release/')
+    # Полный гейт — один раз на веху, перед слиянием релиза в main (GITFLOW.md).
+    if: github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

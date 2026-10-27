@@ -84,7 +84,7 @@ tasks:
       - helm template crane deploy/helm/crane --set existingSecret=crane-env --set ingress.enabled=true >/dev/null
 
   gate:
-    desc: "Полный гейт перед PR в release/* (юниты, мутации, Playwright). В CI не запускается"
+    desc: "Полный гейт перед PR release/* → main (юниты, e2e, мутации по дифу релиза, Playwright). В CI не запускается"
     vars:
       BASE: '{{.BASE | default "origin/main"}}'
     # .env и флаг видны только шагам самого gate (в подзадачи они не передаются): мутационному
