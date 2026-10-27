@@ -113,6 +113,7 @@ CREATE TABLE credential (
   id uuid PRIMARY KEY, principal_id uuid NOT NULL,
   kind text NOT NULL,                -- personal | robot | workload
   workspace_id uuid REFERENCES workspace,  -- команда атрибуции, фиксируется при выпуске и не меняется (14.15); NULL = не распределено
+  idp_sid text,                      -- sid сессии IdP при выпуске сессионного crp_; NULL у долгоживущих и роботов
   prefix text UNIQUE NOT NULL,       -- 'crp_' | 'crr_' | 'crci_' + 8 символов, ищется по нему
   secret_hmac bytea NOT NULL,        -- HMAC-SHA256(pepper, secret)
   scopes jsonb NOT NULL, expires_at timestamptz NOT NULL,
@@ -269,6 +270,8 @@ ALTER TABLE repository ADD FOREIGN KEY (workspace_id) REFERENCES workspace;
 ALTER TABLE package    ADD CONSTRAINT package_owner_once
   CHECK ((namespace_id IS NULL) = (owner_workspace_id IS NOT NULL)) NOT VALID;      -- затем VALIDATE
 ALTER TABLE credential ADD COLUMN workspace_id uuid REFERENCES workspace;          -- атрибуция при выпуске, не меняется
+ALTER TABLE credential ADD COLUMN idp_sid text;  -- sid сессии IdP при выпуске сессионного crp_; NULL у долгоживущих и роботов
+CREATE INDEX credential_by_sid ON credential (idp_sid) WHERE idp_sid IS NOT NULL AND revoked_at IS NULL;
 ALTER TABLE audit_event ADD COLUMN actor_kind principal_kind,
                         ADD COLUMN actor_name text,       -- снимок логина/имени робота/пути проекта на момент события, входит в hash
                         ADD COLUMN workspace_id uuid;     -- атрибуция credential, входит в hash
