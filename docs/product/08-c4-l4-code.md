@@ -22,7 +22,7 @@ crane/
 │  │  ├─ external/            upstream/  trivy/  feeds/  siem/
 │  │  └─ intelligence/        systemone/  llm/
 │  └─ entry/                  driving-слой и composition root
-│     ├─ http/                axum routers, middleware, problem+json
+│     ├─ http/                axum routers, middleware, problem+json, маршруты форматов
 │     ├─ worker/              планировщик и обработчики задач
 │     ├─ analyzer/            песочница разбора архивов
 │     └─ server/              main: роли serve | worker | analyze | all | migrate
@@ -43,11 +43,15 @@ crane/
 | `ports` | `domain` | Только трейты и типы их сигнатур. |
 | `app` | `domain`, `ports` | Use cases оркестрируют порты. Тесты идут на in-memory адаптерах. |
 | `access` | `domain`, `ports` | Решения доступа и их объяснения. |
-| `formats` | `domain`, `ports` | Трансляция протокола клиента в команды ядра. |
+| `formats` | `domain`, `ports` | Трансляция протокола клиента в команды ядра: чистый sans-IO код без HTTP и async; маршруты, аутентификация и вызов use case — в `entry/http`. |
 | `adapters` | `domain`, `ports` | Реализуют порты; друг друга и `app` не знают. |
 | `entry` | все слои | Единственное место, где адаптеры собираются в приложение. |
 
 Матрица лежит в `tools/lint-structure/rules.json` и проверяется на выводе `cargo metadata` в pre-commit и CI: нарушение направления ломает сборку. Bounded context (реестр, цепочка поставки, доступ, аудит и инсайты) — модуль с одним именем в `domain`, `ports` и `app`; контексты общаются через порты и доменные события, а не через типы друг друга.
+
+### Сериализация на границе
+
+`#[derive(Serialize, Deserialize)]` из serde разрешён только на границе проводного формата: в `formats` (протоколы) и `entry` (протокол HTTP, конфигурация). В `domain`, `ports` и `app` он запрещён, ошибки там строятся на `thiserror`. Причина: разбор JSON и XML пяти форматов вручную занял бы тысячи строк. «Скучный Rust» (раздел 3) запрещает собственные процедурные макросы; serde derive сторонний и допущен только на границе.
 
 ## Правило четырёх
 
@@ -62,18 +66,22 @@ crane/
 ## Ключевые трейты
 
 ```rust
-/// Протокол формата: трансляция HTTP-запроса в команду ядра и обратно.
-pub trait FormatProtocol: Send + Sync + 'static {
+/// Протокол формата: чистый код без HTTP, async и IO. Разбирает пути и тела клиента
+/// в команды ядра и рендерит ответы; маршруты, аутентификация и вызов use case живут в `entry/http`.
+pub trait FormatProtocol {
     const FORMAT: Format;                              // Maven | Npm | PyPi | NuGet | Cargo
-    fn routes(&self) -> Router<AppState>;              // пути протокола
     fn version_policy(&self) -> MutabilityRules;       // SNAPSHOT, yank, unlist, deprecate
-    async fn parse_upload(&self, req: UploadRequest) -> Result<UploadPlan>;
-    fn render_metadata(&self, pkg: &PackageView, base: &BaseUrl) -> Result<Rendered>;
-    fn rewrite_upstream(&self, body: Bytes, base: &BaseUrl) -> Result<Bytes>; // ссылки → CRANE
-    fn render_error(&self, e: &Diagnosed) -> Response;  // ошибка в форме, понятной клиенту
+    fn parse_upload(&self, req: UploadRequest<'_>) -> Result<UploadPlan, FormatError>; // путь, Content-Type и тело; без HTTP-типов
+    fn render_metadata(&self, pkg: &PackageView, base: &BaseUrl) -> Result<Rendered, FormatError>;
+    fn rewrite_upstream(&self, body: Bytes, base: &BaseUrl) -> Result<Bytes, FormatError>; // ссылки → CRANE
+    fn render_error(&self, e: &Diagnosed) -> Rendered;  // тело ошибки в форме клиента; статус ставит entry
 }
 // Грамматики имён и версий живут в domain, а не в трейте: формат вызывает
 // PackageName::parse(Self::FORMAT, raw) и Version::parse(Self::FORMAT, raw).
+// В коде трейта пока нет: Cargo реализован свободными функциями `crates/formats/cargo`;
+// трейт появится со вторым форматом. Трейт живёт в `formats`, вызывает его `entry/http`;
+// `app` о форматах не знает. `entry` обобщён по типу формата: из-за `const FORMAT` трейт
+// не годится для `dyn`, так и задумано.
 
 /// Неизменяемое content-addressable хранилище.
 pub trait BlobStore: Send + Sync {
@@ -161,6 +169,9 @@ pub trait SiemSink: Send + Sync {
 ```mermaid
 classDiagram
   direction LR
+  class HttpEntry {
+    +route(request)
+  }
   class PublishService {
     +begin(principal, repo, coord) UploadSession
     +commit(session) VersionId
@@ -209,11 +220,12 @@ classDiagram
   class PolicyEngine {
     +evaluate(gate, evidence) Verdict
   }
-  PublishService --> FormatProtocol
+  HttpEntry --> FormatProtocol
+  HttpEntry --> PublishService
+  HttpEntry --> ProxyService
   PublishService --> BlobStore
   PublishService --> Catalog
   PublishService --> AccessEvaluator
-  ProxyService --> FormatProtocol
   ProxyService --> BlobStore
   ProxyService --> Catalog
   ProxyService --> Singleflight
