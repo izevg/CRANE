@@ -12,6 +12,7 @@ erDiagram
   REPOSITORY ||--o{ PACKAGE : contains
   NAMESPACE ||--o{ PACKAGE : governs
   PACKAGE ||--o{ PACKAGE_VERSION : has
+  PACKAGE ||--o{ PACKAGE_EMBEDDING : "embedded as"
   PACKAGE_VERSION ||--o{ ASSET : files
   ASSET }o--|| BLOB : "points to"
   PACKAGE_VERSION ||--o{ EVIDENCE : "attested by"
@@ -60,8 +61,17 @@ CREATE TABLE package (
   lifecycle text NOT NULL DEFAULT 'active', -- active | deprecated | eol
   replacement_id bigint, description text,
   search_tsv tsvector GENERATED ALWAYS AS (...) STORED,
-  embedding vector(1024),            -- pgvector, размерность embedder'а
   UNIQUE (repository_id, name_norm));
+
+CREATE TABLE package_embedding (
+  package_id bigint NOT NULL REFERENCES package ON DELETE CASCADE,
+  model text NOT NULL,               -- идентификатор модели и версии из конфигурации
+  dim smallint NOT NULL,             -- размерность модели
+  embedding halfvec NOT NULL,        -- halfvec(N) по модели; без typmod, у каждой модели своя N
+  updated_at timestamptz NOT NULL,
+  PRIMARY KEY (package_id, model),
+  CHECK (vector_dims(embedding) = dim));
+ALTER TABLE package_embedding ALTER COLUMN embedding SET STORAGE PLAIN;  -- вектор inline, без TOAST
 
 CREATE TABLE package_version (
   id uuid PRIMARY KEY, package_id bigint NOT NULL REFERENCES package,
@@ -168,6 +178,18 @@ Evidence расширяется строками, а не колонками. Н
 
 `metadata` имеет тип `json`, а не `jsonb`: `jsonb` переписывает текст (порядок ключей, пробелы), а metadata формата — непрозрачные байты для индекса Cargo и ETag, они должны вернуться побайтно.
 
+### Эмбеддинги пакетов
+
+Одна строка на пару (пакет, модель). Смена модели или размерности идёт «рядом»: заполнить строки новой модели, построить её индекс, переключить читаемую модель в конфигурации, затем удалить строки старой модели и её индекс. Горячая таблица `package` при этом не переписывается. У колонки нет typmod, потому что размерности у моделей разные; HNSW требует фиксированной размерности, поэтому у каждой модели свой индекс по выражению с частичным предикатом (pgvector README, «Indexing vectors with different dimensions»):
+
+```sql
+CREATE INDEX CONCURRENTLY package_embedding_hnsw_<model> ON package_embedding
+  USING hnsw ((embedding::halfvec(1024)) halfvec_cosine_ops) WITH (m = 32, ef_construction = 256)
+  WHERE model = '<model>';
+```
+
+Индекс строит задача воркера, а не статическая миграция: он зависит от модели, которую выбрал оператор. `SET STORAGE PLAIN` нужен потому, что, по README pgvector, планировщик не учитывает внешнее (out-of-line) хранение, а `halfvec(1024)` ≈ 2 КБ лежит на пороге TOAST. Эмбеддинг строится на пакет, а не на версию: текст составляют имя, описание, ключевые слова и README последней выпущенной версии; при изменении текста вектор пересчитывается. Алгоритм поиска и обоснование параметров: 10.10.
+
 ## Реализовано в v0.1.0
 
 В `crane-pg` реализован минимальный срез; остальные колонки и таблицы из схемы выше добавляются позже nullable-расширением (expand).
@@ -213,6 +235,8 @@ CREATE TABLE asset (
 | `purl`, `sort_key`, `mutable`, `published_by` | Появление потребителя (граф, сортировка, аудит публикаций) |
 | `sha512`, `sha1`, `md5`, `media_type` | Форматы, которым нужны эти дайджесты и типы |
 | таблица `blob_store` | Второе физическое хранилище; пока `store_id` — текст без FK |
+| `package_embedding` | Векторный поиск, P3 / v1.2.0 |
+| `download_event` | v0.4.0, вместе с журналом аудита |
 | таблица `evidence` | v0.6.0 (P1): таблица целиком, первый вид — provenance из claims; v1.1.0 добавляет виды без миграции |
 
 ## Масштаб L: каталог
@@ -258,6 +282,57 @@ CREATE TABLE asset (
 -   **UUIDv7 для `version.id`.** Вставки в PK-индекс остаются почти append-only; v4 даёт случайные расщепления страниц. `IdGen` обязан выдавать v7.
 -   **Миграции безопасны онлайн.** `CREATE INDEX CONCURRENTLY` в отдельной миграции без транзакции; без перезаписи таблиц; `NOT NULL` через `NOT VALID` + `VALIDATE CONSTRAINT`; значения enum только добавляются.
 
+## Масштаб L: эмбеддинги
+
+**Оценка, не замер** (в отличие от таблицы каталога выше): синтетического замера для векторов ещё не было. Исходные данные: 1–5 млн пакетов, одна строка на пакет и модель.
+
+| Величина | Оценка |
+| --- | --- |
+| Значение `halfvec(1024)` | ≈ 2 КБ |
+| Heap `package_embedding` | ≈ 2–10 ГБ |
+| Индекс HNSW (m = 32) | ≈ 2,5–3 КБ на элемент: ≈ 3 ГБ на 1 млн, ≈ 13–15 ГБ на 5 млн пакетов |
+| То же на `vector(1024)` | примерно в 2–3 раза больше |
+
+Профиль L: PostgreSQL с 64 ГБ RAM (16.3), `shared_buffers` ≈ 16 ГБ. На 5 млн пакетов один индекс подходит к размеру `shared_buffers`. Главный урок источника [2] из 10.10: индекс должен помещаться в память (в [2] индекс `vector` в 14 ГБ не влез в 12 ГБ `shared_buffers`, а `halfvec` сократил его до 7,2 ГБ). Отсюда правила:
+
+-   `halfvec` обязателен, размерность не выше 1024; размер индекса сравнивается с `shared_buffers` в мониторинге.
+-   Во время смены модели два индекса сосуществуют и занимают память вдвое: смену планируют заранее.
+-   **Сборка.** `maintenance_work_mem` соразмерен графу (в [2]: 14 ГБ для 925 тыс. векторов размерности 2000, 7 параллельных воркеров, ≈ 15 мин; бюджет в контейнере 40 ГБ: 16 ГБ `shared_buffers` + 14 ГБ сборка + ≈ 4 ГБ соединения). Для параллельной сборки HNSW `/dev/shm` (Docker `--shm-size`, k8s `emptyDir` с `medium: Memory`) не меньше `maintenance_work_mem` (pgvector README); также настраивается `max_parallel_maintenance_workers`.
+-   После подмены индекса его прогревают `pg_prewarm` (contrib).
+
+Перед v1.2.0 рекомендуется синтетический замер, как для каталога: размер heap и индекса, время сборки, задержка и recall при ACL-фильтре.
+
+## Поток скачиваний
+
+Решение владельца: фиксируются **100%** успешных скачиваний файлов (вместо выборки 10%). Поток идёт в отдельную партиционированную таблицу доступа с большим объёмом записи, а не в `audit_event` с хэш-цепочкой.
+
+```sql
+CREATE TABLE download_event (
+  ts timestamptz NOT NULL,
+  repository_id uuid NOT NULL,       -- hosted или proxy: откуда отдано
+  purl text NOT NULL,                -- pkg:npm/event-stream@3.3.6; переживает удаление версии и архив
+  blob_sha256 bytea NOT NULL,        -- какой файл отдан; совпадает с индикатором компрометации
+  actor uuid,                        -- принципал
+  credential_id uuid,                -- каким токеном; ни секрета, ни его хэша
+  client_ip inet,
+  request_id uuid NOT NULL
+) PARTITION BY RANGE (ts);           -- суточные партиции, роль только INSERT
+-- на каждой партиции:
+CREATE INDEX ON download_event_YYYYMMDD (purl text_pattern_ops, ts);  -- «кто скачал версию X между T1 и T2»; префикс 'pkg:npm/event-stream@' — любую версию
+CREATE INDEX ON download_event_YYYYMMDD (actor, ts);                  -- «что скачивал робот R»
+CREATE INDEX ON download_event_YYYYMMDD USING brin (ts);              -- почасовой дайджест читает час, а не сутки
+```
+
+-   Ключ — `purl`, а не `version_id`: скачивание из proxy не создаёт строки `package_version` (10.2, `proxy_entry`), а `purl` переживает удаление версии и архивирование.
+-   Запрос «кто скачал версию X между T1 и T2» — отсечение партиций по `ts` и префиксный скан по `(purl, ts)`; префикс без версии (`pkg:npm/event-stream@`) даёт любую версию пакета.
+-   Поиск по `blob_sha256` (совпадение с индикатором компрометации) — скан окна хранения: индекса нет намеренно, запрос редкий, а индекс удорожил бы каждую вставку.
+-   Нет FK и нет хэш-цепочки на каждую строку: это дорого на таком потоке. Целостность обеспечивает почасовое событие `audit.download_digest` в цепочке журнала (подробности в 14.13). Его пишет та же почасовая задача, что и `audit.anchor` (10.13): в h+15 мин она записывает дайджест часа h, затем якорь, так что дайджест сразу попадает в WORM. Реплики отбрасывают строки старше 10 мин (запас 5 мин на расхождение часов до дайджеста в 15 мин); такие строки считаются потерянными.
+-   Запись пакетная, `COPY` из каждой реплики API: раз в 1 с или по 5 000 строк.
+-   Партиции создаёт заранее задача воркера, удаляются они через `DROP` (без `DELETE`: нет мёртвых строк и нагрузки на vacuum).
+-   User agent и путь не хранятся: они есть в access-логе stdout.
+
+**Объём для L (оценка, не замер).** L = 50–200 тыс. CI-задач в сутки, ≈ 1 500 запросов на задачу (раздел 3), примерно половина из них скачивания файлов: ≈ 35–150 млн строк в сутки. Строка ≈ 250 Б (heap, два btree и BRIN): ≈ 9–37 ГБ в сутки, за 90 суток ≈ 0,8–3,3 ТБ. Поэтому онлайн-окно по умолчанию: 90 суток в L и 12 месяцев в S и M. Старые партиции архивируются в сжатом виде в WORM-хранилище объектов. В L поток может жить в отдельном tablespace или в отдельном экземпляре PostgreSQL, чтобы не раздувать бэкапы и реплики каталога.
+
 ## Очередь задач
 
 Таблица `job` рассчитана на профиль L и устроена как очередь с visibility timeout (по образцу SQS): взятая задача не удаляется, а становится невидимой до `run_at`.
@@ -300,12 +375,13 @@ RETURNING id, kind, payload, attempts;
 | Группа | Таблицы |
 | --- | --- |
 | Каталог | `workspace`, `repository`, `namespace`, `namespace_owner_history`, `package`, `package_version`, `asset`, `blob`, `blob_store`, `dist_tag` (npm), `upload_session` |
+| Поиск | `package_embedding` |
 | Доступ | `principal`, `group_mapping` (Keycloak → роли), `role_binding`, `policy` (Cedar), `credential`, `trust_policy` (издатель OIDC и claims → права) |
 | Безопасность | `evidence`, `finding` (приоритет, SLA, источник), `exception`, `license_decision`, `license_policy`, `promotion`, `approval` |
 | Уязвимости и скоринг | `advisory`, `feed_cursor`, `risk_score`, `vex_statement`, `emergency_block`, `break_glass_grant` |
 | Граф | `dependency_edge`, `usage_evidence`, `consumer` (проект, сборка, деплой) |
 | Proxy | `proxy_entry` (ключ upstream, etag, fetched\_at, expires\_at, negative, blob) |
-| Эксплуатация | `job`, `job_dead`, `outbox`, `webhook_subscription`, `webhook_delivery`, `idempotency_key`, `retention_rule`, `retention_hold`, `quota_usage`, `audit_event`, `siem_sink`, `siem_cursor` |
+| Эксплуатация | `job`, `job_dead`, `outbox`, `webhook_subscription`, `webhook_delivery`, `idempotency_key`, `retention_rule`, `retention_hold`, `quota_usage`, `audit_event`, `download_event`, `siem_sink`, `siem_cursor` |
 
 ## Жизненный цикл версии
 

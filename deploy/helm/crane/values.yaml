@@ -9,6 +9,8 @@ imagePullSecrets: []
 # Внешние сервисы организации (PostgreSQL, Valkey, S3 не входят в чарт).
 # Секрет с ключами CRANE_DATABASE_URL (обязателен) и CRANE_CACHE, CRANE_BLOBS (по необходимости)
 # создаётся вне чарта: external-secrets, sealed-secrets или вручную.
+# Требования к PostgreSQL: 17+, pgvector >= 0.8, pg_trgm. Расширения создаёт администратор БД
+# или `crane migrate`, если у его роли есть права (проверка расширений появится в v0.2.0).
 existingSecret: ""
 config:
   cache: memory

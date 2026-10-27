@@ -201,7 +201,7 @@ The documentation is currently in Russian; an English translation is planned.
 
 ## Roadmap
 
-Effort is estimated in agent-hours, calibrated against a measured real project ([section 18](docs/product/18-plan-team-budget.md)); the baseline scenario is about 770 agent-hours.
+Effort is estimated in agent-hours, calibrated against a measured real project ([section 18](docs/product/18-plan-team-budget.md)); the baseline scenario is about 800 agent-hours.
 
 - [x] Solution architecture and guidebook
 - [x] Effort estimate and roadmap
@@ -216,11 +216,13 @@ Open decisions: [section 19](docs/product/19-risks-open-decisions.md).
 
 The project is in the design stage, so the most valuable contribution right now is an architecture review: open an issue that links to the relevant documentation section. Repository layout, documentation and code guidelines, DCO sign-off and the review process are in [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md). By participating, you agree to the [Code of Conduct](CODE_OF_CONDUCT-EN.md).
 
-**Security issues** in CRANE must not be reported in public issues: private reporting, timelines and scope are in [SECURITY-EN.md](SECURITY-EN.md).
+**Security issues** in CRANE must not be reported in public issues: private reporting and scope are in [SECURITY-EN.md](SECURITY-EN.md).
 
 ## License
 
 [Apache License 2.0](LICENSE): an explicit patent grant and compatibility with the whole stack. See also [NOTICE](NOTICE).
+
+CRANE is pure OSS with no SLA or guaranteed support period; release security is best effort; the CRA position is in [SECURITY-EN.md](SECURITY-EN.md).
 
 <div align="center">
 <sub>Logo and artwork: <a href="brand/">brand/</a></sub>
