@@ -90,6 +90,27 @@ impl Reply {
     }
 }
 
+/// Каталог с hosted- и proxy-репозиториями обоих форматов.
+fn seeded_catalog(runtime: &Runtime, ids: &SequentialIdGen) -> MemoryCatalog {
+    let catalog = MemoryCatalog::default();
+    for (format, name, kind) in [
+        (Format::Cargo, REPO, RepositoryKind::Hosted),
+        (Format::Cargo, PROXY_REPO, RepositoryKind::Proxy),
+        (Format::Npm, NPM_REPO, RepositoryKind::Hosted),
+        (Format::Npm, NPM_PROXY_REPO, RepositoryKind::Proxy),
+    ] {
+        runtime
+            .block_on(catalog.ensure_repository(Repository {
+                id: RepositoryId::new(ids.generate()),
+                format,
+                kind,
+                name: name.to_owned(),
+            }))
+            .unwrap();
+    }
+    catalog
+}
+
 pub(crate) struct Api {
     runtime: Runtime,
     router: Router,
@@ -158,22 +179,7 @@ impl Api {
     ) -> Self {
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let ids = Arc::new(SequentialIdGen::default());
-        let catalog = MemoryCatalog::default();
-        for (format, name, kind) in [
-            (Format::Cargo, REPO, RepositoryKind::Hosted),
-            (Format::Cargo, PROXY_REPO, RepositoryKind::Proxy),
-            (Format::Npm, NPM_REPO, RepositoryKind::Hosted),
-            (Format::Npm, NPM_PROXY_REPO, RepositoryKind::Proxy),
-        ] {
-            runtime
-                .block_on(catalog.ensure_repository(Repository {
-                    id: RepositoryId::new(ids.generate()),
-                    format,
-                    kind,
-                    name: name.to_owned(),
-                }))
-                .unwrap();
-        }
+        let catalog = seeded_catalog(&runtime, &ids);
         let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
         let catalog_down = Arc::new(AtomicBool::new(false));
         let registry = Arc::new(Registry::new(
