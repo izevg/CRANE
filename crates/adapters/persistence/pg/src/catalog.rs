@@ -90,7 +90,9 @@ fn publish_error(error: sqlx::Error) -> CatalogError {
         if db.is_unique_violation() && db.constraint() == Some(VERSION_KEY) {
             return CatalogError::VersionExists;
         }
-        if db.is_foreign_key_violation() && db.constraint() == Some(PACKAGE_REPOSITORY_FKEY) {
+        // Имя внешнего ключа однозначно: его может нести только его же нарушение,
+        // поэтому отдельная проверка вида ошибки лишь добавила бы недостижимую ветку.
+        if db.constraint() == Some(PACKAGE_REPOSITORY_FKEY) {
             return CatalogError::NotFound;
         }
     }
