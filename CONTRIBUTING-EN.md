@@ -64,6 +64,7 @@ These take effect with the first code.
 
 - **Single entry point:** `task check` (see `AGENTS.md`). `lefthook` hooks are installed by `pnpm install`; do not bypass them.
 - **Code architecture:** Rust is DDD + hexagonal + clean architecture, web is Feature-Sliced Design ([section 8](docs/product/08-c4-l4-code.md), [section 15](docs/product/15-frontend.md)).
+- **Secrets for compose and PostgreSQL tests:** `cp .env.dist .env`, then `task secrets:init` creates the secret files in `./secrets/` (gitignored; existing files are never overwritten).
 - **Rule of four:** at most 4 files and 8 subfolders per folder; mixed folders (files plus subfolders) are forbidden. Checked by `task structure`.
 - **TypeScript wherever possible:** scripts and configs are `.ts`; `.mjs` files are not accepted in the repository.
 - **Rust:** stable toolchain; `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and `cargo test` pass cleanly. The style is the "boring Rust" of [section 3](docs/product/03-load-forecast-rust-vs-fastapi.md): no custom procedural macros, no clever type gymnastics.

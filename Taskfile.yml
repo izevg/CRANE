@@ -48,8 +48,14 @@ tasks:
   rust:deny:
     desc: Лицензии и advisories
     cmds: [cargo deny check]
+  secrets:init:
+    desc: "Создать недостающие файлы секретов для compose (нужен .env); существующие не трогает"
+    dotenv: [".env"]
+    cmds: [node tools/secrets-init.ts]
+
   rust:test:pg:
     desc: "Тесты адаптера PostgreSQL на живой БД (нужны Docker и .env из .env.dist)"
+    deps: [secrets:init]
     # .env читается только здесь: остальные задачи не должны неявно получать CRANE_TEST_DATABASE_URL.
     dotenv: [".env"]
     # Здесь отсутствие БД - ошибка, а не повод пропустить тесты.
@@ -58,7 +64,7 @@ tasks:
     cmds:
       - docker compose -f docker-compose.dev.yaml up -d --wait postgres
       - >-
-        CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
+        CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
         cargo test -p crane-pg
   rust:check:
     desc: fmt, clippy, test, deny
@@ -109,7 +115,7 @@ tasks:
       - git diff {{.BASE}}...HEAD > out/gate.diff
       - >-
         [ ! -s out/gate.diff ] ||
-        CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
+        CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
         cargo mutants --workspace --in-diff out/gate.diff
       - |
         if find web/src -name '*.test.*' | grep -q .; then
