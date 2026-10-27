@@ -1,9 +1,9 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 
 /**
  * Ближайший каталог `name` вверх от `from`. Stryker копирует web/ в `.stryker-tmp/sandbox-*`, и там `../brand` уже
@@ -23,9 +23,24 @@ function findUp(from: string, name: string): string {
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Orca делает `node_modules` и `web/node_modules` символическими ссылками на основной каталог (`orca.yaml`,
+ * `worktree.sharedDirectories`). Vite отдаёт файлы (в том числе в browser-режиме Vitest и в Storybook) только из
+ * разрешённых корней, а реальный путь ссылки лежит вне worktree: `setup-file.js` аддона Storybook не загружался, и
+ * падали все story-тесты. Явный `server.fs.allow` заменяет значение по умолчанию, поэтому корень рабочей области
+ * возвращаем сами. Без символических ссылок реальные пути совпадают с обычными и ничего не меняется.
+ */
+export const FS_ALLOW = [
+  searchForWorkspaceRoot(process.cwd()),
+  ...[join(here, "node_modules"), join(here, "..", "node_modules")]
+    .filter((path) => existsSync(path))
+    .map((path) => realpathSync(path)),
+];
+
 // Сборка и Storybook. Тесты — в vitest.config.ts, чтобы story-проект не попадал в production-конфиг.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: { fs: { allow: FS_ALLOW } },
   resolve: {
     alias: {
       "~test": new URL("./test", import.meta.url).pathname,
