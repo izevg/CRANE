@@ -53,6 +53,7 @@ function HeadCell<TData extends RowData>({ header, pin, compact, sortable }: Hea
   return (
     <th
       scope="col"
+      data-pin={pin ? "start" : undefined}
       aria-sort={canSort ? (direction === false ? "none" : ARIA_SORT[direction]) : undefined}
       className={cx(HEAD, columnClass(meta, compact), pin)}
     >
@@ -99,9 +100,9 @@ export function HeadRow<TData extends RowData>({
 }: HeadRowProps<TData>) {
   const firstPin = selection ? HEAD_PIN_LEFT_AFTER_CHECKBOX : HEAD_PIN_LEFT;
   return (
-    <tr className="h-10 border-b">
+    <tr aria-rowindex={1} className="h-10 border-b">
       {selection ? (
-        <th scope="col" className={cx(HEAD, CHECKBOX_COLUMN, HEAD_PIN_LEFT)}>
+        <th scope="col" data-pin="start" className={cx(HEAD, CHECKBOX_COLUMN, HEAD_PIN_LEFT)}>
           <Checkbox
             checked={selection.allSelected}
             indeterminate={selection.someSelected && !selection.allSelected}
@@ -120,7 +121,7 @@ export function HeadRow<TData extends RowData>({
         />
       ))}
       {hasActions ? (
-        <th scope="col" className={cx(HEAD, HEAD_PIN_RIGHT)}>
+        <th scope="col" data-pin="end" className={cx(HEAD, HEAD_PIN_RIGHT)}>
           <span className="sr-only">{ACTIONS_HEADER}</span>
         </th>
       ) : null}
@@ -190,13 +191,14 @@ export function DataRow<TData extends RowData>({
   return (
     <tr
       data-row-id={row.id}
+      aria-rowindex={index + 2}
       aria-selected={focusable ? selected : undefined}
       tabIndex={tabIndexOf(focusable, tabbable)}
       onFocus={focusable ? handleFocus : undefined}
       onClick={focusable ? handleClick : undefined}
       onKeyDown={focusable ? handleKeyDown : undefined}
       className={cx(
-        "group/row h-11 border-b bg-card transition-[background-color] duration-(--dur-instant) ease-(--ease-out) hover:bg-(--row-hover-bg) aria-selected:bg-(--row-selected-bg) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring forced-colors:aria-selected:outline-2 forced-colors:aria-selected:-outline-offset-2 forced-colors:aria-selected:outline-[Highlight]",
+        "group/row h-11 border-b bg-card transition-[background-color] duration-(--dur-instant) ease-(--ease-out) hover:bg-(--row-hover-bg) aria-selected:bg-(--row-selected-bg) focus-visible:-outline-offset-2 forced-colors:aria-selected:outline-2 forced-colors:aria-selected:-outline-offset-2 forced-colors:aria-selected:outline-[Highlight]",
         focusable && "cursor-pointer",
       )}
     >

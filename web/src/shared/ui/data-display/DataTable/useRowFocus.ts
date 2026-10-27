@@ -123,3 +123,51 @@ export function useLoadMoreFocus({ rowCount, hasLoadMore, focusAt, inner }: Load
   }, [rowCount, hasLoadMore, focusAt, inner]);
   return markLoad;
 }
+
+const PIN_SELECTOR = "th[data-pin]";
+
+function pinWidth(scroller: HTMLElement, side: "start" | "end"): number {
+  let total = 0;
+  for (const cell of scroller.querySelectorAll<HTMLElement>(`${PIN_SELECTOR}[data-pin=${side}]`)) {
+    total += cell.offsetWidth;
+  }
+  return total;
+}
+
+/**
+ * Раскладка области прокрутки, зависящая от размеров:
+ * - ширина закреплённых колонок пишется в `--pin-start` и `--pin-end`, на них опирается `scroll-padding-inline`
+ *   (иначе закреплённые колонки перекрывают элемент в фокусе, WCAG 2.4.11). Ширину первой колонки данных и колонки
+ *   действий задаёт содержимое, поэтому фиксированные токены не подходят, и её приходится измерять;
+ * - область получает `tabindex=0` только при переполнении и только если строки не фокусируются сами
+ *   (иначе лишняя Tab-остановка, WCAG 2.1.1).
+ */
+export function useScrollerLayout(
+  scrollRef: RefObject<HTMLElement | null>,
+  rowsFocusable: boolean,
+): void {
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) {
+      return;
+    }
+    const sync = () => {
+      scroller.style.setProperty("--pin-start", `${pinWidth(scroller, "start")}px`);
+      scroller.style.setProperty("--pin-end", `${pinWidth(scroller, "end")}px`);
+      const overflows = scroller.scrollWidth > scroller.clientWidth;
+      if (overflows && !rowsFocusable) {
+        scroller.setAttribute("tabindex", "0");
+      } else {
+        scroller.removeAttribute("tabindex");
+      }
+    };
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(scroller);
+    const table = scroller.firstElementChild;
+    if (table) {
+      observer.observe(table);
+    }
+    return () => observer.disconnect();
+  }, [scrollRef, rowsFocusable]);
+}

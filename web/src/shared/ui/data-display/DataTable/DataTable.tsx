@@ -18,7 +18,7 @@ import {
   SkeletonRows,
   Spacer,
 } from "./DataTableRows";
-import { useLoadMoreFocus, useRowFocus, useRowWindow } from "./useRowFocus";
+import { useLoadMoreFocus, useRowFocus, useRowWindow, useScrollerLayout } from "./useRowFocus";
 
 const SCROLL_MAX_HEIGHT = "max-h-[640px]";
 
@@ -149,6 +149,7 @@ export function DataTable<TData extends RowData>({
 
   const rows = table.getRowModel().rows;
   const ids = useMemo(() => rows.map((row) => row.id), [rows]);
+  useScrollerLayout(scrollRef, onRowSelect !== undefined);
   const view = useRowWindow(rows.length, scrollRef);
   const { activeId, setActiveId, focusAt } = useRowFocus({
     scrollRef,
@@ -194,21 +195,16 @@ export function DataTable<TData extends RowData>({
 
   return (
     <div className={className}>
-      {/* biome-ignore lint/a11y/useSemanticElements: fieldset — для полей формы; здесь именованная область прокрутки */}
       <div
         ref={scrollRef}
-        role="group"
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: область с горизонтальной прокруткой доступна с клавиатуры (WCAG 2.1.1)
-        tabIndex={0}
-        aria-label={caption}
         className={cx(
-          "overflow-auto focus-visible:shadow-[inset_0_0_0_2px_var(--ring)]",
+          "overflow-auto scroll-pt-10 scroll-ps-[var(--pin-start,0px)] scroll-pe-[var(--pin-end,0px)]",
           view.virtual && SCROLL_MAX_HEIGHT,
         )}
       >
         <table
           aria-label={caption}
-          aria-rowcount={rows.length}
+          aria-rowcount={rows.length + 1}
           aria-busy={loading || undefined}
           className="w-full text-body"
         >

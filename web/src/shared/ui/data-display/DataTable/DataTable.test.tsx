@@ -162,6 +162,16 @@ describe("DataTable", () => {
     expect(onRowSelect).not.toHaveBeenCalled();
   });
 
+  it("строки несут aria-rowindex, а aria-rowcount считает и строку шапки", () => {
+    // Arrange
+    // Act
+    render(<DataTable columns={columns} data={rows} getRowId={getRowId} caption="Версии" />);
+
+    // Assert
+    expect(screen.getByRole("table")).toHaveAttribute("aria-rowcount", String(rows.length + 1));
+    expect(screen.getByRole("row", { name: ROW_141 })).toHaveAttribute("aria-rowindex", "3");
+  });
+
   it("без onRowSelect строки не фокусируются", () => {
     // Arrange
     // Act
