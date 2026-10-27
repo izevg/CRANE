@@ -133,6 +133,9 @@ msgstr "Change: {change}"
 msgid "изменено: было {before}, стало {after}"
 msgstr "changed: was {before}, now {after}"
 
+msgid "Исправлено в {fixedIn}"
+msgstr "Fixed in {fixedIn}"
+
 msgid "Ищем пакеты…"
 msgstr "Searching packages…"
 
@@ -210,6 +213,9 @@ msgstr "Nothing matches the filters"
 
 msgid "Новых уведомлений нет"
 msgstr "No new notifications"
+
+msgid "Номер версии нельзя использовать повторно"
+msgstr "Version number can't be reused"
 
 msgid "обновлено"
 msgstr "updated"
