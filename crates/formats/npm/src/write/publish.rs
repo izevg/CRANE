@@ -102,7 +102,10 @@ pub(super) fn publish(package: &PackageName, body: Body<'_>) -> Result<NpmPublis
         return Err(WriteError::VersionMismatch);
     }
     let expected_file = tarball_file(package, &version);
-    if file != expected_file {
+    // libnpmpublish (npm, pnpm) называет вложение полным именем со scope: `@scope/name-1.0.0.tgz`;
+    // другие клиенты шлют базовое имя. Хранится и отдаётся всегда базовое.
+    let full_name_file = format!("{written}-{}.tgz", version.as_written());
+    if file != expected_file && file != full_name_file {
         return Err(WriteError::AttachmentMismatch);
     }
     let tag = single_tag(body.dist_tags, &key)?;

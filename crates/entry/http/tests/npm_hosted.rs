@@ -522,3 +522,24 @@ fn oversized_publish_document_is_rejected_before_storage() {
         StatusCode::NOT_FOUND
     );
 }
+
+#[test]
+fn scoped_publish_with_the_full_name_attachment_key_npm_sends_is_accepted() {
+    // Arrange
+    let api = Api::new();
+    let mut doc = publish_doc("@scope/pkg", "1.0.0", TARBALL);
+    let attachment = doc["_attachments"]["pkg-1.0.0.tgz"].take();
+    doc["_attachments"] = json!({"@scope/pkg-1.0.0.tgz": attachment});
+
+    // Act
+    let reply = api.npm_put("/npm/web/@scope%2fpkg", &doc);
+
+    // Assert
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(
+        api.npm_get("/npm/web/@scope/pkg/-/pkg-1.0.0.tgz")
+            .body
+            .as_ref(),
+        TARBALL
+    );
+}
