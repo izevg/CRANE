@@ -15,7 +15,7 @@ const sidebar: SidebarProps = {
   helpHref: "/help",
 };
 const topbar: TopbarProps = {
-  breadcrumbs: [{ label: "Пакеты", href: "/p" }, { label: "left-pad" }],
+  breadcrumbs: { trail: [{ label: "Пакеты", href: "/p" }], current: "left-pad" },
   onOpenPalette: vi.fn(),
 };
 

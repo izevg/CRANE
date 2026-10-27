@@ -101,10 +101,30 @@ describe("Sidebar", () => {
     await user.click(screen.getByRole("button", { name: THEME_BUTTON }));
 
     // Act
-    await user.click(await screen.findByRole("menuitem", { name: "Тёмная" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Тёмная" }));
 
     // Assert
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+  });
+
+  it("выбранный режим темы — menuitemradio с aria-checked=true", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    render(<Sidebar {...PROPS} collapsed={false} />);
+    await user.click(screen.getByRole("button", { name: THEME_BUTTON }));
+
+    // Act
+    await user.click(await screen.findByRole("menuitemradio", { name: "Тёмная" }));
+
+    // Assert
+    expect(screen.getByRole("menuitemradio", { name: "Тёмная" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("menuitemradio", { name: "Светлая" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
   });
 
   it("имя переключателя темы называет выбранный режим", async () => {
@@ -114,7 +134,7 @@ describe("Sidebar", () => {
     await user.click(screen.getByRole("button", { name: THEME_BUTTON }));
 
     // Act
-    await user.click(await screen.findByRole("menuitem", { name: "Светлая" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Светлая" }));
 
     // Assert
     expect(screen.getByRole("button", { name: "Тема: Светлая" })).toBeInTheDocument();

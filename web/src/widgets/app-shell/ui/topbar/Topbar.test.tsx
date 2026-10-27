@@ -3,11 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Topbar } from "./Topbar";
 
-const CRUMBS = [
-  { label: "Пакеты", href: "/packages" },
-  { label: "left-pad", href: "/packages/left-pad" },
-  { label: "1.3.0" },
-];
+const CRUMBS = {
+  trail: [
+    { label: "Пакеты", href: "/packages" },
+    { label: "left-pad", href: "/packages/left-pad" },
+  ],
+  current: "1.3.0",
+};
 
 describe("Topbar", () => {
   it("последняя крошка — текущая страница без ссылки", () => {

@@ -11,15 +11,16 @@ import { SearchButton } from "./SearchButton";
 
 const CRUMB = "block max-w-[24ch] truncate";
 
-type Crumb = {
-  label: string;
-  /** У последней крошки (текущая страница) ссылки нет. */
-  href?: string;
-};
+type Crumb = { label: string; href: string };
 
 export type TopbarProps = {
   /** Хлебные крошки живут только здесь: на странице второго ряда крошек нет. */
-  breadcrumbs: readonly Crumb[];
+  breadcrumbs: {
+    /** Путь до текущей страницы: каждая крошка — ссылка. */
+    trail: readonly Crumb[];
+    /** Текущая страница: ссылка у неё невыразима типом. */
+    current: string;
+  };
   onOpenPalette: () => void;
   workspace?: ReactNode;
   status?: ReactNode;
@@ -32,33 +33,25 @@ type Props = TopbarProps & {
   sidebarToggle: ReactNode;
 };
 
-function Crumbs({ crumbs }: { crumbs: readonly Crumb[] }) {
+function Crumbs({ trail, current }: TopbarProps["breadcrumbs"]) {
   return (
     <Breadcrumb className="min-w-0">
       <BreadcrumbList className="flex-nowrap overflow-hidden">
-        {crumbs.map((crumb, index) => {
-          const last = index === crumbs.length - 1;
-          return (
-            <Fragment key={`${crumb.label}:${crumb.href ?? ""}`}>
-              <BreadcrumbItem>
-                {last ? (
-                  <BreadcrumbPage className={CRUMB} title={crumb.label}>
-                    {crumb.label}
-                  </BreadcrumbPage>
-                ) : crumb.href !== undefined ? (
-                  <BreadcrumbLink href={crumb.href} className={CRUMB} title={crumb.label}>
-                    {crumb.label}
-                  </BreadcrumbLink>
-                ) : (
-                  <span className={CRUMB} title={crumb.label}>
-                    {crumb.label}
-                  </span>
-                )}
-              </BreadcrumbItem>
-              {last ? null : <BreadcrumbSeparator />}
-            </Fragment>
-          );
-        })}
+        {trail.map((crumb) => (
+          <Fragment key={`${crumb.label}:${crumb.href}`}>
+            <BreadcrumbItem>
+              <BreadcrumbLink href={crumb.href} className={CRUMB} title={crumb.label}>
+                {crumb.label}
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+          </Fragment>
+        ))}
+        <BreadcrumbItem>
+          <BreadcrumbPage className={CRUMB} title={current}>
+            {current}
+          </BreadcrumbPage>
+        </BreadcrumbItem>
       </BreadcrumbList>
     </Breadcrumb>
   );
@@ -77,7 +70,7 @@ export function Topbar({
   return (
     <header className="sticky top-0 z-20 flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-border bg-background px-4 sm:gap-3 lg:px-6 2xl:px-8">
       {sidebarToggle}
-      <Crumbs crumbs={breadcrumbs} />
+      <Crumbs {...breadcrumbs} />
       <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
         <SearchButton onOpen={onOpenPalette} />
         {workspace}
