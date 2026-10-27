@@ -19,7 +19,6 @@ use tracing::{info, warn};
 pub use endpoint::{Endpoint, EndpointError};
 pub(crate) use waiters::Waiters;
 
-use crate::availability::{Link, LinkEvent, Notice, step};
 use crate::proxy::Releases;
 
 /// Условные накладные расходы записи сверх тела: ключ, счётчики, метки времени.
@@ -222,46 +221,42 @@ impl Valkey {
 async fn hold_connection(client: Client) {
     let mut lost = client.error_rx();
     let mut restored = client.reconnect_rx();
-    // Состояние читаем после подписок: событие между ними не потеряется, а повтор
-    // `step` проглатывает. Сейчас клиент ещё не подключён (`init` не вызывали), но не
+    // Состояние читаем после подписок: событие между ними не потеряется, а повтор того же
+    // состояния журнал не пишет. Сейчас клиент ещё не подключён (`init` не вызывали), но не
     // полагаемся на порядок запуска.
-    let mut link = if client.is_connected() {
-        Link::Available
-    } else {
-        Link::Unavailable
-    };
+    let mut available = client.is_connected();
     loop {
         let mut connection = inbox::connect(&client).await;
         loop {
-            let event = tokio::select! {
-                received = lost.recv() => received.map(|_| LinkEvent::Lost),
-                received = restored.recv() => received.map(|_| LinkEvent::Restored),
+            // `error_rx` шлёт и каждую неудачную попытку реконнекта: журнал пишем только
+            // на смену состояния.
+            let next = tokio::select! {
+                received = lost.recv() => received.map(|_| false),
+                received = restored.recv() => received.map(|_| true),
                 outcome = &mut connection.0 => {
                     inbox::connection_lost(outcome).await;
                     break;
                 }
             };
-            match event {
-                Ok(event) => link = record(link, event),
-                // Пропущенные события: состояние уточнит следующее.
-                Err(RecvError::Lagged(_)) => {}
+            match next {
+                Ok(next) if next != available => {
+                    available = next;
+                    if available {
+                        info!(valkey = "available", "Valkey: соединение установлено");
+                    } else {
+                        warn!(
+                            valkey = "unavailable",
+                            "Valkey: команды отказывают сразу до переподключения"
+                        );
+                    }
+                }
+                // Без смены состояния и при пропущенных событиях (Lagged) журнал молчит: одна
+                // строка может не записаться, неверной не будет.
+                Ok(_) | Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => return,
             }
         }
     }
-}
-
-fn record(previous: Link, event: LinkEvent) -> Link {
-    let (next, notice) = step(previous, event);
-    match notice {
-        Some(Notice::Unavailable) => warn!(
-            valkey = "unavailable",
-            "Valkey: команды отказывают сразу до переподключения"
-        ),
-        Some(Notice::Available) => info!(valkey = "available", "Valkey: соединение установлено"),
-        None => {}
-    }
-    next
 }
 
 #[cfg(test)]
