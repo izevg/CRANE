@@ -117,7 +117,7 @@ gantt
 2. `feat(access)`: Cedar с объяснением решений, роли и разделение обязанностей.
 3. `feat(app)`: журнал действий с цепочкой хэшей.
 4. `feat(entry)`: OpenMetrics, OTLP, health и readiness, алерты в поставке.
-5. `feat(web)`: каркас SPA по FSD: каталог, карточка пакета, администрирование; Storybook и Playwright подключаются здесь (`DEBT.md`, п. 3).
+5. `feat(web)`: каркас SPA по FSD: каталог, карточка пакета, администрирование, командная палитра и центр уведомлений (`docs/ui/`, `docs/api/admin.openapi.yaml`); Storybook и Playwright подключаются здесь (`DEBT.md`, п. 3).
 6. `feat(cli)`: `login` (device flow), `setup` шести клиентов, credential providers для NuGet и Cargo.
 7. `feat(formats)`: `cargo owners add / remove` на реальных принципалах и Cedar (`DEBT.md`, п. 7).
 
