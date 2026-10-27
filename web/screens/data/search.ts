@@ -1,4 +1,3 @@
-// i18n: не мигрирован
 import type { Tone } from "~/shared/ui/primitives";
 
 export type SearchResult = {

@@ -1,5 +1,4 @@
 // biome-ignore-all lint/style/noMagicNumbers: сидовые данные макета (даты, смещения, счётчики)
-// i18n: не мигрирован
 
 export type TokenRow = {
   id: string;

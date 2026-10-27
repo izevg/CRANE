@@ -116,3 +116,59 @@ it("тесты и stories в src не проверяются, а экраны в
   // Assert
   assert.deepEqual(actual, ["web/screens/s1/S1.stories.tsx"]);
 });
+
+it("фикстуры витрины в web/screens/data — контент, а не интерфейс: не проверяются", () => {
+  // Arrange
+  const bad = 'export const a = "Иванов И.";\n';
+  const root = writeTree({
+    "web/src/a.ts": "export const a = 1;\n",
+    "web/screens/data/people.ts": bad,
+    "web/screens/s1/S1.stories.tsx": bad,
+  });
+
+  // Act
+  const actual = checkTree(root).map((v) => v.split(":")[0]);
+
+  // Assert
+  assert.deepEqual(actual, ["web/screens/s1/S1.stories.tsx"]);
+});
+
+it("тело play и title/name истории — служебные части stories, не интерфейс", () => {
+  // Arrange
+  const code = source(
+    'const meta = { title: "Экраны/S1 Поиск", component: C } satisfies Meta<typeof C>;',
+    'export const A: Story = { name: "Десктоп", play: async () => { await expect(x).toHaveText("Закрыть"); } };',
+  );
+
+  // Act
+  const actual = checkSource(code, "web/screens/s1/S1.stories.tsx");
+
+  // Assert
+  assert.deepEqual(actual, []);
+});
+
+it("name вне истории (подпись колонки) остаётся нарушением", () => {
+  // Arrange
+  const code = source('const columns = { name: "Версия" };');
+
+  // Act
+  const actual = checkSource(code, "web/screens/s1/S1.stories.tsx");
+
+  // Assert
+  assert.equal(actual.length, 1);
+});
+
+it("объявление с i18n-fixture и причиной — фикстура, пропускается целиком", () => {
+  // Arrange
+  const code = source(
+    "// i18n-fixture: имена команд — контент витрины",
+    'const TEAMS = ["Платформа", "Платежи"];',
+    'const UI = "Закрыть";',
+  );
+
+  // Act
+  const actual = checkSource(code, "web/screens/s1/S1.stories.tsx");
+
+  // Assert
+  assert.equal(actual.length, 1);
+});
