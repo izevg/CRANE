@@ -1,0 +1,111 @@
+# Single node (раздел 16.1 docs/product): caddy, crane (роль all), postgres, локальный том blobs.
+# Запуск: cp .env.dist .env && docker compose up -d
+# Значения только из .env; пропущенная переменная останавливает запуск.
+# Профили: cache (valkey), scan (analyzer + trivy), s3 (seaweedfs вместо тома).
+name: crane
+
+x-crane: &crane
+  image: ${CRANE_IMAGE:?}:${CRANE_VERSION:?}
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  environment: &crane-env
+    CRANE_DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?}
+    CRANE_CACHE: ${CRANE_CACHE:?}
+    CRANE_BLOBS: ${CRANE_BLOBS:?}
+
+services:
+  caddy:
+    image: ${CADDY_IMAGE:?}
+    restart: unless-stopped
+    ports: ["${CADDY_HTTP_PORT:?}:80", "${CADDY_HTTPS_PORT:?}:443"]
+    environment:
+      CRANE_HOST: ${CRANE_HOST:?}
+      CRANE_HTTP_PORT: ${CRANE_HTTP_PORT:?}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [crane]
+
+  # Миграции отдельной ролью: advisory lock исключает параллельный запуск.
+  migrate:
+    <<: *crane
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  crane:
+    <<: *crane
+    command: ["all"]
+    volumes: [blobs:/data/blobs]
+    deploy:
+      resources:
+        limits: { cpus: "${CRANE_CPUS:?}", memory: "${CRANE_MEMORY:?}" }
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "crane", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  analyzer:
+    <<: *crane
+    profiles: [scan]
+    command: ["analyze"]
+    environment:
+      <<: *crane-env
+      CRANE_TRIVY_URL: ${CRANE_TRIVY_URL:?}
+    # Изолированная сеть: только trivy, наружу выхода нет.
+    networks: [scan]
+    depends_on: [trivy]
+
+  trivy:
+    profiles: [scan]
+    image: ${TRIVY_IMAGE:?}
+    restart: unless-stopped
+    command: ["server", "--listen", "0.0.0.0:4954"]
+    networks: [scan, default]
+    volumes: [trivy:/root/.cache/trivy]
+
+  postgres:
+    image: ${POSTGRES_IMAGE:?}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    volumes: [pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  valkey:
+    profiles: [cache]
+    image: ${VALKEY_IMAGE:?}
+    restart: unless-stopped
+    command: ["--save", "", "--appendonly", "no"]
+
+  seaweedfs:
+    profiles: [s3]
+    image: ${SEAWEEDFS_IMAGE:?}
+    restart: unless-stopped
+    command: ["server", "-dir=/data", "-s3", "-s3.port=8333"]
+    volumes: [s3:/data]
+
+networks:
+  scan:
+    internal: true
+
+volumes:
+  pg:
+  blobs:
+  s3:
+  trivy:
+  caddy-data:

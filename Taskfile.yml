@@ -20,6 +20,7 @@ tasks:
       - task: rust:check
       - task: web:check
       - task: web:test
+      - task: deploy:check
 
   structure:
     desc: Правило четырёх и слои крейтов
@@ -61,6 +62,14 @@ tasks:
   web:test:
     desc: Vitest
     cmds: [pnpm --filter web run test]
+
+  deploy:check:
+    desc: Compose-файлы и Helm-чарт (docker compose config, helm lint, helm template)
+    cmds:
+      - docker compose --env-file .env.dist --profile cache --profile scan --profile s3 config -q
+      - docker compose --env-file .env.dist -f docker-compose.dev.yaml --profile s3 --profile scan config -q
+      - helm lint deploy/helm/crane --set existingSecret=crane-env
+      - helm template crane deploy/helm/crane --set existingSecret=crane-env --set ingress.enabled=true >/dev/null
 
   gate:
     desc: "Полный гейт перед PR в release/* (юниты, мутации, Playwright). В CI не запускается"

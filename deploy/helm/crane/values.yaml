@@ -1,0 +1,51 @@
+image:
+  repository: crane/crane
+  # По умолчанию appVersion чарта
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Внешние сервисы организации (PostgreSQL, Valkey, S3 не входят в чарт).
+# Секрет с ключами CRANE_DATABASE_URL (обязателен) и CRANE_CACHE, CRANE_BLOBS (по необходимости)
+# создаётся вне чарта: external-secrets, sealed-secrets или вручную.
+existingSecret: ""
+config:
+  cache: memory
+  blobs: ""
+
+ports:
+  http: 8080
+  admin: 9464
+
+api:
+  replicas: 2
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { memory: 1Gi }
+
+worker:
+  replicas: 2
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { memory: 1Gi }
+
+# Миграции: Job в pre-install/pre-upgrade hook
+migrate:
+  enabled: true
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: crane.example.com
+  tls: []
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
