@@ -4,11 +4,11 @@
 Эталон замерен по git-истории и файлам (непустые строки, без lock-файлов,
 сгенерированного кода, импортированных спецификаций и бинарных файлов).
 Запуск: python3 tools/estimate-agent-hours.py [--start ГГГГ-ММ-ДД] [--holidays ГГГГ-ММ-ДД ...] [--gantt]
-                                              [--parallel N] [--hours Ч]
+                                              [--parallel N] [--hours Ч] [--every-day]
 С --start печатает календарь релизов по трём сценариям (рабочие дни пн–пт, нерабочие даты задаются --holidays)
-и календарь base по наблюдению 27.10 (5 × 12, OBSERVED) независимо от --parallel и --hours.
---parallel и --hours задают ёмкость (параллельных веток, часов в рабочий день; по умолчанию 4 × 8, BASE)
-и меняют все расчёты в днях и датах.
+и календарь base по наблюдению 27.10 (5 × 12, без выходных, OBSERVED) независимо от --parallel, --hours и --every-day.
+--parallel и --hours задают ёмкость (параллельных веток, часов в рабочий день; по умолчанию 4 × 8, BASE),
+--every-day снимает выходные (по умолчанию пн–пт); все три меняют все расчёты в днях и датах.
 С --gantt дополнительно печатает диаграмму Ганта (Mermaid) для базового сценария.
 Работы «после v1» считаются в итоге, но в календарь и диаграмму не попадают.
 """
@@ -98,12 +98,13 @@ EXTRA = [
 CALENDAR = [
     ("Нагрузочный PoC на целевом железе", POST_V1, 3),
     ("Пентест (Strix) на реальном корпоративном реестре", POST_V1, 7),
+    # RC ждёт обратной связи, а не работы: длительность в днях календаря сценария, число веток её не ускоряет
     ("Release candidate: стабилизация и обратная связь", "P1", 5),  # допущение, уточняется по ходу
 ]
 SCENARIO_COMPLEXITY = {"low": 0.9, "base": 1.0, "high": 1.25}
-# ёмкость: (имя, параллельных веток, часов в рабочий день)
-BASE = ("база плана", 4, 8)  # на ней посчитаны даты ROADMAP
-OBSERVED = ("по наблюдению 27.10, параллельных веток", 5, 12)  # обоснование — ROADMAP, «Как посчитаны даты»
+# ёмкость: (имя, параллельных веток, часов в рабочий день, работа и в выходные)
+BASE = ("база плана: 4 × 8 ч", 4, 8, False)  # на ней посчитаны даты ROADMAP
+OBSERVED = ("по наблюдению 27.10: 5 веток × 12 ч, 7 дней в неделю", 5, 12, True)  # обоснование — ROADMAP, «Как посчитаны даты»
 OPERATOR_FACTOR = 1.5    # Rust и безопасность требуют больше ревью, чем эталон
 
 
@@ -216,20 +217,22 @@ def release_hours(scn):
     return result
 
 
-def workday(start, offset):
+def workday(start, offset, every_day=False):
     """Дата рабочего дня с номером offset (0 — первый рабочий день не раньше start)."""
+    def off(day):  # --holidays действуют и без выходных
+        return day in HOLIDAYS or (not every_day and day.weekday() >= 5)
     day = start
-    while day.weekday() >= 5 or day in HOLIDAYS:
+    while off(day):
         day += dt.timedelta(days=1)
     for _ in range(offset):
         day += dt.timedelta(days=1)
-        while day.weekday() >= 5 or day in HOLIDAYS:
+        while off(day):
             day += dt.timedelta(days=1)
     return day
 
 
 def per_day(cap):
-    _, parallel, hours = cap
+    _, parallel, hours, _ = cap
     return parallel * hours
 
 
@@ -245,8 +248,8 @@ def schedule(scn, start, cap):
         return title, h, begin, end
 
     def row(version, title, h, begin, end, note=""):
-        rows.append((version, title, h, workday(start, math.floor(begin)),
-                     workday(start, max(math.ceil(end) - 1, 0)), note))
+        rows.append((version, title, h, workday(start, math.floor(begin), cap[3]),
+                     workday(start, max(math.ceil(end) - 1, 0), cap[3]), note))
 
     for v in ("v0.1.0", "v0.2.0", "v0.3.0", "v0.4.0", "v0.5.0"):
         if v in DONE:
@@ -267,8 +270,9 @@ def schedule(scn, start, cap):
 
 
 def print_schedule(start, scn, cap):
-    name, parallel, hours = cap
-    print(f"\nКалендарь [{scn}] от {start.isoformat()} ({name}: {parallel:g} × {hours:g} ч, рабочие дни пн–пт):")
+    name, _, _, every_day = cap
+    mode = "все дни недели" if every_day else "рабочие дни пн–пт"
+    print(f"\nКалендарь [{scn}] от {start.isoformat()} ({name}, {mode}):")
     for version, title, h, b, e, note in schedule(scn, start, cap):
         hrs = f"{h:4.0f} агент-ч" if h else " " * 11
         tail = f"  ({note})" if note else ""
@@ -282,7 +286,7 @@ def print_gantt(start, cap):
     stage["v1.0.0"] = "P1"
     print("```mermaid")
     print('%%{init: {"gantt": {"fontSize": 14, "sectionFontSize": 14, "barHeight": 26, "barGap": 6, "leftPadding": 150}}}%%')
-    print("gantt\n  todayMarker off\n  dateFormat YYYY-MM-DD\n  axisFormat %d.%m\n  excludes weekends")
+    print("gantt\n  todayMarker off\n  dateFormat YYYY-MM-DD\n  axisFormat %d.%m" + ("" if cap[3] else "\n  excludes weekends"))
     current = None
     for version, title, _, b, e, note in schedule("base", start, cap):
         if stage[version] != current:
@@ -291,7 +295,7 @@ def print_gantt(start, cap):
         label = f"{version} {title.split(':')[0]}".replace(":", " ").replace("(", "").replace(")", "")
         days, day = 0, b
         while day <= e:  # Mermaid с excludes weekends считает только рабочие дни
-            days += day.weekday() < 5 and day not in HOLIDAYS
+            days += (cap[3] or day.weekday() < 5) and day not in HOLIDAYS
             day += dt.timedelta(days=1)
         tag = "done, " if version in DONE else ""
         print(f"  {label} :{tag}{b.isoformat()}, {max(days, 1)}d")
@@ -306,13 +310,15 @@ if __name__ == "__main__":
     parser.add_argument("--gantt", action="store_true", help="диаграмма Ганта (Mermaid), нужен --start")
     parser.add_argument("--parallel", type=int, default=BASE[1],
                         help="параллельных веток (единица нормы эталона), по умолчанию %(default)s")
+    parser.add_argument("--every-day", action="store_true", help="календарь без выходных (по умолчанию пн–пт)")
     parser.add_argument("--hours", type=float, default=BASE[2],
                         help="часов работы в рабочий день, 0 < ч ≤ 24, по умолчанию %(default)s")
     args = parser.parse_args()
     if args.parallel <= 0 or not 0 < args.hours <= 24:
         parser.error("ёмкость: --parallel > 0 и 0 < --hours ≤ 24")
     HOLIDAYS.update(args.holidays)
-    cap = BASE if (args.parallel, args.hours) == BASE[1:] else ("ёмкость", args.parallel, args.hours)
+    cap = (args.parallel, args.hours, args.every_day)
+    cap = BASE if cap == BASE[1:] else (f"ёмкость: {args.parallel} × {args.hours:g} ч", *cap)
     main(cap)
     if args.start:
         for scn in ("low", "base", "high"):
