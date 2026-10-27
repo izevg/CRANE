@@ -82,8 +82,7 @@ components:
     IdempotencyKey:
       name: Idempotency-Key
       in: header
-      description: Ключ идемпотентности. Обязателен для POST (создание и действия). Хранится 24 часа вместе с хэшем
-        запроса; повтор с тем же телом возвращает прежний результат, повтор с другим телом даёт 422 `idempotency-key-reuse`.
+      description: 'Ключ идемпотентности. Обязателен для POST (создание и действия). Хранится 24 часа вместе с хэшем запроса; повтор с тем же телом возвращает прежний результат, повтор с другим телом даёт 422 `idempotency-key-reuse`. Ключ действует в пределах principal: чужой ключ не совпадает с вашим. Ответы с секретом (`*Created` токена, credential робота, вебхука) не сохраняются: повтор возвращает 409 `idempotency-replay-secret` со ссылкой на созданный ресурс, без секрета.'
       required: true
       schema:
         type: string
@@ -601,7 +600,7 @@ components:
       - released
       - blocked
       - deleted
-      description: Состояние версии.
+      description: 'Действующее состояние версии - вердикт видимости `served()` (10.2): решения о самой версии и действующие правила (экстренные блокировки, окно карантина). Есть и у proxy-версии без строки в каталоге.'
     LifecycleState:
       title: LifecycleState
       type: string
@@ -927,6 +926,7 @@ components:
       - crane:create-compliance-report
       - crane:create-repository
       - crane:update-repository
+      - crane:update-repository-protection
       - crane:purge-cache
       - crane:run
       - crane:create-retention-rule
@@ -1137,14 +1137,19 @@ components:
     Typosquat:
       title: Typosquat
       type: object
-      description: Кандидат typosquatting для proxy-результата.
+      description: 'Кандидат typosquatting для proxy-результата. Ссылка на карточку настоящего пакета - `_links.crane:similar-to` элемента поиска.'
       properties:
         similar_to:
           type: string
+          description: Отображаемое имя настоящего пакета.
+        similar_to_purl:
+          type: string
+          description: Package URL настоящего пакета без версии, на который похоже имя.
         distance:
           type: integer
       required:
       - similar_to
+      - similar_to_purl
       - distance
     Highlight:
       title: Highlight
@@ -1219,7 +1224,7 @@ components:
           description: P3.
         _links:
           $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, crane:package, crane:versions, crane:favorite, crane:unfavorite'
+          description: 'Ссылки HAL: self, crane:package, crane:versions, crane:favorite, crane:unfavorite, crane:similar-to (нет ссылки - настоящего пакета нет в видимых репозиториях)'
       required:
       - purl_base
       - name
@@ -1357,16 +1362,21 @@ components:
       required:
       - _links
       - _embedded
-    BlockReason:
-      title: BlockReason
+    BlockReasonKind:
+      title: BlockReasonKind
+      type: string
+      enum:
+      - rule
+      - emergency
+      description: 'Вид блокировки: значения `kind` вариантов BlockReason (словари UI).'
+    BlockReasonRule:
+      title: BlockReasonRule
       type: object
-      description: Причина блокировки; для emergency - advisory и ближайшая исправленная версия.
+      description: Блокировка по правилу политики.
       properties:
         kind:
           type: string
-          enum:
-          - rule
-          - emergency
+          const: rule
         rule_id:
           type: string
         advisory_id:
@@ -1375,6 +1385,37 @@ components:
           type: string
       required:
       - kind
+      - rule_id
+    BlockReasonEmergency:
+      title: BlockReasonEmergency
+      type: object
+      description: Экстренная блокировка (14.8); снимается только `POST /emergency-blocks/{block_id}/lift`.
+      properties:
+        kind:
+          type: string
+          const: emergency
+        block_id:
+          type: string
+          description: Идентификатор ресурса EmergencyBlock.
+        advisory_id:
+          type: string
+        fixed_in:
+          type: string
+      required:
+      - kind
+      - block_id
+      - advisory_id
+    BlockReason:
+      title: BlockReason
+      description: Причина блокировки версии.
+      oneOf:
+      - $ref: '#/components/schemas/BlockReasonRule'
+      - $ref: '#/components/schemas/BlockReasonEmergency'
+      discriminator:
+        propertyName: kind
+        mapping:
+          rule: '#/components/schemas/BlockReasonRule'
+          emergency: '#/components/schemas/BlockReasonEmergency'
     VersionFlags:
       title: VersionFlags
       type: object
@@ -1442,6 +1483,7 @@ components:
           oneOf:
           - $ref: '#/components/schemas/BlockReason'
           - type: 'null'
+          description: Не null тогда и только тогда, когда `state = blocked`.
         flags:
           $ref: '#/components/schemas/VersionFlags'
         published_at:
@@ -1473,6 +1515,7 @@ components:
       - version
       - purl
       - state
+      - block_reason
       - flags
       - published_at
       - published_by
@@ -1559,6 +1602,7 @@ components:
           oneOf:
           - $ref: '#/components/schemas/BlockReason'
           - type: 'null'
+          description: Не null тогда и только тогда, когда `state = blocked`.
         flags:
           $ref: '#/components/schemas/VersionFlags'
         published_at:
@@ -1616,6 +1660,7 @@ components:
       - version
       - purl
       - state
+      - block_reason
       - flags
       - published_at
       - published_by
@@ -1735,6 +1780,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CodeStep'
+        available_clients:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InstallClient'
+          description: Клиенты, совместимые с форматом пакета, в порядке показа; первый - клиент по умолчанию.
         manual_config:
           $ref: '#/components/schemas/CodeFile'
         install:
@@ -1744,6 +1795,7 @@ components:
           description: 'Ссылки HAL: self'
       required:
       - client
+      - available_clients
       - setup_steps
       - manual_config
       - install
@@ -4141,7 +4193,7 @@ components:
     VexCreate:
       title: VexCreate
       type: object
-      description: Нужен `finding_ids` либо `advisory_id` с `version_range`. Находки разных advisory дают 422 `bulk-vex-single-advisory`.
+      description: Нужен `finding_ids` либо `advisory_id` с `version_range`. Находки разных advisory дают 422 `bulk-vex-single-advisory`. Ограничения по ролям и malware - в описании `POST /vex-statements`.
       x-crane-open-question: Поле `justification` - машинный код обоснования OpenVEX/CycloneDX (кандидат на enum VexJustification) или свободный текст? Сейчас строка без ограничений.
       properties:
         finding_ids:
@@ -5174,16 +5226,12 @@ components:
     RepositorySettings:
       title: RepositorySettings
       type: object
-      description: Настройки репозитория (config в 09).
+      description: Эксплуатационные настройки репозитория (config в 09).
       properties:
         ttl:
           $ref: '#/components/schemas/RepositoryTtl'
         limits:
           $ref: '#/components/schemas/RepositoryLimits'
-        mutable:
-          type: boolean
-        dev_skip_quarantine:
-          type: boolean
         delivery:
           type: string
           enum:
@@ -5191,15 +5239,9 @@ components:
           - presigned
         storage_class:
           type: string
-        upstream_url:
-          type: string
-          format: uri
-          description: Только для proxy.
       required:
       - ttl
       - limits
-      - mutable
-      - dev_skip_quarantine
       - delivery
       - storage_class
     Repository:
@@ -5219,9 +5261,11 @@ components:
           format: date-time
         settings:
           $ref: '#/components/schemas/RepositorySettings'
+        protection:
+          $ref: '#/components/schemas/RepositoryProtection'
         _links:
           $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, crane:update-repository, crane:purge-cache'
+          description: 'Ссылки HAL: self, crane:update-repository, crane:update-repository-protection, crane:purge-cache'
       required:
       - name
       - format
@@ -5229,6 +5273,7 @@ components:
       - workspace
       - created_at
       - settings
+      - protection
       - _links
     RepositoryPage:
       title: RepositoryPage
@@ -5264,11 +5309,57 @@ components:
           type: string
         settings:
           $ref: '#/components/schemas/RepositorySettings'
+        upstream_url:
+          type: string
+          format: uri
+          description: Обязателен для proxy, запрещён для hosted; хост из allowlist экземпляра.
       required:
       - name
       - format
       - kind
       - workspace
+    HostedRepositoryProtection:
+      title: HostedRepositoryProtection
+      type: object
+      description: 'Защитные настройки hosted-репозитория; меняет appsec. `mutable` - только Maven SNAPSHOT, иначе 422.'
+      properties:
+        kind:
+          type: string
+          const: hosted
+        mutable:
+          type: boolean
+        dev_skip_quarantine:
+          type: boolean
+          description: Только dev-репозиторий.
+      required:
+      - kind
+      - mutable
+      - dev_skip_quarantine
+    ProxyRepositoryProtection:
+      title: ProxyRepositoryProtection
+      type: object
+      description: Защитные настройки proxy-репозитория; меняет platform-admin. Хост из allowlist экземпляра (16.8).
+      properties:
+        kind:
+          type: string
+          const: proxy
+        upstream_url:
+          type: string
+          format: uri
+      required:
+      - kind
+      - upstream_url
+    RepositoryProtection:
+      title: RepositoryProtection
+      description: 'Защитные настройки репозитория по его виду. Меняются только отдельной операцией со step-up (14.12); каждое изменение - событие SIEM «Ослабление политики».'
+      oneOf:
+      - $ref: '#/components/schemas/HostedRepositoryProtection'
+      - $ref: '#/components/schemas/ProxyRepositoryProtection'
+      discriminator:
+        propertyName: kind
+        mapping:
+          hosted: '#/components/schemas/HostedRepositoryProtection'
+          proxy: '#/components/schemas/ProxyRepositoryProtection'
     RepositoryPatch:
       title: RepositoryPatch
       type: object
@@ -7459,14 +7550,15 @@ components:
         - access
         summary: Выпустить токен
         description: |-
-          Выпуск `session` (12 ч; это `cctl setup` и `cctl login --refresh`, заменяет `/tokens/session` из раздела 13) или `personal` (до 90 дней по политике). Секрет есть только в этом ответе (`Cache-Control: no-store`).
+          Выпуск `session` (≤ 12 ч и не дольше сессии IdP) или `personal` (≤ 90 дней по политике). Секрет только в этом ответе (`Cache-Control: no-store`). 403 `interactive-login-required` - вызов не из интерактивной сессии IdP человека; 403 `scope-exceeds-principal` - scopes шире прав вызывающего. Правила и причины: 13 «Правила выпуска».
 
-          Роли: любой аутентифицированный.
+          Роли: любой аутентифицированный человек.
         operationId: createToken
         x-crane-phase: P0
         x-crane-since: v0.4.0
         x-crane-action: token:create
-        x-crane-step-up: false
+        x-crane-step-up: true
+        x-crane-step-up-when: тело запроса kind = personal
         x-crane-audit:
           event: token.created
           ocsf_class: 3001
@@ -7499,7 +7591,7 @@ components:
           '400':
             $ref: '#/components/responses/BadRequest'
           '401':
-            $ref: '#/components/responses/Unauthorized'
+            $ref: '#/components/responses/StepUpRequired'
           '403':
             $ref: '#/components/responses/Forbidden'
           '409':
@@ -8230,14 +8322,14 @@ components:
         - access
         summary: Выпустить или ротировать credential
         description: |-
-          Ротация: второй секрет выпускается заранее, оба действуют 24 часа, затем старый отзывается. Секрет есть только в этом ответе.
+          Ротация: второй секрет выпускается заранее, оба действуют 24 часа, затем старый отзывается. Секрет есть только в этом ответе. Scopes credential - ровно scopes робота. 403 `interactive-login-required` - вызов не из интерактивной сессии IdP человека. Правила: 13.
 
           Роли: owner.
         operationId: issueRobotCredential
         x-crane-phase: P0
         x-crane-since: v0.4.0
         x-crane-action: robot:issue_credential
-        x-crane-step-up: false
+        x-crane-step-up: true
         x-crane-audit:
           event: robot.credential_issued
           ocsf_class: 3001
@@ -8263,7 +8355,7 @@ components:
           '400':
             $ref: '#/components/responses/BadRequest'
           '401':
-            $ref: '#/components/responses/Unauthorized'
+            $ref: '#/components/responses/StepUpRequired'
           '403':
             $ref: '#/components/responses/Forbidden'
           '404':

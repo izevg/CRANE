@@ -66,7 +66,8 @@ services:
 | `CRANE_DATABASE_URL` или `CRANE_DATABASE_URL_FILE` | одна из двух | каталог: `memory` (данные теряются при рестарте) или `postgres://…` (`postgresql://…`); файл читается без завершающего перевода строки |
 | `CRANE_CACHE` или `CRANE_CACHE_FILE` | `memory` | кэш proxy и координатор выборок: `memory` (ограничен по байтам, в процессе) или Valkey; схемы `valkey`, `valkeys` (TLS), `valkey-cluster`, `valkeys-cluster`, `valkey-sentinel`, `valkeys-sentinel` (`redis://` не принимается). Необязательна, в отличие от хранилищ: кэш не источник истины, его потеря данных не теряет, поэтому правило «`memory` пишется явно» выше на неё не распространяется. URL может содержать пароль, поэтому есть `_FILE` (читается без завершающего перевода строки, как `CRANE_DATABASE_URL_FILE`) |
 | `CRANE_BLOBS` | обязательна | хранилище blob: `memory`, `file:///абсолютный/путь` или `s3://bucket[/prefix]?endpoint=…` |
-| `CRANE_PUBLIC_URL` | обязательна | внешний адрес (`http://` или `https://`), попадает в `config.json` cargo |
+| `CRANE_PUBLIC_URL` | обязательна | внешний адрес консоли и `/api` (`http://` или `https://`); в `config.json` cargo попадает, если `CRANE_PACKAGES_URL` не задан |
+| `CRANE_PACKAGES_URL` | пусто | origin пакетов для протоколов (`/cargo`, `/npm`, `/pypi`, `/maven`, `/nuget`) и presigned-ссылок. Если задан, консоль на `CRANE_PUBLIC_URL` не отдаёт протоколы, а origin пакетов не отдаёт консоль и `/api`; `config.json` cargo и `cctl setup` берут адрес отсюда. Лучше отдельный регистрируемый домен; поддомен допустим: cookie сессии host-only (`__Host-`), мутации требуют CSRF-токена и Origin |
 | `CRANE_TOKEN` или `CRANE_TOKEN_FILE` | одна из двух | временный статический токен до v0.4.0; файл читается без завершающего перевода строки |
 | `CRANE_TOKEN_PRINCIPAL` | `crane` | имя личности токена (тип «робот»): попадает в журнал аудита, `access`-журнал и ответ cargo `owners` |
 | `CRANE_TRUSTED_PROXIES` | пусто | IP-адреса и CIDR (IPv4, IPv6) через запятую, чьим `X-Forwarded-For` и `X-Request-Id` верить; compose обязан указать сеть Caddy, иначе во всех событиях будет адрес прокси |
@@ -83,7 +84,7 @@ services:
 
 `crane healthcheck` опрашивает `/healthz/ready` на `CRANE_ADMIN_PORT` и завершается с кодом 0 или 1 (для healthcheck в compose: в образе нет curl).
 
-**Секреты и сети в compose.** Токен, пароль PostgreSQL и URL каталога (с паролем) лежат в файлах, пути к которым задают `CRANE_TOKEN_SECRET`, `POSTGRES_PASSWORD_SECRET` и `CRANE_DATABASE_URL_SECRET`; compose монтирует их в `/run/secrets`, а сервер читает через `CRANE_TOKEN_FILE` и `CRANE_DATABASE_URL_FILE`. Ни в переменных окружения, ни в compose-файле, ни в `.env` значений секретов нет. Сеть `edge` с фиксированной подсетью `CRANE_EDGE_SUBNET` соединяет только caddy и crane; та же подсеть передаётся как `CRANE_TRUSTED_PROXIES`, поэтому в аудите виден адрес клиента, а не Caddy. PostgreSQL в `edge` не входит, порт admin наружу не публикуется.
+**Секреты и сети в compose.** Токен, пароль PostgreSQL и URL каталога (с паролем) лежат в файлах, пути к которым задают `CRANE_TOKEN_SECRET`, `POSTGRES_PASSWORD_SECRET` и `CRANE_DATABASE_URL_SECRET`; compose монтирует их в `/run/secrets`, а сервер читает через `CRANE_TOKEN_FILE` и `CRANE_DATABASE_URL_FILE`. Ни в переменных окружения, ни в compose-файле, ни в `.env` значений секретов нет. Сеть `edge` с фиксированной подсетью `CRANE_EDGE_SUBNET` соединяет только caddy и crane; та же подсеть передаётся как `CRANE_TRUSTED_PROXIES`, поэтому в аудите виден адрес клиента, а не Caddy. PostgreSQL в `edge` не входит, порт admin наружу не публикуется. Любой обратный прокси обязан удалять клиентский `X-Request-Id` (Caddy: `header_up -X-Request-Id`), иначе клиент выбирает свой идентификатор корреляции (14.9).
 
 ## 16.2 Kubernetes (Helm chart)
 
@@ -288,7 +289,8 @@ flowchart LR
 -   публичный URL начинается с `http://`;
 -   URL PostgreSQL без `sslmode=verify-full`;
 -   endpoint S3 задан по `http://` или указан `aws_allow_http=true`;
--   режим разделения обязанностей `warn` (14.12).
+-   режим разделения обязанностей `warn` (14.12);
+-   `CRANE_PACKAGES_URL` не задан или его хост совпадает с хостом `CRANE_PUBLIC_URL`.
 
 Без `true` те же находки дают предупреждения и событие `config.insecure`. Шифрование на диске CRANE не проверяет: это зона оператора.
 

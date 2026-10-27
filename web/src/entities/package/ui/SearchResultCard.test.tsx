@@ -109,7 +109,20 @@ describe("SearchResultCard", () => {
   it("typosquat: предупреждение с расстоянием и ссылка на настоящий пакет", () => {
     // Arrange
     // Act
-    card({ typosquat: { similar_to: "@acme/ui", distance: 1 } }, "/packages/real-acme-ui");
+    card(
+      {
+        typosquat: {
+          similar_to: "@acme/ui",
+          similar_to_purl: "pkg:npm/%40acme/ui",
+          distance: 1,
+        },
+        _links: {
+          self: { href: "/api/packages/acme-ui" },
+          "crane:similar-to": { href: "/packages/npm/npm-hosted/%40acme%2Fui" },
+        },
+      },
+      "/packages/real-acme-ui",
+    );
 
     // Assert
     expect(screen.getByText(SQUAT)).toBeVisible();
@@ -122,7 +135,13 @@ describe("SearchResultCard", () => {
   it("typosquat без typosquatHref называет пакет без ссылки", () => {
     // Arrange
     // Act
-    card({ typosquat: { similar_to: "@acme/ui", distance: 1 } });
+    card({
+      typosquat: {
+        similar_to: "@acme/ui",
+        similar_to_purl: "pkg:npm/%40acme/ui",
+        distance: 1,
+      },
+    });
 
     // Assert
     expect(screen.getByText(SQUAT)).toBeVisible();

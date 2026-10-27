@@ -207,6 +207,8 @@ paths:
       description: |-
         Для CI-сценариев (P1): JWT платформы -> `crci_`. Ошибки по RFC 6749 §5.2, не problem+json. Trust policy задаёт издателя, claims и scopes.
 
+        `subject_token` - только JWT доверенного внешнего издателя; токены CRANE - `invalid_grant`. Результат - только `crci_` (10.5).
+
         Роли: аутентифицирует сам `subject_token`.
       operationId: exchangeToken
       x-crane-phase: P0

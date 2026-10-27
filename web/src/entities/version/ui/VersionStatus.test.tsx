@@ -27,7 +27,11 @@ describe("VersionStatus", () => {
 
   it("у заблокированной экстренно причина стоит рядом с advisory", () => {
     // Arrange
-    const version = view("blocked", { kind: "emergency", advisory_id: "CVE-2026-31337" });
+    const version = view("blocked", {
+      kind: "emergency",
+      block_id: "0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
+      advisory_id: "CVE-2026-31337",
+    });
 
     // Act
     render(<VersionStatus version={version} />);
@@ -52,6 +56,7 @@ describe("VersionStatus", () => {
     // Arrange
     const version = view("blocked", {
       kind: "emergency",
+      block_id: "0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
       advisory_id: "CVE-2026-31337",
       fixed_in: "4.17.21",
     });
@@ -65,7 +70,11 @@ describe("VersionStatus", () => {
 
   it("без fixed_in текста про исправление нет", () => {
     // Arrange
-    const version = view("blocked", { kind: "emergency", advisory_id: "CVE-2026-31337" });
+    const version = view("blocked", {
+      kind: "emergency",
+      block_id: "0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
+      advisory_id: "CVE-2026-31337",
+    });
 
     // Act
     render(<VersionStatus version={version} />);
@@ -88,7 +97,11 @@ describe("VersionStatus", () => {
 
   it("причина не показывается у состояния, отличного от blocked", () => {
     // Arrange
-    const version = view("released", { kind: "emergency", advisory_id: "CVE-2026-31337" });
+    const version = view("released", {
+      kind: "emergency",
+      block_id: "0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
+      advisory_id: "CVE-2026-31337",
+    });
 
     // Act
     render(<VersionStatus version={version} />);

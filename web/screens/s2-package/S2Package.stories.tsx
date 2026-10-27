@@ -44,6 +44,7 @@ function installInstructions(client: InstallClient): InstallInstructions {
   };
   return {
     client,
+    available_clients: ["npm", "pnpm", "yarn"],
     setup_steps: [{ title: "Вход и настройка npm", code: "cctl login\ncctl setup npm" }],
     manual_config: { path: ".npmrc", code: `//crane.example/npm/:_authToken=\${CRANE_TOKEN}` },
     install: { code: install[client] ?? "npm i @acme/ui@1.4.2" },

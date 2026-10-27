@@ -44,7 +44,15 @@ export const Typosquat: Story = {
       name: { display: "@acme/uii", normalized: "@acme/uii" },
       repository: { name: "npm-proxy", format: "npm", kind: "proxy", workspace: "platform" },
       latest: { version: "0.0.1", state: "quarantined" },
-      typosquat: { similar_to: "@acme/ui", distance: 1 },
+      typosquat: {
+        similar_to: "@acme/ui",
+        similar_to_purl: "pkg:npm/%40acme/ui",
+        distance: 1,
+      },
+      _links: {
+        self: { href: "/api/packages/acme-uii" },
+        "crane:similar-to": { href: "/packages/npm/npm-hosted/%40acme%2Fui" },
+      },
     },
     typosquatHref: "/packages/acme-ui",
   },
@@ -91,7 +99,11 @@ export const LongName: Story = {
       },
       format: "maven",
       risk: { max_open_priority: "P0", open_count: 12 },
-      typosquat: { similar_to: "com.fasterxml.jackson.core:jackson-databind", distance: 2 },
+      typosquat: {
+        similar_to: "com.fasterxml.jackson.core:jackson-databind",
+        similar_to_purl: "pkg:maven/com.fasterxml.jackson.core/jackson-databind",
+        distance: 2,
+      },
     },
   },
   decorators: [
