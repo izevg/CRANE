@@ -1,8 +1,8 @@
-import { ArrowDownIcon, ArrowUpIcon, OctagonAlertIcon, TriangleAlertIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { formatCount, formatNumber, formatPercent } from "~/shared/lib/text";
-import { Card, Link, Skeleton } from "~/shared/ui/primitives";
+import { Card, Link, Skeleton, TONE_SURFACE, toneGlyph } from "~/shared/ui/primitives";
 import { RelativeTime } from "~/shared/ui/status";
 import { Sparkline } from "../Sparkline/Sparkline";
 
@@ -55,16 +55,6 @@ const RING = {
   error: "ring-1 ring-error-strong",
 } satisfies Record<ActiveTone, string>;
 
-const BADGE = {
-  warning: "@[15rem]/tile:bg-warning-bg @[15rem]/tile:text-warning",
-  error: "@[15rem]/tile:bg-error-bg @[15rem]/tile:text-error",
-} satisfies Record<ActiveTone, string>;
-
-const ICON = {
-  warning: { Glyph: TriangleAlertIcon, color: "text-warning" },
-  error: { Glyph: OctagonAlertIcon, color: "text-error" },
-} satisfies Record<ActiveTone, { Glyph: typeof TriangleAlertIcon; color: string }>;
-
 function resolveTone(props: TileTone): { tone: ActiveTone; label: string } | null {
   if (!("toneLabel" in props)) {
     return null;
@@ -77,16 +67,16 @@ function resolveTone(props: TileTone): { tone: ActiveTone; label: string } | nul
  * а текст тона лежит в `sr-only`; в широкой виден полный бейдж. Текст один, дублей в DOM нет.
  */
 function ToneBadge({ tone, label }: { tone: ActiveTone; label: string }) {
-  const { Glyph, color } = ICON[tone];
+  const Glyph = toneGlyph(tone);
   return (
     <span
       data-tone={tone}
       className={cx(
         "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full text-caption font-semibold @[15rem]/tile:h-6 @[15rem]/tile:px-2.5",
-        BADGE[tone],
+        TONE_SURFACE[tone],
       )}
     >
-      <Glyph aria-hidden="true" className={cx("size-4 shrink-0", color)} />
+      <Glyph aria-hidden="true" className="size-4 shrink-0" />
       <span className="sr-only @[15rem]/tile:not-sr-only">{label}</span>
     </span>
   );
@@ -94,10 +84,10 @@ function ToneBadge({ tone, label }: { tone: ActiveTone; label: string }) {
 
 function deltaStyle({ pct, polarity }: TileDelta): string {
   if (polarity === "neutral" || pct === 0) {
-    return "bg-muted text-muted-foreground";
+    return TONE_SURFACE.neutral;
   }
   const good = polarity === "up-good" ? pct > 0 : pct < 0;
-  return good ? "bg-success-bg text-success" : "bg-error-bg text-error";
+  return good ? TONE_SURFACE.success : TONE_SURFACE.error;
 }
 
 function DeltaChip({ delta }: { delta: TileDelta }) {

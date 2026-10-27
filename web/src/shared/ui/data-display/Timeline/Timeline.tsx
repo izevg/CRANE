@@ -1,15 +1,14 @@
 import type { ReactNode } from "react";
 import { cx } from "~/shared/lib/core";
 import { type Action, ActionButton } from "../../actions";
-import { Badge } from "../../primitives";
-import type { StatusTone } from "../../status";
+import { Badge, TONE_STRONG, type Tone } from "../../primitives";
 
 /**
  * Цвет точки дублируется тегом: если тон не нейтральный, `tag` обязателен (WCAG 1.4.1).
  */
 type ToneProps =
   | { tone?: "neutral"; tag?: string }
-  | { tone: Exclude<StatusTone, "neutral">; tag: string };
+  | { tone: Exclude<Tone, "neutral">; tag: string };
 
 type TimelineItem = {
   id: string;
@@ -27,14 +26,6 @@ type TimelineProps = {
   label: string;
 };
 
-const DOT = {
-  success: "bg-success-strong",
-  info: "bg-info-strong",
-  warning: "bg-warning-strong",
-  error: "bg-error-strong",
-  neutral: "bg-muted-foreground",
-} satisfies Record<StatusTone, string>;
-
 /** Вертикальная лента событий: упорядоченный список `<ol>`. */
 export function Timeline({ items, label }: TimelineProps) {
   return (
@@ -46,7 +37,7 @@ export function Timeline({ items, label }: TimelineProps) {
             <span
               className={cx(
                 "relative mt-1.5 size-2.5 rounded-full ring-4 ring-card forced-color-adjust-none",
-                DOT[item.tone ?? "neutral"],
+                TONE_STRONG[item.tone ?? "neutral"],
               )}
             />
           </div>

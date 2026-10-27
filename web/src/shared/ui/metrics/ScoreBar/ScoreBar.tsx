@@ -1,7 +1,7 @@
 import { Meter } from "@base-ui/react/meter";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { formatNumber } from "~/shared/lib/text";
-import { Badge } from "~/shared/ui/primitives";
+import { Badge, TONE_STRONG, type Tone } from "~/shared/ui/primitives";
 
 type ScoreBarProps = WithClassName<{
   /** Подпись оценки, уже переведённая вызывающим («Релевантность эксплуатации»). */
@@ -39,14 +39,7 @@ const SHADOW_NOTE = "не влияет на решения";
 const LOW_CONFIDENCE_NOTE = "низкая уверенность, не влияет на политику";
 const VALUE_TEXT_SEPARATOR = ", ";
 
-type BarTone = "info" | "warning" | "error" | "muted";
-
-const FILL = {
-  info: "bg-info-strong",
-  warning: "bg-warning-strong",
-  error: "bg-error-strong",
-  muted: "bg-muted-foreground",
-} satisfies Record<BarTone, string>;
+type BarTone = Extract<Tone, "info" | "warning" | "error" | "neutral">;
 
 function format(value: number): string {
   return formatNumber(value, {
@@ -82,7 +75,7 @@ export function ScoreBar({
 }: ScoreBarProps) {
   const score = clamp(value);
   const lowConfidence = confidence !== undefined && confidence < MIN_CONFIDENCE;
-  const tone: BarTone = lowConfidence || shadow ? "muted" : scoreTone(score);
+  const tone: BarTone = lowConfidence || shadow ? "neutral" : scoreTone(score);
   const shown = format(score);
   const confidenceText = confidence === undefined ? null : format(clamp(confidence));
   const valueText =
@@ -116,7 +109,10 @@ export function ScoreBar({
           </span>
         </div>
         <Meter.Track className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-          <Meter.Indicator data-tone={tone} className={cx("h-full rounded-full", FILL[tone])} />
+          <Meter.Indicator
+            data-tone={tone}
+            className={cx("h-full rounded-full", TONE_STRONG[tone])}
+          />
         </Meter.Track>
       </Meter.Root>
       {confidenceText === null ? null : (

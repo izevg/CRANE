@@ -1,12 +1,7 @@
 import { cx, type WithClassName } from "~/shared/lib/core";
+import { TONE_STROKE, type Tone } from "../../primitives";
 
-type SparklineTone = "neutral" | "warning" | "error";
-
-const COLOR = {
-  neutral: "var(--chart-1)",
-  warning: "var(--warning-strong)",
-  error: "var(--error-strong)",
-} satisfies Record<SparklineTone, string>;
+type SparklineTone = Extract<Tone, "neutral" | "warning" | "error">;
 
 const WIDTH = 100;
 const HEIGHT = 32;
@@ -30,7 +25,8 @@ type SparklineProps = WithClassName<{
  * Меньше двух точек — пунктир-заглушка.
  */
 export function Sparkline({ values, reference, tone = "neutral", className }: SparklineProps) {
-  const color = COLOR[tone];
+  // нейтральная линия — цвет основного ряда графиков, а не серый статус
+  const color = tone === "neutral" ? "var(--chart-1)" : TONE_STROKE[tone];
   const box = `0 0 ${WIDTH} ${HEIGHT}`;
   const classes = cx("size-full", className);
 

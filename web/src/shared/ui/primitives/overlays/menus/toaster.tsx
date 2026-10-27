@@ -1,7 +1,7 @@
-import { CircleCheckIcon, InfoIcon, OctagonXIcon, TriangleAlertIcon } from "lucide-react";
 import type { CSSProperties } from "react";
 import { Toaster as Sonner } from "sonner";
 import { useColorMode } from "~/shared/lib/state";
+import { toneGlyph } from "../../display/tone/tone";
 
 const VISIBLE_TOASTS = 3;
 
@@ -12,6 +12,18 @@ const STYLE = {
   "--border-radius": "var(--radius)",
 } as CSSProperties;
 
+const SuccessGlyph = toneGlyph("success");
+const InfoGlyph = toneGlyph("info");
+const WarningGlyph = toneGlyph("warning");
+const ErrorGlyph = toneGlyph("error");
+
+const ICONS = {
+  success: <SuccessGlyph className="size-4" />,
+  info: <InfoGlyph className="size-4" />,
+  warning: <WarningGlyph className="size-4" />,
+  error: <ErrorGlyph className="size-4" />,
+};
+
 /** Контейнер тостов справа снизу, не больше трёх видимых. Монтируется один раз в корне; показывает `showToast`. */
 export function Toaster() {
   const { resolved } = useColorMode();
@@ -21,12 +33,7 @@ export function Toaster() {
       position="bottom-right"
       visibleToasts={VISIBLE_TOASTS}
       className="toaster group"
-      icons={{
-        success: <CircleCheckIcon className="size-4" />,
-        info: <InfoIcon className="size-4" />,
-        warning: <TriangleAlertIcon className="size-4" />,
-        error: <OctagonXIcon className="size-4" />,
-      }}
+      icons={ICONS}
       style={STYLE}
     />
   );

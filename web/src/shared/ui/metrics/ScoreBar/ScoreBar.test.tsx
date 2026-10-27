@@ -157,7 +157,7 @@ describe("ScoreBar", () => {
     const { container } = render(<ScoreBar label={LABEL} value={0.9} confidence={confidence} />);
 
     // Assert
-    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "muted");
+    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "neutral");
   });
 
   it("у shadow-оценки полоса приглушена", () => {
@@ -168,6 +168,6 @@ describe("ScoreBar", () => {
     const { container } = render(<ScoreBar label={LABEL} value={0.9} shadow={shadow} />);
 
     // Assert
-    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "muted");
+    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "neutral");
   });
 });

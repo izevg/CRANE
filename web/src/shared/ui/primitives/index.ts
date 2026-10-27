@@ -22,6 +22,16 @@ export {
   CardHeader,
   CardTitle,
 } from "./display/surfaces/card";
+export {
+  TONE_ICON,
+  TONE_RING,
+  TONE_STROKE,
+  TONE_STRONG,
+  TONE_SURFACE,
+  TONE_TEXT,
+  type Tone,
+  toneGlyph,
+} from "./display/tone/tone";
 export { Checkbox } from "./forms/choice/checkbox";
 export {
   Select,

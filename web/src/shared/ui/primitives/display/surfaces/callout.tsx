@@ -1,23 +1,8 @@
-import { CircleCheckIcon, InfoIcon, OctagonAlertIcon, TriangleAlertIcon } from "lucide-react";
 import type * as React from "react";
 import { cx } from "~/shared/lib/core";
+import { TONE_SURFACE, type Tone, toneGlyph } from "../tone/tone";
 
-type CalloutTone = "info" | "success" | "warning" | "error";
-
-const TONE = {
-  info: "bg-info-bg text-info",
-  success: "bg-success-bg text-success",
-  warning: "bg-warning-bg text-warning",
-  error: "bg-error-bg text-error",
-} satisfies Record<CalloutTone, string>;
-
-// Иконка есть у каждого тона, а у warning и error — обязательно: статус не передаётся только цветом (WCAG 1.4.1).
-const TONE_ICON = {
-  info: InfoIcon,
-  success: CircleCheckIcon,
-  warning: TriangleAlertIcon,
-  error: OctagonAlertIcon,
-} satisfies Record<CalloutTone, React.ComponentType<React.ComponentProps<"svg">>>;
+type CalloutTone = Exclude<Tone, "neutral">;
 
 type CalloutProps = Omit<React.ComponentProps<"div">, "role"> & {
   tone: CalloutTone;
@@ -27,7 +12,7 @@ type CalloutProps = Omit<React.ComponentProps<"div">, "role"> & {
 
 /** Встроенное сообщение в потоке страницы (inline-callout, основа баннера). */
 export function Callout({ tone, urgent = false, className, children, ...props }: CalloutProps) {
-  const Icon = TONE_ICON[tone];
+  const Icon = toneGlyph(tone);
   return (
     <div
       data-slot="callout"
@@ -35,7 +20,7 @@ export function Callout({ tone, urgent = false, className, children, ...props }:
       role={urgent ? "alert" : "status"}
       className={cx(
         "flex w-full gap-2 rounded-md px-3 py-2 text-left text-body",
-        TONE[tone],
+        TONE_SURFACE[tone],
         className,
       )}
       {...props}

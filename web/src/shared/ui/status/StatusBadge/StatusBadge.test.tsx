@@ -1,13 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { StatusBadge, type StatusTone } from "~/shared/ui/status";
+import type { Tone } from "~/shared/ui/primitives";
+import { StatusBadge } from "~/shared/ui/status";
 import { stubMatchMedia } from "~test/matchMedia";
 
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
 // Иконка помечена data-slot="status-icon", точка — "status-dot": класс не проверяем, проверяем наличие глифа.
-const WITH_ICON: StatusTone[] = ["warning", "error"];
-const WITH_DOT: StatusTone[] = ["success", "info", "neutral"];
+const WITH_ICON: Tone[] = ["warning", "error"];
+const WITH_DOT: Tone[] = ["success", "info", "neutral"];
 
 afterEach(() => {
   vi.unstubAllGlobals();
