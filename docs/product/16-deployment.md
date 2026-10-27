@@ -39,7 +39,7 @@ services:
     command: ["all"]
     environment:
       CRANE_DATABASE_URL: postgres://crane@postgres/crane
-      CRANE_CACHE: valkey://valkey:6379        # или "memory" для профиля S
+      CRANE_CACHE: valkey://valkey:6379        # или "memory" для профиля S; URL с паролем — через CRANE_CACHE_FILE
       CRANE_BLOBS: s3://blobs?endpoint=http://seaweedfs:8333   # или file:///data/blobs
     read_only: true
     deploy: { resources: { limits: { cpus: "2", memory: 1g } } }
@@ -50,8 +50,10 @@ services:
     read_only: true
     security_opt: ["no-new-privileges:true"]
   postgres: { image: pgvector/pgvector:pg17, volumes: [pg:/var/lib/postgresql/data] }   # тег фиксируется в v0.2.0
-  valkey:   { image: valkey/valkey:8, command: ["--save", "", "--appendonly", "no"] }
+  valkey:   { image: valkey/valkey:8, command: ["--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"] }
 ```
+
+Ключи артефактов в Valkey живут без TTL, поэтому ему нужны `maxmemory` и `maxmemory-policy allkeys-lru`: без них кэш растёт, пока не упрётся в память хоста.
 
 **Требования к PostgreSQL.** PostgreSQL 17+, pgvector ≥ 0.8 (итеративные сканы индекса HNSW, раздел 10.10), pg_trgm. Плавающие теги (`pgvector/pgvector:pg17` в `.env.dist`, на dogfood-стенде и в документации) заменяются точными версиями и digest в v0.2.0. С этого релиза `crane migrate` проверяет расширения `vector` и `pg_trgm` и при их отсутствии сразу завершается с понятным сообщением.
 
@@ -61,6 +63,7 @@ services:
 | --- | --- | --- |
 | `CRANE_CONFIG` | нет файла | путь к файлу TOML; только из окружения |
 | `CRANE_DATABASE_URL` или `CRANE_DATABASE_URL_FILE` | одна из двух | каталог: `memory` (данные теряются при рестарте) или `postgres://…` (`postgresql://…`); файл читается без завершающего перевода строки |
+| `CRANE_CACHE` или `CRANE_CACHE_FILE` | `memory` | кэш proxy: `memory` (ограничен по байтам, в процессе) или Valkey: `valkey://`, `valkeys://` (TLS), варианты `valkey-cluster://`, `valkey-sentinel://` (и `valkeys-…`); URL может содержать пароль, поэтому есть `_FILE` (читается без завершающего перевода строки, как `CRANE_DATABASE_URL_FILE`) |
 | `CRANE_BLOBS` | обязательна | хранилище blob: `memory`, `file:///абсолютный/путь` или `s3://bucket[/prefix]?endpoint=…` |
 | `CRANE_PUBLIC_URL` | обязательна | внешний адрес (`http://` или `https://`), попадает в `config.json` cargo |
 | `CRANE_TOKEN` или `CRANE_TOKEN_FILE` | одна из двух | временный статический токен до v0.4.0; файл читается без завершающего перевода строки |
