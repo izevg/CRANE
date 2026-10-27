@@ -52,6 +52,9 @@ tasks:
     desc: "Тесты адаптера PostgreSQL на живой БД (нужны Docker и .env из .env.dist)"
     # .env читается только здесь: остальные задачи не должны неявно получать CRANE_TEST_DATABASE_URL.
     dotenv: [".env"]
+    # Здесь отсутствие БД - ошибка, а не повод пропустить тесты.
+    env:
+      CRANE_TEST_REQUIRE_DB: "1"
     cmds:
       - docker compose -f docker-compose.dev.yaml up -d --wait postgres
       - >-
@@ -84,12 +87,21 @@ tasks:
     desc: "Полный гейт перед PR в release/* (юниты, мутации, Playwright). В CI не запускается"
     vars:
       BASE: '{{.BASE | default "origin/main"}}'
+    # .env и флаг видны только шагам самого gate (в подзадачи они не передаются): мутационному
+    # прогону нужна БД, иначе все тесты крейта-адаптера пропускаются и мутанты выживают.
+    dotenv: [".env"]
+    env:
+      CRANE_TEST_REQUIRE_DB: "1"
     cmds:
       - task: check
+      # Поднимает PostgreSQL: шаг cargo mutants ниже рассчитывает, что БД уже работает.
       - task: rust:test:pg
       - mkdir -p out
       - git diff {{.BASE}}...HEAD > out/gate.diff
-      - "[ ! -s out/gate.diff ] || cargo mutants --workspace --in-diff out/gate.diff"
+      - >-
+        [ ! -s out/gate.diff ] ||
+        CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
+        cargo mutants --workspace --in-diff out/gate.diff
       - |
         if find web/src -name '*.test.*' | grep -q .; then
           pnpm --filter web run mutate

@@ -2,7 +2,11 @@
 //!
 //! `CRANE_TEST_DATABASE_URL` - URL администратора сервера (подойдёт любая существующая БД,
 //! например `postgres://crane:change-me@127.0.0.1:5432/crane`). Без переменной тесты
-//! сообщают о пропуске и завершаются успешно.
+//! сообщают о пропуске и завершаются успешно, чтобы обычный `cargo test` работал без Docker.
+//!
+//! `CRANE_TEST_REQUIRE_DB=1` запрещает пропуск: без `CRANE_TEST_DATABASE_URL` тест падает.
+//! Так задан `task rust:test:pg` и `task gate`: молчаливый пропуск там превратил бы
+//! мутационный гейт в проверку без единого DB-теста.
 //!
 //! На каждый тестовый процесс создаётся шаблон `crane_tpl_<uuid>` с применёнными миграциями,
 //! на каждый сценарий - БД `crane_test_<uuid>` из шаблона (копирование файлов дешевле
@@ -29,6 +33,7 @@ use sqlx::{AssertSqlSafe, PgPool};
 use uuid::Uuid;
 
 const URL_ENV: &str = "CRANE_TEST_DATABASE_URL";
+const REQUIRE_ENV: &str = "CRANE_TEST_REQUIRE_DB";
 
 pub(crate) struct TestServer {
     admin: PgPool,
@@ -37,9 +42,14 @@ pub(crate) struct TestServer {
     created: Mutex<Vec<String>>,
 }
 
-/// Выполняет `body` на свежем сервере; без `CRANE_TEST_DATABASE_URL` пропускает тест.
+/// Выполняет `body` на свежем сервере; без `CRANE_TEST_DATABASE_URL` пропускает тест,
+/// а при `CRANE_TEST_REQUIRE_DB=1` падает.
 pub(crate) fn run(body: impl AsyncFnOnce(&TestServer)) {
     let Ok(url) = std::env::var(URL_ENV) else {
+        assert!(
+            std::env::var(REQUIRE_ENV).as_deref() != Ok("1"),
+            "{REQUIRE_ENV}=1, но {URL_ENV} не задана: тесты с PostgreSQL нельзя пропускать"
+        );
         report_skip();
         return;
     };
