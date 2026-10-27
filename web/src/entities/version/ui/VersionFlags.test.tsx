@@ -35,25 +35,35 @@ describe("VersionFlags", () => {
     ).toEqual(["yanked", "mutable", "latest", "next"]);
   });
 
-  it("сообщение об устаревании показывается подсказкой при фокусе", async () => {
+  it("у deprecated есть кнопка с именем, а бейдж остаётся текстом", () => {
+    // Arrange
+    // Act
+    render(<VersionFlags flags={{ ...NONE, deprecated_message: "Используйте 2.x" }} />);
+
+    // Assert
+    expect(screen.getByRole("button", { name: "Подробнее: deprecated" })).toBeVisible();
+    expect(screen.getByText("deprecated")).not.toHaveAttribute("tabindex");
+  });
+
+  it("нажатие на кнопку открывает сообщение автора об устаревании", async () => {
     // Arrange
     const user = userEvent.setup();
     render(<VersionFlags flags={{ ...NONE, deprecated_message: "Используйте 2.x" }} />);
 
     // Act
-    await user.tab();
+    await user.click(screen.getByRole("button", { name: "Подробнее: deprecated" }));
 
     // Assert
-    expect((await screen.findAllByText("Используйте 2.x")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Используйте 2.x")).toBeVisible();
   });
 
-  it("сообщение об устаревании входит в доступное описание флага", () => {
+  it("у флагов без пояснения кнопки нет", () => {
     // Arrange
     // Act
-    render(<VersionFlags flags={{ ...NONE, deprecated_message: "Используйте 2.x" }} />);
+    render(<VersionFlags flags={{ ...NONE, yanked: true }} />);
 
     // Assert
-    expect(screen.getByText("deprecated")).toHaveAccessibleDescription("Используйте 2.x");
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("флаги идут в порядке: статусные, затем dist-tags", () => {

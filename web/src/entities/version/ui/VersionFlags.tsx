@@ -1,27 +1,42 @@
-import { useId } from "react";
+import { useLingui } from "@lingui/react/macro";
+import { InfoIcon } from "lucide-react";
 import type { VersionFlags as VersionFlagsDto } from "~/shared/api";
-import { Badge, Tooltip, TooltipContent, TooltipTrigger } from "~/shared/ui/primitives";
+import {
+  Badge,
+  Button,
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverTitle,
+  PopoverTrigger,
+} from "~/shared/ui/primitives";
 import { flagItems } from "../lib/flags";
 
 type VersionFlagsProps = {
   flags: VersionFlagsDto;
 };
 
-/** Флаг с пояснением: подсказка для мыши и фокуса, то же пояснение — доступное описание триггера. */
+/**
+ * Флаг с пояснением автора. Бейдж остаётся текстом, а пояснение открывает отдельная кнопка «ⓘ» (toggletip):
+ * наведение и фокус на касании не работают, нажатие работает везде, а кнопка имеет имя для скринридера.
+ */
 function HintedFlag({ label, hint }: { label: string; hint: string }) {
-  const hintId = useId();
+  const { t } = useLingui();
   return (
-    <>
-      <Tooltip>
-        <TooltipTrigger render={<Badge variant="outline" tabIndex={0} aria-describedby={hintId} />}>
-          {label}
-        </TooltipTrigger>
-        <TooltipContent>{hint}</TooltipContent>
-      </Tooltip>
-      <span id={hintId} className="sr-only">
-        {hint}
-      </span>
-    </>
+    <span className="inline-flex items-center gap-0.5">
+      <Badge variant="outline">{label}</Badge>
+      <Popover>
+        <PopoverTrigger
+          render={<Button variant="ghost" size="icon-sm" aria-label={t`Подробнее: ${label}`} />}
+        >
+          <InfoIcon aria-hidden="true" />
+        </PopoverTrigger>
+        <PopoverContent>
+          <PopoverTitle>{label}</PopoverTitle>
+          <PopoverDescription>{hint}</PopoverDescription>
+        </PopoverContent>
+      </Popover>
+    </span>
   );
 }
 

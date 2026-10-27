@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { BlockReason, VersionSummary } from "~/shared/api";
 import { VersionStatus } from "../index";
 
 const REASON_TEXT = /Экстренно|По правилу/;
+const FIXED_IN = /Исправлено в/;
 const CVE = /CVE-2026-31337/;
 
 const view = (
@@ -48,27 +48,7 @@ describe("VersionStatus", () => {
     expect(screen.getByText("По правилу · policy.deny.unlicensed")).toBeInTheDocument();
   });
 
-  it("исправленная версия показывается подсказкой при фокусе на причине", async () => {
-    // Arrange
-    const user = userEvent.setup();
-    render(
-      <VersionStatus
-        version={view("blocked", {
-          kind: "emergency",
-          advisory_id: "CVE-2026-31337",
-          fixed_in: "4.17.21",
-        })}
-      />,
-    );
-
-    // Act
-    await user.tab();
-
-    // Assert
-    expect((await screen.findAllByText("Исправлено в 4.17.21")).length).toBeGreaterThan(0);
-  });
-
-  it("исправленная версия входит в доступное описание причины блокировки", () => {
+  it("исправленная версия показана видимым текстом рядом с причиной", () => {
     // Arrange
     const version = view("blocked", {
       kind: "emergency",
@@ -80,9 +60,18 @@ describe("VersionStatus", () => {
     render(<VersionStatus version={version} />);
 
     // Assert
-    expect(screen.getByText("Экстренно · CVE-2026-31337")).toHaveAccessibleDescription(
-      "Исправлено в 4.17.21",
-    );
+    expect(screen.getByText("Исправлено в 4.17.21")).toBeVisible();
+  });
+
+  it("без fixed_in текста про исправление нет", () => {
+    // Arrange
+    const version = view("blocked", { kind: "emergency", advisory_id: "CVE-2026-31337" });
+
+    // Act
+    render(<VersionStatus version={version} />);
+
+    // Assert
+    expect(screen.queryByText(FIXED_IN)).not.toBeInTheDocument();
   });
 
   it("заблокированная без причины показывает только состояние", () => {

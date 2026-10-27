@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, within } from "storybook/test";
 import { VersionStatus } from "../index";
 
 const meta = {
@@ -28,9 +28,9 @@ export const Deleted: Story = {
   args: { version: { state: "deleted", block_reason: null } },
 };
 
-/** Остаётся открытым в момент axe-проверки: причина рядом с состоянием, исправленная версия — в подсказке. */
+/** Остаётся открытым в момент axe-проверки: причина рядом с состоянием, исправленная версия — текстом рядом. */
 export const BlockedEmergency: Story = {
-  name: "Заблокирована экстренно: причина рядом, подсказка с исправленной версией",
+  name: "Заблокирована экстренно: причина и исправленная версия рядом",
   args: {
     version: {
       state: "blocked",
@@ -41,10 +41,7 @@ export const BlockedEmergency: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("Заблокирована")).toBeVisible();
     await expect(canvas.getByText("Экстренно · CVE-2026-31337")).toBeVisible();
-    await userEvent.tab();
-    await expect(
-      await within(document.body).findAllByText("Исправлено в 4.17.21"),
-    ).not.toHaveLength(0);
+    await expect(canvas.getByText("Исправлено в 4.17.21")).toBeVisible();
   },
 };
 

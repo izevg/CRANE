@@ -1,7 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
-import { useId } from "react";
 import { BLOCK_REASON_KIND, VERSION_STATE, type VersionSummary } from "~/shared/api";
-import { Badge, Tooltip, TooltipContent, TooltipTrigger } from "~/shared/ui/primitives";
+import { Badge } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { reasonView } from "../lib/blockReason";
 
@@ -13,13 +12,12 @@ const SEPARATOR = " · ";
 
 /**
  * Состояние версии: бейдж из словаря, а у заблокированной рядом причина («Экстренно · CVE-2026-31337»), чтобы она
- * не пряталась в флагах (patterns §9). Ближайшая исправленная версия — в подсказке.
+ * не пряталась в флагах (patterns §9). Ближайшая исправленная версия — видимым текстом рядом: на касании подсказки нет.
  */
 export function VersionStatus({ version }: VersionStatusProps) {
   const { t } = useLingui();
   const reason = reasonView(version.state, version.block_reason);
   const fixedIn = reason?.fixedIn;
-  const hintId = useId();
   const reasonText =
     reason === null
       ? null
@@ -27,22 +25,9 @@ export function VersionStatus({ version }: VersionStatusProps) {
   return (
     <span className="flex flex-wrap items-center gap-2">
       <StatusBadge {...VERSION_STATE[version.state]} />
-      {reason === null ? null : fixedIn === undefined ? (
-        <Badge variant="destructive">{reasonText}</Badge>
-      ) : (
-        <>
-          <Tooltip>
-            <TooltipTrigger
-              render={<Badge variant="destructive" tabIndex={0} aria-describedby={hintId} />}
-            >
-              {reasonText}
-            </TooltipTrigger>
-            <TooltipContent>{t`Исправлено в ${fixedIn}`}</TooltipContent>
-          </Tooltip>
-          <span id={hintId} className="sr-only">
-            {t`Исправлено в ${fixedIn}`}
-          </span>
-        </>
+      {reason === null ? null : <Badge variant="destructive">{reasonText}</Badge>}
+      {fixedIn === undefined ? null : (
+        <span className="text-caption text-muted-foreground">{t`Исправлено в ${fixedIn}`}</span>
       )}
     </span>
   );

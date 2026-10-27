@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 import { VersionFlags } from "../index";
 
 const meta = {
@@ -39,9 +39,8 @@ export const All: Story = {
   },
 };
 
-/** Остаётся открытым в момент axe-проверки. */
 export const Deprecated: Story = {
-  name: "deprecated: сообщение автора в подсказке",
+  name: "deprecated: сообщение автора по кнопке",
   args: {
     flags: {
       yanked: false,
@@ -51,11 +50,12 @@ export const Deprecated: Story = {
       mutable: false,
     },
   },
-  play: async () => {
-    await userEvent.tab();
-    await expect(
-      await within(document.body).findAllByText("Используйте @acme/ui-next"),
-    ).not.toHaveLength(0);
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole("button", { name: "Подробнее: deprecated" }),
+    );
+    const hint = await within(document.body).findByText("Используйте @acme/ui-next");
+    await waitFor(() => expect(hint).toBeVisible());
   },
 };
 
@@ -85,10 +85,11 @@ export const English: Story = {
   name: "EN: подсказка остаётся текстом автора",
   globals: { locale: "en" },
   args: { ...Deprecated.args },
-  play: async () => {
-    await userEvent.tab();
-    await expect(
-      await within(document.body).findAllByText("Используйте @acme/ui-next"),
-    ).not.toHaveLength(0);
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole("button", { name: "Details: deprecated" }),
+    );
+    const hint = await within(document.body).findByText("Используйте @acme/ui-next");
+    await waitFor(() => expect(hint).toBeVisible());
   },
 };

@@ -289,6 +289,9 @@ msgstr "Platform"
 msgid "По правилу"
 msgstr "By rule"
 
+msgid "Подробнее: {label}"
+msgstr "Details: {label}"
+
 msgid "Подтвердите вход"
 msgstr "Confirm sign-in"
 
