@@ -175,14 +175,14 @@ fn migrator() -> Migrator {
             1,
             "catalog".into(),
             MigrationType::Simple,
-            include_str!("../migrations/0001_catalog.sql").into_sql_str(),
+            include_str!("../../migrations/0001_catalog.sql").into_sql_str(),
             false,
         ),
         Migration::new(
             2,
             "npm".into(),
             MigrationType::Simple,
-            include_str!("../migrations/0002_npm.sql").into_sql_str(),
+            include_str!("../../migrations/0002_npm.sql").into_sql_str(),
             false,
         ),
     ])

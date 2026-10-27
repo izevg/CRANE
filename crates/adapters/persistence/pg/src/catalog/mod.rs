@@ -7,7 +7,9 @@ use crane_ports::registry::{Catalog, CatalogError, NewVersion};
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
-use crate::rows::{
+mod rows;
+
+use self::rows::{
     corrupt, kind_as_str, rejected, repository_from_row, state_as_str, state_parse, to_db_time,
     version_from_row,
 };
