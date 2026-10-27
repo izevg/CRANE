@@ -17,6 +17,13 @@ use crate::cache;
 use crate::config::Cache;
 use crate::system::SystemClock;
 
+/// Параметры движка: бэкенд кэша и пределы размера. Отдельная структура держит число аргументов
+/// `cargo_proxies` в пределах clippy.
+pub(super) struct Engine {
+    pub(super) cache: Cache,
+    pub(super) limits: ProxyLimits,
+}
+
 /// Регистрирует репозитории в каталоге и строит router для каждого имени.
 ///
 /// Без имён возвращает пустой список и не создаёт HTTP-клиент: выключенный proxy ничего не стоит.
@@ -24,7 +31,7 @@ pub(super) async fn cargo_proxies<C: Catalog, B: BlobStore + 'static>(
     catalog: &C,
     ids: &dyn IdGen,
     blobs: Arc<B>,
-    cache: Cache,
+    engine: Engine,
     names: &[String],
     settings: &CargoSettings,
 ) -> Result<Vec<(String, Router)>, RunError> {
@@ -36,14 +43,14 @@ pub(super) async fn cargo_proxies<C: Catalog, B: BlobStore + 'static>(
     let index = policy.admit("https", INDEX_HOST, None, "")?;
     let dl = policy.admit("https", DL_HOST, None, "")?;
     // Один бэкенд на оба порта: кэш и lease выбираются вместе (`CRANE_CACHE`).
-    let shared = cache::backend(cache);
+    let shared = cache::backend(engine.cache);
     let engine = ProxyEngine::new(
         HttpUpstream::new(policy)?,
         shared.clone(),
         shared,
         blobs,
         Arc::new(SystemClock),
-        ProxyLimits::DEFAULT,
+        engine.limits,
     );
     let mut routers = Vec::with_capacity(names.len());
     for name in names {
@@ -124,7 +131,10 @@ mod tests {
             catalog,
             &SequentialIdGen::default(),
             Arc::new(MemoryBlobStore::default()),
-            Cache::Memory,
+            Engine {
+                cache: Cache::Memory,
+                limits: ProxyLimits::DEFAULT,
+            },
             &[NAME.to_owned()],
             &settings(),
         )

@@ -1,3 +1,4 @@
+use std::io;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -11,7 +12,7 @@ use crane_ports::proxy::{
     UpstreamRequest, UpstreamResponse,
 };
 use crane_ports::registry::{BlobError, BlobStore, ByteStream};
-use futures_util::StreamExt;
+use futures_util::{StreamExt, stream};
 
 use super::flight::Outcome;
 use super::{Inner, ProxyError, UpstreamFailure};
@@ -235,10 +236,16 @@ async fn fetch<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
             (state, policy.keep_for(unchanged, max_age))
         }
         (UpstreamResponse::Found { body, .. }, Target::Artifact { .. }) => {
-            let staged = inner.blobs.stage(body).await.map_err(|error| match error {
-                BlobError::Body(_) => ProxyError::from(UpstreamFailure::Unavailable),
-                other => ProxyError::backend(other),
-            })?;
+            // Потолок ставим до staging: сбежавший поток не должен забить диск временной зоны.
+            let bounded = bounded(body, inner.limits.max_artifact_bytes);
+            let staged = inner
+                .blobs
+                .stage(bounded)
+                .await
+                .map_err(|error| match error {
+                    BlobError::Body(error) => body_failure(&error),
+                    other => ProxyError::backend(other),
+                })?;
             // Несовпавший staged-объект не коммитим: чужие байты не должны попасть в CAS.
             job.target.check_digest(staged.digests().sha256)?;
             let digests = inner
@@ -266,19 +273,55 @@ async fn fetch<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
     Ok(entry)
 }
 
+/// Маркер переполнения в ошибке потока: по нему `body_failure` отличает превышение от обрыва.
+#[derive(Debug, thiserror::Error)]
+#[error("тело upstream больше {limit} байт")]
+struct Overflow {
+    limit: u64,
+}
+
+/// Поток с потолком: чанк, переводящий сумму за `limit`, не отдаётся, вместо него ошибка `Overflow`.
+/// Сверх лимита дальше по конвейеру не уходит ни байта, после ошибки поток завершается.
+fn bounded(body: ByteStream, limit: u64) -> ByteStream {
+    Box::pin(stream::unfold(
+        Some((body, 0_u64)),
+        move |state| async move {
+            let (mut body, seen) = state?;
+            match body.next().await? {
+                Err(error) => Some((Err(error), None)),
+                Ok(chunk) => {
+                    let total = seen.saturating_add(u64::try_from(chunk.len()).unwrap_or(u64::MAX));
+                    if total > limit {
+                        Some((Err(io::Error::other(Overflow { limit })), None))
+                    } else {
+                        Some((Ok(chunk), Some((body, total))))
+                    }
+                }
+            }
+        },
+    ))
+}
+
+/// Единственное место, где сбой тела потока становится `ProxyError`.
+fn body_failure(error: &io::Error) -> ProxyError {
+    match error
+        .get_ref()
+        .and_then(|inner| inner.downcast_ref::<Overflow>())
+    {
+        Some(overflow) => ProxyError::TooLarge {
+            limit: overflow.limit,
+        },
+        None => UpstreamFailure::Unavailable.into(),
+    }
+}
+
 /// Собирает тело документа в память с потолком: документ целиком нужен для сравнения и отдачи.
-async fn collect(mut body: ByteStream, limit: u64) -> Result<Bytes, ProxyError> {
+async fn collect(body: ByteStream, limit: u64) -> Result<Bytes, ProxyError> {
+    let mut body = bounded(body, limit);
     let mut buffer = Vec::new();
     while let Some(chunk) = body.next().await {
-        let chunk = chunk.map_err(|_| UpstreamFailure::Unavailable)?;
-        let total = u64::try_from(buffer.len())
-            .unwrap_or(u64::MAX)
-            .saturating_add(u64::try_from(chunk.len()).unwrap_or(u64::MAX));
-        // Проверка до копирования: гигантский ответ не должен раздувать память.
-        if total > limit {
-            return Err(ProxyError::TooLarge { limit });
-        }
-        buffer.extend_from_slice(&chunk);
+        // Потолок срабатывает до копирования: гигантский ответ не раздувает память.
+        buffer.extend_from_slice(&chunk.map_err(|error| body_failure(&error))?);
     }
     Ok(Bytes::from(buffer))
 }
