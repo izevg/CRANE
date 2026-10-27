@@ -22,6 +22,7 @@ import {
 } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import type { Banner } from "~/widgets/app-shell";
+import { PEOPLE, REPOSITORIES } from "../data/common";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
 
@@ -67,7 +68,7 @@ const VERSIONS: readonly VersionRow[] = [
     state: { tone: "success", label: "Выпущена" },
     flags: ["stable"],
     published: "21 окт 2026, 09:15",
-    by: "Петрова А.",
+    by: PEOPLE[1],
   },
   {
     id: "1.4.0",
@@ -83,7 +84,7 @@ const VERSIONS: readonly VersionRow[] = [
     state: { tone: "error", label: "Заблокирована" },
     flags: ["yanked"],
     published: "02 окт 2026, 11:30",
-    by: "Смирнов Д.",
+    by: PEOPLE[2],
   },
   {
     id: "1.3.8",
@@ -91,7 +92,7 @@ const VERSIONS: readonly VersionRow[] = [
     state: { tone: "success", label: "Выпущена" },
     flags: ["deprecated"],
     published: "18 сен 2026, 08:47",
-    by: "Иванов И.",
+    by: PEOPLE[0],
   },
 ];
 
@@ -218,7 +219,7 @@ function RightColumn({ proxy }: { proxy: boolean }) {
             { label: "Пространство имён", value: "@acme/*" },
             {
               label: "Репозиторий",
-              value: proxy ? "npm-proxy → registry.npmjs.org" : "npm-hosted",
+              value: proxy ? `${REPOSITORIES[1].id} → registry.npmjs.org` : REPOSITORIES[0].id,
             },
             {
               label: "Лицензия",
@@ -296,7 +297,9 @@ function S2Package({ proxy = false }: { proxy?: boolean }) {
           chips={
             <>
               <Badge variant="outline">{"npm"}</Badge>
-              <Badge variant="outline">{proxy ? "npm-proxy" : "npm-hosted · platform"}</Badge>
+              <Badge variant="outline">
+                {proxy ? REPOSITORIES[1].id : `${REPOSITORIES[0].id} · platform`}
+              </Badge>
             </>
           }
           caption="Компоненты интерфейса CRANE и внутренних порталов"
@@ -398,6 +401,8 @@ export const ProxyStale: Story = {
   name: "Proxy: stale-баннер",
   args: { proxy: true },
   play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).getByText(STALE.text)).toBeVisible();
+    // Текст баннера дублируется в live-регионе (announce), поэтому совпадений может быть два
+    const [banner] = await within(canvasElement).findAllByText(STALE.text);
+    await expect(banner).toBeVisible();
   },
 };
