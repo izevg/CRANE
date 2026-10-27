@@ -1,7 +1,7 @@
 import { SearchIcon } from "lucide-react";
 import { Kbd } from "~/shared/ui/status";
 
-const LABEL = "Поиск и переходы, Ctrl K";
+const LABEL = "Поиск и переходы Ctrl K";
 const VISIBLE = "Поиск и переходы";
 const SHORTCUT = "Ctrl K";
 
@@ -19,8 +19,10 @@ export function SearchButton({ onOpen }: { onOpen: () => void }) {
       <SearchIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
       <span className="hidden min-w-0 flex-1 truncate text-body text-muted-foreground sm:inline">
         {VISIBLE}
-      </span>
-      <Kbd className="hidden sm:inline-flex">{SHORTCUT}</Kbd>
+      </span>{" "}
+      <Kbd aria-hidden="true" className="hidden sm:inline-flex">
+        {SHORTCUT}
+      </Kbd>
     </button>
   );
 }

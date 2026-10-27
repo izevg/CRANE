@@ -40,7 +40,7 @@ describe("Topbar", () => {
     render(<Topbar breadcrumbs={CRUMBS} onOpenPalette={onOpenPalette} sidebarToggle={null} />);
 
     // Act
-    await user.click(screen.getByRole("button", { name: "Поиск и переходы, Ctrl K" }));
+    await user.click(screen.getByRole("button", { name: "Поиск и переходы Ctrl K" }));
 
     // Assert
     expect(onOpenPalette).toHaveBeenCalledTimes(1);
@@ -65,7 +65,7 @@ describe("Topbar", () => {
     const names = screen.getAllByRole("button").map((button) => button.textContent);
     expect(names).toEqual([
       "Меню",
-      "Поиск и переходыCtrl K",
+      "Поиск и переходы Ctrl K",
       "Workspace",
       "Уведомления",
       "Аккаунт",
