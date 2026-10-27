@@ -135,6 +135,29 @@ fn rfc3339(at: SystemTime) -> String {
     humantime::format_rfc3339_millis(at).to_string()
 }
 
+/// Теги, которые видит клиент: тег на версию, которой нет среди отдаваемых, отбрасывается,
+/// а отсутствующий `latest` выводится (старшая версия без pre-release, иначе старшая вообще).
+/// Единственное место этого правила: его используют и packument, и ответ `GET dist-tags`.
+#[must_use]
+pub fn effective_tags<'a>(
+    versions: &'a [PackageVersion],
+    tags: &'a [(String, VersionId)],
+) -> BTreeMap<&'a str, &'a Version> {
+    let mut effective: BTreeMap<&str, &Version> = tags
+        .iter()
+        .filter_map(|(tag, id)| {
+            let stored = versions.iter().find(|v| v.id == *id)?;
+            Some((tag.as_str(), &stored.version))
+        })
+        .collect();
+    if !effective.contains_key(LATEST)
+        && let Some(latest) = fallback_latest(versions)
+    {
+        effective.insert(LATEST, latest);
+    }
+    effective
+}
+
 /// Собирает packument hosted-репозитория. `versions` — уже отдаваемые (served) версии, непустые:
 /// пустой список — 404 вызывающего, а не документ.
 pub fn render_hosted(
@@ -155,19 +178,10 @@ pub fn render_hosted(
         );
     }
 
-    // Тег на версию, которой нет среди отдаваемых, не показывается.
-    let mut dist_tags: BTreeMap<&str, &str> = tags
-        .iter()
-        .filter_map(|(tag, id)| {
-            let stored = versions.iter().find(|v| v.id == *id)?;
-            Some((tag.as_str(), stored.version.as_written()))
-        })
+    let dist_tags: BTreeMap<&str, &str> = effective_tags(versions, tags)
+        .into_iter()
+        .map(|(tag, version)| (tag, version.as_written()))
         .collect();
-    if !dist_tags.contains_key(LATEST)
-        && let Some(latest) = fallback_latest(versions)
-    {
-        dist_tags.insert(LATEST, latest.as_written());
-    }
 
     let created = versions.iter().map(|v| v.published_at).min();
     let modified = versions.iter().map(|v| v.published_at).max();

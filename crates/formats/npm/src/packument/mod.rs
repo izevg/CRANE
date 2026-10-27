@@ -7,7 +7,7 @@ mod render;
 use crane_domain::registry::NameError;
 
 pub(crate) use model::{Fields, Raw};
-pub use render::{render_hosted, render_upstream};
+pub use render::{effective_tags, render_hosted, render_upstream};
 
 const FULL_TYPE: &str = "application/json";
 const ABBREVIATED_TYPE: &str = "application/vnd.npm.install-v1+json";

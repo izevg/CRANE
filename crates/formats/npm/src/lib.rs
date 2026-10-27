@@ -9,7 +9,9 @@ mod route;
 mod sri;
 mod write;
 
-pub use packument::{DocError, TarballBase, View, content_type, render_hosted, render_upstream};
+pub use packument::{
+    DocError, TarballBase, View, content_type, effective_tags, render_hosted, render_upstream,
+};
 pub use proxy::{
     ACCEPT_SHA1_ONLY, PACKUMENT, REGISTRY_HOST, Tarball, TarballError, UNPUBLISH, packument_path,
     tarball,

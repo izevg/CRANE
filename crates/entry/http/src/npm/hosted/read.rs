@@ -5,7 +5,9 @@ use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use crane_domain::registry::{Coordinate, Format, PackageName};
-use crane_format_npm::{TarballBase, View, content_type, render_hosted, tarball_version};
+use crane_format_npm::{
+    TarballBase, View, content_type, effective_tags, render_hosted, render_tags, tarball_version,
+};
 use crane_ports::registry::{BlobStore, Catalog};
 
 use super::{Request, Shared};
@@ -82,7 +84,7 @@ pub(super) async fn tarball<C: Catalog + 'static, B: BlobStore + 'static>(
         .into_response())
 }
 
-/// Теги с тем же выводом `latest`, что в packument: берутся из собранного документа, а не пересчитываются.
+/// Теги с тем же выводом `latest`, что в packument: правило одно, в формате.
 pub(super) async fn dist_tags<C: Catalog + 'static, B: BlobStore + 'static>(
     shared: &Shared<C, B>,
     request: &Request,
@@ -95,15 +97,8 @@ pub(super) async fn dist_tags<C: Catalog + 'static, B: BlobStore + 'static>(
     if stored.versions.is_empty() {
         return Err(ClientError::not_found());
     }
-    let document = render_hosted(
-        package,
+    Ok(json_ok(render_tags(effective_tags(
         &stored.versions,
         &stored.tags,
-        View::Abbreviated,
-        TarballBase(""),
-    )
-    .map_err(|error| ClientError::internal(&error))?;
-    let parsed: serde_json::Value =
-        serde_json::from_slice(&document).map_err(|error| ClientError::internal(&error))?;
-    Ok(json_ok(parsed["dist-tags"].to_string()))
+    ))))
 }
