@@ -63,26 +63,28 @@ describe("sameTags", () => {
       '{"latest":"1.0.0","next":"2.0.0"}',
       "not json",
       '["latest"]',
+      '[{"latest":"1.0.0","next":"1.1.0-beta.0"}]',
+      '[{"latest":"1.0.0"},{"next":"1.1.0-beta.0"}]',
     ];
 
     // Act
     const actual = cases.map((raw) => sameTags(raw, want));
 
     // Assert
-    assert.deepEqual(actual, [true, false, false, false, false, false]);
+    assert.deepEqual(actual, [true, false, false, false, false, false, true, false]);
   });
 });
 
 describe("versionsOf", () => {
   it("reads an array, a single string and garbage", () => {
     // Arrange
-    const cases = ['["1.0.0","1.1.0"]', '"1.0.0"', "oops", '[1,"2.0.0"]'];
+    const cases = ['["1.0.0","1.1.0"]', '"1.0.0"', '["1.0.0"]', "oops", '[1,"2.0.0"]'];
 
     // Act
     const actual = cases.map(versionsOf);
 
     // Assert
-    assert.deepEqual(actual, [["1.0.0", "1.1.0"], ["1.0.0"], [], ["2.0.0"]]);
+    assert.deepEqual(actual, [["1.0.0", "1.1.0"], ["1.0.0"], ["1.0.0"], [], ["2.0.0"]]);
   });
 });
 

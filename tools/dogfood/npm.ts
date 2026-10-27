@@ -83,9 +83,17 @@ function parseJson(raw: string): unknown {
 const sortedEntries = (record: object): [string, unknown][] =>
   Object.entries(record).sort(([a], [b]) => a.localeCompare(b));
 
+/**
+ * npm 12 печатает `view <имя> <поле> --json` для одной версии массивом из одного элемента, если значение
+ * поля не массив (`[{"latest":..}]`); прежние npm печатали сам объект. Принимаем обе формы.
+ */
+export function unwrapSingle(value: unknown): unknown {
+  return Array.isArray(value) && value.length === 1 ? value[0] : value;
+}
+
 /** `npm view .. dist-tags --json` совпадает с ожидаемым словарём тегов точно. */
 export function sameTags(raw: string, want: Record<string, string>): boolean {
-  const got = parseJson(raw);
+  const got = unwrapSingle(parseJson(raw));
   if (typeof got !== "object" || got === null || Array.isArray(got)) {
     return false;
   }
@@ -94,7 +102,7 @@ export function sameTags(raw: string, want: Record<string, string>): boolean {
 
 /** `npm view .. versions --json`: у единственной версии npm печатает строку, а не массив. */
 export function versionsOf(raw: string): string[] {
-  const got = parseJson(raw);
+  const got = unwrapSingle(parseJson(raw));
   if (typeof got === "string") {
     return [got];
   }
