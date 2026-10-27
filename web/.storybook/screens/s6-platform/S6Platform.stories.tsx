@@ -14,6 +14,7 @@ import { PageHeader } from "~/shared/ui/layout";
 import { MetricTile, ShareBar, StatChip, TimeSeriesChart } from "~/shared/ui/metrics";
 import { Badge, Card, Link, ToggleGroup, ToggleGroupItem } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
+import { PEOPLE, REPOSITORIES } from "../data/common";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
 
@@ -259,13 +260,13 @@ function TopThree({
 const RETENTION_ROWS: readonly TopRow[] = [
   {
     id: "r1",
-    title: "Версии без загрузок 18 мес · npm-hosted",
+    title: `Версии без загрузок 18 мес · ${REPOSITORIES[0].id}`,
     caption: "612 версий · 94 ГБ",
     badge: "правило 1",
   },
   {
     id: "r2",
-    title: "Snapshot-сборки старше 30 дн · maven-central-proxy",
+    title: `Snapshot-сборки старше 30 дн · ${REPOSITORIES[3].id}`,
     caption: "498 версий · 71 ГБ",
     badge: "правило 2",
   },
@@ -289,7 +290,11 @@ const DEAD_JOBS: readonly TopRow[] = [
 }));
 
 const INTEGRITY_ROWS: readonly TopRow[] = [
-  { id: "i1", title: "Последняя проверка", caption: "27 окт. 2026, 03:10 · 12 мин" },
+  {
+    id: "i1",
+    title: "Последняя проверка",
+    caption: `27 окт. 2026, 03:10 · 12 мин · запустил ${PEOPLE[1]}`,
+  },
   { id: "i2", title: "Проверено", caption: "1 % объектов: 4 812 из 481 200" },
   { id: "i3", title: "Следующая", caption: "28 окт. 2026, 03:10 по расписанию" },
 ];
