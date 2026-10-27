@@ -49,6 +49,12 @@ msgstr "{unread, plural, one {Notifications, # unread} other {Notifications, # u
 msgid "CRANE, Реестр артефактов: на главную"
 msgstr "CRANE, Artifact registry: go to home"
 
+msgid "EOL"
+msgstr "EOL"
+
+msgid "Активен"
+msgstr "Active"
+
 msgid "Безопасность"
 msgstr "Security"
 
@@ -73,6 +79,9 @@ msgstr "Select all loaded"
 msgid "Выполняется…"
 msgstr "In progress…"
 
+msgid "Выпущена"
+msgstr "Released"
+
 msgid "Главное меню"
 msgstr "Main menu"
 
@@ -96,6 +105,9 @@ msgstr "More actions"
 
 msgid "Ещё {hidden}"
 msgstr "{hidden} more"
+
+msgid "Заблокирована"
+msgstr "Blocked"
 
 msgid "Загрузка"
 msgstr "Loading"
@@ -126,6 +138,9 @@ msgstr "Searching packages…"
 
 msgid "К содержимому"
 msgstr "Skip to content"
+
+msgid "Карантин"
+msgstr "Quarantine"
 
 msgid "Код"
 msgstr "Code"
@@ -231,6 +246,9 @@ msgstr "Go to, find a package or an action…"
 
 msgid "Платформа"
 msgstr "Platform"
+
+msgid "По правилу"
+msgstr "By rule"
 
 msgid "Подтвердите вход"
 msgstr "Confirm sign-in"
@@ -340,8 +358,17 @@ msgstr "Notifications"
 msgid "уверенность {confidenceText}"
 msgstr "confidence {confidenceText}"
 
+msgid "Удалена"
+msgstr "Deleted"
+
 msgid "удалено"
 msgstr "removed"
+
+msgid "Устарел"
+msgstr "Deprecated"
+
+msgid "Экстренно"
+msgstr "Emergency"
 
 msgid "Я сохранил токен"
 msgstr "I've saved the token"
