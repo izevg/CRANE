@@ -1,9 +1,10 @@
-// Одноразовый стенд: тот же docker-compose.yaml, что у оператора, с отдельным проектом, секретами,
+// Одноразовый стенд: те же docker-compose.yaml и docker-compose.s3.yaml, что у оператора, с отдельным проектом, секретами,
 // подсетью и портами. Всё, что создано, снимается в down(), в том числе после сбоя.
 import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { initSecrets } from "../secrets-init.ts";
 import { docker, log, MS_PER_SECOND, run, SECONDS_PER_MINUTE, warn } from "./exec.ts";
 
 export interface Stand {
@@ -12,6 +13,10 @@ export interface Stand {
   project: string;
   /** Детерминированное имя контейнера Caddy в compose: `<проект>-caddy-1`. */
   caddy: string;
+  /** Имя контейнера SeaweedFS в compose: `<проект>-seaweedfs-1`. */
+  seaweedfs: string;
+  /** Бакет CAS (S3_BUCKET из .env.dist), он же в CRANE_BLOBS. */
+  bucket: string;
   /** Имя контейнера crane в compose: `<проект>-crane-1`; в его сетевом пространстве гасится маршрут. */
   crane: string;
   principal: string;
@@ -45,11 +50,30 @@ const DOWN_TIMEOUT_SECONDS = 5;
 const SUBNET_SECOND_MIN = 200;
 const SUBNET_SECOND_SPAN = 55;
 const OCTET_VALUES = 256;
-const SECRET_MODE = 0o644;
 const DIR_MODE = 0o700;
 const ENV_LINE = /^([A-Z][A-Z0-9_]*)=(.*)$/;
 const OVERLAP = /Pool overlaps|invalid pool request/;
 const ENV_DIST = ".env.dist";
+// Переменные с путями секретов → имя файла в каталоге стенда. Имя файла служит именем секрета в
+// сообщениях проверки утечек. Форматы файлов (URL каталога, ключи S3) знает только secrets-init.
+const SECRET_FILES = {
+  CRANE_TOKEN_SECRET: "crane_token",
+  POSTGRES_PASSWORD_SECRET: "postgres_password",
+  CRANE_DATABASE_URL_SECRET: "database_url",
+  S3_ACCESS_KEY_ID_SECRET: "s3_access_key_id",
+  S3_SECRET_ACCESS_KEY_SECRET: "s3_secret_access_key",
+} as const;
+const WRONG_TOKEN_NAME = "неверный токен";
+const S3_ENDPOINT = "http://seaweedfs:8333";
+// Стенд = Valkey + S3 + PostgreSQL: те же файлы и профиль, что включает оператор.
+const COMPOSE_MODES = [
+  "-f",
+  "docker-compose.yaml",
+  "-f",
+  "docker-compose.s3.yaml",
+  "--profile",
+  "cache",
+];
 /**
  * Имя proxy-репозитория crates.io для цели cargo с номером `index`: `/cargo/<имя>/`. Ключ кэша включает
  * репозиторий, поэтому у каждой цели свой кэш и первый прогон каждой честно идёт мимо кэша.
@@ -73,28 +97,27 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
   const project = `crane-dogfood-${id}`;
   const image = `crane-dogfood:${id}`;
   const tmp = join(tmpdir(), project);
-  const token = hex(HEX_BYTES_SECRET);
   const wrongToken = hex(HEX_BYTES_SECRET);
-  const postgresPassword = hex(HEX_BYTES_SECRET);
   // Пользователь и база берутся из .env.dist: URL в секрете обязан совпасть с тем, что создаёт postgres.
-  const { user, database } = postgresNames(join(root, ENV_DIST));
-  const databaseUrl = `postgres://${user}:${postgresPassword}@postgres:5432/${database}`;
+  const names = envDistValues(join(root, ENV_DIST));
   const principal = `dogfood-${id}`;
-  const secrets = [
-    { name: "токен", value: token },
-    { name: "неверный токен", value: wrongToken },
-    { name: "пароль PostgreSQL", value: postgresPassword },
-    { name: "URL каталога", value: databaseUrl },
+  // Секреты создаёт secrets-init в start(); до него токена и списка нет.
+  let token = "";
+  const secrets: { name: string; value: string }[] = [
+    { name: WRONG_TOKEN_NAME, value: wrongToken },
   ];
+  const secretPaths = Object.fromEntries(
+    Object.entries(SECRET_FILES).map(([variable, file]) => [variable, join(tmp, file)]),
+  );
 
   const overrides = join(tmp, "overrides.env");
-  // Профиль cache в базовой команде: up, logs и down (в том числе повторный после смены подсети) видят valkey.
+  // Режимы в базовой команде: up, logs и down (в том числе повторный после смены подсети) видят valkey,
+  // seaweedfs, сеть и том s3.
   const compose = [
     "compose",
     "-p",
     project,
-    "--profile",
-    "cache",
+    ...COMPOSE_MODES,
     "--env-file",
     ENV_DIST,
     "--env-file",
@@ -108,17 +131,37 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
     id,
     project,
     caddy: `${project}-caddy-1`,
+    seaweedfs: `${project}-seaweedfs-1`,
+    bucket: names.bucket,
     crane: `${project}-crane-1`,
     principal,
-    token,
+    get token() {
+      return token;
+    },
     wrongToken,
     secrets,
     start() {
       mkdirSync(tmp, { mode: DIR_MODE });
-      writeSecrets(tmp, { token, postgresPassword, databaseUrl });
+      // mkdir уважает umask, а каталог обязан быть ровно 0700 (файлы внутри 0644 делает secrets-init).
+      chmodSync(tmp, DIR_MODE);
+      initSecrets({ ...secretPaths, POSTGRES_USER: names.user, POSTGRES_DB: names.database }, tmp);
+      token = readSecret(secretPaths, "CRANE_TOKEN_SECRET");
+      for (const [variable, file] of Object.entries(SECRET_FILES)) {
+        secrets.push({ name: file, value: readSecret(secretPaths, variable) });
+      }
       log(`стенд ${project}: сборка образа ${image}`);
       docker(["build", "-t", image, root], { timeoutMs: BUILD_TIMEOUT_MS });
-      startCompose(tmp, overrides, { id, principal, proxyRepos }, composeRun);
+      startCompose(
+        overrides,
+        {
+          id,
+          principal,
+          proxyRepos,
+          blobs: `s3://${names.bucket}?endpoint=${S3_ENDPOINT}&allow_http=true`,
+        },
+        secretPaths,
+        composeRun,
+      );
     },
     restartCrane() {
       // `restart`, а не пересоздание: контейнер тот же, журнал compose сохраняется, а память процесса
@@ -176,27 +219,14 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
   };
 }
 
-/** Файлы 0644 в каталоге 0700: на Linux bind-монтируемый секрет читает uid 65532, а не владелец хоста. */
-function writeSecrets(
-  tmp: string,
-  values: { token: string; postgresPassword: string; databaseUrl: string },
-): void {
-  chmodSync(tmp, DIR_MODE);
-  const files: [string, string][] = [
-    ["crane_token", values.token],
-    ["postgres_password", values.postgresPassword],
-    ["database_url", values.databaseUrl],
-  ];
-  for (const [name, value] of files) {
-    writeFileSync(join(tmp, name), value);
-    chmodSync(join(tmp, name), SECRET_MODE);
-  }
+function readSecret(paths: Record<string, string>, variable: string): string {
+  return readFileSync(paths[variable] ?? "", "utf8").trim();
 }
 
 function startCompose(
-  tmp: string,
   overrides: string,
-  settings: { id: string; principal: string; proxyRepos: string[] },
+  settings: { id: string; principal: string; proxyRepos: string[]; blobs: string },
+  secretPaths: Record<string, string>,
   composeRun: (args: string[]) => string,
 ): void {
   for (let attempt = 1; ; attempt += 1) {
@@ -205,9 +235,9 @@ function startCompose(
     const lines = [
       "CRANE_IMAGE=crane-dogfood",
       `CRANE_VERSION=${settings.id}`,
-      `CRANE_TOKEN_SECRET=${join(tmp, "crane_token")}`,
-      `POSTGRES_PASSWORD_SECRET=${join(tmp, "postgres_password")}`,
-      `CRANE_DATABASE_URL_SECRET=${join(tmp, "database_url")}`,
+      ...Object.entries(secretPaths).map(([variable, path]) => `${variable}=${path}`),
+      // CAS на S3: бакет создаёт seaweedfs-init, ключи лежат в файлах секретов, в URL их нет.
+      `CRANE_BLOBS=${settings.blobs}`,
       `CRANE_TOKEN_PRINCIPAL=${settings.principal}`,
       `CRANE_CARGO_PROXY_REPOS=${settings.proxyRepos.join(",")}`,
       // L2-кэш в Valkey. Адрес без пароля и учётных данных, поэтому не секрет: сервис valkey в compose
@@ -235,8 +265,8 @@ function startCompose(
   }
 }
 
-/** POSTGRES_USER и POSTGRES_DB из .env.dist; отсутствие любого из них — ошибка. */
-function postgresNames(path: string): { user: string; database: string } {
+/** POSTGRES_USER, POSTGRES_DB и S3_BUCKET из .env.dist; отсутствие любого из них — ошибка. */
+function envDistValues(path: string): { user: string; database: string; bucket: string } {
   const values = new Map<string, string>();
   for (const line of readFileSync(path, "utf8").split("\n")) {
     const match = ENV_LINE.exec(line);
@@ -246,10 +276,11 @@ function postgresNames(path: string): { user: string; database: string } {
   }
   const user = values.get("POSTGRES_USER");
   const database = values.get("POSTGRES_DB");
-  if (!(user && database)) {
-    throw new Error(`${path}: нужны POSTGRES_USER и POSTGRES_DB`);
+  const bucket = values.get("S3_BUCKET");
+  if (!(user && database && bucket)) {
+    throw new Error(`${path}: нужны POSTGRES_USER, POSTGRES_DB и S3_BUCKET`);
   }
-  return { user, database };
+  return { user, database, bucket };
 }
 
 /** Всё, что относится к стенду и ещё существует. */
