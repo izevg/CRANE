@@ -2,6 +2,7 @@ import type { Decorator, Preview } from "@storybook/react-vite";
 import "~/shared/styles";
 import "../src/app/index.css";
 import "./fonts";
+import { activateLocale, type Locale } from "~/shared/lib/i18n";
 import { applyFonts, fontGlobalTypes, fontInitialGlobals } from "./fonts/toolbars";
 import { StoryShell } from "./StoryShell";
 
@@ -31,8 +32,26 @@ const withGlobals: Decorator = (Story, context) => {
 };
 
 const preview: Preview = {
+  // Каталог грузится до рендера story; выбор в хранилище витрина не пишет (activateLocale без записи).
+  loaders: [
+    async ({ globals }) => {
+      await activateLocale((globals as { locale?: Locale }).locale ?? "ru");
+    },
+  ],
   decorators: [withGlobals],
   globalTypes: {
+    locale: {
+      description: "Язык интерфейса",
+      toolbar: {
+        title: "Язык",
+        icon: "globe",
+        dynamicTitle: true,
+        items: [
+          { value: "ru", title: "RU" },
+          { value: "en", title: "EN" },
+        ],
+      },
+    },
     ...fontGlobalTypes,
     theme: {
       description: "Тема",
@@ -59,7 +78,7 @@ const preview: Preview = {
       },
     },
   },
-  initialGlobals: { theme: "light", motion: "system", ...fontInitialGlobals },
+  initialGlobals: { theme: "light", motion: "system", locale: "ru", ...fontInitialGlobals },
   parameters: {
     layout: "padded",
     // Нарушения axe валят прогон story-тестов. Отключать правило можно только в конкретной story и с причиной.

@@ -1,0 +1,41 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-10-27 21:01+0300\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: en\n"
+
+msgid "{count, plural, one {# непрочитанное} few {# непрочитанных} many {# непрочитанных} other {# непрочитанных}}"
+msgstr "{count, plural, one {# unread} other {# unread}}"
+
+msgid "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
+msgstr "{count, plural, one {# row selected} other {# rows selected}}"
+
+msgid "{size, plural, one {# ключ} few {# ключа} many {# ключей} other {# ключа}}"
+msgstr "{size, plural, one {# key} other {# keys}}"
+
+msgid "{size, plural, one {# элемент} few {# элемента} many {# элементов} other {# элемента}}"
+msgstr "{size, plural, one {# item} other {# items}}"
+
+msgid "{total, plural, one {Результатов: #} few {Результатов: #} many {Результатов: #} other {Результатов: #}}"
+msgstr "{total, plural, other {Results: #}}"
+
+msgid "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
+msgstr "{unread, plural, one {Notifications, # unread} other {Notifications, # unread}}"
+
+msgid "Массовые действия"
+msgstr "Bulk actions"
+
+msgid "Не удалось скопировать — выделите текст вручную"
+msgstr "Could not copy. Select the text and copy it manually"
+
+msgid "Скопировано"
+msgstr "Copied"
+
+msgid "Снять выделение"
+msgstr "Clear selection"
+
+msgid "Уведомления"
+msgstr "Notifications"
