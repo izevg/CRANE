@@ -52,6 +52,7 @@ fn version(name: &str, vers: &str, yanked: bool, sha_byte: u8) -> PackageVersion
         version: publish.version,
         state: VersionState::Released,
         yanked,
+        deprecated: None,
         published_at: SystemTime::UNIX_EPOCH,
         metadata: publish.metadata,
     }

@@ -6,15 +6,10 @@ use bytes::Bytes;
 use crane_domain::registry::Sha256;
 use futures_core::Stream;
 
+use super::Digests;
+
 /// Поток байт тела артефакта; ошибка чтения — `io::Error`.
 pub type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, std::io::Error>> + Send>>;
-
-/// SHA-256 и размер содержимого.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Digests {
-    pub sha256: Sha256,
-    pub size: u64,
-}
 
 /// Непрозрачный ключ временного объекта; смысл знает только породивший его адаптер.
 #[derive(Debug, Clone, PartialEq, Eq)]

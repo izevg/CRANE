@@ -13,7 +13,7 @@ use crane_app::proxy::{ProxyEngine, ProxyLimits, Served};
 use crane_domain::proxy::{
     EgressPolicy, EgressRefusal, MetadataPolicy, NegativePolicy, Origin, ProxyKey, UpstreamPath,
 };
-use crane_domain::registry::{RepositoryId, Sha256};
+use crane_domain::registry::{Checksum, RepositoryId};
 use crane_memory::{
     ManualClock, MemoryBlobStore, MemoryFetchLeases, MemoryProxyCache, SequentialIdGen,
 };
@@ -397,7 +397,7 @@ impl World {
     pub(crate) fn artifact(
         &self,
         raw_path: &str,
-        expected: Option<Sha256>,
+        expected: Option<Checksum>,
     ) -> Result<Served<crane_app::proxy::Fetched>, crane_app::proxy::ProxyError> {
         futures_executor::block_on(self.engine.artifact(
             &self.origin,

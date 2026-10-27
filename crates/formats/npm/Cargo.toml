@@ -9,3 +9,21 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+crane-domain = { path = "../../core/domain" }
+# Тело загрузки и PUT-документы приходят и уходят как Bytes без копий.
+bytes = "1"
+# Проводной формат npm: JSON; derive допустим на границе формата.
+serde = { version = "1", features = ["derive"] }
+# raw_value: packument разбирается заимствованно, поля пересобираются без материализации `Value`.
+serde_json = { version = "1", features = ["raw_value"] }
+# Вложения публикации (standard) и SRI-суммы (`sha512-<base64>`) кодируются в base64.
+base64 = "0.22"
+# Поля `time` packument: RFC 3339 с миллисекундами.
+humantime = "2"
+thiserror = "2"
+
+[dev-dependencies]
+# Только для построения VersionId/RepositoryId в тестах; в рабочий код не попадает.
+uuid = "1"

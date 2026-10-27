@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 /// Формат пакетного реестра; значения совпадают с SQL enum `pkg_format`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Format {
     Maven,
     Npm,

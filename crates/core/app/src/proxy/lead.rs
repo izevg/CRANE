@@ -6,12 +6,12 @@ use bytes::Bytes;
 use crane_domain::proxy::{
     Freshness, MetadataPolicy, NegativePolicy, ProxyKey, UpstreamBase, UpstreamPath,
 };
-use crane_domain::registry::Sha256;
+use crane_domain::registry::Checksum;
 use crane_ports::proxy::{
     Cached, CachedState, Claim, ETag, FetchLeases, Lease, ProxyCache, Upstream, UpstreamError,
     UpstreamRequest, UpstreamResponse,
 };
-use crane_ports::registry::{BlobError, BlobStore, ByteStream};
+use crane_ports::registry::{BlobError, BlobStore, ByteStream, Digests};
 use futures_util::{StreamExt, stream};
 
 use super::flight::Outcome;
@@ -24,7 +24,7 @@ pub(super) enum Target {
         policy: MetadataPolicy,
     },
     Artifact {
-        expected: Option<Sha256>,
+        expected: Option<Checksum>,
         negative: NegativePolicy,
     },
 }
@@ -48,7 +48,7 @@ impl Target {
                 Self::Document { policy },
             ) => policy.assess(*unchanged, *max_age, entry.fetched_at, now),
             (CachedState::Blob(digests), Self::Artifact { expected, .. })
-                if expected.is_none_or(|expected| expected == digests.sha256) =>
+                if expected.is_none_or(|expected| digests.satisfies(&expected)) =>
             {
                 Freshness::Fresh
             }
@@ -67,14 +67,14 @@ impl Target {
 
     /// Дайджест полученных байт против ожидаемого. Полёт общий, а ожидание у каждого вызывающего своё,
     /// поэтому проверка нужна и лидеру до коммита, и присоединившемуся после полёта.
-    pub(super) fn check_digest(&self, actual: Sha256) -> Result<(), ProxyError> {
+    pub(super) fn check_digest(&self, digests: &Digests) -> Result<(), ProxyError> {
         match self {
             Self::Artifact {
                 expected: Some(expected),
                 ..
-            } if *expected != actual => Err(ProxyError::DigestMismatch {
-                expected: *expected,
-                actual,
+            } if !digests.satisfies(expected) => Err(ProxyError::DigestMismatch {
+                expected: Box::new(*expected),
+                actual: Box::new(digests.of_kind(expected)),
             }),
             _ => Ok(()),
         }
@@ -247,7 +247,7 @@ async fn fetch<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
                     other => ProxyError::backend(other),
                 })?;
             // Несовпавший staged-объект не коммитим: чужие байты не должны попасть в CAS.
-            job.target.check_digest(staged.digests().sha256)?;
+            job.target.check_digest(staged.digests())?;
             let digests = inner
                 .blobs
                 .commit(staged)

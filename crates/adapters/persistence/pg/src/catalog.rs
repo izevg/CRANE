@@ -1,8 +1,11 @@
+use std::collections::BTreeSet;
+
 use crane_domain::registry::{
     Format, PackageName, PackageVersion, Repository, RepositoryId, Version, VersionId, VersionState,
 };
 use crane_ports::registry::{Catalog, CatalogError, NewVersion};
 use sqlx::{PgConnection, PgPool};
+use uuid::Uuid;
 
 use crate::rows::{
     corrupt, kind_as_str, rejected, repository_from_row, state_as_str, state_parse, to_db_time,
@@ -27,7 +30,7 @@ macro_rules! select_version {
     ($tail:literal) => {
         concat!(
             r#"SELECT r.format::text AS format, p.name_display, v.id, r.id AS repository_id,
-                v.version_display, v.state::text AS state, v.yanked, v.published_at,
+                v.version_display, v.state::text AS state, v.yanked, v.deprecated, v.published_at,
                 v.metadata::text AS metadata,
                 COALESCE(f.paths, '{}') AS paths,
                 COALESCE(f.digests, '{}') AS digests,
@@ -218,6 +221,27 @@ impl Catalog for PgCatalog {
         .await
         .map_err(publish_error)?;
 
+        // Теги переносятся в той же транзакции, что и версия: либо всё, либо ничего.
+        // Дубли имён схлопываются заранее: один INSERT не может затронуть строку дважды.
+        let tags: Vec<&str> = new
+            .tags
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        sqlx::query(
+            "INSERT INTO dist_tag (package_id, tag, version_id)
+         SELECT $1, t.tag, $2 FROM UNNEST($3::text[]) AS t(tag)
+         ON CONFLICT (package_id, tag) DO UPDATE SET version_id = EXCLUDED.version_id",
+        )
+        .bind(package_id)
+        .bind(new.id.as_uuid())
+        .bind(&tags)
+        .execute(&mut *tx)
+        .await
+        .map_err(backend)?;
+
         // Результат читается из БД, а не собирается из входа: так publish и find совпадают
         // по построению (микросекунды времени, написание пакета, размер из blob, порядок путей).
         let stored = load_version(&mut tx, new.id)
@@ -274,6 +298,81 @@ impl Catalog for PgCatalog {
             return Err(CatalogError::NotFound);
         }
         Ok(())
+    }
+
+    async fn set_deprecated(
+        &self,
+        id: VersionId,
+        message: Option<String>,
+    ) -> Result<(), CatalogError> {
+        let done = sqlx::query("UPDATE package_version SET deprecated = $2 WHERE id = $1")
+            .bind(id.as_uuid())
+            .bind(message)
+            .execute(&self.pool)
+            .await
+            .map_err(backend)?;
+        if done.rows_affected() == 0 {
+            return Err(CatalogError::NotFound);
+        }
+        Ok(())
+    }
+
+    async fn set_tag(&self, version: VersionId, tag: &str) -> Result<(), CatalogError> {
+        // Пакет берётся из самой версии: тег чужого пакета выразить нельзя.
+        let done = sqlx::query(
+            "INSERT INTO dist_tag (package_id, tag, version_id)
+             SELECT package_id, $2, id FROM package_version WHERE id = $1
+             ON CONFLICT (package_id, tag) DO UPDATE SET version_id = EXCLUDED.version_id",
+        )
+        .bind(version.as_uuid())
+        .bind(tag)
+        .execute(&self.pool)
+        .await
+        .map_err(backend)?;
+        if done.rows_affected() == 0 {
+            return Err(CatalogError::NotFound);
+        }
+        Ok(())
+    }
+
+    async fn remove_tag(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+        tag: &str,
+    ) -> Result<bool, CatalogError> {
+        let done = sqlx::query(
+            "DELETE FROM dist_tag d USING package p
+             WHERE d.package_id = p.id AND p.repository_id = $1 AND p.name_norm = $2 AND d.tag = $3",
+        )
+        .bind(repository.as_uuid())
+        .bind(package.normalized())
+        .bind(tag)
+        .execute(&self.pool)
+        .await
+        .map_err(backend)?;
+        Ok(done.rows_affected() > 0)
+    }
+
+    async fn tags(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+    ) -> Result<Vec<(String, VersionId)>, CatalogError> {
+        // COLLATE "C": байтовый порядок, одинаковый для любой локали кластера и совпадающий с Ord для String.
+        let rows: Vec<(String, Uuid)> = sqlx::query_as(
+            "SELECT d.tag, d.version_id FROM dist_tag d JOIN package p ON p.id = d.package_id
+             WHERE p.repository_id = $1 AND p.name_norm = $2 ORDER BY d.tag COLLATE \"C\"",
+        )
+        .bind(repository.as_uuid())
+        .bind(package.normalized())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(backend)?;
+        Ok(rows
+            .into_iter()
+            .map(|(tag, id)| (tag, VersionId::new(id)))
+            .collect())
     }
 
     async fn transition(

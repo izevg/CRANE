@@ -3,12 +3,13 @@ use std::io;
 use std::sync::Arc;
 
 use crane_domain::registry::Sha256;
-use crane_ports::registry::{BlobError, BlobStore, ByteStream, Digests, Staged, StagingKey};
+use crane_ports::registry::{
+    BlobError, BlobStore, ByteStream, Digester, Digests, Staged, StagingKey,
+};
 use futures_util::StreamExt;
 use object_store::buffered::BufWriter;
 use object_store::path::Path;
 use object_store::{ObjectStore, ObjectStoreExt};
-use sha2::Digest;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
@@ -38,15 +39,13 @@ impl BlobStore for ObjectBlobStore {
     async fn stage(&self, mut body: ByteStream) -> Result<Staged, BlobError> {
         let path = Path::from(format!("staging/{}", Uuid::new_v4()));
         let mut writer = BufWriter::new(Arc::clone(&self.store), path.clone());
-        let mut hasher = sha2::Sha256::new();
-        let mut size = 0u64;
+        let mut digester = Digester::default();
         // Отдельный блок, чтобы откат был в одной точке. shutdown сюда не входит:
         // abort после него паникует («Already shut down»).
         let streamed: Result<(), BlobError> = async {
             while let Some(chunk) = body.next().await {
                 let chunk = chunk.map_err(BlobError::Body)?;
-                hasher.update(&chunk);
-                size += chunk.len() as u64;
+                digester.update(&chunk);
                 writer.put(chunk).await.map_err(backend)?;
             }
             Ok(())
@@ -59,11 +58,10 @@ impl BlobStore for ObjectBlobStore {
             return Err(e);
         }
         writer.shutdown().await.map_err(backend)?;
-        let digests = Digests {
-            sha256: Sha256::from(<[u8; 32]>::from(hasher.finalize())),
-            size,
-        };
-        Ok(Staged::new(StagingKey::new(path.to_string()), digests))
+        Ok(Staged::new(
+            StagingKey::new(path.to_string()),
+            digester.finish(),
+        ))
     }
 
     async fn commit(&self, staged: Staged) -> Result<Digests, BlobError> {

@@ -1,66 +1,67 @@
+//! Дайджесты содержимого: SHA-256 (ключ CAS), SHA-512 и SHA-1 (контрольные суммы форматов).
+
+mod checksum;
+mod hex;
+
 use std::fmt;
 
-const LEN: usize = 32;
-const HEX_LEN: usize = LEN * 2;
+pub use checksum::Checksum;
+pub use hex::DigestError;
 
-/// Ошибка разбора hex-представления дайджеста.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub enum DigestError {
-    #[error("ожидалось 64 hex-символа, получено {0}")]
-    InvalidLength(usize),
-    #[error("недопустимый hex-символ {0:?}")]
-    InvalidChar(char),
-}
+/// Объявляет тип дайджеста фиксированной длины с общим разбором и выводом hex.
+macro_rules! digest {
+    ($(#[$meta:meta])* $name:ident, $len:expr) => {
+        $(#[$meta])*
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        pub struct $name([u8; $len]);
 
-/// Дайджест SHA-256 (ключ содержимого в CAS).
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Sha256([u8; LEN]);
+        impl $name {
+            /// Принимает hex любого регистра.
+            pub fn from_hex(s: &str) -> Result<Self, DigestError> {
+                hex::parse(s).map(Self)
+            }
 
-impl Sha256 {
-    /// Принимает hex любого регистра.
-    pub fn from_hex(s: &str) -> Result<Self, DigestError> {
-        let len = s.chars().count();
-        if len != HEX_LEN {
-            return Err(DigestError::InvalidLength(len));
+            #[must_use]
+            pub const fn as_bytes(&self) -> &[u8; $len] {
+                &self.0
+            }
         }
-        let mut digits = [0u8; HEX_LEN];
-        for (slot, c) in digits.iter_mut().zip(s.chars()) {
-            *slot = c
-                .to_digit(16)
-                .and_then(|d| u8::try_from(d).ok())
-                .ok_or(DigestError::InvalidChar(c))?;
+
+        impl From<[u8; $len]> for $name {
+            fn from(bytes: [u8; $len]) -> Self {
+                Self(bytes)
+            }
         }
-        let mut bytes = [0u8; LEN];
-        let (pairs, _) = digits.as_chunks::<2>();
-        for (byte, [hi, lo]) in bytes.iter_mut().zip(pairs) {
-            *byte = (hi << 4) + lo;
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                hex::write(&self.0, f)
+            }
         }
-        Ok(Self(bytes))
-    }
 
-    #[must_use]
-    pub const fn as_bytes(&self) -> &[u8; LEN] {
-        &self.0
-    }
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, concat!(stringify!($name), "({})"), self)
+            }
+        }
+    };
 }
 
-impl From<[u8; LEN]> for Sha256 {
-    fn from(bytes: [u8; LEN]) -> Self {
-        Self(bytes)
-    }
-}
-
-impl fmt::Display for Sha256 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.iter().try_for_each(|b| write!(f, "{b:02x}"))
-    }
-}
-
-impl fmt::Debug for Sha256 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Sha256({self})")
-    }
-}
+digest!(
+    /// Дайджест SHA-256 (ключ содержимого в CAS).
+    Sha256,
+    32
+);
+digest!(
+    /// Дайджест SHA-512 (`dist.integrity` npm).
+    Sha512,
+    64
+);
+digest!(
+    /// Дайджест SHA-1 (`dist.shasum` npm). Не криптостойкий: только сверка с заявленным клиентом.
+    Sha1,
+    20
+);
 
 #[cfg(test)]
 mod tests {
@@ -113,7 +114,13 @@ mod tests {
         let result = Sha256::from_hex(hex);
 
         // Assert
-        assert_eq!(result.unwrap_err(), DigestError::InvalidLength(63));
+        assert_eq!(
+            result.unwrap_err(),
+            DigestError::InvalidLength {
+                expected: 64,
+                actual: 63
+            }
+        );
     }
 
     #[test]
@@ -125,7 +132,13 @@ mod tests {
         let result = Sha256::from_hex(&hex);
 
         // Assert
-        assert_eq!(result.unwrap_err(), DigestError::InvalidLength(65));
+        assert_eq!(
+            result.unwrap_err(),
+            DigestError::InvalidLength {
+                expected: 64,
+                actual: 65
+            }
+        );
     }
 
     #[test]
@@ -152,6 +165,40 @@ mod tests {
         assert_eq!(
             (printed.len(), Sha256::from_hex(&printed)),
             (64, Ok(digest))
+        );
+    }
+
+    #[test]
+    fn sha512_and_sha1_round_trip_through_hex() {
+        // Arrange
+        let sha512 = "ab".repeat(64);
+        let sha1 = "0f".repeat(20);
+
+        // Act
+        let printed = (
+            Sha512::from_hex(&sha512).map(|d| d.to_string()),
+            Sha1::from_hex(&sha1).map(|d| d.to_string()),
+        );
+
+        // Assert
+        assert_eq!(printed, (Ok(sha512), Ok(sha1)));
+    }
+
+    #[test]
+    fn sha1_rejects_sha256_length() {
+        // Arrange
+        let hex = EMPTY_SHA256;
+
+        // Act
+        let result = Sha1::from_hex(hex);
+
+        // Assert
+        assert_eq!(
+            result.unwrap_err(),
+            DigestError::InvalidLength {
+                expected: 40,
+                actual: 64
+            }
         );
     }
 }

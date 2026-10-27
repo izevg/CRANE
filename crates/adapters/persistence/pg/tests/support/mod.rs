@@ -229,6 +229,7 @@ pub(crate) fn new_version(seq: u64, repo: RepositoryId, package: &str, raw: &str
         published_at: SystemTime::UNIX_EPOCH + Duration::from_secs(seq),
         assets: vec![asset(&format!("{package}-{raw}.crate"), 7, 3)],
         metadata: FormatMetadata::new(r#"{"deps":[]}"#.to_owned()),
+        tags: Vec::new(),
     }
 }
 

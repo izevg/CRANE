@@ -18,15 +18,15 @@ use crane_ports::registry::{BlobStore, Catalog};
 use futures_util::stream;
 
 use super::Shared;
-use crate::error::{CargoError, chain};
+use crate::error::{ClientError, chain};
 
 const JSON: &str = "application/json";
 
-fn coordinate(repo: String, name: &str, version: &str) -> Result<Coordinate, CargoError> {
+fn coordinate(repo: String, name: &str, version: &str) -> Result<Coordinate, ClientError> {
     let package =
-        PackageName::parse(Format::Cargo, name).map_err(|e| CargoError::bad_request(chain(&e)))?;
+        PackageName::parse(Format::Cargo, name).map_err(|e| ClientError::bad_request(chain(&e)))?;
     let version =
-        Version::parse(Format::Cargo, version).map_err(|e| CargoError::bad_request(chain(&e)))?;
+        Version::parse(Format::Cargo, version).map_err(|e| ClientError::bad_request(chain(&e)))?;
     Ok(Coordinate {
         format: Format::Cargo,
         repository: repo,
@@ -44,10 +44,10 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
     Extension(caller): Extension<Caller>,
     Path(repo): Path<String>,
     body: Result<Bytes, BytesRejection>,
-) -> Result<Response, CargoError> {
+) -> Result<Response, ClientError> {
     let body =
-        body.map_err(|rejection| CargoError::new(rejection.status(), rejection.body_text()))?;
-    let request = parse_publish(body).map_err(|e| CargoError::bad_request(chain(&e)))?;
+        body.map_err(|rejection| ClientError::new(rejection.status(), rejection.body_text()))?;
+    let request = parse_publish(body).map_err(|e| ClientError::bad_request(chain(&e)))?;
 
     // crates.io тоже отвергает смену написания, и мы отказываем явной ошибкой. Каталог при этом
     // сам держит инвариант: первое записанное написание побеждает даже в гонке (`name_display`
@@ -60,7 +60,7 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
     if let Some(first) = existing.first()
         && first.package.as_written() != request.name.as_written()
     {
-        return Err(CargoError::bad_request(format!(
+        return Err(ClientError::bad_request(format!(
             "крейт уже опубликован под именем `{}`",
             first.package.as_written()
         )));
@@ -83,9 +83,10 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
                     path,
                     body: Box::pin(stream::once(ready(crate_file))),
                     // Cargo хэш не присылает: cksum берётся из CAS.
-                    declared_sha256: None,
+                    declared: Vec::new(),
                 },
                 metadata: request.metadata,
+                tags: Vec::new(),
             },
         )
         .await?;
@@ -96,7 +97,7 @@ pub(super) async fn download<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
     Extension(caller): Extension<Caller>,
     Path((repo, name, version)): Path<(String, String, String)>,
-) -> Result<Response, CargoError> {
+) -> Result<Response, ClientError> {
     let coordinate = coordinate(repo, &name, &version)?;
     let path = asset_path(&coordinate.package, &coordinate.version);
     let download = shared.registry.fetch(&caller, &coordinate, &path).await?;
@@ -115,7 +116,7 @@ pub(super) async fn yank<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
     Extension(caller): Extension<Caller>,
     Path((repo, name, version)): Path<(String, String, String)>,
-) -> Result<Response, CargoError> {
+) -> Result<Response, ClientError> {
     set_yanked(&shared, &caller, repo, &name, &version, true).await
 }
 
@@ -123,7 +124,7 @@ pub(super) async fn unyank<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
     Extension(caller): Extension<Caller>,
     Path((repo, name, version)): Path<(String, String, String)>,
-) -> Result<Response, CargoError> {
+) -> Result<Response, ClientError> {
     set_yanked(&shared, &caller, repo, &name, &version, false).await
 }
 
@@ -134,7 +135,7 @@ async fn set_yanked<C: Catalog + 'static, B: BlobStore + 'static>(
     name: &str,
     version: &str,
     yanked: bool,
-) -> Result<Response, CargoError> {
+) -> Result<Response, ClientError> {
     let coordinate = coordinate(repo, name, version)?;
     shared
         .registry
@@ -147,21 +148,21 @@ pub(super) async fn owners<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
     Extension(caller): Extension<Caller>,
     Path((repo, name)): Path<(String, String)>,
-) -> Result<Response, CargoError> {
-    let package =
-        PackageName::parse(Format::Cargo, &name).map_err(|e| CargoError::bad_request(chain(&e)))?;
+) -> Result<Response, ClientError> {
+    let package = PackageName::parse(Format::Cargo, &name)
+        .map_err(|e| ClientError::bad_request(chain(&e)))?;
     let versions = shared
         .registry
         .versions(&caller, Format::Cargo, &repo, &package)
         .await?;
     if versions.is_empty() {
-        return Err(CargoError::not_found());
+        return Err(ClientError::not_found());
     }
     Ok(json_ok(render_owners(&caller.principal.id)))
 }
 
-pub(super) async fn owners_unsupported() -> CargoError {
-    CargoError::new(
+pub(super) async fn owners_unsupported() -> ClientError {
+    ClientError::new(
         StatusCode::NOT_IMPLEMENTED,
         "управление владельцами появится в v0.4.0",
     )

@@ -7,6 +7,7 @@
     reason = "dead_code: фикстуры общие для тестовых бинарей; unwrap в тестах = падение теста"
 )]
 
+pub(crate) mod npm;
 pub(crate) mod proxy;
 
 use std::cell::RefCell;
@@ -24,7 +25,10 @@ use crane_app::registry::Registry;
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::audit::AuditEvent;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
-use crane_http::{CargoSettings, StaticToken, TrustedProxies, admin_router, api_router};
+use crane_http::{
+    CargoSettings, FormatSettings, NpmSettings, ProxyRouters, StaticToken, TrustedProxies,
+    admin_router, api_router,
+};
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::audit::AuditSink;
 use crane_ports::registry::Catalog;
@@ -38,10 +42,16 @@ use tower::ServiceExt;
 pub(crate) const TOKEN: &str = "s3cret-token";
 pub(crate) const PUBLIC_URL: &str = "https://crane.example";
 pub(crate) const MAX_PUBLISH_BYTES: usize = 4096;
+/// Документ публикации npm несёт tarball в base64, поэтому предел шире.
+pub(crate) const MAX_NPM_PUBLISH_BYTES: usize = 65536;
 pub(crate) const REPO: &str = "internal";
 /// Личность, которой принадлежит `TOKEN`.
 pub(crate) const PRINCIPAL: &str = "crane";
 const PROXY_REPO: &str = "mirror";
+/// Hosted-репозиторий npm.
+pub(crate) const NPM_REPO: &str = "web";
+/// Имя proxy-репозитория npm в каталоге; routers монтируются снаружи.
+pub(crate) const NPM_PROXY_REPO: &str = "npmjs";
 const WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub(crate) struct Reply {
@@ -77,6 +87,7 @@ pub(crate) struct Api {
     router: Router,
     admin: Router,
     audit: Arc<MemoryAudit>,
+    clock: Arc<ManualClock>,
 }
 
 impl Api {
@@ -92,49 +103,80 @@ impl Api {
 
     /// `sink` получает события и use cases, и слоя auth; `audit` — то, что отдаёт `audit_events`.
     pub(crate) fn build(proxies: &str, sink: Arc<dyn AuditSink>, audit: Arc<MemoryAudit>) -> Self {
-        Self::build_with(proxies, sink, audit, Vec::new())
+        Self::build_with(proxies, sink, audit, ProxyRouters::default())
     }
 
     /// Рядом с hosted-репозиториями монтируются готовые proxy-routers.
     pub(crate) fn with_proxy_repos(proxy_repos: Vec<(String, Router)>) -> Self {
         let audit = Arc::new(MemoryAudit::default());
-        Self::build_with("", audit.clone(), audit, proxy_repos)
+        Self::build_with(
+            "",
+            audit.clone(),
+            audit,
+            ProxyRouters {
+                cargo: proxy_repos,
+                npm: Vec::new(),
+            },
+        )
+    }
+
+    /// Рядом с hosted-репозиториями монтируются готовые proxy-routers npm.
+    pub(crate) fn with_npm_proxy_repos(npm: Vec<(String, Router)>) -> Self {
+        let audit = Arc::new(MemoryAudit::default());
+        Self::build_with(
+            "",
+            audit.clone(),
+            audit,
+            ProxyRouters {
+                cargo: Vec::new(),
+                npm,
+            },
+        )
     }
 
     fn build_with(
         proxies: &str,
         sink: Arc<dyn AuditSink>,
         audit: Arc<MemoryAudit>,
-        proxy_repos: Vec<(String, Router)>,
+        proxy_repos: ProxyRouters,
     ) -> Self {
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let ids = Arc::new(SequentialIdGen::default());
         let catalog = MemoryCatalog::default();
-        for (name, kind) in [
-            (REPO, RepositoryKind::Hosted),
-            (PROXY_REPO, RepositoryKind::Proxy),
+        for (format, name, kind) in [
+            (Format::Cargo, REPO, RepositoryKind::Hosted),
+            (Format::Cargo, PROXY_REPO, RepositoryKind::Proxy),
+            (Format::Npm, NPM_REPO, RepositoryKind::Hosted),
+            (Format::Npm, NPM_PROXY_REPO, RepositoryKind::Proxy),
         ] {
             runtime
                 .block_on(catalog.ensure_repository(Repository {
                     id: RepositoryId::new(ids.generate()),
-                    format: Format::Cargo,
+                    format,
                     kind,
                     name: name.to_owned(),
                 }))
                 .unwrap();
         }
+        let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
         let registry = Arc::new(Registry::new(
             catalog,
             MemoryBlobStore::default(),
-            Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH)),
+            clock.clone(),
             ids,
             sink.clone(),
         ));
         let router = api_router(
             registry.clone(),
-            CargoSettings {
-                public_url: PUBLIC_URL.to_owned(),
-                max_publish_bytes: MAX_PUBLISH_BYTES,
+            FormatSettings {
+                cargo: CargoSettings {
+                    public_url: PUBLIC_URL.to_owned(),
+                    max_publish_bytes: MAX_PUBLISH_BYTES,
+                },
+                npm: NpmSettings {
+                    public_url: PUBLIC_URL.to_owned(),
+                    max_publish_bytes: MAX_NPM_PUBLISH_BYTES,
+                },
             },
             StaticToken::new(
                 TOKEN.as_bytes(),
@@ -152,7 +194,13 @@ impl Api {
             router,
             admin: admin_router(registry),
             audit,
+            clock,
         }
+    }
+
+    /// Сдвигает часы реестра (окно снятия версий).
+    pub(crate) fn advance(&self, by: std::time::Duration) {
+        self.clock.advance(by);
     }
 
     /// Даёт задачам, запущенным запросом (фоновая ревалидация), выполниться, пока условие не истинно.

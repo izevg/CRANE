@@ -17,7 +17,7 @@ use bytes::Bytes;
 use crane_domain::proxy::{
     EgressRefusal, Freshness, MetadataPolicy, NegativePolicy, Origin, UpstreamPath, age,
 };
-use crane_domain::registry::Sha256;
+use crane_domain::registry::Checksum;
 use crane_ports::proxy::{Cached, CachedState, FetchLeases, ProxyCache, Upstream};
 use crane_ports::registry::{BlobError, BlobStore, ByteStream, Digests};
 use crane_ports::system::Clock;
@@ -126,8 +126,12 @@ pub enum ProxyError {
     NotFound,
     #[error("upstream не ответил")]
     Upstream(#[from] UpstreamFailure),
-    #[error("sha256 не совпал: ожидался {expected}, получен {actual}")]
-    DigestMismatch { expected: Sha256, actual: Sha256 },
+    #[error("контрольная сумма не совпала: ожидалась {expected}, получена {actual}")]
+    // Checksum с sha512 велик: без Box вариант раздувает каждый `Result<_, ProxyError>`.
+    DigestMismatch {
+        expected: Box<Checksum>,
+        actual: Box<Checksum>,
+    },
     #[error("ответ upstream больше {limit} байт")]
     TooLarge { limit: u64 },
     #[error("ошибка бэкенда")]
@@ -234,7 +238,7 @@ where
         &self,
         origin: &Origin,
         path: &UpstreamPath,
-        expected: Option<Sha256>,
+        expected: Option<Checksum>,
         negative: &NegativePolicy,
     ) -> Result<Served<Fetched>, ProxyError> {
         let now = self.0.clock.now();
@@ -259,7 +263,7 @@ where
                 fetched_at,
                 state: CachedState::Blob(digests),
             } => {
-                target.check_digest(digests.sha256)?;
+                target.check_digest(&digests)?;
                 let body = self
                     .0
                     .blobs

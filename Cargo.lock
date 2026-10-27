@@ -389,6 +389,16 @@ version = "0.1.0"
 [[package]]
 name = "crane-format-npm"
 version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "crane-domain",
+ "humantime",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "uuid",
+]
 
 [[package]]
 name = "crane-format-nuget"
@@ -408,10 +418,12 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "axum-extra",
+ "base64 0.22.1",
  "bytes",
  "crane-app",
  "crane-domain",
  "crane-format-cargo",
+ "crane-format-npm",
  "crane-memory",
  "crane-ports",
  "crane-siem",
@@ -446,7 +458,6 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "moka",
- "sha2 0.10.9",
  "uuid",
 ]
 
@@ -459,7 +470,6 @@ dependencies = [
  "crane-ports",
  "futures-util",
  "object_store",
- "sha2 0.10.9",
  "tokio",
  "url",
  "uuid",
@@ -486,6 +496,8 @@ dependencies = [
  "crane-domain",
  "futures-core",
  "futures-util",
+ "sha1 0.10.7",
+ "sha2 0.10.9",
  "thiserror",
  "uuid",
 ]
@@ -498,6 +510,7 @@ dependencies = [
  "crane-app",
  "crane-domain",
  "crane-format-cargo",
+ "crane-format-npm",
  "crane-http",
  "crane-memory",
  "crane-objstore",

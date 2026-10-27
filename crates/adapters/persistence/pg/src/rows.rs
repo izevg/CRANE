@@ -106,7 +106,7 @@ pub(crate) fn repository_from_row(row: &PgRow) -> Result<Repository, CatalogErro
 }
 
 /// Колонки: `format`, `name_display`, `id`, `repository_id`, `version_display`, `state`,
-/// `yanked`, `published_at`, `metadata`, `paths`, `digests`, `sizes`; массивы файлов
+/// `yanked`, `deprecated`, `published_at`, `metadata`, `paths`, `digests`, `sizes`; массивы файлов
 /// выровнены по индексу и отсортированы по пути.
 pub(crate) fn version_from_row(row: &PgRow) -> Result<PackageVersion, CatalogError> {
     let format = column::<&str>(row, "format")?
@@ -121,6 +121,7 @@ pub(crate) fn version_from_row(row: &PgRow) -> Result<PackageVersion, CatalogErr
             .map_err(corrupt)?,
         state: state_parse(column::<&str>(row, "state")?)?,
         yanked: column::<bool>(row, "yanked")?,
+        deprecated: column::<Option<String>>(row, "deprecated")?,
         published_at: from_db_time(column::<OffsetDateTime>(row, "published_at")?)?,
         assets: assets_from_columns(
             column::<Vec<String>>(row, "paths")?,

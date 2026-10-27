@@ -55,6 +55,8 @@ const ENV_DIST = ".env.dist";
  * репозиторий, поэтому у каждой цели свой кэш и первый прогон каждой честно идёт мимо кэша.
  */
 export const proxyRepo = (index: number): string => `crates-io-${index + 1}`;
+/** Proxy-репозиторий npmjs для npm-сценария: `/npm/<имя>/`; своё имя, чтобы не сдвигать индексы `proxyRepo`. */
+export const npmProxyRepo = "npmjs-1";
 
 const hex = (bytes: number): string => randomBytes(bytes).toString("hex");
 
@@ -211,6 +213,8 @@ function startCompose(
       // L2-кэш в Valkey. Адрес без пароля и учётных данных, поэтому не секрет: сервис valkey в compose
       // без auth и доступен только по сети default.
       "CRANE_CACHE=valkey://valkey:6379",
+      "CRANE_NPM_REPOS=internal",
+      `CRANE_NPM_PROXY_REPOS=${npmProxyRepo}`,
       `CRANE_EDGE_SUBNET=${subnet}`,
       "CADDY_HTTP_PORT=127.0.0.1:",
       "CADDY_HTTPS_PORT=127.0.0.1:",

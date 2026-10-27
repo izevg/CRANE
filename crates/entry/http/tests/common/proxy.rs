@@ -12,7 +12,10 @@ use crane_app::proxy::{ProxyEngine, ProxyLimits};
 use crane_domain::proxy::{EgressPolicy, EgressRefusal, Origin};
 use crane_domain::registry::RepositoryId;
 use crane_format_cargo::{DL_HOST, INDEX_HOST};
-use crane_http::{CargoProxyOrigins, CargoSettings, cargo_proxy_router};
+use crane_format_npm::REGISTRY_HOST;
+use crane_http::{
+    CargoProxyOrigins, CargoSettings, NpmSettings, cargo_proxy_router, npm_proxy_router,
+};
 use crane_memory::{
     ManualClock, MemoryBlobStore, MemoryFetchLeases, MemoryProxyCache, SequentialIdGen,
 };
@@ -20,10 +23,12 @@ use crane_ports::proxy::{ETag, Upstream, UpstreamError, UpstreamRequest, Upstrea
 use crane_ports::system::IdGen;
 use futures_util::stream;
 
-use super::{MAX_PUBLISH_BYTES, PUBLIC_URL};
+use super::{MAX_NPM_PUBLISH_BYTES, MAX_PUBLISH_BYTES, PUBLIC_URL};
 
 /// Имя proxy-репозитория в URL.
 pub(crate) const NAME: &str = "crates-io";
+/// Имя npm proxy-репозитория в URL.
+pub(crate) const NPM_NAME: &str = "npmjs";
 
 /// Один ответ upstream на запрос конкретного пути.
 pub(crate) enum Step {
@@ -142,6 +147,46 @@ impl Proxy {
         };
         Self {
             router: cargo_proxy_router(engine, origins, &settings, NAME),
+            upstream,
+            clock,
+        }
+    }
+
+    pub(crate) fn advance(&self, by: Duration) {
+        self.clock.advance(by);
+    }
+}
+
+/// Router npm proxy-репозитория, фейковый upstream и часы движка.
+pub(crate) struct NpmProxy {
+    pub(crate) router: Router,
+    pub(crate) upstream: FakeUpstream,
+    pub(crate) clock: Arc<ManualClock>,
+}
+
+impl NpmProxy {
+    pub(crate) fn new() -> Self {
+        let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
+        let upstream = FakeUpstream::default();
+        let engine = ProxyEngine::new(
+            upstream.clone(),
+            MemoryProxyCache::default(),
+            MemoryFetchLeases::new(clock.clone()),
+            MemoryBlobStore::default(),
+            clock.clone(),
+            ProxyLimits::DEFAULT,
+        );
+        let policy = EgressPolicy::new([REGISTRY_HOST], false);
+        let origin = Origin {
+            repository: RepositoryId::new(SequentialIdGen::default().generate()),
+            base: policy.admit("https", REGISTRY_HOST, None, "").unwrap(),
+        };
+        let settings = NpmSettings {
+            public_url: PUBLIC_URL.to_owned(),
+            max_publish_bytes: MAX_NPM_PUBLISH_BYTES,
+        };
+        Self {
+            router: npm_proxy_router(engine, origin, &settings, NPM_NAME),
             upstream,
             clock,
         }

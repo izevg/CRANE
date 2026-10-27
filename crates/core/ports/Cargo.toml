@@ -19,5 +19,7 @@ bytes = "1"
 crane-domain = { path = "../domain" }
 futures-core = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
+sha1 = "0.10"
+sha2 = "0.10"
 thiserror = "2"
 uuid = "1"

@@ -54,6 +54,9 @@ services:
       CRANE_TOKEN_PRINCIPAL: ${CRANE_TOKEN_PRINCIPAL:?}
       # Список имён proxy-репозиториев crates.io через запятую; пусто — proxy выключен.
       CRANE_CARGO_PROXY_REPOS: ${CRANE_CARGO_PROXY_REPOS:-}
+      # Hosted и proxy-репозитории npm (registry.npmjs.org) через запятую; пусто — не создаются.
+      CRANE_NPM_REPOS: ${CRANE_NPM_REPOS:-}
+      CRANE_NPM_PROXY_REPOS: ${CRANE_NPM_PROXY_REPOS:-}
       # Сеть edge делят только caddy и crane: из неё верим X-Forwarded-For. Порт admin не публикуется.
       CRANE_TRUSTED_PROXIES: ${CRANE_EDGE_SUBNET:?}
     secrets: [database_url, crane_token]

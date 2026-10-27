@@ -60,6 +60,14 @@ impl CacheFacts {
         }
     }
 
+    /// Документ отдан, но tarball не проверить (нет sha512): факты документа плюс причина отказа.
+    pub(crate) fn weak_integrity(result: &CacheResult) -> Self {
+        Self {
+            failure: Some("weak-integrity"),
+            ..Self::served(result)
+        }
+    }
+
     /// Ошибка движка; `NotFound` и сбой бэкенда не про upstream, поэтому фактов нет.
     pub(crate) fn failed(error: &ProxyError) -> Self {
         let (failure, reason) = match error {

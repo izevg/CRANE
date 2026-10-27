@@ -1,8 +1,8 @@
-//! Use cases bounded context «реестр»: публикация, получение и yank версий.
+//! Use cases bounded context «реестр»: публикация, получение, yank, удаление, устаревание и теги версий.
 
-mod fetch;
-mod publish;
-mod yank;
+mod flags;
+mod read;
+mod write;
 
 use std::fmt;
 use std::sync::Arc;
@@ -11,7 +11,8 @@ use crane_domain::access::Caller;
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
 pub use crane_domain::registry::Coordinate;
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, PackageVersion, Repository, Sha256, VersionState,
+    Asset, Checksum, Format, FormatMetadata, PackageVersion, Repository, RepositoryKind, Sha256,
+    VersionId, VersionState,
 };
 use crane_ports::audit::AuditSink;
 use crane_ports::registry::{BlobError, BlobStore, ByteStream, Catalog, CatalogError};
@@ -22,7 +23,8 @@ use crane_ports::system::{Clock, IdGen};
 pub struct Upload {
     pub path: String,
     pub body: ByteStream,
-    pub declared_sha256: Option<Sha256>,
+    /// Контрольные суммы, заявленные клиентом: проверяется каждая, пустой список — заявлений нет.
+    pub declared: Vec<Checksum>,
 }
 
 impl fmt::Debug for Upload {
@@ -30,7 +32,7 @@ impl fmt::Debug for Upload {
         // Поток не Debug и не должен попадать в журналы.
         f.debug_struct("Upload")
             .field("path", &self.path)
-            .field("declared_sha256", &self.declared_sha256)
+            .field("declared", &self.declared)
             .finish_non_exhaustive()
     }
 }
@@ -41,6 +43,16 @@ pub struct Publish {
     pub coordinate: Coordinate,
     pub file: Upload,
     pub metadata: FormatMetadata,
+    /// Dist-теги, которые публикация ставит на версию (переносит с прежних).
+    pub tags: Vec<String>,
+}
+
+/// Пакет для чтения: видимые клиентам версии и теги. Фильтр тегов по видимым версиям — дело формата.
+#[derive(Debug)]
+pub struct PackageView {
+    pub versions: Vec<PackageVersion>,
+    /// Отсортированы по имени тега; могут указывать на невидимые версии.
+    pub tags: Vec<(String, VersionId)>,
 }
 
 /// Скачиваемый файл версии.
@@ -73,8 +85,17 @@ pub enum RegistryError {
     VersionExists,
     #[error("версия недоступна: {state:?}")]
     Unavailable { state: VersionState },
-    #[error("sha256 не совпал: заявлен {declared}, получен {actual}")]
-    DigestMismatch { declared: Sha256, actual: Sha256 },
+    // Checksum с sha512 велик: без Box вариант раздувает каждый `Result<_, RegistryError>`.
+    #[error("контрольная сумма не совпала: заявлена {declared}, получена {actual}")]
+    DigestMismatch {
+        declared: Box<Checksum>,
+        actual: Box<Checksum>,
+    },
+    /// Окно, в течение которого версию можно удалить, закрыто: остаётся блокировка.
+    #[error("окно удаления закрыто: версия опубликована слишком давно")]
+    DeleteWindowClosed,
+    #[error("тег не найден")]
+    TagNotFound,
     /// Обрыв тела запроса: ошибка клиента, не хранилища.
     #[error("ошибка чтения тела запроса")]
     Body(#[source] std::io::Error),
@@ -199,6 +220,20 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             .ok_or(RegistryError::RepositoryNotFound)
     }
 
+    /// Версия hosted-репозитория: мутации, меняющие содержимое, прокси-репозиториям запрещены.
+    async fn find_hosted(&self, coordinate: &Coordinate) -> Result<PackageVersion, RegistryError> {
+        let repository = self
+            .find_repository(coordinate.format, &coordinate.repository)
+            .await?;
+        if repository.kind != RepositoryKind::Hosted {
+            return Err(RegistryError::NotHosted);
+        }
+        self.catalog
+            .find_version(repository.id, &coordinate.package, &coordinate.version)
+            .await?
+            .ok_or(RegistryError::VersionNotFound)
+    }
+
     async fn find(&self, coordinate: &Coordinate) -> Result<PackageVersion, RegistryError> {
         let repository = self
             .find_repository(coordinate.format, &coordinate.repository)
@@ -234,13 +269,21 @@ fn use_case_futures_are_send<C: Catalog, B: BlobStore>(
     caller: &Caller,
     publish: Publish,
     coordinate: &Coordinate,
-    package: &crane_domain::registry::PackageName,
+    package_ref: &crane_domain::registry::PackageRef,
+    policy: crane_domain::registry::DeletePolicy,
 ) {
     fn send<T: Send>(_: T) {}
+    let package = &package_ref.package;
     send(registry.publish(caller, publish));
     send(registry.fetch(caller, coordinate, ""));
     send(registry.versions(caller, Format::Cargo, "", package));
     send(registry.set_yanked(caller, coordinate, true));
+    send(registry.delete(caller, coordinate, &policy));
+    send(registry.delete_package(caller, Format::Cargo, "", package, &policy));
+    send(registry.set_deprecated(caller, coordinate, None));
+    send(registry.set_tag(caller, coordinate, ""));
+    send(registry.remove_tag(caller, package_ref, ""));
+    send(registry.package(caller, Format::Cargo, "", package));
     send(registry.repository(caller, Format::Cargo, ""));
     send(registry.ready());
 }

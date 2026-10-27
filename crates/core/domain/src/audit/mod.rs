@@ -1,7 +1,7 @@
 //! Факты для журнала аудита.
 
 use crate::access::{Principal, RequestContext};
-use crate::registry::Coordinate;
+use crate::registry::{Coordinate, PackageRef};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuditAction {
@@ -9,6 +9,20 @@ pub enum AuditAction {
     Publish(Coordinate),
     Yank(Coordinate),
     Unyank(Coordinate),
+    Delete(Coordinate),
+    Deprecate {
+        coordinate: Coordinate,
+        /// `None` снимает устаревание.
+        message: Option<String>,
+    },
+    Tag {
+        coordinate: Coordinate,
+        tag: String,
+    },
+    Untag {
+        package: PackageRef,
+        tag: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,8 +1,10 @@
-//! Два вида ошибочных ответов и единая таблица `RegistryError` → HTTP.
+//! Ошибочные ответы и единая таблица `RegistryError` → HTTP. Форма тела — свойство точки монтирования (`Dialect`).
 
 use std::error::Error;
 
+use axum::extract::{Request, State};
 use axum::http::StatusCode;
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use crane_app::proxy::ProxyError;
 use crane_app::registry::RegistryError;
@@ -15,8 +17,8 @@ const UPSTREAM_DETAIL: &str = "upstream недоступен";
 /// id запроса известен только внешнему слою, он и рендерит тело (`context::render`).
 #[derive(Debug, Clone)]
 pub(crate) enum ErrorBody {
-    /// `{"errors":[{"detail":"…"}]}`.
-    Cargo(String),
+    /// Текст для клиента; оболочку (`{"errors":[…]}`, `{"error":…}` или RFC 9457) выбирает `Dialect`.
+    Detail(String),
     /// RFC 9457.
     Problem {
         title: &'static str,
@@ -24,14 +26,14 @@ pub(crate) enum ErrorBody {
     },
 }
 
-/// Ошибка в форме cargo: `{"errors":[{"detail":"…"}]}`.
+/// Ошибка для клиента формата: статус и текст, без привязки к проводной форме.
 #[derive(Debug)]
-pub(crate) struct CargoError {
+pub(crate) struct ClientError {
     status: StatusCode,
     detail: String,
 }
 
-impl CargoError {
+impl ClientError {
     pub(crate) fn new(status: StatusCode, detail: impl Into<String>) -> Self {
         Self {
             status,
@@ -54,7 +56,7 @@ impl CargoError {
     }
 }
 
-impl From<RegistryError> for CargoError {
+impl From<RegistryError> for ClientError {
     fn from(error: RegistryError) -> Self {
         let (status, detail) = describe(&error);
         Self { status, detail }
@@ -62,7 +64,7 @@ impl From<RegistryError> for CargoError {
 }
 
 /// Клиенту proxy сообщает только «upstream недоступен»: адреса, причины отказа и суммы остаются в журнале.
-impl From<ProxyError> for CargoError {
+impl From<ProxyError> for ClientError {
     fn from(error: ProxyError) -> Self {
         match error {
             ProxyError::NotFound => Self::not_found(),
@@ -74,17 +76,37 @@ impl From<ProxyError> for CargoError {
     }
 }
 
-impl IntoResponse for CargoError {
+impl IntoResponse for ClientError {
     fn into_response(self) -> Response {
         let mut response = self.status.into_response();
         response
             .extensions_mut()
-            .insert(ErrorBody::Cargo(self.detail));
+            .insert(ErrorBody::Detail(self.detail));
         response
     }
 }
 
-/// Ошибка в форме RFC 9457 для не-cargo маршрутов.
+/// Диалект точки монтирования: определяет форму тела ошибки и схему аутентификации.
+/// Ошибка формата не знает, как её покажут; слой `mark_dialect` на router формата кладёт диалект в ответ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Dialect {
+    Cargo,
+    Npm,
+}
+
+/// Слой router'а формата (`from_fn_with_state(dialect, mark_dialect)`): снаружи auth, чтобы 401 и 403
+/// тоже получили форму своего формата.
+pub(crate) async fn mark_dialect(
+    State(dialect): State<Dialect>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let mut response = next.run(request).await;
+    response.extensions_mut().insert(dialect);
+    response
+}
+
+/// Ошибка в форме RFC 9457 для маршрутов вне форматов.
 #[derive(Debug)]
 pub(crate) struct Problem {
     status: StatusCode,
@@ -150,13 +172,16 @@ fn describe(error: &RegistryError) -> (StatusCode, String) {
     let status = match error {
         RegistryError::RepositoryNotFound
         | RegistryError::VersionNotFound
+        | RegistryError::TagNotFound
         | RegistryError::AssetNotFound => StatusCode::NOT_FOUND,
         RegistryError::NotHosted => StatusCode::METHOD_NOT_ALLOWED,
         RegistryError::VersionExists => StatusCode::CONFLICT,
         RegistryError::Unavailable {
             state: VersionState::Deleted,
         } => StatusCode::GONE,
-        RegistryError::Unavailable { .. } => StatusCode::FORBIDDEN,
+        RegistryError::Unavailable { .. } | RegistryError::DeleteWindowClosed => {
+            StatusCode::FORBIDDEN
+        }
         RegistryError::DigestMismatch { .. } => StatusCode::UNPROCESSABLE_ENTITY,
         RegistryError::Body(_) => StatusCode::BAD_REQUEST,
         RegistryError::Backend(_) => return internal(error),
@@ -176,14 +201,14 @@ mod tests {
 
     use crane_app::proxy::UpstreamFailure;
     use crane_domain::proxy::EgressRefusal;
-    use crane_domain::registry::Sha256;
+    use crane_domain::registry::{Checksum, Sha256};
 
     use super::*;
 
     #[test]
     fn registry_errors_map_to_http_statuses() {
         // Arrange
-        let digest = Sha256::from([1; 32]);
+        let digest = Checksum::Sha256(Sha256::from([1; 32]));
         let cases = [
             (RegistryError::RepositoryNotFound, StatusCode::NOT_FOUND),
             (RegistryError::NotHosted, StatusCode::METHOD_NOT_ALLOWED),
@@ -210,11 +235,13 @@ mod tests {
             ),
             (
                 RegistryError::DigestMismatch {
-                    declared: digest,
-                    actual: digest,
+                    declared: Box::new(digest),
+                    actual: Box::new(digest),
                 },
                 StatusCode::UNPROCESSABLE_ENTITY,
             ),
+            (RegistryError::DeleteWindowClosed, StatusCode::FORBIDDEN),
+            (RegistryError::TagNotFound, StatusCode::NOT_FOUND),
             (
                 RegistryError::Body(io::Error::other("обрыв")),
                 StatusCode::BAD_REQUEST,
@@ -235,7 +262,7 @@ mod tests {
     #[test]
     fn proxy_errors_map_to_status_and_hide_upstream_details() {
         // Arrange
-        let sum = Sha256::from([1; 32]);
+        let sum = Checksum::Sha256(Sha256::from([1; 32]));
         let cases = [
             ProxyError::NotFound,
             ProxyError::Upstream(UpstreamFailure::Unavailable),
@@ -243,8 +270,8 @@ mod tests {
                 "evil.example".to_owned(),
             ))),
             ProxyError::DigestMismatch {
-                expected: sum,
-                actual: sum,
+                expected: Box::new(sum),
+                actual: Box::new(sum),
             },
             ProxyError::TooLarge { limit: 1 },
             ProxyError::Backend(Arc::new(io::Error::other("postgres://u:SECRET@h/db"))),
@@ -252,7 +279,7 @@ mod tests {
 
         // Act
         let actual = cases.map(|error| {
-            let error = CargoError::from(error);
+            let error = ClientError::from(error);
             (error.status, error.detail)
         });
 

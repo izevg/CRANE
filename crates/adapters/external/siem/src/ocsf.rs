@@ -2,7 +2,7 @@
 
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
-use crane_domain::registry::Coordinate;
+use crane_domain::registry::{Format, PackageName, Version};
 use uuid::Uuid;
 
 const SCHEMA_VERSION: &str = "1.3.0";
@@ -80,23 +80,63 @@ fn shape(action: &AuditAction) -> Shape {
         AuditAction::Publish(_) => api(1, "Create", "publish"),
         AuditAction::Yank(_) => api(3, "Update", "yank"),
         AuditAction::Unyank(_) => api(3, "Update", "unyank"),
+        AuditAction::Delete(_) => api(4, "Delete", "delete"),
+        AuditAction::Deprecate { message, .. } => api(
+            3,
+            "Update",
+            if message.is_some() {
+                "deprecate"
+            } else {
+                "undeprecate"
+            },
+        ),
+        AuditAction::Tag { .. } => api(3, "Update", "tag"),
+        AuditAction::Untag { .. } => api(3, "Update", "untag"),
     }
 }
 
-fn coordinate(action: &AuditAction) -> Option<&Coordinate> {
+/// Объект действия: пакет и, если действие над версией, сама версия.
+struct Resource<'a> {
+    format: Format,
+    repository: &'a str,
+    package: &'a PackageName,
+    version: Option<&'a Version>,
+}
+
+fn resource(action: &AuditAction) -> Option<Resource<'_>> {
     match action {
         AuditAction::Authenticate => None,
-        AuditAction::Publish(c) | AuditAction::Yank(c) | AuditAction::Unyank(c) => Some(c),
+        AuditAction::Publish(c)
+        | AuditAction::Yank(c)
+        | AuditAction::Unyank(c)
+        | AuditAction::Delete(c)
+        | AuditAction::Deprecate { coordinate: c, .. }
+        | AuditAction::Tag { coordinate: c, .. } => Some(Resource {
+            format: c.format,
+            repository: &c.repository,
+            package: &c.package,
+            version: Some(&c.version),
+        }),
+        AuditAction::Untag { package, .. } => Some(Resource {
+            format: package.format,
+            repository: &package.repository,
+            package: &package.package,
+            version: None,
+        }),
     }
 }
 
-/// `+` в версии (метаданные сборки) кодируется: иначе purl неоднозначен.
-fn purl(c: &Coordinate) -> String {
-    format!(
-        "pkg:cargo/{}@{}",
-        c.package.as_written(),
-        c.version.as_written().replace('+', "%2B")
-    )
+/// `+` (метаданные сборки) и `@` (scope npm) кодируются: иначе purl неоднозначен.
+fn purl_component(raw: &str) -> String {
+    raw.replace('+', "%2B").replace('@', "%40")
+}
+
+fn purl(r: &Resource<'_>) -> String {
+    let name = purl_component(r.package.as_written());
+    let base = format!("pkg:{}/{name}", r.format.as_str());
+    r.version.map_or(base.clone(), |version| {
+        format!("{base}@{}", purl_component(version.as_written()))
+    })
 }
 
 fn kind_name(kind: PrincipalKind) -> &'static str {
@@ -137,7 +177,7 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
         Outcome::Success => (1, "Success", 1, None),
         Outcome::Failure { reason } => (2, "Failure", 2, Some(reason.clone())),
     };
-    let resource = coordinate(&event.action);
+    let resource = resource(&event.action);
     OcsfRecord {
         class_uid: shape.class_uid,
         category_uid: shape.category_uid,
@@ -159,9 +199,9 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
         src_ip: event.request.client_ip.map(|ip| ip.to_string()),
         user_agent: event.request.user_agent.clone(),
         operation: shape.operation,
-        resource_uid: resource.map(purl),
-        resource_type: resource.map(|_| "package"),
-        repository: resource.map(|c| c.repository.clone()),
+        resource_uid: resource.as_ref().map(purl),
+        resource_type: resource.as_ref().map(|_| "package"),
+        repository: resource.map(|r| r.repository.to_owned()),
         trace_id: event.request.trace_id.clone(),
     }
 }
@@ -173,7 +213,7 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
 )]
 mod tests {
     use crane_domain::access::{RequestContext, RequestId};
-    use crane_domain::registry::{Format, PackageName, Version};
+    use crane_domain::registry::{Coordinate, PackageRef};
 
     use super::*;
 
@@ -207,6 +247,21 @@ mod tests {
         }
     }
 
+    fn package_ref() -> PackageRef {
+        PackageRef {
+            format: Format::Cargo,
+            repository: "internal".to_owned(),
+            package: PackageName::parse(Format::Cargo, "serde").expect("имя"),
+        }
+    }
+
+    fn deprecate(message: Option<&str>) -> AuditAction {
+        AuditAction::Deprecate {
+            coordinate: coord("serde", "1.0.0"),
+            message: message.map(str::to_owned),
+        }
+    }
+
     fn failure() -> Outcome {
         Outcome::Failure {
             reason: "причина".to_owned(),
@@ -228,7 +283,27 @@ mod tests {
             (AuditAction::Publish(c()), Outcome::Success, robot.clone()),
             (AuditAction::Publish(c()), failure(), robot.clone()),
             (AuditAction::Yank(c()), Outcome::Success, robot.clone()),
-            (AuditAction::Unyank(c()), failure(), robot),
+            (AuditAction::Unyank(c()), failure(), robot.clone()),
+            (AuditAction::Delete(c()), Outcome::Success, robot.clone()),
+            (AuditAction::Delete(c()), failure(), robot.clone()),
+            (deprecate(Some("old")), Outcome::Success, robot.clone()),
+            (deprecate(None), Outcome::Success, robot.clone()),
+            (
+                AuditAction::Tag {
+                    coordinate: c(),
+                    tag: "latest".to_owned(),
+                },
+                Outcome::Success,
+                robot.clone(),
+            ),
+            (
+                AuditAction::Untag {
+                    package: package_ref(),
+                    tag: "latest".to_owned(),
+                },
+                failure(),
+                robot,
+            ),
         ];
 
         // Act
@@ -255,6 +330,12 @@ mod tests {
                 (6003, 6, 1, 600_301, 2, 2, Some("publish")),
                 (6003, 6, 3, 600_303, 1, 1, Some("yank")),
                 (6003, 6, 3, 600_303, 2, 2, Some("unyank")),
+                (6003, 6, 4, 600_304, 1, 1, Some("delete")),
+                (6003, 6, 4, 600_304, 2, 2, Some("delete")),
+                (6003, 6, 3, 600_303, 1, 1, Some("deprecate")),
+                (6003, 6, 3, 600_303, 1, 1, Some("undeprecate")),
+                (6003, 6, 3, 600_303, 1, 1, Some("tag")),
+                (6003, 6, 3, 600_303, 2, 2, Some("untag")),
             ]
         );
     }
@@ -279,20 +360,50 @@ mod tests {
     fn purl_encodes_plus_in_version_and_keeps_written_name() {
         // Arrange
         let cases = [
-            coord("serde", "1.0.0"),
-            coord("Foo_Bar", "1.2.3-rc.1+build5"),
+            AuditAction::Publish(coord("serde", "1.0.0")),
+            AuditAction::Publish(coord("Foo_Bar", "1.2.3-rc.1+build5")),
         ];
 
         // Act
-        let actual = cases.map(|c| purl(&c));
+        let actual = cases.map(|action| resource(&action).as_ref().map(purl));
 
         // Assert
         assert_eq!(
             actual,
             [
-                "pkg:cargo/serde@1.0.0",
-                "pkg:cargo/Foo_Bar@1.2.3-rc.1%2Bbuild5"
+                Some("pkg:cargo/serde@1.0.0".to_owned()),
+                Some("pkg:cargo/Foo_Bar@1.2.3-rc.1%2Bbuild5".to_owned()),
             ]
+        );
+    }
+
+    #[test]
+    fn purl_component_encodes_plus_and_scope_marker() {
+        // Arrange
+        let cases = ["@scope/pkg", "1.0.0+build", "plain"];
+
+        // Act
+        let actual = cases.map(purl_component);
+
+        // Assert
+        assert_eq!(actual, ["%40scope/pkg", "1.0.0%2Bbuild", "plain"]);
+    }
+
+    #[test]
+    fn package_level_action_resource_has_purl_without_version() {
+        // Arrange
+        let action = AuditAction::Untag {
+            package: package_ref(),
+            tag: "latest".to_owned(),
+        };
+
+        // Act
+        let r = ocsf(&event(action, Outcome::Success, None), Uuid::nil(), 0);
+
+        // Assert
+        assert_eq!(
+            (r.resource_uid.as_deref(), r.repository.as_deref()),
+            (Some("pkg:cargo/serde"), Some("internal"))
         );
     }
 

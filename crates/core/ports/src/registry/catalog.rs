@@ -6,7 +6,7 @@ use crane_domain::registry::{
     VersionId, VersionState,
 };
 
-/// Версия к публикации. `yanked` при публикации всегда `false`, поэтому поля нет.
+/// Версия к публикации. `yanked` при публикации всегда `false`, а `deprecated` — `None`, поэтому полей нет.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewVersion {
     pub id: VersionId,
@@ -17,6 +17,8 @@ pub struct NewVersion {
     pub published_at: SystemTime,
     pub assets: Vec<Asset>,
     pub metadata: FormatMetadata,
+    /// Dist-теги, которые публикация ставит на эту версию в той же транзакции (переносит с других версий).
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -52,7 +54,9 @@ pub trait Catalog: Send + Sync {
     /// Атомарно. Пакет создаётся при первой версии и хранит первое написание имени.
     /// Версия уникальна по `(repository, name.normalized(), version.canonical())` навсегда,
     /// включая `Deleted`. Неизвестный репозиторий даёт `NotFound`.
-    /// Возвращённая запись несёт сохранённое написание пакета и `yanked = false`.
+    /// Теги из `NewVersion.tags` ставятся в той же транзакции и переносятся с прежних версий;
+    /// при `VersionExists` и `NotFound` не меняется ничего.
+    /// Возвращённая запись несёт сохранённое написание пакета, `yanked = false` и `deprecated = None`.
     fn publish_version(
         &self,
         version: NewVersion,
@@ -79,6 +83,39 @@ pub trait Catalog: Send + Sync {
         id: VersionId,
         yanked: bool,
     ) -> impl Future<Output = Result<(), CatalogError>> + Send;
+
+    /// Ставит (`Some`) или снимает (`None`) сообщение об устаревании. Идемпотентно.
+    /// Неизвестный id даёт `NotFound`.
+    fn set_deprecated(
+        &self,
+        id: VersionId,
+        message: Option<String>,
+    ) -> impl Future<Output = Result<(), CatalogError>> + Send;
+
+    /// Ставит dist-тег на версию; пакет определяется по версии, поэтому тег чужого пакета
+    /// выразить нельзя. Если тег уже стоит на другой версии, переносит его. Идемпотентно.
+    /// Неизвестный id даёт `NotFound`.
+    fn set_tag(
+        &self,
+        version: VersionId,
+        tag: &str,
+    ) -> impl Future<Output = Result<(), CatalogError>> + Send;
+
+    /// Снимает тег. `false`, если такого тега у пакета не было.
+    fn remove_tag(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+        tag: &str,
+    ) -> impl Future<Output = Result<bool, CatalogError>> + Send;
+
+    /// Теги пакета, отсортированные по имени тега побайтно. Нет пакета: пустой вектор.
+    /// Теги могут указывать на версии в любом состоянии, включая `Deleted`: фильтрует формат.
+    fn tags(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+    ) -> impl Future<Output = Result<Vec<(String, VersionId)>, CatalogError>> + Send;
 
     /// Compare-and-set: меняет состояние, только если текущее равно `from`,
     /// иначе `StateConflict { actual }`. Допустимость ребра проверяет вызывающий
