@@ -1,5 +1,3 @@
-use std::fmt;
-
 use uuid::Uuid;
 
 /// Идентификатор репозитория.
@@ -22,12 +20,6 @@ impl RepositoryId {
     }
 }
 
-impl fmt::Display for RepositoryId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
 impl VersionId {
     #[must_use]
     pub const fn new(id: Uuid) -> Self {
@@ -40,18 +32,12 @@ impl VersionId {
     }
 }
 
-impl fmt::Display for VersionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn id_keeps_uuid_and_displays_it() {
+    fn id_keeps_uuid() {
         // Arrange
         let uuid = Uuid::from_u128(0x1234);
 
@@ -59,6 +45,6 @@ mod tests {
         let id = VersionId::new(uuid);
 
         // Assert
-        assert_eq!((id.as_uuid(), id.to_string()), (uuid, uuid.to_string()));
+        assert_eq!(id.as_uuid(), uuid);
     }
 }
