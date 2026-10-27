@@ -166,6 +166,7 @@ it("measure: generated, migrations, ignoredDirs и точечные папки �
     "crates/a/migrations/m.rs": rows(1),
     "crates/node_modules/n.rs": rows(1),
     "crates/.hidden/h.rs": rows(1),
+    "web/src/shared/api/generated/g.ts": rows(1),
   });
 
   // Act

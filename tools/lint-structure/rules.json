@@ -21,7 +21,7 @@
   "entryFiles": ["lib.rs", "main.rs", "mod.rs", "index.ts", "index.tsx"],
   "aaa": { "roots": ["crates", "web", "cli", "tools"], "exemptDirs": ["e2e"] },
   "size": {
-    "roots": ["crates", "web/src", "web/screens", "cli", "tools"],
+    "roots": ["crates", "web/src", "web/screens", "web/test", "cli", "tools"],
     "exemptDirs": ["generated", "migrations"],
     "extensions": [".rs", ".ts", ".tsx"],
     "maxLines": 400,
