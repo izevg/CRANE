@@ -10,8 +10,12 @@ mod common;
 
 use std::pin::pin;
 
-use common::proxy::{FakeUpstream, Step, World, path, policy, poll_once, secs};
+use common::hello_sha256;
+use common::proxy::{FakeUpstream, Step, World, bytes_of, key, path, policy, poll_once, secs};
 use crane_app::proxy::{CacheResult, ProxyError};
+use crane_domain::proxy::NegativePolicy;
+use crane_domain::registry::Sha256;
+use crane_ports::proxy::{Cached, CachedState, Claim, FetchLeases, ProxyCache};
 use futures_executor::block_on;
 use futures_util::future::join;
 
@@ -180,4 +184,158 @@ fn leader_releases_its_lease_after_a_failed_fetch() {
     // Assert
     assert!(served.is_err());
     assert_eq!((world.leases.led(), world.leases.released()), (1, 1));
+}
+
+#[test]
+fn abandoned_flight_is_not_resumed_by_the_next_request() {
+    // Arrange
+    let (upstream, gate) = FakeUpstream::gated([Step::Found(b"v2", None)]);
+    let world = World::without_leases(upstream);
+    let (doc, policy) = (path(DOC), policy());
+    let mut abandoned = Box::pin(world.engine.metadata(&world.origin, &doc, &policy));
+    let _ = poll_once(abandoned.as_mut());
+    drop(abandoned);
+    gate.open();
+
+    // Act
+    let served = world.metadata(DOC).unwrap();
+
+    // Assert
+    assert_eq!(served.body, "v2");
+    assert_eq!(served.result, CacheResult::Miss);
+    assert_eq!(world.upstream.call_count(), 2);
+}
+
+#[test]
+fn joiner_with_foreign_expected_digest_is_rejected_by_shared_flight() {
+    // Arrange
+    let (upstream, gate) = FakeUpstream::gated([Step::Found(b"hello", None)]);
+    let world = World::without_leases(upstream);
+    let (blob, negative) = (path("crates/a.crate"), NegativePolicy::ARTIFACT);
+    let foreign = Sha256::from([0xab; 32]);
+    let mut leader = pin!(world.engine.artifact(&world.origin, &blob, None, &negative));
+    let mut joiner = pin!(
+        world
+            .engine
+            .artifact(&world.origin, &blob, Some(foreign), &negative)
+    );
+    let _ = poll_once(leader.as_mut());
+    let _ = poll_once(joiner.as_mut());
+    gate.open();
+
+    // Act
+    let (leader, joiner) = block_on(join(leader, joiner));
+
+    // Assert
+    assert_eq!(leader.unwrap().body.digests.sha256, hello_sha256());
+    assert!(matches!(
+        joiner,
+        Err(ProxyError::DigestMismatch { expected, actual }) if expected == foreign && actual == hello_sha256()
+    ));
+    assert_eq!(world.upstream.call_count(), 1);
+}
+
+#[test]
+fn follower_serves_the_artifact_stored_by_the_leader() {
+    // Arrange
+    let (upstream_a, gate) = FakeUpstream::gated([Step::Found(b"hello", None)]);
+    let world = World::with_upstream(upstream_a);
+    let upstream_b = FakeUpstream::new([]);
+    let replica = world.replica(upstream_b.clone());
+    let (blob, negative) = (path("crates/a.crate"), NegativePolicy::ARTIFACT);
+    let mut leader = pin!(world.engine.artifact(&world.origin, &blob, None, &negative));
+    let mut follower =
+        pin!(replica.artifact(&world.origin, &blob, Some(hello_sha256()), &negative));
+    let _ = poll_once(leader.as_mut());
+    let _ = poll_once(follower.as_mut());
+    gate.open();
+
+    // Act
+    let (_, follower) = block_on(join(leader, follower));
+
+    // Assert
+    let follower = follower.unwrap();
+    assert_eq!(follower.result, CacheResult::Miss);
+    assert_eq!(bytes_of(follower.body), b"hello");
+    assert_eq!(upstream_b.call_count(), 0);
+}
+
+#[test]
+fn follower_with_foreign_expected_digest_ignores_the_leaders_entry() {
+    // Arrange
+    let (upstream_a, gate) = FakeUpstream::gated([Step::Found(b"hello", None)]);
+    let world = World::with_upstream(upstream_a);
+    let upstream_b = FakeUpstream::new([Step::Found(b"hello", None)]);
+    let replica = world.replica(upstream_b.clone());
+    let (blob, negative) = (path("crates/a.crate"), NegativePolicy::ARTIFACT);
+    let foreign = Sha256::from([0xab; 32]);
+    let mut leader = pin!(world.engine.artifact(&world.origin, &blob, None, &negative));
+    let mut follower = pin!(replica.artifact(&world.origin, &blob, Some(foreign), &negative));
+    let _ = poll_once(leader.as_mut());
+    let _ = poll_once(follower.as_mut());
+    gate.open();
+
+    // Act
+    let (_, follower) = block_on(join(leader, follower));
+
+    // Assert
+    assert!(matches!(follower, Err(ProxyError::DigestMismatch { .. })));
+    assert_eq!(upstream_b.call_count(), 1);
+}
+
+#[test]
+fn follower_serves_not_found_recorded_by_the_leader() {
+    // Arrange
+    let (upstream_a, gate) = FakeUpstream::gated([Step::NotFound]);
+    let world = World::with_upstream(upstream_a);
+    let upstream_b = FakeUpstream::new([]);
+    let replica = world.replica(upstream_b.clone());
+    let (blob, negative) = (path("crates/a.crate"), NegativePolicy::ARTIFACT);
+    let mut leader = pin!(world.engine.artifact(&world.origin, &blob, None, &negative));
+    let mut follower = pin!(replica.artifact(&world.origin, &blob, None, &negative));
+    let _ = poll_once(leader.as_mut());
+    let _ = poll_once(follower.as_mut());
+    gate.open();
+
+    // Act
+    let (_, follower) = block_on(join(leader, follower));
+
+    // Assert
+    assert!(matches!(follower, Err(ProxyError::NotFound)));
+    assert_eq!(upstream_b.call_count(), 0);
+}
+
+#[test]
+fn follower_fetches_itself_when_the_negative_entry_expired_before_settling() {
+    // Arrange
+    let world = World::new([]);
+    let upstream_b = FakeUpstream::new([Step::Found(b"hello", None)]);
+    let replica = world.replica(upstream_b.clone());
+    let (blob, negative) = (path("crates/a.crate"), NegativePolicy::ARTIFACT);
+    let lease = match block_on(
+        world
+            .leases
+            .claim(&key("crates/a.crate"), secs(30), secs(25)),
+    )
+    .unwrap()
+    {
+        Claim::Lead(lease) => lease,
+        Claim::Settled => unreachable!("lease свободен"),
+    };
+    let mut follower = pin!(replica.artifact(&world.origin, &blob, None, &negative));
+    let _ = poll_once(follower.as_mut());
+    let recorded = Cached {
+        fetched_at: common::proxy::epoch(),
+        state: CachedState::Missing { misses: 1 },
+    };
+    block_on(world.cache.put(&key("crates/a.crate"), recorded, secs(600))).unwrap();
+    world.advance(negative.ttl);
+    block_on(world.leases.release(lease)).unwrap();
+
+    // Act
+    let served = block_on(follower).unwrap();
+
+    // Assert
+    assert_eq!(served.result, CacheResult::Miss);
+    assert_eq!(upstream_b.call_count(), 1);
 }

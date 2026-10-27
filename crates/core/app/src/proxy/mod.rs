@@ -324,6 +324,15 @@ where
                         ..
                     },
             } => {
+                // Полёт общий, а ожидание у каждого своё: гарантию дайджеста держим для каждого вызывающего.
+                if let Some(expected) = expected
+                    && expected != digests.sha256
+                {
+                    return Err(ProxyError::DigestMismatch {
+                        expected,
+                        actual: digests.sha256,
+                    });
+                }
                 let body = self
                     .0
                     .blobs
