@@ -12,6 +12,8 @@ export interface Rules {
   unlimitedDirs: string[];
   serviceFiles: string[];
   testFiles: string[];
+  /** Stories Storybook: витрина и спецификация компонента. В правило четырёх не входят, но и не тесты (AAA не проверяется). */
+  storyFiles: string[];
   entryFiles: string[];
   rustLayers: Record<string, string[]>;
   aaa: { roots: string[]; exemptDirs: string[] };
@@ -45,6 +47,7 @@ interface Listing {
 function list(dir: string, rules: Rules): Listing {
   const isService = matcher(rules.serviceFiles);
   const isTest = matcher(rules.testFiles);
+  const isStory = matcher(rules.storyFiles);
   const listing: Listing = { files: [], dirs: [] };
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const { name } = entry;
@@ -55,7 +58,7 @@ function list(dir: string, rules: Rules): Listing {
       if (!(rules.ignoredDirs.includes(name) || rules.unlimitedDirs.includes(name))) {
         listing.dirs.push(name);
       }
-    } else if (!(isService(name) || isTest(name))) {
+    } else if (!(isService(name) || isTest(name) || isStory(name))) {
       listing.files.push(name);
     }
   }

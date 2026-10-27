@@ -1,0 +1,26 @@
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1); /* вход, отклик */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); /* перемещение по экрану */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* sheet/drawer */
+  --dur-instant: 100ms;
+  --dur-fast: 150ms; /* выход, hover */
+  --dur-base: 200ms; /* вход popover/dialog/toast */
+  --dur-slow: 250ms; /* drawer */
+  --dur-max: 300ms; /* верхняя граница; числа, прогресс */
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-base: 150ms;
+    --dur-slow: 150ms;
+    --dur-max: 150ms;
+  }
+}
+/*
+ * То же самое явным атрибутом. Нужен Storybook: media-запрос нельзя переключить кнопкой в тулбаре,
+ * поэтому тулбар ставит data-motion="reduce" на <html>. Значения должны совпадать с блоком выше.
+ */
+:root[data-motion="reduce"] {
+  --dur-base: 150ms;
+  --dur-slow: 150ms;
+  --dur-max: 150ms;
+}

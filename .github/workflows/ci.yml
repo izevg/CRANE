@@ -116,4 +116,12 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: typecheck, biome, steiger, knip, depcruise
         run: pnpm --filter web run check
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --filter web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
+      - run: pnpm --filter web exec playwright install --with-deps chromium
       - run: pnpm --filter web run test
