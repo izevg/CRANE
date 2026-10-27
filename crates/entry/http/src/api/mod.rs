@@ -54,11 +54,15 @@ pub fn api_router<C: Catalog + 'static, B: BlobStore + 'static>(
         }
     };
     let cargo_guard = auth(Dialect::Cargo, Arc::clone(&token), Arc::clone(&audit));
-    let npm_guard = auth(Dialect::Npm, token, audit);
+    let npm_guard = auth(Dialect::Npm, token, Arc::clone(&audit));
     let mut root = Router::new()
         .nest(
             &format!("{CARGO_PREFIX}/{{repo}}"),
-            cargo_guard(cargo::hosted_router(Arc::clone(&registry), settings.cargo)),
+            cargo_guard(cargo::hosted_router(
+                Arc::clone(&registry),
+                settings.cargo,
+                audit,
+            )),
         )
         .nest(
             &format!("{NPM_PREFIX}/{{repo}}"),

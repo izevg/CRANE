@@ -9,23 +9,35 @@ use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, put};
 use crane_app::registry::Registry;
+use crane_ports::audit::AuditSink;
 use crane_ports::registry::{BlobStore, Catalog};
 
-use super::{CargoSettings, cargo_not_found};
+use super::{CARGO_PREFIX, CargoSettings, cargo_not_found};
 
 /// Общее состояние обработчиков.
 struct Shared<C, B> {
     registry: Arc<Registry<C, B>>,
     settings: CargoSettings,
+    audit: Arc<dyn AuditSink>,
+}
+
+/// Адрес репозитория, от которого строятся `dl`/`api` в `config.json` и адрес его индекса.
+fn repo_base(settings: &CargoSettings, repo: &str) -> String {
+    format!("{}{CARGO_PREFIX}/{repo}", settings.public_url)
 }
 
 /// Маршруты hosted-репозитория без слоя аутентификации: его накладывает `api_router`.
 pub(crate) fn hosted_router<C: Catalog + 'static, B: BlobStore + 'static>(
     registry: Arc<Registry<C, B>>,
     settings: CargoSettings,
+    audit: Arc<dyn AuditSink>,
 ) -> Router {
     let max_publish_bytes = settings.max_publish_bytes;
-    let shared = Arc::new(Shared { registry, settings });
+    let shared = Arc::new(Shared {
+        registry,
+        settings,
+        audit,
+    });
     Router::new()
         .route("/index/config.json", get(index::config))
         .route("/index/{*path}", get(index::sparse))

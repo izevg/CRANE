@@ -12,4 +12,4 @@ pub use api::{
 };
 pub use index::{IndexError, index_path, parse_index_path, render_index};
 pub use proxy::{Archive, DL_HOST, INDEX, INDEX_HOST, archive};
-pub use publish::{CargoPublish, PublishError, parse_publish};
+pub use publish::{CargoPublish, ForeignRegistry, MetadataError, PublishError, parse_publish};
