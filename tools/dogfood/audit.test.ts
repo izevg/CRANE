@@ -346,6 +346,7 @@ describe("egressLines", () => {
 const BAD_GATEWAY = 502;
 const UNAUTHORIZED = 401;
 const OK = 200;
+const SERVICE_UNAVAILABLE = 503;
 const LAST_OK = 499;
 const FIRST_SERVER_ERROR = 500;
 const HIT_SEEN = /cache=miss.*200\/hit/;
@@ -579,6 +580,17 @@ describe("checkUpstreamDown", () => {
   it("rejects a probe that failed for another reason", () => {
     // Arrange
     const probe = [probeLine(BAD_GATEWAY, "refused")];
+
+    // Act
+    const problems = checkUpstreamDown(probe, [refusedFetch]);
+
+    // Assert
+    assert.equal(problems.length, 1);
+  });
+
+  it("rejects a probe answered with another status than 502", () => {
+    // Arrange
+    const probe = [probeLine(SERVICE_UNAVAILABLE, "unavailable")];
 
     // Act
     const problems = checkUpstreamDown(probe, [refusedFetch]);
