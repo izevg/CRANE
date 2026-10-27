@@ -355,7 +355,15 @@ function SummaryTab({ event }: { event: AuditEvent }) {
               ),
             },
             { label: "on_behalf_of", value: "user-04be" },
-            { label: t`Действие`, value: event.action.code },
+            {
+              label: t`Действие`,
+              value: (
+                <span className="flex flex-col leading-tight">
+                  <span className="font-mono text-caption">{event.action.code}</span>
+                  <span className="text-caption text-muted-foreground">{event.action.label}</span>
+                </span>
+              ),
+            },
             { label: t`Ресурс`, value: event.resource },
           ]}
         />
@@ -587,7 +595,11 @@ export const Desktop1440: Story = {
   name: "Desktop 1440 · SecOps",
   play: async ({ canvasElement }) => {
     const body = within(canvasElement.ownerDocument.body);
-    await expect(await body.findByRole("dialog", { name: "Событие" })).toBeVisible();
+    const dialog = await body.findByRole("dialog", { name: "Событие" });
+    await expect(dialog).toBeVisible();
+    // «Действие»: подпись и код рядом, как в таблице, а не сырой код
+    const value = within(dialog).getByText("Действие").nextElementSibling;
+    await expect(value?.querySelectorAll("span span")).toHaveLength(2);
   },
 };
 
