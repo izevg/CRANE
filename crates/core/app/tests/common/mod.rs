@@ -14,11 +14,12 @@ use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
 use crane_app::registry::{Coordinate, Publish, Registry, Upload};
+use crane_domain::access::{Caller, Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::registry::{
     Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, RepositoryId,
     RepositoryKind, Sha256, Version, VersionId, VersionState,
 };
-use crane_memory::{FixedClock, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_memory::{FixedClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::registry::{
     BlobError, BlobStore, ByteStream, Catalog, CatalogError, Digests, NewVersion, Staged,
 };
@@ -35,6 +36,29 @@ pub(crate) const METADATA: &str = r#"{"deps":[]}"#;
 
 pub(crate) fn fixed_now() -> SystemTime {
     SystemTime::UNIX_EPOCH + Duration::from_secs(1_000)
+}
+
+pub(crate) fn principal() -> Principal {
+    Principal {
+        id: "tester".to_owned(),
+        kind: PrincipalKind::Robot,
+    }
+}
+
+pub(crate) fn request_context() -> RequestContext {
+    RequestContext {
+        request_id: RequestId::parse("req-1").unwrap(),
+        trace_id: None,
+        client_ip: None,
+        user_agent: None,
+    }
+}
+
+pub(crate) fn caller() -> Caller {
+    Caller {
+        principal: principal(),
+        request: request_context(),
+    }
 }
 
 pub(crate) fn hello_sha256() -> Sha256 {
@@ -99,6 +123,7 @@ pub(crate) struct Seed {
     pub(crate) catalog: MemoryCatalog,
     pub(crate) blobs: MemoryBlobStore,
     pub(crate) ids: Arc<SequentialIdGen>,
+    audit: Arc<MemoryAudit>,
     pub(crate) hosted: RepositoryId,
 }
 
@@ -111,6 +136,7 @@ impl Seed {
             catalog,
             blobs: MemoryBlobStore::default(),
             ids,
+            audit: Arc::default(),
             hosted,
         }
     }
@@ -129,6 +155,11 @@ impl Seed {
         }))
         .unwrap()
         .id
+    }
+
+    /// Общий с `Registry` журнал аудита: после `registry()` самого `Seed` уже нет.
+    pub(crate) fn audit(&self) -> Arc<MemoryAudit> {
+        Arc::clone(&self.audit)
     }
 
     pub(crate) fn with_proxy(self) -> Self {
@@ -203,6 +234,7 @@ impl Seed {
             wrap_blobs(self.blobs),
             Arc::new(FixedClock::new(fixed_now())),
             self.ids,
+            self.audit,
         )
     }
 

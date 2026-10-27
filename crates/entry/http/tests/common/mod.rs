@@ -17,7 +17,7 @@ use bytes::Bytes;
 use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_http::{CargoSettings, StaticToken, admin_router, api_router};
-use crane_memory::{FixedClock, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_memory::{FixedClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::registry::Catalog;
 use crane_ports::system::IdGen;
 use http_body_util::BodyExt;
@@ -81,6 +81,7 @@ impl Api {
             MemoryBlobStore::default(),
             Arc::new(FixedClock::new(SystemTime::UNIX_EPOCH)),
             ids,
+            Arc::new(MemoryAudit::default()),
         );
         let router = api_router(
             Arc::new(registry),

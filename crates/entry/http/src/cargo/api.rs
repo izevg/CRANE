@@ -53,7 +53,12 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
     // одного файла несли бы разные имена.
     let existing = shared
         .registry
-        .versions(Format::Cargo, &repo, &request.name)
+        .versions(
+            &super::placeholder_caller(),
+            Format::Cargo,
+            &repo,
+            &request.name,
+        )
         .await?;
     if let Some(first) = existing.first()
         && first.package.as_written() != request.name.as_written()
@@ -68,21 +73,24 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
     let crate_file: Result<Bytes, io::Error> = Ok(request.crate_file);
     shared
         .registry
-        .publish(Publish {
-            coordinate: Coordinate {
-                format: Format::Cargo,
-                repository: repo,
-                package: request.name,
-                version: request.version,
+        .publish(
+            &super::placeholder_caller(),
+            Publish {
+                coordinate: Coordinate {
+                    format: Format::Cargo,
+                    repository: repo,
+                    package: request.name,
+                    version: request.version,
+                },
+                file: Upload {
+                    path,
+                    body: Box::pin(stream::once(ready(crate_file))),
+                    // Cargo хэш не присылает: cksum берётся из CAS.
+                    declared_sha256: None,
+                },
+                metadata: request.metadata,
             },
-            file: Upload {
-                path,
-                body: Box::pin(stream::once(ready(crate_file))),
-                // Cargo хэш не присылает: cksum берётся из CAS.
-                declared_sha256: None,
-            },
-            metadata: request.metadata,
-        })
+        )
         .await?;
     Ok(json_ok(render_publish_ok()))
 }
@@ -93,7 +101,10 @@ pub(super) async fn download<C: Catalog + 'static, B: BlobStore + 'static>(
 ) -> Result<Response, CargoError> {
     let coordinate = coordinate(repo, &name, &version)?;
     let path = asset_path(&coordinate.package, &coordinate.version);
-    let download = shared.registry.fetch(&coordinate, &path).await?;
+    let download = shared
+        .registry
+        .fetch(&super::placeholder_caller(), &coordinate, &path)
+        .await?;
     Ok((
         StatusCode::OK,
         [
@@ -127,7 +138,10 @@ async fn set_yanked<C: Catalog + 'static, B: BlobStore + 'static>(
     yanked: bool,
 ) -> Result<Response, CargoError> {
     let coordinate = coordinate(repo, name, version)?;
-    shared.registry.set_yanked(&coordinate, yanked).await?;
+    shared
+        .registry
+        .set_yanked(&super::placeholder_caller(), &coordinate, yanked)
+        .await?;
     Ok(json_ok(render_ok()))
 }
 
@@ -139,7 +153,7 @@ pub(super) async fn owners<C: Catalog + 'static, B: BlobStore + 'static>(
         PackageName::parse(Format::Cargo, &name).map_err(|e| CargoError::bad_request(chain(&e)))?;
     let versions = shared
         .registry
-        .versions(Format::Cargo, &repo, &package)
+        .versions(&super::placeholder_caller(), Format::Cargo, &repo, &package)
         .await?;
     if versions.is_empty() {
         return Err(CargoError::not_found());

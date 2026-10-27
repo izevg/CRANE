@@ -1,6 +1,9 @@
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
 
+use crane_domain::audit::AuditEvent;
+use crane_ports::audit::AuditSink;
 use crane_ports::system::{Clock, IdGen};
 use uuid::Uuid;
 
@@ -30,5 +33,31 @@ impl IdGen for SequentialIdGen {
         // Счётчику нужна только уникальность, порядок с другой памятью не важен.
         let next = self.0.fetch_add(1, Ordering::Relaxed) + 1;
         Uuid::from_u128(u128::from(next))
+    }
+}
+/// Журнал аудита в памяти: копит события для проверки в тестах.
+#[derive(Debug, Default)]
+pub struct MemoryAudit {
+    events: Mutex<Vec<AuditEvent>>,
+}
+
+impl MemoryAudit {
+    /// Снимок записанных событий в порядке поступления.
+    #[must_use]
+    pub fn events(&self) -> Vec<AuditEvent> {
+        // Отравление замка не портит данные: push атомарен внутри замка.
+        self.events
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl AuditSink for MemoryAudit {
+    fn record(&self, event: AuditEvent) {
+        self.events
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(event);
     }
 }

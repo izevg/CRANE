@@ -11,6 +11,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::middleware::from_fn_with_state;
 use axum::routing::{delete, get, put};
 use crane_app::registry::Registry;
+use crane_domain::access::{Caller, Principal, PrincipalKind, RequestContext, RequestId};
 use crane_ports::registry::{BlobStore, Catalog};
 
 pub use auth::StaticToken;
@@ -24,6 +25,22 @@ pub struct CargoSettings {
     pub public_url: String,
     /// Предел тела публикации: оно буферизуется в памяти целиком.
     pub max_publish_bytes: usize,
+}
+
+// TODO(PR4-entry): заглушка до middleware, которая строит `Caller` из аутентификации и запроса.
+fn placeholder_caller() -> Caller {
+    Caller {
+        principal: Principal {
+            id: "static-token".to_owned(),
+            kind: PrincipalKind::Robot,
+        },
+        request: RequestContext {
+            request_id: RequestId::from(uuid::Uuid::nil()),
+            trace_id: None,
+            client_ip: None,
+            user_agent: None,
+        },
+    }
 }
 
 /// Общее состояние обработчиков.

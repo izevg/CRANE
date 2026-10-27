@@ -7,21 +7,15 @@ mod yank;
 use std::fmt;
 use std::sync::Arc;
 
+use crane_domain::access::Caller;
+use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
+pub use crane_domain::registry::Coordinate;
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, Sha256, Version,
-    VersionState,
+    Asset, Format, FormatMetadata, PackageVersion, Repository, Sha256, VersionState,
 };
+use crane_ports::audit::AuditSink;
 use crane_ports::registry::{BlobError, BlobStore, ByteStream, Catalog, CatalogError};
 use crane_ports::system::{Clock, IdGen};
-
-/// Координата версии пакета в репозитории.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Coordinate {
-    pub format: Format,
-    pub repository: String,
-    pub package: PackageName,
-    pub version: Version,
-}
 
 /// Файл версии от клиента. Один файл на запрос: так устроены все протоколы;
 /// добавление файлов к версии (`PyPI`, Maven) — отдельный use case позже.
@@ -120,24 +114,49 @@ pub struct Registry<C, B> {
     blobs: B,
     clock: Arc<dyn Clock>,
     ids: Arc<dyn IdGen>,
+    audit: Arc<dyn AuditSink>,
 }
 
 impl<C, B> fmt::Debug for Registry<C, B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Порты и `dyn Clock` не Debug.
+        // Порты и `dyn`-зависимости не Debug.
         f.debug_struct("Registry").finish_non_exhaustive()
     }
 }
 
 impl<C: Catalog, B: BlobStore> Registry<C, B> {
     #[must_use]
-    pub fn new(catalog: C, blobs: B, clock: Arc<dyn Clock>, ids: Arc<dyn IdGen>) -> Self {
+    pub fn new(
+        catalog: C,
+        blobs: B,
+        clock: Arc<dyn Clock>,
+        ids: Arc<dyn IdGen>,
+        audit: Arc<dyn AuditSink>,
+    ) -> Self {
         Self {
             catalog,
             blobs,
             clock,
             ids,
+            audit,
         }
+    }
+
+    /// Единственная точка эмиссии аудита: ровно одно событие на мутирующий use case.
+    fn audited<T>(&self, caller: &Caller, action: AuditAction, result: &Result<T, RegistryError>) {
+        let outcome = match result {
+            Ok(_) => Outcome::Success,
+            // Только Display: цепочка `source` у Backend может содержать адреса хранилища.
+            Err(error) => Outcome::Failure {
+                reason: error.to_string(),
+            },
+        };
+        self.audit.record(AuditEvent {
+            actor: Some(caller.principal.clone()),
+            request: caller.request.clone(),
+            action,
+            outcome,
+        });
     }
 
     async fn repository(&self, format: Format, name: &str) -> Result<Repository, RegistryError> {
@@ -179,15 +198,16 @@ fn served(version: &PackageVersion) -> Result<(), RegistryError> {
 )]
 fn use_case_futures_are_send<C: Catalog, B: BlobStore>(
     registry: &Registry<C, B>,
+    caller: &Caller,
     publish: Publish,
     coordinate: &Coordinate,
-    package: &PackageName,
+    package: &crane_domain::registry::PackageName,
 ) {
     fn send<T: Send>(_: T) {}
-    send(registry.publish(publish));
-    send(registry.fetch(coordinate, ""));
-    send(registry.versions(Format::Cargo, "", package));
-    send(registry.set_yanked(coordinate, true));
+    send(registry.publish(caller, publish));
+    send(registry.fetch(caller, coordinate, ""));
+    send(registry.versions(caller, Format::Cargo, "", package));
+    send(registry.set_yanked(caller, coordinate, true));
 }
 
 #[cfg(test)]

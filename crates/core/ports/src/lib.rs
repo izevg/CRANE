@@ -1,8 +1,9 @@
 //! Порты ядра: трейты, через которые use cases обращаются к внешнему миру.
 //!
 //! Асинхронные порты (`BlobStore`, `Catalog`) не dyn-совместимы: `app` обобщён по ним,
-//! а зависимости собирает `entry`. `Clock` и `IdGen` синхронны и dyn-совместимы.
+//! а зависимости собирает `entry`. `Clock`, `IdGen` и `AuditSink` синхронны и dyn-совместимы.
 
+pub mod audit;
 pub mod registry;
 pub mod system;
 

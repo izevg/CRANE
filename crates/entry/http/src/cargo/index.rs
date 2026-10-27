@@ -36,7 +36,7 @@ pub(super) async fn sparse<C: Catalog + 'static, B: BlobStore + 'static>(
     let name = parse_index_path(&path).ok_or_else(CargoError::not_found)?;
     let versions = shared
         .registry
-        .versions(Format::Cargo, &repo, &name)
+        .versions(&super::placeholder_caller(), Format::Cargo, &repo, &name)
         .await?;
     // Пустой индекс — это «крейта нет», а не крейт без версий.
     if versions.is_empty() {

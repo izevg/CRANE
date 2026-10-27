@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_http::{CargoSettings, StaticToken, admin_router, api_router};
-use crane_memory::{MemoryBlobStore, MemoryCatalog};
+use crane_memory::{MemoryAudit, MemoryBlobStore, MemoryCatalog};
 use crane_ports::registry::Catalog;
 use crane_ports::system::IdGen;
 use futures_util::future::{self, Either};
@@ -41,7 +41,15 @@ async fn serve_async(settings: Settings) -> Result<(), RunError> {
             })
             .await?;
     }
-    let registry = Arc::new(Registry::new(catalog, blobs, Arc::new(SystemClock), ids));
+    // TODO(PR4-entry): in-memory приёмник вместо настоящего журнала аудита.
+    let audit = Arc::new(MemoryAudit::default());
+    let registry = Arc::new(Registry::new(
+        catalog,
+        blobs,
+        Arc::new(SystemClock),
+        ids,
+        audit,
+    ));
     // Сырой токен живёт только до этой строки: дальше остаётся его хэш.
     let token = StaticToken::from_secret(settings.token.expose());
     drop(settings.token);

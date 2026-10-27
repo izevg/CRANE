@@ -1,3 +1,4 @@
+use crane_domain::access::Caller;
 use crane_domain::registry::{Format, PackageName, PackageVersion};
 use crane_ports::registry::{BlobStore, Catalog};
 
@@ -8,6 +9,8 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
     /// скрыты только не-`Released`.
     pub async fn fetch(
         &self,
+        // Чтение пока не авторизуется; в v0.4 Cedar решает и для чтений.
+        _caller: &Caller,
         coordinate: &Coordinate,
         path: &str,
     ) -> Result<Download, RegistryError> {
@@ -26,6 +29,8 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
     /// Неизвестный пакет — пустой список, не ошибка.
     pub async fn versions(
         &self,
+        // Чтение пока не авторизуется; в v0.4 Cedar решает и для чтений.
+        _caller: &Caller,
         format: Format,
         repository: &str,
         package: &PackageName,

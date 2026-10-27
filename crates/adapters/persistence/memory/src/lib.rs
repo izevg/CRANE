@@ -9,4 +9,4 @@ mod system;
 
 pub use blob::MemoryBlobStore;
 pub use catalog::MemoryCatalog;
-pub use system::{FixedClock, SequentialIdGen};
+pub use system::{FixedClock, MemoryAudit, SequentialIdGen};
