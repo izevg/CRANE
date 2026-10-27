@@ -1,4 +1,4 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react";
 import { XIcon } from "lucide-react";
 import {
   type KeyboardEvent,
@@ -12,8 +12,8 @@ import {
 import { useBreakpoint } from "~/shared/lib/core";
 import { type Action, ActionBar, type ActionGroup, ActionMenu } from "../../actions";
 import { Button, DialogClose, Sheet, SheetContent, SheetTitle } from "../../primitives";
+import { CLOSE } from "./messages";
 
-const CLOSE = "Закрыть";
 const HEADING_CLASS = "min-w-0 flex-1 truncate text-h2 outline-none";
 
 type DetailPanelProps = {
@@ -77,6 +77,7 @@ export function DetailPanel({
   returnFocusRef,
   ...body
 }: DetailPanelProps) {
+  const { _ } = useLingui();
   const docked = useBreakpoint("2xl");
   const titleId = useId();
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -129,7 +130,7 @@ export function DetailPanel({
             </h2>
           }
           closeButton={
-            <Button variant="ghost" size="icon" aria-label={CLOSE} onClick={close}>
+            <Button variant="ghost" size="icon" aria-label={_(CLOSE)} onClick={close}>
               <XIcon aria-hidden="true" />
             </Button>
           }
@@ -155,7 +156,7 @@ export function DetailPanel({
             </SheetTitle>
           }
           closeButton={
-            <DialogClose render={<Button variant="ghost" size="icon" aria-label={CLOSE} />}>
+            <DialogClose render={<Button variant="ghost" size="icon" aria-label={_(CLOSE)} />}>
               <XIcon aria-hidden="true" />
             </DialogClose>
           }

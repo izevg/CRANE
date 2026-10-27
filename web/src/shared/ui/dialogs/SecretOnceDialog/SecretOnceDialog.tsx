@@ -1,4 +1,4 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react";
 import { useCallback, useId, useState } from "react";
 import { type Action, ActionButton } from "../../actions";
 import { CodeBlock } from "../../data-display";
@@ -13,12 +13,7 @@ import {
   CalloutTitle,
   Checkbox,
 } from "../../primitives";
-
-const WARNING = "Сохраните сейчас — больше мы его не покажем";
-const COPY = "Копировать токен";
-const SAVED = "Я сохранил токен";
-const DONE = "Готово";
-const DONE_REASON = "Отметьте, что сохранили токен";
+import { COPY, DONE, DONE_REASON, SAVED, WARNING } from "./messages";
 
 type SecretOnceDialogProps = {
   /** Секрет живёт только в памяти диалога: `null` — диалог закрыт и секрета в DOM нет. */
@@ -31,6 +26,7 @@ type SecretOnceDialogProps = {
 type BodyProps = Omit<SecretOnceDialogProps, "secret"> & { secret: string };
 
 function SecretDialogBody({ secret, title, onDone }: BodyProps) {
+  const { _ } = useLingui();
   const [saved, setSaved] = useState(false);
   const checkboxId = useId();
   // Диалог открыт, пока есть секрет, поэтому клик вне окна и Esc до отметки ничего не закрывают сами:
@@ -44,9 +40,9 @@ function SecretDialogBody({ secret, title, onDone }: BodyProps) {
     [saved, onDone],
   );
   const done: Action = {
-    label: DONE,
+    label: _(DONE),
     run: { onSelect: onDone },
-    ...(saved ? {} : { disabledReason: DONE_REASON }),
+    ...(saved ? {} : { disabledReason: _(DONE_REASON) }),
   };
   return (
     <AlertDialog open onOpenChange={handleOpenChange}>
@@ -56,12 +52,12 @@ function SecretDialogBody({ secret, title, onDone }: BodyProps) {
         </AlertDialogHeader>
         <AlertDialogBody className="flex flex-col gap-4">
           <Callout tone="warning">
-            <CalloutTitle>{WARNING}</CalloutTitle>
+            <CalloutTitle>{_(WARNING)}</CalloutTitle>
           </Callout>
-          <CodeBlock code={secret} copyLabel={COPY} machine />
+          <CodeBlock code={secret} copyLabel={_(COPY)} machine />
           <div className="flex items-center gap-2 text-body">
             <Checkbox id={checkboxId} checked={saved} onCheckedChange={setSaved} />
-            <label htmlFor={checkboxId}>{SAVED}</label>
+            <label htmlFor={checkboxId}>{_(SAVED)}</label>
           </div>
         </AlertDialogBody>
         <AlertDialogFooter>

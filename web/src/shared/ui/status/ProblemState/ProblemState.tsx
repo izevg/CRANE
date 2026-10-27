@@ -1,4 +1,5 @@
-// i18n: не мигрирован
+import type { MessageDescriptor } from "@lingui/core";
+import { useLingui } from "@lingui/react";
 import {
   CloudAlertIcon,
   FileQuestionMarkIcon,
@@ -10,6 +11,15 @@ import {
 import { type ReactNode, useId } from "react";
 import { cx } from "~/shared/lib/core";
 import { type Action, ActionBar, type ActionGroup } from "~/shared/ui/actions";
+import {
+  FORBIDDEN_TITLE,
+  NOT_FOUND_HINT,
+  NOT_FOUND_TITLE,
+  OFFLINE_HINT,
+  OFFLINE_TITLE,
+  SESSION_HINT,
+  SESSION_TITLE,
+} from "./messages";
 import { ContactLine, RemediationList, RequestIdLine, RuleLine } from "./ProblemParts";
 
 /**
@@ -56,19 +66,12 @@ type Head = {
   Icon: LucideIcon;
   circle: string;
   iconTone: string;
-  title: string;
-  hint?: string | undefined;
+  /** Дескриптор — локальный словарь кита; строка — серверный текст, как пришёл. */
+  title: MessageDescriptor | string;
+  hint?: MessageDescriptor | string | undefined;
 };
 
 const HEADINGS = { 1: "h1", 2: "h2", 3: "h3" } as const;
-
-const NOT_FOUND_TITLE = "Не найдено или нет доступа";
-const NOT_FOUND_HINT = "Проверьте адрес или имя пакета";
-const FORBIDDEN_TITLE = "Недостаточно прав";
-const OFFLINE_TITLE = "Нет соединения";
-const OFFLINE_HINT = "Проверьте сеть — данные обновятся, когда связь вернётся";
-const SESSION_TITLE = "Сессия завершена";
-const SESSION_HINT = "Войдите снова, чтобы продолжить работу";
 
 const NEUTRAL = { circle: "bg-muted", iconTone: "text-muted-foreground" } as const;
 
@@ -201,6 +204,7 @@ export function ProblemState({
   compact = false,
   className,
 }: ProblemStateProps) {
+  const { _ } = useLingui();
   const headingId = useId();
   const head = headOf(problem);
   const Heading = HEADINGS[headingLevel];
@@ -224,11 +228,11 @@ export function ProblemState({
         <Icon className={cx(head.iconTone, compact ? "size-5" : "size-7")} aria-hidden="true" />
       </span>
       <Heading id={headingId} className="mt-4 max-w-[48ch] text-balance text-h3 wrap-anywhere">
-        {head.title}
+        {typeof head.title === "string" ? head.title : _(head.title)}
       </Heading>
       {head.hint ? (
         <p className="mt-1 max-w-[48ch] text-body text-muted-foreground wrap-anywhere">
-          {head.hint}
+          {typeof head.hint === "string" ? head.hint : _(head.hint)}
         </p>
       ) : null}
       <Details problem={problem} />
