@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190 40" role="img" aria-label="CRANE">
+  <title>CRANE</title>
+  <g fill="none" stroke="#29303e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" transform="translate(4 0)">
+    <path d="M29.3 8.7A16 16 0 1 0 29.3 31.3"/>
+    <path d="M44 36V4H58A9 9 0 0 1 58 22H44M56 22L70 36"/>
+    <path d="M80 36L94 4L108 36M85.5 25H102.5"/>
+    <path d="M118 36V4L144 36V4"/>
+    <path d="M178 4H156V36H178M156 20H174"/>
+  </g>
+</svg>

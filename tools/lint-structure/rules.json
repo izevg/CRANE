@@ -1,0 +1,30 @@
+{
+  "scope": ["crates", "web/src", "cli"],
+  "limits": { "files": 4, "dirs": 8 },
+  "ignoredDirs": ["target", "node_modules", ".git", ".gb-cache", "dist", "coverage"],
+  "unlimitedDirs": ["tests", "__tests__", "migrations", "generated"],
+  "serviceFiles": [
+    "Cargo.toml",
+    "Cargo.lock",
+    "build.rs",
+    "package.json",
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "tsconfig*.json",
+    "vite.config.*",
+    "vitest.config.*",
+    "biome.json*"
+  ],
+  "testFiles": ["*.test.*", "*.spec.*"],
+  "entryFiles": ["lib.rs", "main.rs", "mod.rs", "index.ts", "index.tsx"],
+  "rustLayers": {
+    "domain": [],
+    "ports": ["domain"],
+    "app": ["domain", "ports"],
+    "access": ["domain", "ports"],
+    "formats": ["domain", "ports"],
+    "adapters": ["domain", "ports"],
+    "entry": ["domain", "ports", "app", "access", "formats", "adapters"]
+  }
+}

@@ -1,0 +1,4 @@
+# Полный мутационный гейт запускается локально перед PR в release/* (task gate).
+timeout_multiplier = 3.0
+minimum_test_timeout = 20
+exclude_globs = ["**/tests/**", "**/benches/**"]

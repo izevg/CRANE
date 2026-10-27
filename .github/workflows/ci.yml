@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, "release/**"]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  branch-flow:
+    name: branch-flow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Проверить направление PR
+        env:
+          HEAD: ${{ github.head_ref }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$BASE" = "main" ]; then
+            [[ "$HEAD" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "В main принимаются только release/vX.Y.Z (получено: $HEAD)"; exit 1; }
+          else
+            [[ "$HEAD" =~ ^release/ ]] && { echo "В release/* принимаются feature-ветки, не release"; exit 1; }
+          fi
+          echo "ok: $HEAD → $BASE"
+
+  title:
+    name: title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Заголовок PR — Conventional Commits (он станет сообщением сквоша)
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$TITLE" | pnpm exec commitlint
+      - name: Запрет атрибуции ИИ в описании PR
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf 'chore: check\n\n%s\n' "$PR_BODY" | pnpm exec commitlint
+
+  gate-mark:
+    name: gate-mark
+    if: startsWith(github.base_ref, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Отметка о локальном мутационном гейте (task gate)
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          sha="$(printf '%s\n' "$BODY" | sed -n 's/^Gate-SHA: *\([0-9a-f]\{40\}\).*/\1/p' | head -1)"
+          printf '%s\n' "$BODY" | grep -q '^Gate: passed' || { echo "В описании PR нет «Gate: passed» (запустите task gate)"; exit 1; }
+          [ -n "$sha" ] || { echo "В описании PR нет «Gate-SHA: <40 hex>»"; exit 1; }
+          git merge-base --is-ancestor "$sha" "${{ github.event.pull_request.head.sha }}" \
+            || { echo "Gate-SHA $sha не входит в историю PR"; exit 1; }
+
+  structure:
+    name: structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm run test:tools
+      - name: Правило четырёх и слои крейтов
+        run: pnpm run lint:structure
+
+  rust:
+    name: rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "rustfmt, clippy" }
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: typecheck, biome, steiger, knip, depcruise
+        run: pnpm --filter web run check
+      - run: pnpm --filter web run test

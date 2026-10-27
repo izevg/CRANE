@@ -1,0 +1,91 @@
+# Единая точка входа: `task --list`. Требуется go-task (https://taskfile.dev).
+version: "3"
+
+tasks:
+  default:
+    desc: Список задач
+    cmds: [task --list]
+    silent: true
+
+  install:
+    desc: Зависимости и git hooks
+    cmds: [pnpm install]
+
+  check:
+    desc: "Быстрые проверки (как pre-push): Rust, web, структура, tools"
+    cmds:
+      - task: structure
+      - task: lint
+      - task: tools:check
+      - task: rust:check
+      - task: web:check
+      - task: web:test
+
+  structure:
+    desc: Правило четырёх и слои крейтов
+    cmds: [node tools/lint-structure/index.ts]
+
+  lint:
+    desc: Biome на весь репозиторий (tools, конфиги, web)
+    cmds: [pnpm exec biome check .]
+
+  tools:check:
+    desc: Типы и тесты tools/ и конфигов в корне
+    cmds:
+      - pnpm exec tsc -p tsconfig.json
+      - node --test tools/lint-structure/checks.test.ts
+
+  rust:fmt:
+    desc: cargo fmt --check
+    cmds: [cargo fmt --all --check]
+  rust:clippy:
+    desc: cargo clippy -D warnings
+    cmds: [cargo clippy --workspace --all-targets -- -D warnings]
+  rust:test:
+    desc: cargo test
+    cmds: [cargo test --workspace]
+  rust:deny:
+    desc: Лицензии и advisories
+    cmds: [cargo deny check]
+  rust:check:
+    desc: fmt, clippy, test, deny
+    cmds:
+      - task: rust:fmt
+      - task: rust:clippy
+      - task: rust:test
+      - task: rust:deny
+
+  web:check:
+    desc: typecheck, Steiger, knip, depcruise
+    cmds: [pnpm --filter web run check]
+  web:test:
+    desc: Vitest
+    cmds: [pnpm --filter web run test]
+
+  gate:
+    desc: "Полный гейт перед PR в release/* (юниты, мутации, Playwright). В CI не запускается"
+    vars:
+      BASE: '{{.BASE | default "origin/main"}}'
+    cmds:
+      - task: check
+      - mkdir -p out
+      - git diff {{.BASE}}...HEAD > out/gate.diff
+      - "[ ! -s out/gate.diff ] || cargo mutants --workspace --in-diff out/gate.diff"
+      - pnpm --filter web run mutate
+      - "! pnpm --filter web exec playwright --version >/dev/null 2>&1 || pnpm --filter web run e2e"
+      - |
+        printf 'Gate: passed\nGate-SHA: %s\nGate-Date: %s\n' "$(git rev-parse HEAD)" "$(date -u +%Y-%m-%dT%H:%MZ)" | tee out/gate-report.md
+
+  bump:
+    desc: "Бамп версий: task bump TAG=v0.1.0"
+    requires: { vars: [TAG] }
+    cmds:
+      - node tools/bump-version.ts {{.TAG}}
+
+  changelog:
+    desc: Пересобрать CHANGELOG.md (окна между тегами)
+    cmds: [pnpm exec git-cliff --output CHANGELOG.md]
+
+  guidebook:
+    desc: Собрать PDF гайдбука
+    cmds: [tools/build-guidebook.sh]

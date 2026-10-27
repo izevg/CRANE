@@ -1,0 +1,29 @@
+# Хуки ставит `pnpm install` (prepare). Тяжёлый мутационный гейт здесь не гоняется: `task gate`.
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm exec commitlint --edit {1}
+
+pre-commit:
+  parallel: true
+  commands:
+    structure:
+      run: task structure
+    rustfmt:
+      glob: "*.rs"
+      run: task rust:fmt
+    biome:
+      glob: "*.{ts,tsx,js,json,css}"
+      run: pnpm exec biome check --no-errors-on-unmatched {staged_files}
+
+pre-push:
+  parallel: true
+  commands:
+    clippy:
+      run: task rust:clippy
+    rust-tests:
+      run: task rust:test
+    deny:
+      run: task rust:deny
+    web:
+      run: task web:check

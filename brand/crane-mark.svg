@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CRANE">
+  <title>CRANE</title>
+  <defs>
+    <linearGradient id="crane-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6a135c"/>
+      <stop offset="0.55" stop-color="#951b81"/>
+      <stop offset="1" stop-color="#c7017f"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#crane-bg)"/>
+  <g fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M22 54V11"/>
+    <path d="M11 18H54"/>
+    <path d="M12 18L22 10L50 18"/>
+    <path d="M14 54H30"/>
+    <path d="M44 18V29"/>
+  </g>
+  <rect x="10.5" y="18" width="7" height="5.5" rx="1" fill="#fff"/>
+  <g stroke="#fff" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M44 30L52 34.5L44 39L36 34.5Z" fill="#fff"/>
+    <path d="M36 34.5V43.5L44 48V39" fill="#fff" fill-opacity="0.45"/>
+    <path d="M52 34.5V43.5L44 48V39" fill="#fff" fill-opacity="0.2"/>
+  </g>
+</svg>

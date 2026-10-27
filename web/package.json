@@ -1,0 +1,36 @@
+{
+  "name": "web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "fsd": "steiger ./src",
+    "unused": "knip",
+    "deps": "depcruise src --config .dependency-cruiser.ts",
+    "check": "pnpm run typecheck && pnpm run fsd && pnpm run unused && pnpm run deps",
+    "test": "vitest run --passWithNoTests",
+    "mutate": "stryker run"
+  },
+  "devDependencies": {
+    "@feature-sliced/steiger-plugin": "^0.8.0",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "dependency-cruiser": "^18.7.0",
+    "knip": "^6.43.0",
+    "steiger": "^0.8.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}

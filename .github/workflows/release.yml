@@ -1,0 +1,48 @@
+name: Release
+
+# Слияние release/vX.Y.Z → main: бамп версий, CHANGELOG (окно «предыдущий тег..HEAD»), коммит, тег vX.Y.Z.
+# Запись в защищённую main идёт от GitHub App (bypass); тег от App запускает workflow publish.
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    concurrency: release
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Бамп, CHANGELOG, коммит, тег
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          tag="${HEAD_REF#release/}"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "Тег $tag уже существует"; exit 1; fi
+          node tools/bump-version.ts "$tag"
+          cargo update --workspace
+          pnpm exec git-cliff --tag "$tag" --output CHANGELOG.md
+          git config user.name "crane-release[bot]"
+          git config user.email "crane-release[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(release): $tag"
+          git tag -a "$tag" -m "$tag"
+          git push origin main "$tag"
