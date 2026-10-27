@@ -25,4 +25,7 @@ exclude_re = [
   # (`task e2e`: настоящий cargo против сервера в Compose), а не юнит-тесты. Логика фильтра
   # журнала ИБ вынесена в `log_filter` и мутируется как обычно.
   "entry/server/src/main\\.rs:\\d+:\\d+: replace (main|execute|init_logging)\\b",
+  # Запуск слушателей и обработка сигналов ОС (SIGTERM, Ctrl+C) — та же проводка процесса:
+  # проверяется e2e-стендом (`task e2e` поднимает и гасит сервер в Compose).
+  "entry/server/src/run/mod\\.rs:\\d+:\\d+: replace (serve|serve_async|shutdown_signal|terminate)\\b",
 ]

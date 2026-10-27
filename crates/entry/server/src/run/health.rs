@@ -122,17 +122,15 @@ mod tests {
     }
 
     #[test]
-    fn probe_of_closed_port_is_unhealthy() {
+    fn healthcheck_of_closed_port_is_unhealthy() {
         // Arrange
-        let runtime = runtime();
+        let port = runtime().block_on(async {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            listener.local_addr().unwrap().port()
+        });
 
         // Act
-        let result = runtime.block_on(async {
-            let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
-            let port = listener.local_addr().unwrap().port();
-            drop(listener);
-            probe(port).await
-        });
+        let result = healthcheck(port);
 
         // Assert
         assert!(result.is_err());
