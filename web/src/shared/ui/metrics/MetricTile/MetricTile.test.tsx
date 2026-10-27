@@ -83,6 +83,17 @@ describe("MetricTile", () => {
     expect(screen.getAllByRole("link")).toHaveLength(1);
   });
 
+  it("имя плитки-ссылки содержит единицу измерения", () => {
+    // Arrange
+    const props = { label: "Объём", value: 18.4, unit: "ТБ", href: "/storage" };
+
+    // Act
+    render(<MetricTile {...props} />);
+
+    // Assert
+    expect(screen.getByRole("link", { name: "Объём: 18,4 ТБ" })).toBeInTheDocument();
+  });
+
   it("плитка-ссылка с нейтральным тоном называется «метка: значение»", () => {
     // Arrange
     const label = "Версий";

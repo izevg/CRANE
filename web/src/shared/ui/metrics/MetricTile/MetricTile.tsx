@@ -42,10 +42,12 @@ const STALE_PREFIX = "обновлено ";
 const DELTA_PREFIX = "Изменение: ";
 const MINUS = "−";
 const NAME_SEPARATOR = ": ";
+const UNIT_SEPARATOR = " ";
 const TONE_SEPARATOR = ", ";
 const PERCENT = 100;
 
-const SIZE = "h-28 @3xl/page:h-[168px]";
+// min-height, а не height: при увеличенных интервалах текста (WCAG 1.4.12) подпись не обрезается.
+const SIZE = "min-h-28 @3xl/page:min-h-[168px]";
 const PADDING = "px-4 py-3 @3xl/page:py-4";
 
 type ActiveTone = "warning" | "error";
@@ -172,8 +174,14 @@ function Footer({
 }
 
 /** Имя плитки-ссылки: «P0 открыто: 1, требует действия». */
-function linkName(label: string, value: TileValue, toneLabel: string | undefined): string {
-  const shown = value === null ? NO_DATA_NAME : formatValue(value);
+function linkName(
+  label: string,
+  value: TileValue,
+  unit: string | undefined,
+  toneLabel: string | undefined,
+): string {
+  const number = value === null ? NO_DATA_NAME : formatValue(value);
+  const shown = value === null || !unit ? number : `${number}${UNIT_SEPARATOR}${unit}`;
   const name = `${label}${NAME_SEPARATOR}${shown}`;
   return toneLabel === undefined ? name : `${name}${TONE_SEPARATOR}${toneLabel}`;
 }
@@ -226,7 +234,7 @@ export function MetricTile(props: MetricTileProps) {
   return (
     <Link
       href={href}
-      aria-label={linkName(label, value, tone?.label)}
+      aria-label={linkName(label, value, unit, tone?.label)}
       aria-describedby={footerId}
       className={cx("block rounded-xl transition-shadow hover:shadow-md", className)}
     >
