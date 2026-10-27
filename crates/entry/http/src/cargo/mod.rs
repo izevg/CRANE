@@ -2,6 +2,7 @@
 
 mod auth;
 mod hosted;
+mod proxy;
 
 use std::sync::Arc;
 
@@ -20,6 +21,7 @@ use sha2::{Digest as _, Sha256};
 
 use auth::Auth;
 pub use auth::StaticToken;
+pub use proxy::{CargoProxyOrigins, cargo_proxy_router};
 
 use crate::context::{TrustedProxies, request_context};
 use crate::error::{CargoError, not_found};
@@ -38,22 +40,31 @@ pub struct CargoSettings {
 }
 
 /// Корневой router API: cargo под токеном, всё остальное — problem+json 404.
+///
+/// `proxy_repos` — готовые routers proxy-репозиториев; каждый монтируется как `/cargo/<имя>`.
+/// Имя должно быть допустимым сегментом пути axum (без `{`, `}`, `/`).
 pub fn api_router<C: Catalog + 'static, B: BlobStore + 'static>(
     registry: Arc<Registry<C, B>>,
     cargo: CargoSettings,
     token: StaticToken,
     proxies: TrustedProxies,
     audit: Arc<dyn AuditSink>,
+    proxy_repos: Vec<(String, Router)>,
 ) -> Router {
     let auth = Arc::new(Auth { token, audit });
     // `layer`, а не `route_layer`: 401 должен закрывать и неизвестные пути,
     // иначе без токена можно перебирать маршруты.
     let guarded =
         |router: Router| router.layer(from_fn_with_state(Arc::clone(&auth), auth::require_token));
-    let root = Router::new().nest(
+    let mut root = Router::new().nest(
         &format!("{CARGO_PREFIX}/{{repo}}"),
         guarded(hosted::hosted_router(registry, cargo)),
     );
+    // Статический сегмент побеждает `{repo}` в маршрутизаторе axum, поэтому proxy-имя
+    // не перехватывается hosted-маршрутами (проверено в tests/cargo_proxy.rs).
+    for (name, router) in proxy_repos {
+        root = root.nest(&format!("{CARGO_PREFIX}/{name}"), guarded(router));
+    }
     // Самый внешний слой: контекст запроса нужен и auth, и fallback, и рендеру ошибок.
     root.fallback(not_found)
         .layer(from_fn_with_state(Arc::new(proxies), request_context))

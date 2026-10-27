@@ -4,10 +4,12 @@ use std::error::Error;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use crane_app::proxy::ProxyError;
 use crane_app::registry::RegistryError;
 use crane_domain::registry::VersionState;
 
 const INTERNAL_DETAIL: &str = "внутренняя ошибка сервера";
+const UPSTREAM_DETAIL: &str = "upstream недоступен";
 
 /// Что именно писать в тело ошибки. Ответ несёт его в расширениях с пустым телом:
 /// id запроса известен только внешнему слою, он и рендерит тело (`context::render`).
@@ -56,6 +58,19 @@ impl From<RegistryError> for CargoError {
     fn from(error: RegistryError) -> Self {
         let (status, detail) = describe(&error);
         Self { status, detail }
+    }
+}
+
+/// Клиенту proxy сообщает только «upstream недоступен»: адреса, причины отказа и суммы остаются в журнале.
+impl From<ProxyError> for CargoError {
+    fn from(error: ProxyError) -> Self {
+        match error {
+            ProxyError::NotFound => Self::not_found(),
+            ProxyError::Upstream(_)
+            | ProxyError::DigestMismatch { .. }
+            | ProxyError::TooLarge { .. } => Self::new(StatusCode::BAD_GATEWAY, UPSTREAM_DETAIL),
+            ProxyError::Backend(_) => Self::internal(&error),
+        }
     }
 }
 
@@ -157,7 +172,10 @@ fn describe(error: &RegistryError) -> (StatusCode, String) {
 )]
 mod tests {
     use std::io;
+    use std::sync::Arc;
 
+    use crane_app::proxy::UpstreamFailure;
+    use crane_domain::proxy::EgressRefusal;
     use crane_domain::registry::Sha256;
 
     use super::*;
@@ -212,6 +230,48 @@ mod tests {
 
         // Assert
         assert_eq!(actual, cases.map(|(_, expected)| expected));
+    }
+
+    #[test]
+    fn proxy_errors_map_to_status_and_hide_upstream_details() {
+        // Arrange
+        let sum = Sha256::from([1; 32]);
+        let cases = [
+            ProxyError::NotFound,
+            ProxyError::Upstream(UpstreamFailure::Unavailable),
+            ProxyError::Upstream(UpstreamFailure::Refused(EgressRefusal::HostNotAllowed(
+                "evil.example".to_owned(),
+            ))),
+            ProxyError::DigestMismatch {
+                expected: sum,
+                actual: sum,
+            },
+            ProxyError::TooLarge { limit: 1 },
+            ProxyError::Backend(Arc::new(io::Error::other("postgres://u:SECRET@h/db"))),
+        ];
+
+        // Act
+        let actual = cases.map(|error| {
+            let error = CargoError::from(error);
+            (error.status, error.detail)
+        });
+
+        // Assert
+        let bad_gateway = (StatusCode::BAD_GATEWAY, UPSTREAM_DETAIL.to_owned());
+        assert_eq!(
+            actual,
+            [
+                (StatusCode::NOT_FOUND, "не найдено".to_owned()),
+                bad_gateway.clone(),
+                bad_gateway.clone(),
+                bad_gateway.clone(),
+                bad_gateway,
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    INTERNAL_DETAIL.to_owned()
+                ),
+            ]
+        );
     }
 
     #[test]

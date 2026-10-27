@@ -7,6 +7,8 @@
     reason = "dead_code: фикстуры общие для тестовых бинарей; unwrap в тестах = падение теста"
 )]
 
+pub(crate) mod proxy;
+
 use std::io;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -39,6 +41,7 @@ pub(crate) const REPO: &str = "internal";
 /// Личность, которой принадлежит `TOKEN`.
 pub(crate) const PRINCIPAL: &str = "crane";
 const PROXY_REPO: &str = "mirror";
+const WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub(crate) struct Reply {
     pub(crate) status: StatusCode,
@@ -88,6 +91,21 @@ impl Api {
 
     /// `sink` получает события и use cases, и слоя auth; `audit` — то, что отдаёт `audit_events`.
     pub(crate) fn build(proxies: &str, sink: Arc<dyn AuditSink>, audit: Arc<MemoryAudit>) -> Self {
+        Self::build_with(proxies, sink, audit, Vec::new())
+    }
+
+    /// Рядом с hosted-репозиториями монтируются готовые proxy-routers.
+    pub(crate) fn with_proxy_repos(proxy_repos: Vec<(String, Router)>) -> Self {
+        let audit = Arc::new(MemoryAudit::default());
+        Self::build_with("", audit.clone(), audit, proxy_repos)
+    }
+
+    fn build_with(
+        proxies: &str,
+        sink: Arc<dyn AuditSink>,
+        audit: Arc<MemoryAudit>,
+        proxy_repos: Vec<(String, Router)>,
+    ) -> Self {
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let ids = Arc::new(SequentialIdGen::default());
         let catalog = MemoryCatalog::default();
@@ -126,6 +144,7 @@ impl Api {
             ),
             TrustedProxies::parse(proxies).unwrap(),
             sink,
+            proxy_repos,
         );
         Self {
             runtime,
@@ -133,6 +152,19 @@ impl Api {
             admin: admin_router(registry),
             audit,
         }
+    }
+
+    /// Даёт задачам, запущенным запросом (фоновая ревалидация), выполниться, пока условие не истинно.
+    pub(crate) fn wait_until(&self, condition: impl Fn() -> bool) {
+        self.runtime.block_on(async {
+            tokio::time::timeout(WAIT, async {
+                while !condition() {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+        });
     }
 
     pub(crate) fn audit_events(&self) -> Vec<AuditEvent> {
