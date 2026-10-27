@@ -272,6 +272,14 @@ version = "0.0.0"
 [[package]]
 name = "crane-format-cargo"
 version = "0.0.0"
+dependencies = [
+ "bytes",
+ "crane-domain",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "uuid",
+]
 
 [[package]]
 name = "crane-format-maven"
