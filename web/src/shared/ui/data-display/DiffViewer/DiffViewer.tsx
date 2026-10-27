@@ -1,6 +1,17 @@
-// i18n: не мигрирован
+import type { MessageDescriptor } from "@lingui/core";
+import { useLingui } from "@lingui/react";
 import { useMemo } from "react";
 import { cx } from "~/shared/lib/core";
+import {
+  DIFF_ADDED,
+  DIFF_AFTER,
+  DIFF_BEFORE,
+  DIFF_CHANGE,
+  DIFF_CONTENT,
+  DIFF_PATH,
+  DIFF_REMOVED,
+  diffChanged,
+} from "../text/messages";
 
 /** Строка диффа, посчитанного сервером. `path` — поле или номер строки, если он есть. */
 export type DiffRow =
@@ -18,17 +29,11 @@ type DiffViewerProps = {
   label: string;
 };
 
-const BEFORE = "Было";
-const AFTER = "Стало";
-const PATH_HEAD = "Поле";
-const CHANGE_HEAD = "Изменение";
-const TEXT_HEAD = "Содержимое";
-
 const MARKER = {
-  add: { sign: "+", text: "добавлено" },
-  remove: { sign: "−", text: "удалено" },
-  same: { sign: "", text: "" },
-} satisfies Record<LineKind, { sign: string; text: string }>;
+  add: { sign: "+", text: DIFF_ADDED },
+  remove: { sign: "−", text: DIFF_REMOVED },
+  same: { sign: "", text: null },
+} satisfies Record<LineKind, { sign: string; text: MessageDescriptor | null }>;
 
 const TONE = {
   add: "bg-(--diff-add-bg) text-(--diff-add-fg)",
@@ -39,21 +44,20 @@ const TONE = {
 const CELL = "px-3 py-1 align-top font-mono text-caption whitespace-pre-wrap wrap-anywhere";
 const PATH =
   "px-3 py-1 text-left align-top text-caption font-normal text-muted-foreground wrap-anywhere";
-const CHANGED = "изменено: было ";
-const CHANGED_TO = ", стало ";
 
 const SIGN_COLUMN = "w-8 px-2 py-1 text-center align-top font-mono text-caption font-semibold";
 
 /** Знак + скрытый текст: изменение не передаётся только цветом (WCAG 1.4.1). */
 function Marker({ kind }: { kind: LineKind }) {
+  const { _ } = useLingui();
   const { sign, text } = MARKER[kind];
-  if (sign === "") {
+  if (text === null) {
     return null;
   }
   return (
     <>
       <span aria-hidden="true">{sign}</span>
-      <span className="sr-only">{text}</span>
+      <span className="sr-only">{_(text)}</span>
     </>
   );
 }
@@ -68,14 +72,8 @@ function PathCell({ row }: { row: DiffRow }) {
 
 /** Для скринридера изменённое поле читается одной фразой; визуальные строки скрыты (`aria-hidden`), чтобы не дублировать. */
 function ChangeSummary({ before, after }: { before: string; after: string }) {
-  return (
-    <span className="sr-only">
-      {CHANGED}
-      {before}
-      {CHANGED_TO}
-      {after}
-    </span>
-  );
+  const { _ } = useLingui();
+  return <span className="sr-only">{_(diffChanged(before, after))}</span>;
 }
 
 function InlineRow({ row, withPath }: { row: DiffRow; withPath: boolean }) {
@@ -160,6 +158,7 @@ function SplitRow({ row, withPath }: { row: DiffRow; withPath: boolean }) {
  * скрытым текстом для скринридера, цвет лишь усиливает их.
  */
 export function DiffViewer({ rows, mode = "inline", label }: DiffViewerProps) {
+  const { _ } = useLingui();
   const withPath = rows.some((row) => row.path !== undefined);
   const keyed = useMemo(
     () => rows.map((row, index) => ({ row, key: `${index}:${row.kind}` })),
@@ -178,25 +177,25 @@ export function DiffViewer({ rows, mode = "inline", label }: DiffViewerProps) {
           <tr>
             {split ? null : (
               <th scope="col" className="w-8">
-                {CHANGE_HEAD}
+                {_(DIFF_CHANGE)}
               </th>
             )}
             {withPath ? (
               <th scope="col" className="w-[28%] px-3 py-1.5 font-semibold">
-                {PATH_HEAD}
+                {_(DIFF_PATH)}
               </th>
             ) : null}
             {split ? (
               <>
                 <th scope="col" className="px-3 py-1.5 font-semibold">
-                  {BEFORE}
+                  {_(DIFF_BEFORE)}
                 </th>
                 <th scope="col" className="px-3 py-1.5 font-semibold">
-                  {AFTER}
+                  {_(DIFF_AFTER)}
                 </th>
               </>
             ) : (
-              <th scope="col">{TEXT_HEAD}</th>
+              <th scope="col">{_(DIFF_CONTENT)}</th>
             )}
           </tr>
         </thead>

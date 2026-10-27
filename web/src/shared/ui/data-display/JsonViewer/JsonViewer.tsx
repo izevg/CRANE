@@ -1,6 +1,4 @@
-// i18n: не мигрирован
-import { plural } from "@lingui/core/macro";
-import { useLingui } from "@lingui/react/macro";
+import { useLingui } from "@lingui/react";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -11,16 +9,19 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { CopyButton } from "../../actions";
 import { Button } from "../../primitives";
+import {
+  JSON_COLLAPSE_ALL,
+  JSON_COPY,
+  JSON_EXPAND_ALL,
+  JSON_ROOT,
+  jsonCollapse,
+  jsonExpand,
+  jsonSummary,
+} from "../text/messages";
 import { collapseAll, defaultCollapsed, flatten, type JsonRow, type JsonValue } from "./tree";
 
 export type { JsonValue } from "./tree";
 
-const ROOT_NAME = "корень";
-const COLLAPSE = "Свернуть";
-const EXPAND = "Развернуть";
-const EXPAND_ALL = "Развернуть всё";
-const COLLAPSE_ALL = "Свернуть всё";
-const COPY_JSON = "Копировать JSON";
 const REGION = "JSON";
 const INDENT_REM = 1;
 const JSON_INDENT = 2;
@@ -48,13 +49,10 @@ function brackets(row: JsonRow): { open: string; close: string } {
     : { open: "{", close: "}" };
 }
 
-/** «3 элемента» / «12 ключей»: свёрнутый контейнер. Склонение — ICU plural, порядок слов зависит от языка. */
+/** «3 элемента» / «12 ключей»: свёрнутый контейнер; склонение и порядок слов — в сообщении (ICU plural). */
 function Summary({ row }: { row: Extract<JsonRow, { kind: "collapsed" }> }) {
-  const { t } = useLingui();
-  const size = row.size;
-  return row.container === "array"
-    ? t`${plural(size, { one: "# элемент", few: "# элемента", many: "# элементов", other: "# элемента" })}`
-    : t`${plural(size, { one: "# ключ", few: "# ключа", many: "# ключей", other: "# ключа" })}`;
+  const { _ } = useLingui();
+  return _(jsonSummary(row.container, row.size));
 }
 
 function Label({ row }: { row: JsonRow }) {
@@ -126,7 +124,8 @@ function Line({
 }) {
   const expanded = row.kind === "open";
   const toggleable = expanded || row.kind === "collapsed";
-  const name = row.label ?? ROOT_NAME;
+  const { _ } = useLingui();
+  const name = row.label ?? _(JSON_ROOT);
   const handleToggle = useCallback(() => onToggle(row.nodeId), [onToggle, row.nodeId]);
   return (
     <div className="flex min-h-6 items-start hover:bg-(--row-hover-bg)">
@@ -145,7 +144,7 @@ function Line({
             variant="ghost"
             size="icon-sm"
             aria-expanded={expanded}
-            aria-label={`${expanded ? COLLAPSE : EXPAND} ${name}`}
+            aria-label={_(expanded ? jsonCollapse(name) : jsonExpand(name))}
             onClick={handleToggle}
           >
             {expanded ? (
@@ -167,6 +166,7 @@ function Line({
 
 /** Дерево JSON со сворачиванием узлов и номерами строк. Значения выводятся текстом, разметка из данных невозможна. */
 export function JsonViewer({ value, label = REGION, className }: JsonViewerProps) {
+  const { _ } = useLingui();
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => defaultCollapsed(value));
   const rows = useMemo(() => flatten(value, collapsed), [value, collapsed]);
   const toggle = useCallback((nodeId: string) => {
@@ -185,13 +185,13 @@ export function JsonViewer({ value, label = REGION, className }: JsonViewerProps
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="ghost" size="sm" onClick={expandAll}>
           <ChevronsUpDownIcon aria-hidden="true" />
-          {EXPAND_ALL}
+          {_(JSON_EXPAND_ALL)}
         </Button>
         <Button variant="ghost" size="sm" onClick={collapseEverything}>
           <ChevronsDownUpIcon aria-hidden="true" />
-          {COLLAPSE_ALL}
+          {_(JSON_COLLAPSE_ALL)}
         </Button>
-        <CopyButton value={JSON.stringify(value, null, JSON_INDENT)} label={COPY_JSON} />
+        <CopyButton value={JSON.stringify(value, null, JSON_INDENT)} label={_(JSON_COPY)} />
       </div>
       <section
         aria-label={label}

@@ -1,10 +1,9 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react";
 import { useLayoutEffect, useRef } from "react";
 import { cx } from "~/shared/lib/core";
 import { CopyButton } from "../../actions";
 import { MachineValue } from "../../primitives";
-
-const DEFAULT_LABEL = "Код";
+import { CODE_LABEL } from "../text/messages";
 
 type CodeBlockProps = {
   code: string;
@@ -26,10 +25,11 @@ type CodeBlockProps = {
 export function CodeBlock({
   code,
   copyLabel,
-  label = DEFAULT_LABEL,
+  label,
   wrap = false,
   machine = false,
 }: CodeBlockProps) {
+  const { _ } = useLingui();
   const ref = useRef<HTMLPreElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: смена текста не меняет размер рамки, но меняет переполнение
   useLayoutEffect(() => {
@@ -62,7 +62,7 @@ export function CodeBlock({
       <pre
         ref={ref}
         role="region"
-        aria-label={label}
+        aria-label={label ?? _(CODE_LABEL)}
         className={cx(
           "m-0 max-h-64 min-w-0 flex-1 overflow-auto p-1 font-mono text-caption text-foreground",
           wrap ? "whitespace-pre-wrap wrap-anywhere" : "whitespace-pre",
