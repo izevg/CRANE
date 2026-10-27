@@ -265,8 +265,7 @@ flowchart LR
 -   URL PostgreSQL без `sslmode=verify-full`;
 -   endpoint S3 по http;
 -   режим разделения обязанностей `warn` (14.12);
--   bucket S3 без шифрования по умолчанию (проверка через GetBucketEncryption; нужно право `s3:GetEncryptionConfiguration`);
--   политика переполнения аудита скачиваний не `reject` (14.13).
+-   bucket S3 без шифрования по умолчанию (проверка через GetBucketEncryption; нужно право `s3:GetEncryptionConfiguration`).
 
 Чего CRANE изнутри проверить не может (шифрование тома PostgreSQL, шифрование репозитория pgBackRest), то оператор подтверждает явным ключом, например `CRANE_ATTEST_STORAGE_ENCRYPTED=true`. Подтверждение записывается в журнал при старте. В профиле `standard` те же находки дают предупреждения и событие `config.insecure`.
 

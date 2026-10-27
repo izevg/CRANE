@@ -29,7 +29,7 @@ Security fixes go into the latest release. Backports to older versions are made 
 
 The steps are these, with no promised deadlines: we acknowledge the report, assess severity (CVSS), fix, and publish an advisory.
 
-Disclosure is coordinated: the advisory is published once a fix is available; by default no later than 90 days after the report unless we agree otherwise. A CVE ID is requested for each vulnerability. The advisory lists affected versions, the upgrade path, temporary mitigations and credit to the reporter.
+Disclosure is coordinated: the advisory is published once a fix is available; by default no later than 90 days after the report unless we agree otherwise. This is the embargo limit, not a fix deadline. A CVE ID is requested for each vulnerability. The advisory lists affected versions, the upgrade path, temporary mitigations and credit to the reporter.
 
 ## Scope
 
@@ -62,7 +62,7 @@ We will not pursue good-faith research as long as you:
 
 ## Verifying releases
 
-From v0.5.0 (when the repository goes public), releases are built in CI with SLSA provenance, cosign image signatures and an SBOM. CSAF advisories and VEX for each release are published when feasible. Verify the signature before deploying (section 14.3):
+From v0.5.0 (when the repository goes public), releases are planned to be built in CI with SLSA provenance, cosign image signatures and an SBOM. CSAF advisories and VEX for each release are published when feasible. Verify the signature before deploying (section 14.3):
 
 ```bash
 cosign verify <CRANE image> \

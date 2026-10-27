@@ -222,7 +222,7 @@ The project is in the design stage, so the most valuable contribution right now 
 
 [Apache License 2.0](LICENSE): an explicit patent grant and compatibility with the whole stack. See also [NOTICE](NOTICE).
 
-CRANE is pure OSS, forever: the project will never be sold. It has a single maintainer; there is no SLA, no guaranteed support period and no security team. Release security is best effort. CRANE is non-commercial free software and is not placed on the market in the course of a commercial activity (recital 18 of Regulation (EU) 2024/2847, the CRA), so the project does not assume manufacturer obligations; whoever ships CRANE in a commercial product evaluates their own obligations. This is not legal advice. Details: [SECURITY-EN.md](SECURITY-EN.md).
+CRANE is pure OSS with no SLA or guaranteed support period; release security is best effort; the CRA position is in [SECURITY-EN.md](SECURITY-EN.md).
 
 <div align="center">
 <sub>Logo and artwork: <a href="brand/">brand/</a></sub>
