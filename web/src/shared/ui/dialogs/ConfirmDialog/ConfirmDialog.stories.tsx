@@ -101,3 +101,20 @@ export const PendingCancel: Story = {
 };
 
 export const Dark: Story = { globals: { theme: "dark" } };
+
+/** Остаётся открытым в момент axe-проверки. */
+export const EnglishCancel: Story = {
+  name: "EN: подписи диалога",
+  globals: { locale: "en" },
+  args: {
+    pending: true,
+    confirm: { label: "Block", run: { onSelect: onConfirm }, destructive: true },
+  },
+  play: async () => {
+    const dialog = await within(document.body).findByRole("alertdialog");
+    await expect(await within(dialog).findByRole("button", { name: "Cancel" })).toBeVisible();
+    await expect(within(dialog).getByRole("button", { name: "Block" })).toHaveAccessibleDescription(
+      "In progress…",
+    );
+  },
+};

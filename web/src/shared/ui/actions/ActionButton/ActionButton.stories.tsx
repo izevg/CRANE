@@ -5,6 +5,7 @@ import { contrastRatio, effectiveBackground } from "~test/contrast";
 
 const onSelect = fn();
 const blockedSelect = fn();
+const STEP_UP_HINT_EN = /sign-in confirmation required/;
 const STEP_UP_HINT = /требуется подтверждение входа/;
 
 const meta = {
@@ -141,5 +142,16 @@ export const StepUpChipContrastDark: Story = {
   render: () => <StepUpRow />,
   play: async ({ canvasElement }) => {
     await Promise.all(within(canvasElement).getAllByRole("button").map(expectChipStandsOut));
+  },
+};
+
+export const StepUpEnglish: Story = {
+  name: "EN: подсказка step-up в имени кнопки",
+  globals: { locale: "en" },
+  args: { action: { label: "Apply retention", run: { onSelect: fn() }, stepUp: true } },
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByRole("button")).toHaveAccessibleName(
+      STEP_UP_HINT_EN,
+    );
   },
 };

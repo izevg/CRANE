@@ -7,6 +7,12 @@ msgstr ""
 "X-Generator: @lingui/cli\n"
 "Language: en\n"
 
+msgid " (откроется в новой вкладке)"
+msgstr " (opens in a new tab)"
+
+msgid ", требуется подтверждение входа"
+msgstr ", sign-in confirmation required"
+
 msgid "{count, plural, one {# непрочитанное} few {# непрочитанных} many {# непрочитанных} other {# непрочитанных}}"
 msgstr "{count, plural, one {# unread} other {# unread}}"
 
@@ -40,6 +46,12 @@ msgstr "CRANE, Artifact registry: go to home"
 msgid "Безопасность"
 msgstr "Security"
 
+msgid "Было"
+msgstr "Before"
+
+msgid "Войдите снова, чтобы продолжить работу"
+msgstr "Sign in again to continue"
+
 msgid "Время"
 msgstr "Time"
 
@@ -49,23 +61,56 @@ msgstr "All"
 msgid "выбор"
 msgstr "select"
 
+msgid "Выбрать все загруженные"
+msgstr "Select all loaded"
+
+msgid "Выполняется…"
+msgstr "In progress…"
+
 msgid "Главное меню"
 msgstr "Main menu"
+
+msgid "Готово"
+msgstr "Done"
 
 msgid "Действия"
 msgstr "Actions"
 
+msgid "добавлено"
+msgstr "added"
+
 msgid "Доступ"
 msgstr "Access"
+
+msgid "Другие действия"
+msgstr "More actions"
 
 msgid "Ещё {hidden}"
 msgstr "{hidden} more"
 
+msgid "Загрузка"
+msgstr "Loading"
+
+msgid "Загрузка текста"
+msgstr "Loading text"
+
 msgid "закрыть"
 msgstr "close"
 
+msgid "Закрыть"
+msgstr "Close"
+
+msgid "Идентификатор запроса:"
+msgstr "Request ID:"
+
+msgid "Изменение"
+msgstr "Change"
+
 msgid "Изменение: {change}"
 msgstr "Change: {change}"
+
+msgid "изменено: было {before}, стало {after}"
+msgstr "changed: was {before}, now {after}"
 
 msgid "Ищем пакеты…"
 msgstr "Searching packages…"
@@ -73,8 +118,26 @@ msgstr "Searching packages…"
 msgid "К содержимому"
 msgstr "Skip to content"
 
+msgid "Код"
+msgstr "Code"
+
 msgid "Командная палитра"
 msgstr "Command palette"
+
+msgid "Контакт: {contact}"
+msgstr "Contact: {contact}"
+
+msgid "Копировать JSON"
+msgstr "Copy JSON"
+
+msgid "Копировать request_id"
+msgstr "Copy request_id"
+
+msgid "Копировать токен"
+msgstr "Copy token"
+
+msgid "корень"
+msgstr "root"
 
 msgid "Личное и справка"
 msgstr "Personal and help"
@@ -85,11 +148,20 @@ msgstr "Bulk actions"
 msgid "модель {model}"
 msgstr "model {model}"
 
+msgid "Навигационная цепочка"
+msgstr "Breadcrumbs"
+
 msgid "Навигация по разделам реестра"
 msgstr "Navigate the registry sections"
 
+msgid "Не найдено или нет доступа"
+msgstr "Not found or no access"
+
 msgid "Не удалось скопировать — выделите текст вручную"
 msgstr "Could not copy. Select the text and copy it manually"
+
+msgid "Недостаточно прав"
+msgstr "Insufficient permissions"
 
 msgid "Непрочитано."
 msgstr "Unread."
@@ -100,8 +172,14 @@ msgstr "no data"
 msgid "Нет данных"
 msgstr "No data"
 
+msgid "Нет соединения"
+msgstr "No connection"
+
 msgid "Ничего не найдено"
 msgstr "Nothing found"
+
+msgid "Ничего не найдено по фильтрам"
+msgstr "Nothing matches the filters"
 
 msgid "Новых уведомлений нет"
 msgstr "No new notifications"
@@ -109,14 +187,26 @@ msgstr "No new notifications"
 msgid "обновлено"
 msgstr "updated"
 
+msgid "Оповещения"
+msgstr "Alerts"
+
 msgid "Основное меню"
 msgstr "Primary menu"
 
 msgid "открыть"
 msgstr "open"
 
+msgid "Отмена"
+msgstr "Cancel"
+
+msgid "Отметьте, что сохранили токен"
+msgstr "Confirm that you've saved the token"
+
 msgid "Пакеты"
 msgstr "Packages"
+
+msgid "Пауза автообновления"
+msgstr "Pause auto-refresh"
 
 msgid "Перейти"
 msgstr "Go to"
@@ -139,11 +229,29 @@ msgstr "Show as chart"
 msgid "Показать таблицей"
 msgstr "Show as table"
 
+msgid "Поле"
+msgstr "Field"
+
+msgid "Правило: {ruleId}"
+msgstr "Rule: {ruleId}"
+
+msgid "Проверьте адрес или имя пакета"
+msgstr "Check the address or package name"
+
+msgid "Проверьте сеть — данные обновятся, когда связь вернётся"
+msgstr "Check your network — data will refresh when the connection returns"
+
 msgid "Прочие ({count})"
 msgstr "Other ({count})"
 
 msgid "Прочитать все"
 msgstr "Mark all as read"
+
+msgid "Развернуть {name}"
+msgstr "Expand {name}"
+
+msgid "Развернуть всё"
+msgstr "Expand all"
 
 msgid "Реестр артефактов"
 msgstr "Artifact registry"
@@ -151,11 +259,20 @@ msgstr "Artifact registry"
 msgid "Свернуть"
 msgstr "Collapse"
 
+msgid "Свернуть {name}"
+msgstr "Collapse {name}"
+
+msgid "Свернуть всё"
+msgstr "Collapse all"
+
 msgid "Свернуть: {text}"
 msgstr "Collapse: {text}"
 
 msgid "Светлая"
 msgstr "Light"
+
+msgid "Сессия завершена"
+msgstr "Session ended"
 
 msgid "Системная"
 msgstr "System"
@@ -163,14 +280,29 @@ msgstr "System"
 msgid "Скопировано"
 msgstr "Copied"
 
+msgid "Скопировать ID"
+msgstr "Copy ID"
+
+msgid "Скопировать идентификатор запроса"
+msgstr "Copy request ID"
+
 msgid "Скрыть остальные"
 msgstr "Hide the rest"
 
 msgid "Снять выделение"
 msgstr "Clear selection"
 
+msgid "Содержимое"
+msgstr "Content"
+
+msgid "Сохраните сейчас — больше мы его не покажем"
+msgstr "Save it now — we won't show it again"
+
 msgid "Справка"
 msgstr "Help"
+
+msgid "Стало"
+msgstr "After"
 
 msgid "Тема оформления"
 msgstr "Appearance"
@@ -186,3 +318,9 @@ msgstr "Notifications"
 
 msgid "уверенность {confidenceText}"
 msgstr "confidence {confidenceText}"
+
+msgid "удалено"
+msgstr "removed"
+
+msgid "Я сохранил токен"
+msgstr "I've saved the token"
