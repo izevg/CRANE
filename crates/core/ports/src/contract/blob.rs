@@ -17,6 +17,8 @@ pub async fn blob_store_contract<B: BlobStore>(new: impl Fn() -> B) {
     uncommitted_blob_is_not_readable(&new()).await;
     broken_body_is_reported_as_body_error(&new()).await;
     commit_of_missing_staged_object_fails(&new()).await;
+    staged_objects_are_independent(&new()).await;
+    commit_after_transfer_is_idempotent(&new()).await;
 }
 
 fn body(chunks: Vec<io::Result<Bytes>>) -> ByteStream {
@@ -139,4 +141,35 @@ async fn commit_of_missing_staged_object_fails<B: BlobStore>(store: &B) {
         matches!(opened, Err(BlobError::NotFound(_))),
         "неудавшийся commit не создаёт blob: open даёт NotFound"
     );
+}
+
+async fn staged_objects_are_independent<B: BlobStore>(store: &B) {
+    let hello = store.stage(hello()).await.expect("stage hello");
+    let world = store
+        .stage(body(vec![Ok(Bytes::from_static(b"world"))]))
+        .await
+        .expect("stage world");
+
+    let hello = store.commit(hello).await.expect("commit hello");
+    let world = store.commit(world).await.expect("commit world");
+
+    let opened_hello = store.open(&hello.sha256).await.expect("open hello");
+    let opened_world = store.open(&world.sha256).await.expect("open world");
+    assert_eq!(
+        (read_all(opened_hello).await, read_all(opened_world).await),
+        (b"hello".to_vec(), b"world".to_vec()),
+        "одновременно существующие staged-объекты не мешают друг другу: каждый blob отдаёт свои байты"
+    );
+}
+
+async fn commit_after_transfer_is_idempotent<B: BlobStore>(store: &B) {
+    let staged = store.stage(hello()).await.expect("stage");
+    let digests = store.commit(staged).await.expect("первый commit");
+    let replay = Staged::new(StagingKey::new("missing".to_owned()), digests);
+
+    let result = store.commit(replay).await;
+
+    let again = result
+        .expect("повтор commit после переноса: staged-объекта нет, но blob уже есть — это успех");
+    assert_eq!(again, digests, "повторный commit возвращает те же Digests");
 }

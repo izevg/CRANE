@@ -17,6 +17,7 @@ pub async fn catalog_contract<C: Catalog>(new: impl Fn() -> C) {
     package_keeps_first_written_name(&new()).await;
     names_differing_only_in_spelling_collide(&new()).await;
     stored_spelling_survives_lookups(&new()).await;
+    find_version_matches_whole_coordinate(&new()).await;
     repositories_are_isolated(&new()).await;
     transition_is_compare_and_set(&new()).await;
     set_yanked_is_idempotent(&new()).await;
@@ -285,6 +286,30 @@ async fn stored_spelling_survives_lookups<C: Catalog>(catalog: &C) {
             .collect::<Vec<_>>(),
         vec![("Serde-Json", "1.0.0+build.5")],
         "versions отдаёт исходные написания имени и версии, а не нормализованные"
+    );
+}
+
+async fn find_version_matches_whole_coordinate<C: Catalog>(catalog: &C) {
+    let repo_a = ensure_repo(catalog, 1, "a").await;
+    let repo_b = ensure_repo(catalog, 2, "b").await;
+    catalog
+        .publish_version(new_version(10, repo_a, "serde", "1.0.0"))
+        .await
+        .expect("публикация");
+
+    let other_repository = catalog
+        .find_version(repo_b, &name("serde"), &version("1.0.0"))
+        .await
+        .expect("find_version");
+    let other_version = catalog
+        .find_version(repo_a, &name("serde"), &version("2.0.0"))
+        .await
+        .expect("find_version");
+
+    assert_eq!(
+        (other_repository, other_version),
+        (None, None),
+        "find_version требует совпадения всей координаты: чужой репозиторий или другая версия дают None"
     );
 }
 
