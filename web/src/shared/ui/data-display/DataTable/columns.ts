@@ -37,12 +37,15 @@ declare module "@tanstack/react-table" {
 const LOWEST_PRIORITY = 3;
 
 // Классы записаны целиком: Tailwind находит их по тексту исходников.
+// Пороги считаются по ширине контейнера страницы, а не окна: окно минус сайдбар (248 px) и поля.
+// P2 с окна lg (1024): 1024 − 248 − 2×24 ≈ 728 px → 45rem (720 px).
+// P3 с окна 2xl (1536): 1536 − 248 − 2×32 ≈ 1224 px → 76rem (1216 px).
 // Видимость считается от контейнера `@container/page`, который объявляет шелл. Без такого контейнера
 // условие `max-width` не срабатывает, и все колонки остаются видимыми.
 const PRIORITY_CLASS = {
   1: "",
-  2: "@max-[64rem]/page:hidden",
-  3: "@max-[96rem]/page:hidden",
+  2: "@max-[45rem]/page:hidden",
+  3: "@max-[76rem]/page:hidden",
 } satisfies Record<ColumnPriority, string>;
 
 type PriorityMeta = { priority?: ColumnPriority; numeric?: boolean } | undefined;
