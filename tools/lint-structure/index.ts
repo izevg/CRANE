@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkAaaTree } from "./aaa.ts";
 import { cargoMetadata, checkRustLayers, checkStructure, type Rules } from "./checks.ts";
-import { measure, sizeReport } from "./size.ts";
+import { measure, oversized, sizeReport } from "./size.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
@@ -22,6 +22,7 @@ if (process.argv.includes("--report")) {
 const violations = [
   ...checkStructure(root, rules),
   ...checkRustLayers(root, rules, cargoMetadata(root)),
+  ...oversized(measure(root, rules), rules.size.maxLines),
   ...checkAaaTree(root, rules),
 ];
 
