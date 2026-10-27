@@ -1,0 +1,11 @@
+[package]
+name = "crane-server"
+description = "Composition root и точка входа сервера: роли serve, worker, analyze, all, migrate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

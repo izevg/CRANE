@@ -1,0 +1,11 @@
+[package]
+name = "crane-app"
+description = "Use cases ядра: publish, fetch, promote, evaluate, search."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

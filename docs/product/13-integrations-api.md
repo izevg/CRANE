@@ -26,7 +26,7 @@ Keycloak отвечает на вопрос «кто это», CRANE на воп
 | Объект в Keycloak | Тип | Потоки OIDC | Назначение |
 | --- | --- | --- | --- |
 | Клиент `crane-web` | confidential | Authorization Code + PKCE (S256) | Вход в UI. Токены хранит BFF на сервере, браузер получает только HttpOnly-cookie сессии |
-| Клиент `crane-cli` | public | Device Authorization Grant (RFC 8628), refresh token | `crane login` в терминале, на сервере без браузера и в IDE |
+| Клиент `crane-cli` | public | Device Authorization Grant (RFC 8628), refresh token | `cctl login` в терминале, на сервере без браузера и в IDE |
 | Клиент `crane` | bearer-only (audience) | — | Аудитория `aud: crane` в токенах; client roles для ролей уровня экземпляра (раздел 14.12) |
 | Сервисные аккаунты автоматизации | confidential | Client Credentials | Jenkins, Argo CD, скрипты: обмен токена на краткоживущий токен CRANE (ниже) |
 | Группы `/crane/<workspace>/<роль>` | группы | — | Роли в workspace: `owner`, `maintainer`, `developer`, `reader` |
@@ -46,11 +46,11 @@ Keycloak отвечает на вопрос «кто это», CRANE на воп
 
 ### Разработчик: от входа до `npm install`
 
-1.  **Вход.** `crane login` запускает device flow: CLI показывает код и ссылку, пользователь входит в Keycloak (с MFA по политике realm). CLI получает access и refresh токены и кладёт refresh в системное хранилище секретов (Keychain, Secret Service, Credential Manager).
-2.  **Выпуск токена для клиентов.** `crane setup npm pip maven gradle nuget cargo` вызывает `POST /api/v1/tokens/session` с JWT пользователя. CRANE создаёт `crp_` на 12 часов, ограниченный scopes из запроса (например, только чтение или конкретные workspaces), и возвращает его один раз.
+1.  **Вход.** `cctl login` запускает device flow: CLI показывает код и ссылку, пользователь входит в Keycloak (с MFA по политике realm). CLI получает access и refresh токены и кладёт refresh в системное хранилище секретов (Keychain, Secret Service, Credential Manager).
+2.  **Выпуск токена для клиентов.** `cctl setup npm pip maven gradle nuget cargo` вызывает `POST /api/v1/tokens/session` с JWT пользователя. CRANE создаёт `crp_` на 12 часов, ограниченный scopes из запроса (например, только чтение или конкретные workspaces), и возвращает его один раз.
 3.  **Настройка клиентов.** CLI записывает токен в конфигурацию каждого клиента (таблица ниже). Секрет не попадает в историю shell и в файлы проекта.
 4.  **Работа.** Пакетный менеджер предъявляет `crp_`; CRANE находит запись по идентификатору, сверяет HMAC, проверяет эпоху пользователя и считает решение Cedar по текущим ролям.
-5.  **Продление.** `crane login --refresh` (или хук IDE) выпускает новый `crp_` по refresh-токену Keycloak без повторного ввода пароля. Когда сессия Keycloak закончилась, нужен новый вход.
+5.  **Продление.** `cctl login --refresh` (или хук IDE) выпускает новый `crp_` по refresh-токену Keycloak без повторного ввода пароля. Когда сессия Keycloak закончилась, нужен новый вход.
 
 Для тех, кому сессионного токена мало (например, офлайн-сборка на ноутбуке), владелец политики может разрешить личный долгоживущий токен: явные scopes, срок до 90 дней, напоминания за 14 и 3 дня, отзыв из UI одним действием.
 
@@ -96,8 +96,8 @@ CRANE реализует только sparse-протокол cargo (RFC 2789, �
 -   **Версионирование**: мажорная версия в пути; deprecation через заголовок `Sunset` минимум за 6 месяцев.
 -   **Идемпотентность**: заголовок `Idempotency-Key` для всех мутаций, хранится 24 ч вместе с хэшем запроса.
 -   **Пагинация** курсорами, фильтры как query-параметры, частичные ответы через `fields`.
--   **CLI** `crane`: login (device flow), robots, tokens, publish, promote, diag, warm, readiness, export.
--   **Декларативная конфигурация** (этап после P3): YAML-манифесты workspaces, репозиториев, namespaces и политик, применяемые через `crane apply` с dry run.
+-   **CLI** `cctl`: login (device flow), robots, tokens, publish, promote, diag, warm, readiness, export.
+-   **Декларативная конфигурация** (этап после P3): YAML-манифесты workspaces, репозиториев, namespaces и политик, применяемые через `cctl apply` с dry run.
 
 ## AI-контур: скоринг systemone и генеративные модели
 

@@ -24,6 +24,8 @@ yanked = "deny"
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# cargo-deny считает path-зависимость без версии wildcard; крейты workspace не публикуются (`publish = false`), и с этим флагом он их не трогает.
+allow-wildcard-paths = true
 deny = [
   { name = "openssl" },
   { name = "openssl-sys" },

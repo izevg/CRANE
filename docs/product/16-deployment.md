@@ -130,7 +130,7 @@ CRANE отдаёт телеметрию только в открытых фор�
 | `GET /healthz/live` | служебный | Процесс жив и event loop не завис | Kubelet |
 | `GET /healthz/ready` | служебный | Готов принимать трафик: PostgreSQL и хранилище доступны; Valkey и upstream на готовность не влияют | Kubelet, балансировщик |
 | `GET /healthz/startup` | служебный | Миграции применены, кэши прогреты | Kubelet |
-| `GET /api/v1/status` | основной | Версия, режим (normal, read-only, degraded), состояние компонентов и фидов, отставание экспорта в SIEM | Пользователи, CLI `crane diag`, внешние статус-страницы |
+| `GET /api/v1/status` | основной | Версия, режим (normal, read-only, degraded), состояние компонентов и фидов, отставание экспорта в SIEM | Пользователи, CLI `cctl diag`, внешние статус-страницы |
 | OTLP export | исходящий | Трассы, журналы и, по желанию, метрики в OpenTelemetry Collector (gRPC или HTTP) | Настраивается endpoint и заголовки |
 
 ### Каталог метрик

@@ -1,0 +1,23 @@
+[package]
+name = "crane-memory"
+description = "In-memory адаптер портов для тестов ядра."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes = "1"
+crane-domain = { path = "../../../core/domain" }
+crane-ports = { path = "../../../core/ports" }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+sha2 = "0.10"
+uuid = "1"
+
+[dev-dependencies]
+crane-ports = { path = "../../../core/ports", features = ["contract"] }
+futures-executor = "0.3"

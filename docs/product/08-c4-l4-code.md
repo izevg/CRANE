@@ -27,11 +27,11 @@ crane/
 │     ├─ analyzer/            песочница разбора архивов
 │     └─ server/              main: роли serve | worker | analyze | all | migrate
 ├─ web/                       React SPA на собственном UI kit (FSD)
-├─ cli/                       crane CLI (Rust, clap)
+├─ cli/                       CLI cctl (Rust, clap)
 └─ deploy/                    compose/, helm/
 ```
 
-*Рис. 8.0. Раскладка репозитория (имя CLI уточняется: раздел 19, решение 12).*
+*Рис. 8.0. Раскладка репозитория (CLI называется `cctl`: раздел 19, решение 12).*
 
 ## Слои и направление зависимостей
 

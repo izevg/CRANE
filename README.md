@@ -168,10 +168,10 @@ helm install crane oci://example.org/charts/crane \
 **Разработчик:**
 
 ```bash
-crane login                                   # вход через Keycloak (device flow, MFA)
-crane setup npm pip maven gradle nuget cargo        # токены и конфигурация пакетных менеджеров
+cctl login                                    # вход через Keycloak (device flow, MFA)
+cctl setup npm pip maven gradle nuget cargo         # токены и конфигурация пакетных менеджеров
 npm install @acme/ui                          # дальше всё как обычно
-crane diag <request-id>                       # почему отказали и как исправить
+cctl diag <request-id>                        # почему отказали и как исправить
 ```
 
 **GitLab CI, без хранимых секретов:**

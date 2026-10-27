@@ -168,10 +168,10 @@ helm install crane oci://example.org/charts/crane \
 **Developer:**
 
 ```bash
-crane login                                   # sign in via Keycloak (device flow, MFA)
-crane setup npm pip maven gradle nuget cargo        # tokens and package manager configuration
+cctl login                                    # sign in via Keycloak (device flow, MFA)
+cctl setup npm pip maven gradle nuget cargo         # tokens and package manager configuration
 npm install @acme/ui                          # business as usual from here
-crane diag <request-id>                       # why it was denied and how to fix it
+cctl diag <request-id>                        # why it was denied and how to fix it
 ```
 
 **GitLab CI, no stored secrets:**

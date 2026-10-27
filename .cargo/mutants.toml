@@ -1,4 +1,8 @@
 # Полный мутационный гейт запускается локально перед PR в release/* (task gate).
 timeout_multiplier = 3.0
 minimum_test_timeout = 20
-exclude_globs = ["**/tests/**", "**/benches/**"]
+# Контракт портов — исполняемая спецификация (тестовый код), мутировать её бессмысленно.
+exclude_globs = ["**/tests/**", "**/benches/**", "crates/core/ports/src/contract/**"]
+# Поведение портов проверяет контракт в крейтах-адаптерах; без этого мутанты ports
+# прогоняют только тесты самого ports, где проверять нечего.
+test_workspace = true
