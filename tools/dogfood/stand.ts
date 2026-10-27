@@ -1,4 +1,4 @@
-// Одноразовый стенд: те же docker-compose.yaml и docker-compose.s3.yaml, что у оператора, с отдельным проектом, секретами,
+// Одноразовый стенд: те же docker-compose.yaml, docker-compose.s3.yaml и docker-compose.cache.yaml, что у оператора, с отдельным проектом, секретами,
 // подсетью и портами. Всё, что создано, снимается в down(), в том числе после сбоя.
 import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -60,24 +60,26 @@ const ENV_LINE = /^([A-Z][A-Z0-9_]*)=(.*)$/;
 const OVERLAP = /Pool overlaps|invalid pool request/;
 const ENV_DIST = ".env.dist";
 // Переменные с путями секретов → имя файла в каталоге стенда. Имя файла служит именем секрета в
-// сообщениях проверки утечек. Форматы файлов (URL каталога, ключи S3) знает только secrets-init.
+// сообщениях проверки утечек. Форматы файлов (URL каталога и кэша, ключи S3) знает только secrets-init.
 const SECRET_FILES = {
   CRANE_TOKEN_SECRET: "crane_token",
   POSTGRES_PASSWORD_SECRET: "postgres_password",
   CRANE_DATABASE_URL_SECRET: "database_url",
   S3_ACCESS_KEY_ID_SECRET: "s3_access_key_id",
   S3_SECRET_ACCESS_KEY_SECRET: "s3_secret_access_key",
+  VALKEY_PASSWORD_SECRET: "valkey_password",
+  CRANE_CACHE_URL_SECRET: "cache_url",
 } as const;
 const WRONG_TOKEN_NAME = "неверный токен";
 const S3_ENDPOINT = "http://seaweedfs:8333";
-// Стенд = Valkey + S3 + PostgreSQL: те же файлы и профиль, что включает оператор.
+// Стенд = Valkey + S3 + PostgreSQL: те же override-файлы, что включает оператор.
 const COMPOSE_MODES = [
   "-f",
   "docker-compose.yaml",
   "-f",
   "docker-compose.s3.yaml",
-  "--profile",
-  "cache",
+  "-f",
+  "docker-compose.cache.yaml",
 ];
 /**
  * Имя proxy-репозитория crates.io для цели cargo с номером `index`: `/cargo/<имя>/`. Ключ кэша включает
@@ -259,9 +261,6 @@ function startCompose(
       `CRANE_BLOBS=${settings.blobs}`,
       `CRANE_TOKEN_PRINCIPAL=${settings.principal}`,
       `CRANE_CARGO_PROXY_REPOS=${settings.proxyRepos.join(",")}`,
-      // L2-кэш в Valkey. Адрес без пароля и учётных данных, поэтому не секрет: сервис valkey в compose
-      // без auth и доступен только по сети default.
-      "CRANE_CACHE=valkey://valkey:6379",
       "CRANE_NPM_REPOS=internal",
       `CRANE_NPM_PROXY_REPOS=${npmProxyRepo}`,
       `CRANE_NAMESPACES=${NAMESPACES.join(",")}`,
