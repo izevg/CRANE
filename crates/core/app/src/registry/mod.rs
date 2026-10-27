@@ -1,8 +1,8 @@
 //! Use cases bounded context «реестр»: публикация, получение и yank версий.
 
-mod fetch;
-mod publish;
-mod yank;
+mod flags;
+mod read;
+mod write;
 
 use std::fmt;
 use std::sync::Arc;
