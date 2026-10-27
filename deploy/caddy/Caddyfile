@@ -2,5 +2,9 @@
 # Обе переменные приходят из environment сервиса caddy, без дефолтов.
 {$CRANE_HOST} {
 	encode zstd gzip
-	reverse_proxy crane:{$CRANE_HTTP_PORT}
+	# CRANE верит X-Request-Id от доверенных прокси (CRANE_TRUSTED_PROXIES), поэтому
+	# клиентский заголовок удаляем: без него CRANE сам выдаёт идентификатор (UUIDv7).
+	reverse_proxy crane:{$CRANE_HTTP_PORT} {
+		header_up -X-Request-Id
+	}
 }
