@@ -99,6 +99,9 @@ pub enum RegistryError {
     /// Обрыв тела запроса: ошибка клиента, не хранилища.
     #[error("ошибка чтения тела запроса")]
     Body(#[source] std::io::Error),
+    /// Каталог или blob-хранилище не отвечают: для клиента это 503, повтор позже имеет смысл.
+    #[error("хранилище не отвечает")]
+    Unreachable(#[source] Box<dyn std::error::Error + Send + Sync>),
     /// Сбой хранилища или нарушенный инвариант: для клиента это 500.
     #[error("ошибка бэкенда")]
     Backend(#[source] Box<dyn std::error::Error + Send + Sync>),
@@ -109,6 +112,7 @@ impl From<CatalogError> for RegistryError {
     fn from(error: CatalogError) -> Self {
         match error {
             CatalogError::VersionExists => Self::VersionExists,
+            CatalogError::Unreachable(source) => Self::Unreachable(source),
             // `find_*` возвращают Option, а записи физически не удаляются, поэтому
             // NotFound и StateConflict здесь означают нарушенный инвариант, то есть 500.
             CatalogError::NotFound
@@ -122,6 +126,7 @@ impl From<BlobError> for RegistryError {
     fn from(error: BlobError) -> Self {
         match error {
             BlobError::Body(source) => Self::Body(source),
+            BlobError::Unreachable(source) => Self::Unreachable(source),
             // Нет blob при существующей записи каталога — нарушенный инвариант (500),
             // а не AssetNotFound: клиент просил файл, который каталог обещает.
             BlobError::NotFound(_) | BlobError::Backend(_) => Self::Backend(Box::new(error)),
@@ -183,12 +188,12 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
     ///
     /// # Errors
     ///
-    /// `Backend`, если каталог или blob-хранилище не ответили.
+    /// `Unreachable`, если каталог или blob-хранилище не ответили; `Backend` — другой сбой.
     pub async fn ready(&self) -> Result<(), RegistryError> {
         self.catalog.find_repository(Format::Cargo, "").await?;
         match self.blobs.open(&Sha256::from([0; 32])).await {
             Ok(_) | Err(BlobError::NotFound(_)) => Ok(()),
-            Err(error) => Err(RegistryError::Backend(Box::new(error))),
+            Err(error) => Err(error.into()),
         }
     }
 
@@ -373,6 +378,24 @@ mod tests {
         assert!(
             mapped.iter().all(is_backend),
             "отсутствующий blob при записи каталога — 500, не AssetNotFound: {mapped:?}"
+        );
+    }
+
+    #[test]
+    fn unreachable_storage_errors_keep_their_kind() {
+        // Arrange
+        let catalog = CatalogError::Unreachable("нет связи".into());
+        let blob = BlobError::Unreachable("нет связи".into());
+
+        // Act
+        let mapped = [RegistryError::from(catalog), RegistryError::from(blob)];
+
+        // Assert
+        assert!(
+            mapped
+                .iter()
+                .all(|error| matches!(error, RegistryError::Unreachable(_))),
+            "недоступность хранилища — 503, а не 500: {mapped:?}"
         );
     }
 }

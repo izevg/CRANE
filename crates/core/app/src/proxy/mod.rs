@@ -59,6 +59,9 @@ pub enum ProxyError {
     },
     #[error("ответ upstream больше {limit} байт")]
     TooLarge { limit: u64 },
+    /// Blob-хранилище не отвечает: клиенту 503, это не сбой upstream и не баг.
+    #[error("хранилище не отвечает")]
+    Unreachable(#[source] Arc<dyn std::error::Error + Send + Sync>),
     #[error("ошибка бэкенда")]
     Backend(#[source] Arc<dyn std::error::Error + Send + Sync>),
 }
@@ -66,6 +69,14 @@ pub enum ProxyError {
 impl ProxyError {
     fn backend(error: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Backend(Arc::new(error))
+    }
+
+    /// Единственное место, где ошибка blob-хранилища становится ошибкой движка.
+    fn blob(error: BlobError) -> Self {
+        match error {
+            BlobError::Unreachable(source) => Self::Unreachable(Arc::from(source)),
+            other => Self::backend(other),
+        }
     }
 
     fn invariant(what: &'static str) -> Self {
@@ -194,7 +205,7 @@ where
                     .blobs
                     .open(&digests.sha256)
                     .await
-                    .map_err(ProxyError::backend)?;
+                    .map_err(ProxyError::blob)?;
                 Ok(Served {
                     body: Fetched { digests, body },
                     result: CacheResult::Miss,
@@ -267,7 +278,7 @@ where
                 })),
                 // Класс proxy-cache разрешено терять (09): запись без blob — промах, качаем заново.
                 Err(BlobError::NotFound(_)) => Ok(None),
-                Err(error) => Err(ProxyError::backend(error)),
+                Err(error) => Err(ProxyError::blob(error)),
             },
             CachedState::Document { .. } => Ok(None),
         }

@@ -11,6 +11,8 @@ use crane_app::registry::RegistryError;
 use crane_domain::registry::VersionState;
 
 const INTERNAL_DETAIL: &str = "внутренняя ошибка сервера";
+/// Единственный текст клиенту при недоступном хранилище: адреса и причины остаются в журнале.
+const UNREACHABLE_DETAIL: &str = "хранилище временно недоступно";
 const UPSTREAM_DETAIL: &str = "upstream недоступен";
 
 /// Что именно писать в тело ошибки. Ответ несёт его в расширениях с пустым телом:
@@ -71,6 +73,10 @@ impl From<ProxyError> for ClientError {
             ProxyError::Upstream(_)
             | ProxyError::DigestMismatch { .. }
             | ProxyError::TooLarge { .. } => Self::new(StatusCode::BAD_GATEWAY, UPSTREAM_DETAIL),
+            ProxyError::Unreachable(_) => {
+                let (status, detail) = unreachable(&error);
+                Self { status, detail }
+            }
             ProxyError::Backend(_) => Self::internal(&error),
         }
     }
@@ -168,6 +174,16 @@ fn internal(source: &(dyn Error + 'static)) -> (StatusCode, String) {
     )
 }
 
+/// 503: хранилище не отвечает, повтор позже имеет смысл. Это отказ среды, а не баг, поэтому warn.
+fn unreachable(source: &(dyn Error + 'static)) -> (StatusCode, String) {
+    // Цепочка может содержать хост хранилища: она только в журнале.
+    tracing::warn!(error = %chain(source), "хранилище недоступно");
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        UNREACHABLE_DETAIL.to_owned(),
+    )
+}
+
 fn describe(error: &RegistryError) -> (StatusCode, String) {
     let status = match error {
         RegistryError::RepositoryNotFound
@@ -184,6 +200,7 @@ fn describe(error: &RegistryError) -> (StatusCode, String) {
         }
         RegistryError::DigestMismatch { .. } => StatusCode::UNPROCESSABLE_ENTITY,
         RegistryError::Body(_) => StatusCode::BAD_REQUEST,
+        RegistryError::Unreachable(_) => return unreachable(error),
         RegistryError::Backend(_) => return internal(error),
     };
     (status, error.to_string())
@@ -247,6 +264,10 @@ mod tests {
                 StatusCode::BAD_REQUEST,
             ),
             (
+                RegistryError::Unreachable("сбой".into()),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
+            (
                 RegistryError::Backend("сбой".into()),
                 StatusCode::INTERNAL_SERVER_ERROR,
             ),
@@ -274,6 +295,7 @@ mod tests {
                 actual: Box::new(sum),
             },
             ProxyError::TooLarge { limit: 1 },
+            ProxyError::Unreachable(Arc::new(io::Error::other("postgres://u:SECRET@h/db"))),
             ProxyError::Backend(Arc::new(io::Error::other("postgres://u:SECRET@h/db"))),
         ];
 
@@ -294,6 +316,10 @@ mod tests {
                 bad_gateway.clone(),
                 bad_gateway,
                 (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    UNREACHABLE_DETAIL.to_owned()
+                ),
+                (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     INTERNAL_DETAIL.to_owned()
                 ),
@@ -311,6 +337,18 @@ mod tests {
 
         // Assert
         assert_eq!(detail, INTERNAL_DETAIL);
+    }
+
+    #[test]
+    fn unreachable_detail_hides_the_source_message() {
+        // Arrange
+        let error = RegistryError::Unreachable("postgres://u:SECRET@h/db".into());
+
+        // Act
+        let (_, detail) = describe(&error);
+
+        // Assert
+        assert_eq!(detail, UNREACHABLE_DETAIL);
     }
 
     #[test]

@@ -1,9 +1,10 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use object_store::aws::{AmazonS3Builder, AmazonS3ConfigKey};
 use object_store::local::LocalFileSystem;
 use object_store::prefix::PrefixStore;
-use object_store::{Error, ObjectStore};
+use object_store::{BackoffConfig, Error, ObjectStore, RetryConfig};
 use url::Url;
 
 use crate::ObjectBlobStore;
@@ -129,13 +130,29 @@ pub fn is_public_s3_param(key: &str, value: &str) -> bool {
     PUBLIC_S3_KEYS.contains(&name) && !endpoint_has_credentials
 }
 
+/// Отказ blob-хранилища укладывается в тот же бюджет, что ожидание соединения с БД
+/// (`DB_ACQUIRE_TIMEOUT`, 5 с): клиент получает 503 за секунды, а не через 3 минуты
+/// ретраев `object_store` по умолчанию (10 попыток, 180 с).
+const RETRY_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_RETRIES: usize = 3;
+
+pub(crate) fn retry() -> RetryConfig {
+    RetryConfig {
+        max_retries: MAX_RETRIES,
+        retry_timeout: RETRY_TIMEOUT,
+        backoff: BackoffConfig::default(),
+    }
+}
+
 fn s3(url: &Url, key: Option<S3Key>) -> Result<Arc<dyn ObjectStore>, Error> {
     let bucket = url
         .host_str()
         .ok_or_else(|| not_supported("в s3:// URL не указан бакет"))?;
     // from_env, а не parse_url_opts: тот игнорирует учётные данные из окружения
     // и молча отбрасывает неизвестные ключи.
-    let mut builder = AmazonS3Builder::from_env().with_url(format!("s3://{bucket}"));
+    let mut builder = AmazonS3Builder::from_env()
+        .with_url(format!("s3://{bucket}"))
+        .with_retry(retry());
     for (key, value) in url.query_pairs() {
         builder = builder.with_config(key.parse::<AmazonS3ConfigKey>()?, value.into_owned());
     }

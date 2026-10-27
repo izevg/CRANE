@@ -28,6 +28,35 @@ pub(crate) fn corrupt(what: impl Display) -> CatalogError {
     CatalogError::Backend(format!("повреждённая запись каталога: {what}").into())
 }
 
+/// Сбой драйвера или БД: единственная воронка, где решается, «хранилище не отвечает» это или баг.
+pub(crate) fn backend(error: sqlx::Error) -> CatalogError {
+    if unreachable(&error) {
+        CatalogError::Unreachable(Box::new(error))
+    } else {
+        CatalogError::Backend(Box::new(error))
+    }
+}
+
+/// Соединение или сервер БД недоступны: повтор позже имеет смысл.
+fn unreachable(error: &sqlx::Error) -> bool {
+    match error {
+        sqlx::Error::PoolTimedOut
+        | sqlx::Error::PoolClosed
+        | sqlx::Error::Io(_)
+        | sqlx::Error::Tls(_)
+        | sqlx::Error::WorkerCrashed => true,
+        sqlx::Error::Database(db) => db.code().is_some_and(|code| unreachable_code(&code)),
+        _ => false,
+    }
+}
+
+/// SQLSTATE «сервер не принимает запросы»: класс 08 (сбой соединения) и остановка сервера
+/// (57P01 `admin_shutdown`, 57P02 `crash_shutdown`, 57P03 `cannot_connect_now`). При `compose stop`
+/// живая сессия получает именно 57P01, а не ошибку ввода-вывода.
+fn unreachable_code(code: &str) -> bool {
+    code.starts_with("08") || matches!(code, "57P01" | "57P02" | "57P03")
+}
+
 pub(crate) const fn kind_as_str(kind: RepositoryKind) -> &'static str {
     match kind {
         RepositoryKind::Hosted => "hosted",
@@ -229,6 +258,44 @@ mod tests {
 
         // Assert
         assert_eq!(back, moments.map(Some));
+    }
+
+    #[test]
+    fn server_shutdown_and_connection_sqlstates_are_unreachable() {
+        // Arrange
+        let codes = [
+            "08000", "08006", "57P01", "57P02", "57P03", "23505", "40001", "57014", "42P01", "",
+        ];
+
+        // Act
+        let actual = codes.map(unreachable_code);
+
+        // Assert
+        assert_eq!(
+            actual,
+            [
+                true, true, true, true, true, false, false, false, false, false
+            ]
+        );
+    }
+
+    #[test]
+    fn driver_errors_split_into_unreachable_and_backend() {
+        // Arrange
+        let cases = [
+            sqlx::Error::PoolTimedOut,
+            sqlx::Error::PoolClosed,
+            sqlx::Error::WorkerCrashed,
+            sqlx::Error::Io(std::io::Error::other("connection refused")),
+            sqlx::Error::RowNotFound,
+            sqlx::Error::ColumnNotFound("x".to_owned()),
+        ];
+
+        // Act
+        let actual = cases.map(|error| matches!(backend(error), CatalogError::Unreachable(_)));
+
+        // Assert
+        assert_eq!(actual, [true, true, true, true, false, false]);
     }
 
     #[test]

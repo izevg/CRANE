@@ -61,6 +61,24 @@ fn blob_backend_failure_makes_registry_not_ready() {
 }
 
 #[test]
+fn blob_unreachable_makes_registry_not_ready_as_unreachable() {
+    // Arrange
+    let registry = Seed::new().registry_with(
+        |catalog| catalog,
+        |blobs| OpenFailsBlobs::new(blobs, || BlobError::Unreachable("нет связи".into())),
+    );
+
+    // Act
+    let result = block_on(registry.ready());
+
+    // Assert
+    assert!(
+        matches!(result, Err(RegistryError::Unreachable(_))),
+        "{result:?}"
+    );
+}
+
+#[test]
 fn missing_probe_blob_still_means_blob_store_answered() {
     // Arrange
     let registry = Seed::new().registry_with(

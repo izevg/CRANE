@@ -101,3 +101,37 @@ fn cas_backend_failure_on_hit_is_a_backend_error() {
     // Assert
     assert!(matches!(outcome, Err(ProxyError::Backend(_))));
 }
+
+#[test]
+fn cas_unreachable_on_hit_is_an_unreachable_error() {
+    // Arrange
+    let cache = SharedCache::default();
+    let record = Cached {
+        fetched_at: epoch(),
+        state: CachedState::Blob(Digests {
+            sha256: hello_sha256(),
+            sha512: hello_sha512(),
+            sha1: hello_sha1(),
+            size: 5,
+        }),
+    };
+    block_on(cache.put(&key(CRATE), record, secs(1))).unwrap();
+    let clock = Arc::new(ManualClock::new(epoch()));
+    let engine = ProxyEngine::new(
+        FakeUpstream::new([]),
+        cache,
+        SharedLeases::new(Arc::clone(&clock)),
+        OpenFailsBlobs::new(MemoryBlobStore::default(), || {
+            BlobError::Unreachable("нет связи".into())
+        }),
+        clock,
+        ProxyLimits::DEFAULT,
+    );
+
+    // Act
+    let outcome =
+        block_on(engine.artifact(&origin(), &path(CRATE), None, &NegativePolicy::ARTIFACT));
+
+    // Assert
+    assert!(matches!(outcome, Err(ProxyError::Unreachable(_))));
+}
