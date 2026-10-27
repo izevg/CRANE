@@ -101,17 +101,17 @@ gitGraph
 | Источник | feature-ветка | `release/vX.Y.Z` |
 | Слияние | squash | merge commit (история нужна для CHANGELOG) |
 | Заголовок | Conventional Commit | `chore(release): vX.Y.Z` |
-| В описании | вывод `task gate` (`Gate: passed`, `Gate-SHA` — коммит из истории PR) | — |
-| Проверки CI | `branch-flow`, `title`, `gate-mark`, `structure`, `rust`, `web` | `branch-flow`, `title`, `structure`, `rust`, `web` |
+| В описании | таблица ручных мутантов (мутация → тест, который её поймал) | вывод `task gate` (`Gate: passed`, `Gate-SHA` — коммит из истории PR) |
+| Проверки CI | `branch-flow`, `title`, `structure`, `rust`, `web` | `branch-flow`, `title`, `gate-mark`, `structure`, `rust`, `web` |
 | Одобрение | сопровождающий; для доступа, токенов, криптографии, протоколов и аудита — двое, один из них отвечает за безопасность | владелец проекта |
 
-Полный мутационный гейт (`task gate`) запускается локально перед PR в `release/*` и в CI не гоняется. После ребейза или нового коммита в PR его нужно повторить и обновить `Gate-SHA`.
+PR в `release/*` проходит `task check`, тесты затронутой части (`task rust:test:pg`, `task e2e`) и ручные мутанты ревью. Полный мутационный гейт (`task gate`) запускается локально один раз на веху — перед PR `release/vX.Y.Z` → `main`, по всему дифу релиза относительно `main`; в CI не гоняется. Найденные им пробелы закрываются PR в ту же релизную ветку, затем гейт повторяется и `Gate-SHA` обновляется.
 
 ## Как выпускается версия
 
 1. Владелец выбирает версию по таблице выше и создаёт `release/vX.Y.Z` от `main`.
-2. Feature-ветки (от `main`, при необходимости перебазированные на релизную) сливаются в неё squash-ом через PR с зелёным `task gate`.
-3. Когда объём вехи готов и CI на релизной ветке зелёный, открывается PR `release/vX.Y.Z` → `main` с заголовком `chore(release): vX.Y.Z`. Владелец одобряет и сливает его merge commit.
+2. Feature-ветки (от `main`, при необходимости перебазированные на релизную) сливаются в неё squash-ом через PR с зелёными проверками и таблицей ручных мутантов.
+3. Когда объём вехи готов, на релизной ветке запускается полный `task gate`; когда он и CI зелёные, открывается PR `release/vX.Y.Z` → `main` с заголовком `chore(release): vX.Y.Z`. Владелец одобряет и сливает его merge commit.
 4. Workflow `release` запускается на слиянии: проверяет, что тега ещё нет, запускает `tools/bump-version.ts`, `cargo update --workspace`, `git-cliff --tag vX.Y.Z`, делает коммит `chore(release): vX.Y.Z`, ставит аннотированный тег и пушит их в `main`.
 5. Тег запускает workflow `publish`: GitHub Release с заметками из CHANGELOG.
 6. Релизная и feature-ветки удаляются (GitHub удаляет ветку при слиянии), worktree очищаются.

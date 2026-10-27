@@ -87,7 +87,7 @@ These take effect with the first code.
 3. All CI checks are green.
 4. A maintainer approval is required; changes to access control, tokens, cryptography, protocols or audit need two, one of them from the security owner.
 5. Review comments are discussed in the pull request, and the decision is recorded there.
-6. Merges into `release/*` are squashed; the PR title follows Conventional Commits and the description carries the `task gate` result.
+6. Merges into `release/*` are squashed; the PR title follows Conventional Commits and the description carries a manual mutants table; the full `task gate` runs before the release PR to `main`.
 7. After the release is approved, the `release/vX.Y.Z` → `main` PR is merged with a merge commit; the `release` workflow sets versions, CHANGELOG and the `vX.Y.Z` tag ([section 16.7](docs/product/16-deployment.md)).
 
 ## Contribution license

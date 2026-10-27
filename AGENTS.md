@@ -49,7 +49,8 @@ The single entry point is the [Taskfile](Taskfile.yml) (`task --list`).
 | PostgreSQL tests | `task rust:test:pg` (needs `.env` from `.env.dist` and Docker) |
 | Web: types, Biome, Steiger, knip, depcruise | `task web:check` · unit tests: `task web:test` |
 | File structure and crate layers | `task structure` |
-| Full gate before a PR to `release/*` | `task gate` (unit tests + cargo-mutants and Stryker mutations + Playwright) |
+| Checks before a PR to `release/*` | `task check` + the tests the change touches (`task rust:test:pg` for storage, `task e2e` for HTTP, server and delivery) + a manual mutants table in the PR description |
+| Full gate before the release PR `release/*` → `main` | `task gate` (unit tests + cargo-mutants and Stryker mutations over the whole release diff against `main` + e2e + Playwright) |
 | Prune worktrees of merged branches | `task worktrees:prune` (dry-run) · `task worktrees:prune -- --apply` |
 | Version bump, CHANGELOG, guidebook | `task bump TAG=vX.Y.Z` · `task changelog` · `task guidebook` |
 
@@ -109,19 +110,19 @@ Not counted: manifests and configs (`Cargo.toml`, `package.json`, `tsconfig*.jso
       );
   }
   ```
-- Mutation testing: `cargo-mutants` and Stryker. The critical path (format protocols, access control, CAS and publishing, tokens) must hold the threshold. The full gate runs **locally** (`task gate`) before a PR to `release/*`; it is not run in CI. Playwright and Storybook tests are also local.
+- Mutation testing: `cargo-mutants` and Stryker. The critical path (format protocols, access control, CAS and publishing, tokens) must hold the threshold. A feature PR to `release/*` carries a **manual mutants table** in its description (mutation → test that caught it), produced by the coder and the lead during review. The full gate runs **locally** (`task gate`) once per milestone, before the release PR `release/*` → `main`; it is not run in CI. Gaps it finds are fixed by PRs into the same release branch before the release PR merges. Playwright and Storybook tests are also local.
 
 ## Git flow
 
 The full description (branch diagram, versioning, tag rules, release procedure) is in [GITFLOW.md](GITFLOW.md); below is the short version.
 
 - `main` is the primary (production) branch. `release/vX.Y.Z` and feature branches are created from it.
-- A feature branch from `main` → PR to `release/vX.Y.Z`, merged with **squash**. The PR title is a Conventional Commit (it becomes the squash message). The PR description contains the output of `task gate` (`Gate: passed`, `Gate-SHA`).
+- A feature branch from `main` → PR to `release/vX.Y.Z`, merged with **squash**. The PR title is a Conventional Commit (it becomes the squash message). The PR description contains the manual mutants table; `task gate` output (`Gate: passed`, `Gate-SHA`) goes into the release PR to `main`.
 - **Rebasing feature branches onto release branches is allowed, and sometimes required.** A feature branch is created from `main`, but its PR targets a release branch, so rebase it onto `origin/release/vX.Y.Z` (`git rebase origin/release/vX.Y.Z`):
-  - when the release branch received changes your work depends on (for example a fix that `task gate` needs), or that conflict with it;
+  - when the release branch received changes your work depends on (for example a fix your checks need), or that conflict with it;
   - before opening the PR and whenever the release branch moves ahead, so that the PR diff contains only your own changes.
 
-  Rules: rebase only your own feature branches and push them with `git push --force-with-lease` (never plain `--force`); never rebase or force-push `main` or `release/*`; the rebase changes commit SHAs, so rerun `task gate` and update `Gate-SHA` in the PR description (CI requires the `Gate-SHA` to be in the PR history). Do not merge release branches into feature branches; use rebase.
+  Rules: rebase only your own feature branches and push them with `git push --force-with-lease` (never plain `--force`); never rebase or force-push `main` or `release/*`; the rebase changes commit SHAs, so rerun your checks. Do not merge release branches into feature branches; use rebase.
 - The owner approves the release → PR `release/vX.Y.Z` → `main`, merged with a **merge commit** (not squash: the commit history is needed for the CHANGELOG).
 - After the merge into `main`, the `release` workflow bumps the versions (`Cargo.toml`, `package.json`, `Chart.yaml`), rebuilds `CHANGELOG.md` from commits (window "previous tag..HEAD", `git-cliff`), makes the `chore(release): vX.Y.Z` commit and creates the `vX.Y.Z` tag. The tag triggers the `publish` workflow: a GitHub Release with notes from the CHANGELOG. Images are not built for ghcr yet.
 - Commit types: `feat fix perf refactor docs test build ci chore revert style`; the scope is kebab-case, the header is ≤ 100 characters.
