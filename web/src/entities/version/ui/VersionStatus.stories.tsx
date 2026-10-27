@@ -34,7 +34,12 @@ export const BlockedEmergency: Story = {
   args: {
     version: {
       state: "blocked",
-      block_reason: { kind: "emergency", advisory_id: "CVE-2026-31337", fixed_in: "4.17.21" },
+      block_reason: {
+        kind: "emergency",
+        block_id: "0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
+        advisory_id: "CVE-2026-31337",
+        fixed_in: "4.17.21",
+      },
     },
   },
   play: async ({ canvasElement }) => {
@@ -66,7 +71,11 @@ export const Dark: Story = {
   args: {
     version: {
       state: "blocked",
-      block_reason: { kind: "emergency", advisory_id: "CVE-2026-31337" },
+      block_reason: {
+        kind: "emergency",
+        block_id: "0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
+        advisory_id: "CVE-2026-31337",
+      },
     },
   },
 };
@@ -77,7 +86,12 @@ export const English: Story = {
   args: {
     version: {
       state: "blocked",
-      block_reason: { kind: "emergency", advisory_id: "CVE-2026-31337", fixed_in: "4.17.21" },
+      block_reason: {
+        kind: "emergency",
+        block_id: "0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
+        advisory_id: "CVE-2026-31337",
+        fixed_in: "4.17.21",
+      },
     },
   },
   play: async ({ canvasElement }) => {
