@@ -22,7 +22,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "types": ["vite/client"],
-    "paths": { "~/*": ["./src/*"], "~test/*": ["./test/*"] }
+    "paths": { "~/*": ["./src/*"], "~test/*": ["./test/*"], "~brand/*": ["../brand/*"] }
   },
   "include": ["src", "test", "*.config.ts"]
 }

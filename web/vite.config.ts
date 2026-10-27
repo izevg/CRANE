@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "~test": new URL("./test", import.meta.url).pathname,
+      // Логотип CRANE живёт в корневом brand/ (единственный источник истины), в web/ его не копируем.
+      "~brand": new URL("../brand", import.meta.url).pathname,
       "~": new URL("./src", import.meta.url).pathname,
     },
   },
