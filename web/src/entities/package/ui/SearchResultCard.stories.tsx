@@ -61,6 +61,14 @@ export const WithRisk: Story = {
   },
 };
 
+export const WithBlockingRisk: Story = {
+  name: "С риском: P0 · заполненная точка",
+  args: { item: { ...BASE_ITEM, risk: { max_open_priority: "P0", open_count: 2 } } },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByText("P0 · 2 находки")).toBeVisible();
+  },
+};
+
 export const Deprecated: Story = {
   name: "Устаревший",
   args: {

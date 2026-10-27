@@ -57,6 +57,28 @@ describe("SearchResultCard", () => {
     expect(screen.getByText("P2 · 2 находки")).toBeVisible();
   });
 
+  it("пилюля P0 рисуется с заполненной точкой вместо иконки", () => {
+    // Arrange
+    // Act
+    card({ risk: { max_open_priority: "P0", open_count: 1 } });
+
+    // Assert
+    const pill = screen.getByText("P0 · 1 находка");
+    expect(pill.querySelector('[data-slot="status-dot"]')).not.toBeNull();
+    expect(pill.querySelector('[data-slot="status-icon"]')).toBeNull();
+  });
+
+  it("пилюля P1 рисуется с иконкой, как и положено тону error", () => {
+    // Arrange
+    // Act
+    card({ risk: { max_open_priority: "P1", open_count: 1 } });
+
+    // Assert
+    expect(
+      screen.getByText("P1 · 1 находка").querySelector('[data-slot="status-icon"]'),
+    ).not.toBeNull();
+  });
+
   it("пять находок склоняются как «находок»", () => {
     // Arrange
     // Act

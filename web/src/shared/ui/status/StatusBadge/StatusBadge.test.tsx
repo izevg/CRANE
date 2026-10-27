@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { VERSION_STATE } from "~/shared/api";
+import { PRIORITY, VERSION_STATE } from "~/shared/api";
 import type { Tone } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 
@@ -82,5 +82,15 @@ describe("StatusBadge", () => {
 
     // Assert
     expect(screen.getByText("Заблокирована")).toBeVisible();
+  });
+
+  it("P0 отличается от P1 заполненной точкой при том же тоне", () => {
+    // Arrange
+    // Act
+    const { container } = render(<StatusBadge {...PRIORITY.P0} label="P0" />);
+
+    // Assert
+    expect(container.querySelector('[data-slot="status-dot"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="status-icon"]')).toBeNull();
   });
 });

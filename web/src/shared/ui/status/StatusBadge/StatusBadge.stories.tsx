@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
-import { VERSION_STATE } from "~/shared/api";
+import { PRIORITY, VERSION_STATE } from "~/shared/api";
 import { StatusBadge } from "~/shared/ui/status";
 
 const meta = {
@@ -76,5 +76,19 @@ export const FromDictionaryEnglish: Story = {
   globals: { locale: "en" },
   play: async ({ canvasElement }) => {
     await expect(within(canvasElement).getByText("Quarantine")).toBeVisible();
+  },
+};
+
+export const Strong: Story = {
+  name: "P0 против P1: заполненная точка",
+  render: () => (
+    <div className="flex flex-wrap items-center gap-3">
+      <StatusBadge {...PRIORITY.P0} label="P0" />
+      <StatusBadge {...PRIORITY.P1} label="P1" />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.querySelectorAll('[data-slot="status-dot"]')).toHaveLength(1);
+    await expect(canvasElement.querySelectorAll('[data-slot="status-icon"]')).toHaveLength(1);
   },
 };

@@ -7,13 +7,15 @@ type StatusBadgeProps = {
   tone: Tone;
   /** Текст обязателен: статус не передаётся одним цветом. Дескриптор из словаря API переводится здесь. */
   label: string | MessageDescriptor;
+  /** Заполненная точка вместо иконки: старший уровень в паре одного тона (P0 против P1). */
+  strong?: boolean;
   /** Пульсация только у выполняющихся процессов; при prefers-reduced-motion выключена в CSS. */
   pulse?: boolean;
 };
 
-export function StatusBadge({ tone, label, pulse = false }: StatusBadgeProps) {
+export function StatusBadge({ tone, label, strong = false, pulse = false }: StatusBadgeProps) {
   const { t } = useLingui();
-  const Icon = TONE_ICON[tone];
+  const Icon = strong ? null : TONE_ICON[tone];
   return (
     <span
       data-tone={tone}
