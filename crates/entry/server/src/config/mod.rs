@@ -212,8 +212,8 @@ impl Cache {
         // Текст ошибки адаптера в ConfigError не попадает: он может цитировать адрес.
         match crane_valkey::Endpoint::parse(value.expose()) {
             Ok(endpoint) => Ok(Self::Valkey(endpoint)),
-            Err(crane_valkey::EndpointError::Scheme { .. }) => {
-                Err(unsupported(CACHE, value.expose()))
+            Err(crane_valkey::EndpointError::Scheme { scheme }) => {
+                Err(ConfigError::Unsupported { var: CACHE, scheme })
             }
             Err(crane_valkey::EndpointError::Invalid) => Err(ConfigError::Invalid {
                 var: CACHE,
