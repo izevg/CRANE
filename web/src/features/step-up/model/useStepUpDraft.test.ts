@@ -17,12 +17,12 @@ describe("useStepUpDraft", () => {
     act(() => result.current[1]("обоснование"));
 
     // Assert
-    expect(sessionStorage.getItem("crane.stepup.reveal-event")).toBe("обоснование");
+    expect(sessionStorage.getItem("crane.stepup.reveal-event")).toBe('"обоснование"');
   });
 
   it("после редиректа черновик восстанавливается по тому же formId", () => {
     // Arrange
-    sessionStorage.setItem("crane.stepup.reveal-event", "обоснование");
+    sessionStorage.setItem("crane.stepup.reveal-event", '"обоснование"');
 
     // Act
     const { result } = renderHook(() => useStepUpDraft("reveal-event", isText));

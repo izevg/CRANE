@@ -2,14 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initColorScheme, useColorMode } from "~/shared/lib/state";
 import { stubMatchMedia } from "~test/matchMedia";
+import { brokenStorage } from "~test/storage";
 import { COLOR_SCHEME_STORAGE_KEY, readStoredMode, writeStoredMode } from "./colorScheme";
-
-function brokenStorage(): Storage {
-  const fail = (): never => {
-    throw new Error("storage недоступен");
-  };
-  return { getItem: fail, setItem: fail, removeItem: fail, clear: fail, key: fail, length: 0 };
-}
 
 beforeEach(() => {
   localStorage.clear();
@@ -17,16 +11,17 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   document.documentElement.removeAttribute("data-theme");
 });
 
 describe("readStoredMode", () => {
   it("с недоступным storage возвращает system без исключения", () => {
     // Arrange
-    const storage = brokenStorage();
+    brokenStorage();
 
     // Act
-    const mode = readStoredMode(storage);
+    const mode = readStoredMode();
 
     // Assert
     expect(mode).toBe("system");
@@ -58,10 +53,10 @@ describe("readStoredMode", () => {
 describe("writeStoredMode", () => {
   it("с недоступным storage возвращает false без исключения", () => {
     // Arrange
-    const storage = brokenStorage();
+    brokenStorage();
 
     // Act
-    const written = writeStoredMode("dark", storage);
+    const written = writeStoredMode("dark");
 
     // Assert
     expect(written).toBe(false);

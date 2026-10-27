@@ -1,78 +1,53 @@
 /** Какое хранилище браузера: `local` живёт между сессиями, `session` — до закрытия вкладки. */
-type StorageKind = "local" | "session";
-/** Хранилище задаётся видом или готовым объектом `Storage` (подмена в тестах). */
-export type StorageSource = StorageKind | Storage;
+export type StorageKind = "local" | "session";
 
-function storageOf(source: StorageSource): Storage | undefined {
-  if (typeof source !== "string") {
-    return source;
-  }
+function storageOf(kind: StorageKind): Storage | undefined {
   try {
     if (typeof window === "undefined") {
       return undefined;
     }
-    return source === "local" ? window.localStorage : window.sessionStorage;
+    return kind === "local" ? window.localStorage : window.sessionStorage;
   } catch {
     // доступ к storage сам может бросить (запрещённые куки, песочница)
     return undefined;
   }
 }
 
-/** Строка хранится как есть (совместимо с ключами, записанными до хелпера), остальное — как JSON. */
-function serialize(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value);
-}
-
 /**
- * Что считать значением записи: JSON-объект и массив — только разобранными; примитив — разобранным, а если он
- * не подошёл, то и строкой как есть (ключи, записанные до хелпера, лежат строками без JSON).
+ * Читает строку и проверяет её `isValid`. Любой сбой (нет storage, исключение, невалидное значение) даёт
+ * `undefined`: вызывающий подставляет значение по умолчанию. Кодировка не знает про JSON: хранятся только строки,
+ * структуры сериализует вызывающий.
  */
-function candidates(raw: string): unknown[] {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return typeof parsed === "object" && parsed !== null ? [parsed] : [parsed, raw];
-  } catch {
-    return [raw];
-  }
-}
-
-/**
- * Читает значение и проверяет его `isValid`. Любой сбой (нет storage, исключение, чужой формат, невалидное
- * значение) даёт `undefined`: вызывающий подставляет значение по умолчанию.
- */
-export function readStored<T>(
-  source: StorageSource,
+export function readStored<T extends string>(
+  kind: StorageKind,
   key: string,
-  isValid: (value: unknown) => value is T,
+  isValid: (value: string) => value is T,
 ): T | undefined {
   try {
-    const raw = storageOf(source)?.getItem(key);
-    if (raw === null || raw === undefined) {
-      return undefined;
-    }
-    return candidates(raw).find(isValid);
+    const raw = storageOf(kind)?.getItem(key);
+    return raw !== null && raw !== undefined && isValid(raw) ? raw : undefined;
   } catch {
     return undefined;
   }
 }
 
-/** Пишет значение; `false`, если сохранить не удалось (выбор тогда живёт до перезагрузки). */
-export function writeStored(source: StorageSource, key: string, value: unknown): boolean {
+/** Пишет строку; `false`, если сохранить не удалось (выбор тогда живёт до перезагрузки). */
+export function writeStored(kind: StorageKind, key: string, value: string): boolean {
   try {
-    const storage = storageOf(source);
+    const storage = storageOf(kind);
     if (storage === undefined) {
       return false;
     }
-    storage.setItem(key, serialize(value));
+    storage.setItem(key, value);
     return true;
   } catch {
     return false;
   }
 }
 
-export function removeStored(source: StorageSource, key: string): void {
+export function removeStored(kind: StorageKind, key: string): void {
   try {
-    storageOf(source)?.removeItem(key);
+    storageOf(kind)?.removeItem(key);
   } catch {
     // нечего удалять: хранилище недоступно
   }

@@ -7,7 +7,7 @@
  * Чтение и запись — через `storage/storage.ts`. Любой сбой storage или matchMedia деградирует в `system` / light без исключений.
  */
 
-import { readStored, type StorageSource, writeStored } from "../storage/storage";
+import { readStored, writeStored } from "../storage/storage";
 
 export const COLOR_SCHEME_STORAGE_KEY = "crane.colorScheme";
 
@@ -22,12 +22,12 @@ export function isColorMode(value: unknown): value is ColorMode {
   return typeof value === "string" && (COLOR_MODES as readonly string[]).includes(value);
 }
 
-export function readStoredMode(source: StorageSource = "local"): ColorMode {
-  return readStored(source, COLOR_SCHEME_STORAGE_KEY, isColorMode) ?? "system";
+export function readStoredMode(): ColorMode {
+  return readStored("local", COLOR_SCHEME_STORAGE_KEY, isColorMode) ?? "system";
 }
 
-export function writeStoredMode(mode: ColorMode, source: StorageSource = "local"): boolean {
-  return writeStored(source, COLOR_SCHEME_STORAGE_KEY, mode);
+export function writeStoredMode(mode: ColorMode): boolean {
+  return writeStored("local", COLOR_SCHEME_STORAGE_KEY, mode);
 }
 
 function systemQuery(): MediaQueryList | undefined {

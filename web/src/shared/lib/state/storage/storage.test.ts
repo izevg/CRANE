@@ -1,75 +1,58 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { brokenStorage } from "~test/storage";
 import { readStored, removeStored, writeStored } from "./storage";
 
-const isNumber = (value: unknown): value is number => typeof value === "number";
-const isString = (value: unknown): value is string => typeof value === "string";
+const isMode = (value: string): value is "dark" | "light" => value === "dark" || value === "light";
+const isAny = (value: string): value is string => value.length >= 0;
 const KEY = "crane.test";
 
-function brokenStorage(): Storage {
-  const fail = (): never => {
-    throw new Error("storage недоступен");
-  };
-  return { getItem: fail, setItem: fail, removeItem: fail, clear: fail, key: fail, length: 0 };
-}
-
 afterEach(() => {
+  vi.restoreAllMocks();
   localStorage.clear();
   sessionStorage.clear();
 });
 
 describe("readStored", () => {
-  it("читает записанное значение из выбранного хранилища", () => {
+  it("читает записанную строку из выбранного хранилища", () => {
     // Arrange
-    writeStored("session", KEY, { draft: "текст" });
-    const isDraft = (value: unknown): value is { draft: string } =>
-      typeof value === "object" && value !== null && "draft" in value;
+    writeStored("session", KEY, "dark");
 
     // Act
-    const actual = readStored("session", KEY, isDraft);
-
-    // Assert
-    expect(actual).toEqual({ draft: "текст" });
-  });
-
-  it("не путает local и session", () => {
-    // Arrange
-    writeStored("local", KEY, "в local");
-
-    // Act
-    const actual = readStored("session", KEY, isString);
-
-    // Assert
-    expect(actual).toBeUndefined();
-  });
-
-  it("значение не прошло isValid — undefined", () => {
-    // Arrange
-    writeStored("local", KEY, "строка");
-
-    // Act
-    const actual = readStored("local", KEY, isNumber);
-
-    // Assert
-    expect(actual).toBeUndefined();
-  });
-
-  it("строка, записанная без хелпера, читается как есть", () => {
-    // Arrange
-    localStorage.setItem(KEY, "dark");
-
-    // Act
-    const actual = readStored("local", KEY, isString);
+    const actual = readStored("session", KEY, isMode);
 
     // Assert
     expect(actual).toBe("dark");
   });
 
-  it("исключение storage не пробрасывается, а даёт undefined", () => {
+  it("не путает local и session", () => {
     // Arrange
-    const storage = brokenStorage();
+    writeStored("local", KEY, "dark");
 
     // Act
-    const actual = readStored(storage, KEY, isString);
+    const actual = readStored("session", KEY, isMode);
+
+    // Assert
+    expect(actual).toBeUndefined();
+  });
+
+  it("строка не прошла isValid — undefined", () => {
+    // Arrange
+    writeStored("local", KEY, "sepia");
+
+    // Act
+    const actual = readStored("local", KEY, isMode);
+
+    // Assert
+    expect(actual).toBeUndefined();
+  });
+
+  it("исключение storage не пробрасывается, а даёт undefined", () => {
+    // Arrange
+    writeStored("local", KEY, "dark");
+    brokenStorage();
+
+    // Act
+    const actual = readStored("local", KEY, isAny);
 
     // Assert
     expect(actual).toBeUndefined();
@@ -77,12 +60,21 @@ describe("readStored", () => {
 });
 
 describe("writeStored и removeStored", () => {
+  it("строка кладётся в хранилище без кодирования", () => {
+    // Arrange
+    // Act
+    writeStored("local", KEY, "dark");
+
+    // Assert
+    expect(localStorage.getItem(KEY)).toBe("dark");
+  });
+
   it("исключение при записи даёт false", () => {
     // Arrange
-    const storage = brokenStorage();
+    brokenStorage();
 
     // Act
-    const written = writeStored(storage, KEY, "x");
+    const written = writeStored("local", KEY, "x");
 
     // Assert
     expect(written).toBe(false);
@@ -96,15 +88,15 @@ describe("writeStored и removeStored", () => {
     removeStored("local", KEY);
 
     // Assert
-    expect(readStored("local", KEY, isString)).toBeUndefined();
+    expect(readStored("local", KEY, isAny)).toBeUndefined();
   });
 
   it("исключение при удалении не пробрасывается", () => {
     // Arrange
-    const storage = brokenStorage();
+    brokenStorage();
 
     // Act
-    const act = () => removeStored(storage, KEY);
+    const act = () => removeStored("local", KEY);
 
     // Assert
     expect(act).not.toThrow();
