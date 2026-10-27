@@ -12,4 +12,4 @@ pub use entity::{
     Asset, FormatMetadata, PackageVersion, Repository, RepositoryId, RepositoryKind, VersionId,
 };
 pub use lifecycle::{DeletePolicy, TransitionError, VersionState};
-pub use locator::Coordinate;
+pub use locator::{Coordinate, PackageRef};
