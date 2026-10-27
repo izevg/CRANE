@@ -17,6 +17,41 @@ struct State {
     repositories: Vec<Repository>,
     /// В порядке публикации, как того требует контракт `versions`.
     versions: Vec<PackageVersion>,
+    tags: Vec<Tag>,
+}
+
+/// Dist-тег: пакет определяется парой (репозиторий, имя), как и в `same_package`.
+#[derive(Debug)]
+struct Tag {
+    repository: RepositoryId,
+    package: PackageName,
+    name: String,
+    version: VersionId,
+}
+
+impl State {
+    /// Ставит тег, перенося его, если он уже стоит у пакета.
+    fn put_tag(
+        &mut self,
+        repository: RepositoryId,
+        package: &PackageName,
+        name: &str,
+        version: VersionId,
+    ) {
+        let existing = self
+            .tags
+            .iter_mut()
+            .find(|t| t.repository == repository && t.package == *package && t.name == name);
+        match existing {
+            Some(tag) => tag.version = version,
+            None => self.tags.push(Tag {
+                repository,
+                package: package.clone(),
+                name: name.to_owned(),
+                version,
+            }),
+        }
+    }
 }
 
 impl MemoryCatalog {
@@ -115,6 +150,9 @@ impl Catalog for MemoryCatalog {
             assets: version.assets,
             metadata: version.metadata,
         };
+        for tag in &version.tags {
+            state.put_tag(record.repository, &record.package, tag, record.id);
+        }
         state.versions.push(record.clone());
         ready(Ok(record))
     }
@@ -158,6 +196,65 @@ impl Catalog for MemoryCatalog {
             record.yanked = yanked;
             Ok(())
         }))
+    }
+
+    fn set_deprecated(
+        &self,
+        id: VersionId,
+        message: Option<String>,
+    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
+        ready(self.update(id, |record| {
+            record.deprecated = message;
+            Ok(())
+        }))
+    }
+
+    fn set_tag(
+        &self,
+        version: VersionId,
+        tag: &str,
+    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
+        let mut state = self.lock();
+        let target = state
+            .versions
+            .iter()
+            .find(|v| v.id == version)
+            .map(|v| (v.repository, v.package.clone()));
+        let done = target.map_or(Err(CatalogError::NotFound), |(repository, package)| {
+            state.put_tag(repository, &package, tag, version);
+            Ok(())
+        });
+        ready(done)
+    }
+
+    fn remove_tag(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+        tag: &str,
+    ) -> impl Future<Output = Result<bool, CatalogError>> + Send {
+        let mut state = self.lock();
+        let before = state.tags.len();
+        state
+            .tags
+            .retain(|t| !(t.repository == repository && t.package == *package && t.name == tag));
+        ready(Ok(state.tags.len() < before))
+    }
+
+    fn tags(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+    ) -> impl Future<Output = Result<Vec<(String, VersionId)>, CatalogError>> + Send {
+        let mut found: Vec<_> = self
+            .lock()
+            .tags
+            .iter()
+            .filter(|t| t.repository == repository && t.package == *package)
+            .map(|t| (t.name.clone(), t.version))
+            .collect();
+        found.sort_by(|a, b| a.0.cmp(&b.0));
+        ready(Ok(found))
     }
 
     fn transition(

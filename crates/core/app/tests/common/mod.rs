@@ -207,6 +207,7 @@ impl Seed {
             published_at: fixed_now(),
             assets: vec![asset],
             metadata: FormatMetadata::new(METADATA.to_owned()),
+            tags: Vec::new(),
         }))
         .unwrap()
     }
@@ -309,6 +310,39 @@ impl Catalog for BlindCatalog {
         self.0.set_yanked(id, yanked)
     }
 
+    fn set_deprecated(
+        &self,
+        id: VersionId,
+        message: Option<String>,
+    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
+        self.0.set_deprecated(id, message)
+    }
+
+    fn set_tag(
+        &self,
+        version: VersionId,
+        tag: &str,
+    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
+        self.0.set_tag(version, tag)
+    }
+
+    fn remove_tag(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+        tag: &str,
+    ) -> impl Future<Output = Result<bool, CatalogError>> + Send {
+        self.0.remove_tag(repository, package, tag)
+    }
+
+    fn tags(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+    ) -> impl Future<Output = Result<Vec<(String, VersionId)>, CatalogError>> + Send {
+        self.0.tags(repository, package)
+    }
+
     fn transition(
         &self,
         id: VersionId,
@@ -370,6 +404,39 @@ impl Catalog for DownCatalog {
         yanked: bool,
     ) -> impl Future<Output = Result<(), CatalogError>> + Send {
         self.0.set_yanked(id, yanked)
+    }
+
+    fn set_deprecated(
+        &self,
+        id: VersionId,
+        message: Option<String>,
+    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
+        self.0.set_deprecated(id, message)
+    }
+
+    fn set_tag(
+        &self,
+        version: VersionId,
+        tag: &str,
+    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
+        self.0.set_tag(version, tag)
+    }
+
+    fn remove_tag(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+        tag: &str,
+    ) -> impl Future<Output = Result<bool, CatalogError>> + Send {
+        self.0.remove_tag(repository, package, tag)
+    }
+
+    fn tags(
+        &self,
+        repository: RepositoryId,
+        package: &PackageName,
+    ) -> impl Future<Output = Result<Vec<(String, VersionId)>, CatalogError>> + Send {
+        self.0.tags(repository, package)
     }
 
     fn transition(

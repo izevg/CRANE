@@ -170,13 +170,22 @@ fn satisfies(version: &str, minimum: Version) -> bool {
 // Миграции вшиваются в бинарник и регистрируются явно: макрос `sqlx::migrate!` в проекте
 // не используется. Новая миграция - ещё одна строка в списке (см. migrations/README.md).
 fn migrator() -> Migrator {
-    Migrator::with_migrations(vec![Migration::new(
-        1,
-        "catalog".into(),
-        MigrationType::Simple,
-        include_str!("../migrations/0001_catalog.sql").into_sql_str(),
-        false,
-    )])
+    Migrator::with_migrations(vec![
+        Migration::new(
+            1,
+            "catalog".into(),
+            MigrationType::Simple,
+            include_str!("../migrations/0001_catalog.sql").into_sql_str(),
+            false,
+        ),
+        Migration::new(
+            2,
+            "npm".into(),
+            MigrationType::Simple,
+            include_str!("../migrations/0002_npm.sql").into_sql_str(),
+            false,
+        ),
+    ])
 }
 
 #[cfg(test)]

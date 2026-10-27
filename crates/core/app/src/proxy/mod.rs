@@ -127,9 +127,10 @@ pub enum ProxyError {
     #[error("upstream не ответил")]
     Upstream(#[from] UpstreamFailure),
     #[error("контрольная сумма не совпала: ожидалась {expected}, получена {actual}")]
+    // Checksum с sha512 велик: без Box вариант раздувает каждый `Result<_, ProxyError>`.
     DigestMismatch {
-        expected: Checksum,
-        actual: Checksum,
+        expected: Box<Checksum>,
+        actual: Box<Checksum>,
     },
     #[error("ответ upstream больше {limit} байт")]
     TooLarge { limit: u64 },

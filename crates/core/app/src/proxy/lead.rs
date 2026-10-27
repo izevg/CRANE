@@ -73,8 +73,8 @@ impl Target {
                 expected: Some(expected),
                 ..
             } if !digests.satisfies(expected) => Err(ProxyError::DigestMismatch {
-                expected: *expected,
-                actual: digests.of_kind(expected),
+                expected: Box::new(*expected),
+                actual: Box::new(digests.of_kind(expected)),
             }),
             _ => Ok(()),
         }

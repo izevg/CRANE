@@ -243,8 +243,8 @@ mod tests {
                 "evil.example".to_owned(),
             ))),
             ProxyError::DigestMismatch {
-                expected: sum,
-                actual: sum,
+                expected: Box::new(sum),
+                actual: Box::new(sum),
             },
             ProxyError::TooLarge { limit: 1 },
             ProxyError::Backend(Arc::new(io::Error::other("postgres://u:SECRET@h/db"))),

@@ -217,9 +217,16 @@ CREATE TABLE package_version (
   id uuid PRIMARY KEY, package_id bigint NOT NULL REFERENCES package (id),
   version text NOT NULL, version_display text NOT NULL,
   state ver_state NOT NULL, yanked boolean NOT NULL DEFAULT false,
+  deprecated text,                   -- миграция 0002: сообщение deprecate (npm), NULL - не устарела
   published_at timestamptz NOT NULL, metadata json NOT NULL,
   CONSTRAINT package_version_package_id_version_key UNIQUE (package_id, version)
 ) WITH (fillfactor = 90);
+
+-- Миграция 0002: dist-теги npm. Пакет тега совпадает с пакетом версии (set_tag выводит его из версии).
+CREATE TABLE dist_tag (
+  package_id bigint NOT NULL REFERENCES package (id), tag text NOT NULL,
+  version_id uuid NOT NULL REFERENCES package_version (id),
+  PRIMARY KEY (package_id, tag));
 
 CREATE TABLE blob (
   store_id text NOT NULL, sha256 bytea NOT NULL CHECK (octet_length(sha256) = 32),
@@ -233,7 +240,7 @@ CREATE TABLE asset (
   FOREIGN KEY (store_id, blob_sha256) REFERENCES blob (store_id, sha256));
 ```
 
-*Рис. 9.3. Срез схемы v0.1.0.* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД.
+*Рис. 9.3. Срез схемы v0.1.0 плюс миграция 0002 (`deprecated`, `dist_tag`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД.
 
 | Отложено | Когда добавляется |
 | --- | --- |
@@ -278,7 +285,8 @@ CREATE TABLE asset (
 | --- | --- |
 | `package`: UNIQUE `(repository_id, name_norm)` | Поиск пакета по имени в репозитории |
 | `package_version`: UNIQUE `(package_id, version)` | `find_version`; уникальность при публикации; `versions()` — range scan по префиксу `package_id`, сортировка строк одного пакета в памяти, отдельный индекс не нужен |
-| `package_version`: PK `id` | `transition`, `set_yanked` |
+| `package_version`: PK `id` | `transition`, `set_yanked`, `set_deprecated`, `set_tag` |
+| `dist_tag`: PK `(package_id, tag)` | `tags` (range scan по префиксу `package_id`, порядок `COLLATE "C"`), upsert при `set_tag` и публикации с тегами, `remove_tag` |
 | `asset`: PK `(version_id, path)` | Файлы версии |
 | `blob`: PK `(store_id, sha256)` | Дедупликация при публикации; цель FK из `asset` |
 
@@ -426,7 +434,7 @@ stateDiagram-v2
 | Ключ | Значение и TTL |
 | --- | --- |
 | `md:<repo>:<name>` | Отрендеренная metadata (сжатая zstd) + ETag; TTL по эвристике 11.1; инвалидация по событию. Для proxy — документ после фильтра `served()`; сырой документ upstream — в `px:`. |
-| `px:<repo>:<path>` | Запись proxy-кэша: факты (время получения; тело, ETag и max-age документа; дайджесты артефакта или счётчик 404), ручной бинарный формат с байтом версии. TTL = `keep_for` из политики; у артефактов TTL нет. |
+| `px:<repo>:<path>` | Запись proxy-кэша: факты (время получения; тело, ETag и max-age документа; дайджесты артефакта или счётчик 404), ручной бинарный формат с байтом версии (кодек v2: blob несёт sha256, sha512, sha1 и размер; записи v1 читаются как промах). TTL = `keep_for` из политики; у артефактов TTL нет. |
 | `sf:<repo>:<path>` | Lease singleflight: `SET NX PX` с токеном-фенсингом, снимается Lua-скриптом только своим токеном. |
 | `rl:<principal>:<bucket>` | Теоретическое время прибытия GCRA; Lua-скрипт атомарно. |
 | `ep:<principal>` | Эпоха авторизации; инкремент при отзыве, блокировке, смене групп. |

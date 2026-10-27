@@ -58,6 +58,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
                 published_at: self.clock.now(),
                 assets: vec![asset],
                 metadata,
+                tags: Vec::new(),
             })
             .await?;
         Ok(published)

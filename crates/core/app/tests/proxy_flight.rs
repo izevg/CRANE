@@ -236,7 +236,7 @@ fn joiner_with_foreign_expected_digest_is_rejected_by_shared_flight() {
     assert_eq!(leader.unwrap().body.digests.sha256, hello_sha256());
     assert!(matches!(
         joiner,
-        Err(ProxyError::DigestMismatch { expected, actual }) if expected == foreign && actual == Checksum::Sha256(hello_sha256())
+        Err(ProxyError::DigestMismatch { expected, actual }) if *expected == foreign && *actual == Checksum::Sha256(hello_sha256())
     ));
     assert_eq!(world.upstream.call_count(), 1);
 }

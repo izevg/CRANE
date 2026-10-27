@@ -83,7 +83,7 @@ fn digest_mismatch_is_rejected() {
     // Assert
     assert!(matches!(
         outcome,
-        Err(ProxyError::DigestMismatch { expected: e, actual }) if e == expected && actual == Checksum::Sha256(hello_sha256())
+        Err(ProxyError::DigestMismatch { expected: e, actual }) if *e == expected && *actual == Checksum::Sha256(hello_sha256())
     ));
 }
 
@@ -290,7 +290,7 @@ fn cached_blob_with_other_digest_is_refetched_and_mismatch_reported() {
     // Assert
     assert!(matches!(
         outcome,
-        Err(ProxyError::DigestMismatch { expected: e, actual }) if e == expected && actual == Checksum::Sha256(hello_sha256())
+        Err(ProxyError::DigestMismatch { expected: e, actual }) if *e == expected && *actual == Checksum::Sha256(hello_sha256())
     ));
     assert_eq!(world.upstream.call_count(), 2);
 }
@@ -341,7 +341,7 @@ fn miss_with_wrong_sha512_reports_mismatch_and_commits_nothing() {
     assert!(matches!(
         outcome,
         Err(ProxyError::DigestMismatch { expected: e, actual })
-            if e == expected && actual == Checksum::Sha512(hello_sha512())
+            if *e == expected && *actual == Checksum::Sha512(hello_sha512())
     ));
     assert!(matches!(
         block_on(world.blobs.open(&hello_sha256())),
