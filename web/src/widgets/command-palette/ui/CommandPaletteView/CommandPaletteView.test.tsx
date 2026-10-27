@@ -7,6 +7,7 @@ import { CommandPaletteView } from "~/widgets/command-palette";
 const UNBLOCK = /Снять блок/;
 const NAV_PACKAGES = /Пакеты и репозитории/;
 const LEFT_PAD = /left-pad/;
+const STEP_UP = /Отозвать токен.*требуется подтверждение входа/;
 const NAME = "Перейти, найти пакет или действие";
 
 const navigation = [
@@ -204,5 +205,16 @@ describe("CommandPaletteView", () => {
 
     // Assert
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("действие со step-up показывает MFA и пометку для скринридера", () => {
+    // Arrange
+    setup({ actions: [{ label: "Отозвать токен", run: { onSelect: vi.fn() }, stepUp: true }] });
+
+    // Act
+    const option = screen.getByRole("option", { name: STEP_UP });
+
+    // Assert
+    expect(within(option).getByText("MFA")).toBeInTheDocument();
   });
 });

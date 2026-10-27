@@ -2,11 +2,9 @@ import { Autocomplete } from "@base-ui/react/autocomplete";
 import { ArrowRightIcon, PackageIcon, ZapIcon } from "lucide-react";
 import { type ReactNode, useCallback } from "react";
 import { cx } from "~/shared/lib/core";
+import { ActionContent } from "~/shared/ui/actions";
 import { Badge } from "~/shared/ui/primitives";
 import type { PaletteOption } from "../../lib/palette/model";
-
-const MFA = "MFA";
-const STEP_UP_HINT = ", требуется подтверждение входа";
 
 const ITEM =
   "flex min-h-9 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-body outline-hidden data-highlighted:bg-accent data-disabled:cursor-not-allowed data-disabled:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0";
@@ -38,22 +36,16 @@ function Body({ option }: { option: PaletteOption }): ReactNode {
       </>
     );
   }
-  const { label, stepUp, disabledReason } = option.entry;
+  const { disabledReason } = option.entry;
   return (
     <>
       <ZapIcon aria-hidden="true" className={ICON} />
       <span className={LABEL}>
-        {label}
+        <ActionContent action={option.entry} />
         {disabledReason === undefined ? null : (
           <span className="block text-caption text-muted-foreground">{disabledReason}</span>
         )}
       </span>
-      {stepUp ? (
-        <>
-          <Badge variant="outline">{MFA}</Badge>
-          <span className="sr-only">{STEP_UP_HINT}</span>
-        </>
-      ) : null}
     </>
   );
 }
