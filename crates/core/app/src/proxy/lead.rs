@@ -204,7 +204,7 @@ async fn fetch<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
         (UpstreamResponse::Found { body, .. }, Target::Artifact { .. }) => {
             store_artifact(&inner.blobs, job, body, inner.limits.max_artifact_bytes).await?
         }
-        (UpstreamResponse::NotFound, target) => record_miss(job, &target),
+        (UpstreamResponse::NotFound, _) => record_miss(job),
     };
     let entry = Cached { fetched_at, state };
     // Кэш не источник истины: не записался — следующий запрос просто сходит в upstream.
@@ -297,14 +297,14 @@ async fn store_artifact<B: BlobStore>(
 }
 
 /// 404: отрицательная запись, счётчик промахов растёт от прежней отрицательной записи.
-fn record_miss(job: &Job, target: &Target) -> Stored {
+fn record_miss(job: &Job) -> Stored {
     let misses = match job.prev.as_ref().map(|prev| &prev.state) {
         Some(CachedState::Missing { misses }) => misses.saturating_add(1),
         _ => 1,
     };
     (
         CachedState::Missing { misses },
-        target.negative().ttl_after(misses),
+        job.target.negative().ttl_after(misses),
     )
 }
 

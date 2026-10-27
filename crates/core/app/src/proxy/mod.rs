@@ -5,7 +5,7 @@
 
 mod flight;
 mod lead;
-mod outcome;
+mod served;
 
 use std::fmt;
 use std::sync::Arc;
@@ -21,7 +21,7 @@ use futures_util::FutureExt;
 
 use self::flight::{Flight, Flights, Invariant};
 use self::lead::{Job, Target, lead};
-pub use self::outcome::{CacheResult, Fetched, Revalidation, Served, UpstreamFailure};
+pub use self::served::{CacheResult, Fetched, Revalidation, Served, UpstreamFailure};
 
 /// Пределы движка. Умолчания — 10.2 (lease 30 с, ожидание 25 с) плюс потолки размера документа (память) и архива (диск staging).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
