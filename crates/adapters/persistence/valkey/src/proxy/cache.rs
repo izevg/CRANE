@@ -31,11 +31,7 @@ impl ProxyCache for Valkey {
             return Ok(None);
         };
         let entry = decode(raw).map_err(backend)?;
-        node.local.l1.insert(name.clone(), entry.clone());
-        // Пока запись шла из L2 в L1, могла прийти инвалидация: тогда в L1 лежит устаревшее.
-        if node.local.generation() != seen {
-            node.local.l1.invalidate(&name);
-        }
+        node.local.admit(name, entry.clone(), seen);
         Ok(Some(entry))
     }
 

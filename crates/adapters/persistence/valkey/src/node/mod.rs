@@ -85,6 +85,15 @@ impl Local {
         self.generation.load(Ordering::Acquire)
     }
 
+    /// Кладёт в L1 запись, прочитанную из L2, когда поколение было `seen`. Если с тех пор
+    /// пришла инвалидация, запись могла устареть, пока шла в L1: её нельзя оставлять.
+    pub(crate) fn admit(&self, name: String, entry: Cached, seen: u64) {
+        self.l1.insert(name.clone(), entry);
+        if self.generation() != seen {
+            self.l1.invalidate(&name);
+        }
+    }
+
     /// Порядок важен: сначала поколение и L1, потом пробуждение. Проснувшийся ждущий
     /// перечитывает кэш и не должен увидеть старую запись в L1.
     pub(crate) fn invalidate(&self, name: &str) {
@@ -169,4 +178,83 @@ impl Valkey {
 async fn hold_connection(client: Client) {
     let _connection = inbox::connect(&client).await;
     std::future::pending::<()>().await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crane_ports::proxy::CachedState;
+    use std::time::SystemTime;
+
+    const NAME: &str = "px:name";
+
+    fn entry() -> Cached {
+        Cached {
+            fetched_at: SystemTime::UNIX_EPOCH,
+            state: CachedState::Missing { misses: 1 },
+        }
+    }
+
+    #[test]
+    fn admit_keeps_entry_when_nothing_was_invalidated_meanwhile() {
+        // Arrange
+        let local = Local::new(1 << 20);
+        let seen = local.generation();
+
+        // Act
+        local.admit(NAME.to_owned(), entry(), seen);
+
+        // Assert
+        assert_eq!(local.l1.get(NAME), Some(entry()));
+    }
+
+    #[test]
+    fn admit_drops_entry_read_before_an_invalidation() {
+        // Arrange
+        let local = Local::new(1 << 20);
+        let seen = local.generation();
+        local.invalidate("px:other");
+
+        // Act
+        local.admit(NAME.to_owned(), entry(), seen);
+
+        // Assert
+        assert_eq!(
+            local.l1.get(NAME),
+            None,
+            "любая инвалидация после чтения L2 делает прочитанное подозрительным"
+        );
+    }
+
+    #[test]
+    fn invalidate_removes_only_the_named_entry() {
+        // Arrange
+        let local = Local::new(1 << 20);
+        local.l1.insert(NAME.to_owned(), entry());
+        local.l1.insert("px:other".to_owned(), entry());
+
+        // Act
+        local.invalidate(NAME);
+
+        // Assert
+        assert_eq!(
+            (local.l1.get(NAME), local.l1.get("px:other")),
+            (None, Some(entry())),
+            "инвалидация выбрасывает только названный ключ"
+        );
+    }
+
+    #[test]
+    fn forget_all_empties_l1() {
+        // Arrange
+        let local = Local::new(1 << 20);
+        local.l1.insert(NAME.to_owned(), entry());
+        local.l1.insert("px:other".to_owned(), entry());
+
+        // Act
+        local.forget_all();
+
+        // Assert
+        assert_eq!((local.l1.get(NAME), local.l1.get("px:other")), (None, None));
+    }
 }

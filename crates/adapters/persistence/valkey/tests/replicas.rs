@@ -39,9 +39,11 @@ const WAKE_DEADLINE: Duration = Duration::from_secs(10);
 const DELIVERY_DEADLINE: Duration = Duration::from_secs(1);
 const POLL_STEP: Duration = Duration::from_millis(10);
 
-fn key() -> ProxyKey {
+/// Ключ зависит от БД теста: pub/sub в Valkey общий для всех БД, и одноимённые ключи
+/// параллельных тестов будили бы друг друга, маскируя потерянные пробуждения.
+fn key(db: u8) -> ProxyKey {
     ProxyKey {
-        repository: RepositoryId::new(Uuid::from_u128(1)),
+        repository: RepositoryId::new(Uuid::from_u128(u128::from(db))),
         path: UpstreamPath::parse("index/se/rd/serde").expect("путь в тестовых данных валиден"),
     }
 }
@@ -61,10 +63,10 @@ fn document(text: &'static [u8]) -> Cached {
 /// Читает запись, пока она не станет равна `wanted`, но не дольше `DELIVERY_DEADLINE`:
 /// pub/sub доставляется асинхронно, и момент прихода инвалидации тест не знает. Единственный
 /// опрос с ограничением по времени во всём наборе; по исходу сравнивает вызывающий тест.
-async fn get_until(cache: &Valkey, wanted: &Cached) -> Option<Cached> {
+async fn get_until(cache: &Valkey, key: &ProxyKey, wanted: &Cached) -> Option<Cached> {
     let deadline = tokio::time::Instant::now() + DELIVERY_DEADLINE;
     loop {
-        let found = cache.get(&key()).await.expect("get");
+        let found = cache.get(key).await.expect("get");
         if found.as_ref() == Some(wanted) || tokio::time::Instant::now() >= deadline {
             return found;
         }
@@ -85,17 +87,19 @@ fn put_on_one_replica_drops_stale_entry_from_l1_of_another() {
         // Arrange
         let (a, b) = server.replicas(INVALIDATION_DB).await;
         let (stale, fresh) = (document(b"v0"), document(b"v1"));
-        a.put(&key(), stale.clone(), KEEP).await.expect("put v0");
-        let warmed = b.get(&key()).await.expect("get v0");
+        a.put(&key(INVALIDATION_DB), stale.clone(), KEEP)
+            .await
+            .expect("put v0");
+        let warmed = b.get(&key(INVALIDATION_DB)).await.expect("get v0");
 
         // Act
-        let put = a.put(&key(), fresh.clone(), KEEP).await;
+        let put = a.put(&key(INVALIDATION_DB), fresh.clone(), KEEP).await;
 
         // Assert
         put.expect("put v1");
         assert_eq!(warmed, Some(stale), "вторая реплика закэшировала v0 в L1");
         assert_eq!(
-            get_until(&b, &fresh).await,
+            get_until(&b, &key(INVALIDATION_DB), &fresh).await,
             Some(fresh),
             "запись первой реплики выбрасывает устаревшее из L1 второй"
         );
@@ -108,11 +112,11 @@ fn release_on_one_replica_wakes_waiting_claim_on_another() {
         // Arrange
         let (a, b) = server.replicas(WAKE_DB).await;
         let leader = lead(
-            a.claim(&key(), LEASE, LONG_PATIENCE)
+            a.claim(&key(WAKE_DB), LEASE, LONG_PATIENCE)
                 .await
                 .expect("claim A"),
         );
-        let waiting_key = key();
+        let waiting_key = key(WAKE_DB);
         let mut waiting = pin!(b.claim(&waiting_key, LEASE, LONG_PATIENCE));
         let queued = waiting
             .as_mut()
@@ -145,13 +149,13 @@ fn release_of_expired_token_keeps_new_holder() {
         // Arrange
         let (a, b) = server.replicas(FENCING_DB).await;
         let expired = lead(
-            a.claim(&key(), SHORT_LEASE, LONG_PATIENCE)
+            a.claim(&key(FENCING_DB), SHORT_LEASE, LONG_PATIENCE)
                 .await
                 .expect("claim A"),
         );
         tokio::time::sleep(AFTER_SHORT_LEASE).await;
         let _holder = lead(
-            b.claim(&key(), LEASE, LONG_PATIENCE)
+            b.claim(&key(FENCING_DB), LEASE, LONG_PATIENCE)
                 .await
                 .expect("claim B"),
         );
@@ -162,7 +166,9 @@ fn release_of_expired_token_keeps_new_holder() {
         // Assert
         released.expect("release устаревшего токена - no-op, а не ошибка");
         assert_eq!(
-            b.claim(&key(), LEASE, SHORT_PATIENCE).await.expect("claim"),
+            b.claim(&key(FENCING_DB), LEASE, SHORT_PATIENCE)
+                .await
+                .expect("claim"),
             Claim::Settled,
             "новый держатель сохранил lease: третий претендент ждёт, а не лидирует"
         );
@@ -175,13 +181,13 @@ fn claim_settles_when_patience_runs_out() {
         // Arrange
         let (a, b) = server.replicas(PATIENCE_DB).await;
         let _holder = lead(
-            a.claim(&key(), LEASE, LONG_PATIENCE)
+            a.claim(&key(PATIENCE_DB), LEASE, LONG_PATIENCE)
                 .await
                 .expect("claim A"),
         );
 
         // Act
-        let result = b.claim(&key(), LEASE, SHORT_PATIENCE).await;
+        let result = b.claim(&key(PATIENCE_DB), LEASE, SHORT_PATIENCE).await;
 
         // Assert
         assert_eq!(
