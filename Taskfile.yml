@@ -1,9 +1,6 @@
 # Единая точка входа: `task --list`. Требуется go-task (https://taskfile.dev).
 version: "3"
 
-# Переменные подключения к PostgreSQL для rust:test:pg (cp .env.dist .env).
-dotenv: [".env"]
-
 tasks:
   default:
     desc: Список задач
@@ -53,6 +50,8 @@ tasks:
     cmds: [cargo deny check]
   rust:test:pg:
     desc: "Тесты адаптера PostgreSQL на живой БД (нужны Docker и .env из .env.dist)"
+    # .env читается только здесь: остальные задачи не должны неявно получать CRANE_TEST_DATABASE_URL.
+    dotenv: [".env"]
     cmds:
       - docker compose -f docker-compose.dev.yaml up -d --wait postgres
       - >-
