@@ -2,24 +2,8 @@ import type { Preview } from "@storybook/react-vite";
 
 type Globals = NonNullable<Preview["globalTypes"]>;
 
-/** ВРЕМЕННО: тулбары сравнения шрифтов. Пункт `jost` — текущий шрифт кита, он же значение по умолчанию. */
+/** ВРЕМЕННО: тулбар сравнения моно-шрифтов. Пункт `system` — текущее значение кита. */
 export const fontGlobalTypes: Globals = {
-  font: {
-    description: "Шрифт",
-    toolbar: {
-      title: "Шрифт",
-      icon: "paintbrush",
-      dynamicTitle: true,
-      items: [
-        { value: "jost", title: "Jost (сейчас)" },
-        { value: "onest", title: "Onest" },
-        { value: "onest-manrope", title: "Onest + Manrope (заголовки)" },
-        { value: "golos-text", title: "Golos Text" },
-        { value: "inter", title: "Inter" },
-        { value: "plex-sans", title: "IBM Plex Sans" },
-      ],
-    },
-  },
   mono: {
     description: "Моно для кода",
     toolbar: {
@@ -36,12 +20,11 @@ export const fontGlobalTypes: Globals = {
   },
 };
 
-export const fontInitialGlobals = { font: "jost", mono: "system" };
+export const fontInitialGlobals = { mono: "system" };
 
 /** Ставит выбор на <html>: значения по умолчанию снимают атрибут, и CSS кита работает как в приложении. */
-export function applyFonts(globals: { font?: unknown; mono?: unknown }): void {
+export function applyFonts(globals: { mono?: unknown }): void {
   const root = document.documentElement;
-  const font = globals.font;
   const mono = globals.mono;
   const choose = (name: string, value: unknown, fallback: string) => {
     if (typeof value === "string" && value !== fallback) {
@@ -50,6 +33,5 @@ export function applyFonts(globals: { font?: unknown; mono?: unknown }): void {
       root.removeAttribute(name);
     }
   };
-  choose("data-font", font, "jost");
   choose("data-mono", mono, "system");
 }

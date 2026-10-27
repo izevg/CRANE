@@ -115,11 +115,11 @@
   --shadow-subtle: var(--shadow-subtle);
   --shadow-card: var(--shadow-card);
 
-  /* Jost (OFL-1.1) — временная гарнитура: токены оставлены под подмену лицензированным шрифтом */
+  /* Onest (OFL-1.1): шрифт кита; файлы и сабсеты — shared/styles/fonts.css */
   --font-sans:
-    "Jost Variable", ui-sans-serif, system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    "Onest Variable", ui-sans-serif, system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-display:
-    "Jost Variable", ui-sans-serif, system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    "Onest Variable", ui-sans-serif, system-ui, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-mono:
     ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --font-weight-medium: 400;

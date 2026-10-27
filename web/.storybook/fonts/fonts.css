@@ -1,30 +1,8 @@
 /*
- * ВРЕМЕННО: сравнение шрифтов в Storybook. Тулбар «Шрифт» ставит data-font на <html>, тулбар «Моно для кода» — data-mono.
- * Переопределяются только токены --font-sans, --font-display и --font-mono; Jost остаётся значением по умолчанию.
+ * ВРЕМЕННО: сравнение моноширинных шрифтов в Storybook. Тулбар «Моно для кода» ставит data-mono на <html> и
+ * переопределяет только токен --font-mono. Текстовый шрифт (Onest) теперь не сравнивается: он шрифт кита.
  * Удаление проигравших: убрать пакет из devDependencies, импорт в index.ts, правило здесь и пункт в toolbars.ts.
  */
-:root[data-font="onest"] {
-  --font-sans: "Onest Variable", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
-  --font-display: "Onest Variable", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
-}
-:root[data-font="onest-manrope"] {
-  --font-sans: "Onest Variable", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
-  --font-display: "Manrope Variable", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
-}
-:root[data-font="golos-text"] {
-  --font-sans: "Golos Text Variable", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
-  --font-display: "Golos Text Variable", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
-}
-:root[data-font="inter"] {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
-  --font-display: "Inter Variable", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
-}
-:root[data-font="plex-sans"] {
-  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
-  --font-display: "IBM Plex Sans Variable", ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
-}
-
-/* Моно: «Как текст» — правило брендбука BRICK (нет отдельного моноширинного), «Системный» — значение из кода. */
 :root[data-mono="as-text"] {
   --font-mono: var(--font-sans);
 }
@@ -36,12 +14,9 @@
 }
 
 /*
- * Tailwind собирает утилиты .font-mono и .font-sans из `@theme inline` с буквальным значением, а не var(): токен
- * на них не влияет. Здесь они привязаны к токенам, но только внутри витрины.
+ * Tailwind собирает утилиту .font-mono из `@theme inline` с буквальным значением, а не var(): токен на неё не
+ * влияет. Здесь она привязана к токену, но только внутри витрины.
  */
-:root[data-font] .font-sans {
-  font-family: var(--font-sans);
-}
 :root[data-mono] .font-mono {
   font-family: var(--font-mono);
 }
