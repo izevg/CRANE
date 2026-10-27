@@ -1,10 +1,9 @@
-import type { Tone } from "~/shared/ui/primitives";
-import type { VersionState } from "./versions";
+import { FORMAT, type Format, type SearchItem, type VersionState } from "~/shared/api";
 
-export type SearchResult = {
+type Draft = {
   id: string;
   name: string;
-  format: string;
+  format: SearchItem["format"];
   repository: string;
   workspace: string;
   description: string;
@@ -19,13 +18,38 @@ export type SearchResult = {
   risk?: { priority: "P0" | "P1" | "P2" | "P3"; findings: number };
 };
 
-const RISK_TONE = { P0: "error", P1: "error", P2: "warning", P3: "info" } as const satisfies Record<
-  string,
-  Tone
->;
+export type ResultRow = { id: string; item: SearchItem; typosquatHref?: string };
 
-export function riskTone(priority: keyof typeof RISK_TONE): Tone {
-  return RISK_TONE[priority];
+const PROXY_SUFFIX = /proxy$/;
+const TYPOSQUAT_DISTANCE = 1;
+
+function toItem(draft: Draft): SearchItem {
+  return {
+    purl_base: `pkg:${draft.format}/${draft.name}`,
+    name: { display: draft.name, normalized: draft.name.toLowerCase() },
+    format: draft.format,
+    repository: {
+      name: draft.repository,
+      format: draft.format,
+      kind: PROXY_SUFFIX.test(draft.repository) ? "proxy" : "hosted",
+      workspace: draft.workspace,
+    },
+    description: draft.description,
+    latest: { version: draft.version, state: draft.state },
+    downloads_30d: draft.downloads,
+    owner_team: draft.team,
+    last_release_at: draft.updated,
+    has_readme: true,
+    lifecycle: { state: draft.deprecated ? "deprecated" : "active" },
+    exact_match: draft.exact === true,
+    ...(draft.risk
+      ? { risk: { max_open_priority: draft.risk.priority, open_count: draft.risk.findings } }
+      : {}),
+    ...(draft.typosquatOf
+      ? { typosquat: { similar_to: draft.typosquatOf, distance: TYPOSQUAT_DISTANCE } }
+      : {}),
+    _links: { self: { href: `/api/packages/${draft.id}` } },
+  };
 }
 
 const RELEASED = "released";
@@ -33,7 +57,7 @@ const QUARANTINE = "quarantined";
 const BLOCKED = "blocked";
 
 // i18n-fixture: результаты поиска (названия, описания, команды) — контент витрины, а не текст интерфейса
-export const RESULTS: readonly SearchResult[] = [
+const DRAFTS: readonly Draft[] = [
   {
     id: "acme-ui",
     name: "@acme/ui",
@@ -108,7 +132,7 @@ export const RESULTS: readonly SearchResult[] = [
   {
     id: "acme-ui-py",
     name: "acme-ui-tokens",
-    format: "PyPI",
+    format: "pypi",
     repository: "pypi-hosted",
     workspace: "data",
     description: "Дизайн-токены Acme для отчётов Jupyter и дашбордов matplotlib",
@@ -122,7 +146,7 @@ export const RESULTS: readonly SearchResult[] = [
   {
     id: "acme-ui-render",
     name: "acme-ui-report-renderer",
-    format: "PyPI",
+    format: "pypi",
     repository: "pypi-hosted",
     workspace: "data",
     description: "Генерация PDF-отчётов в стиле Acme на WeasyPrint и Jinja2",
@@ -135,7 +159,7 @@ export const RESULTS: readonly SearchResult[] = [
   {
     id: "acme-ui-bom",
     name: "com.acme.platform:acme-ui-bom",
-    format: "Maven",
+    format: "maven",
     repository: "maven-central-proxy",
     workspace: "platform",
     description: "BOM для согласованных версий серверных компонентов Acme UI Gateway",
@@ -149,7 +173,7 @@ export const RESULTS: readonly SearchResult[] = [
   {
     id: "acme-ui-spring",
     name: "com.acme.payments:ui-session-spring-starter",
-    format: "Maven",
+    format: "maven",
     repository: "maven-central-proxy",
     workspace: "payments",
     description: "Spring Boot starter для UI-сессий; отозван из-за CVE-2026-31337",
@@ -163,7 +187,7 @@ export const RESULTS: readonly SearchResult[] = [
   {
     id: "acme-ui-blazor",
     name: "Acme.Ui.Blazor.Components",
-    format: "NuGet",
+    format: "nuget",
     repository: "nuget-hosted",
     workspace: "platform",
     description: "Компоненты Blazor для внутренних порталов: таблицы, формы, диалоги",
@@ -176,7 +200,7 @@ export const RESULTS: readonly SearchResult[] = [
   {
     id: "acme-ui-tokens-rs",
     name: "acme-ui-tokens-sys",
-    format: "Cargo",
+    format: "cargo",
     repository: "cargo-sparse",
     workspace: "mobile",
     description: "Rust-биндинги к токенам дизайн-системы для встраиваемых экранов",
@@ -202,13 +226,32 @@ export const RESULTS: readonly SearchResult[] = [
   },
 ];
 
-export const FORMAT_FACETS = [
-  { value: "npm", label: "npm", count: { count: 21, capped: false } },
-  { value: "pypi", label: "PyPI", count: { count: 8, capped: false } },
-  { value: "maven", label: "Maven", count: { count: 5, capped: false } },
-  { value: "nuget", label: "NuGet", count: { count: 3, capped: false } },
-  { value: "cargo", label: "Cargo", count: { count: 1, capped: false } },
-] as const;
+function typosquatHref(draft: Draft): string | undefined {
+  const original = DRAFTS.find((candidate) => candidate.name === draft.typosquatOf);
+  return original === undefined ? undefined : `/packages/${original.id}`;
+}
+
+export const RESULTS: readonly ResultRow[] = DRAFTS.map((draft) => {
+  const href = typosquatHref(draft);
+  return {
+    id: draft.id,
+    item: toItem(draft),
+    ...(href === undefined ? {} : { typosquatHref: href }),
+  };
+});
+
+const FORMAT_COUNTS = { npm: 21, pypi: 8, maven: 5, nuget: 3, cargo: 1 } as const satisfies Record<
+  Format,
+  number
+>;
+
+const FORMATS = ["npm", "pypi", "maven", "nuget", "cargo"] as const satisfies readonly Format[];
+
+export const FORMAT_FACETS = FORMATS.map((value) => ({
+  value,
+  label: FORMAT[value],
+  count: { count: FORMAT_COUNTS[value], capped: false },
+}));
 
 export const WORKSPACE_FACETS = [
   { value: "platform", label: "platform", count: { count: 19, capped: false } },

@@ -4,13 +4,12 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useCallback, useId, useState } from "react";
 import { expect, within } from "storybook/test";
+import { SearchResultCard } from "~/entities/package";
 import { i18n } from "~/shared/lib/i18n";
 import { FacetList, FilterSelect, SegmentedControl } from "~/shared/ui/inputs";
 import { PageHeader } from "~/shared/ui/layout";
 import {
-  Badge,
   Button,
-  Callout,
   Input,
   Link,
   Sheet,
@@ -26,20 +25,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "~/shared/ui/primitives";
-import { EmptyState, RelativeTime, StatusBadge } from "~/shared/ui/status";
+import { EmptyState } from "~/shared/ui/status";
 import type { Banner } from "~/widgets/app-shell";
 import { REPOSITORIES, WORKSPACES } from "../data/common";
-import {
-  FORMAT_FACETS,
-  RESULTS,
-  riskTone,
-  type SearchResult,
-  WORKSPACE_FACETS,
-} from "../data/search";
-import { versionBadge } from "../data/states";
-import { activeFormat } from "../frame/format";
+import { FORMAT_FACETS, RESULTS, WORKSPACE_FACETS } from "../data/search";
+import { fitsViewport } from "../frame/fit";
 import { ScreenFrame } from "../frame/ScreenFrame";
-import { desktop, mobile, screenParameters } from "../frame/screen";
+import { desktop, mobile, mobile320, screenParameters } from "../frame/screen";
 
 function formatSegments() {
   return [
@@ -48,11 +40,7 @@ function formatSegments() {
       label: i18n._(msg`Все`),
       count: 38,
     },
-    { value: "npm", label: "npm", count: 21 },
-    { value: "pypi", label: "PyPI", count: 8 },
-    { value: "maven", label: "Maven", count: 5 },
-    { value: "nuget", label: "NuGet", count: 3 },
-    { value: "cargo", label: "Cargo", count: 1 },
+    ...FORMAT_FACETS.map(({ value, label, count }) => ({ value, label, count: count.count })),
   ] as const;
 }
 
@@ -71,60 +59,6 @@ function degraded(): readonly Banner[] {
       },
     },
   ];
-}
-
-// Спека волны 2: patterns §6 — будущий widgets/search-results/ResultCard
-function ResultCard({ item }: { item: SearchResult }) {
-  const { t } = useLingui();
-  const titleId = useId();
-  return (
-    <article
-      aria-labelledby={titleId}
-      className="flex min-w-0 flex-col gap-1.5 rounded-xl bg-card p-4 shadow-card"
-    >
-      {item.exact ? <p className="text-overline text-brand">{t`Точное совпадение`}</p> : null}
-      {item.typosquatOf ? (
-        <Callout tone="warning" className="py-1 text-caption">
-          {t`Похоже на ${item.typosquatOf} — 1 символ (возможный typosquat). `}
-          <Link href={`/packages/${item.typosquatOf}`} className="underline">
-            {item.typosquatOf}
-          </Link>
-        </Callout>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <h3 id={titleId} className="min-w-0 text-h3 wrap-anywhere">
-          <Link href={`/packages/${item.id}`} className="text-foreground hover:text-brand">
-            {item.name}
-          </Link>
-        </h3>
-        <Badge variant="outline">{item.format}</Badge>
-        <Badge variant="secondary">{`${item.repository} · ${item.workspace}`}</Badge>
-        {item.deprecated ? <StatusBadge tone="warning" label={t`Устарел`} /> : null}
-        {item.risk ? (
-          <span className="ml-auto">
-            <StatusBadge
-              tone={riskTone(item.risk.priority)}
-              label={`${item.risk.priority} · ${item.risk.findings} ${item.risk.findings === 1 ? t`находка` : t`находки`}`}
-            />
-          </span>
-        ) : null}
-      </div>
-      <p className="truncate text-body text-muted-foreground">{item.description}</p>
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
-        <span className="flex items-center gap-2">
-          <span className="inline-flex gap-1">
-            <span>{t`Последняя`}</span> <span className="font-mono">{item.version}</span>
-          </span>
-          <StatusBadge {...versionBadge(item.state)} />
-        </span>
-        <span className="tabular-nums">
-          {t`${activeFormat().number(item.downloads)} загрузок за 30 дн`}
-        </span>
-        <span>{item.team}</span>
-        <RelativeTime ts={item.updated} />
-      </p>
-    </article>
-  );
 }
 
 function Facets() {
@@ -238,8 +172,13 @@ function ResultsList() {
       <p role="status" className="text-caption text-muted-foreground tabular-nums">
         {t`38 результатов · 74 мс`}
       </p>
-      {RESULTS.map((item) => (
-        <ResultCard key={item.id} item={item} />
+      {RESULTS.map(({ id, item, typosquatHref }) => (
+        <SearchResultCard
+          key={id}
+          item={item}
+          href={`/packages/${id}`}
+          {...(typosquatHref === undefined ? {} : { typosquatHref })}
+        />
       ))}
     </section>
   );
@@ -376,4 +315,32 @@ export const English: Story = {
     await expect(canvas.getByRole("heading", { level: 1, name: "Search" })).toBeVisible();
     await expect(canvas.getByText("38 results · 74 ms")).toBeVisible();
   },
+};
+
+/** Топбар не шире окна на телефоне (WCAG 1.4.10): ширины 390 и 320, обе локали. */
+export const Fit390: Story = {
+  ...Mobile,
+  name: "Телефон 390: топбар помещается",
+  play: fitsViewport,
+};
+
+export const Fit320: Story = {
+  ...Mobile,
+  name: "Телефон 320: топбар помещается",
+  globals: mobile320,
+  play: fitsViewport,
+};
+
+export const Fit390English: Story = {
+  ...Mobile,
+  name: "Телефон 390 EN: топбар помещается",
+  globals: { ...mobile, locale: "en" },
+  play: fitsViewport,
+};
+
+export const Fit320English: Story = {
+  ...Mobile,
+  name: "Телефон 320 EN: топбар помещается",
+  globals: { ...mobile320, locale: "en" },
+  play: fitsViewport,
 };

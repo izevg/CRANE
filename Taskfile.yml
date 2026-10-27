@@ -8,8 +8,10 @@ tasks:
     silent: true
 
   install:
-    desc: Зависимости и git hooks
-    cmds: [pnpm install]
+    desc: Зависимости, git hooks и типы API (orval)
+    cmds:
+      - pnpm install
+      - pnpm --filter web run gen:api
 
   check:
     desc: "Быстрые проверки (как pre-push): Rust, web, структура, tools"
@@ -90,7 +92,7 @@ tasks:
       - task: rust:deny
 
   web:check:
-    desc: typecheck, Steiger, knip, depcruise
+    desc: генерация типов API (orval), typecheck, Steiger, knip, depcruise
     cmds: [pnpm --filter web run check]
   web:test:
     desc: Vitest — проекты unit (jsdom) и storybook (Chromium; один раз `pnpm --filter web exec playwright install chromium`)

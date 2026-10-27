@@ -1,13 +1,21 @@
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { type ChangeEvent, useCallback, useId, useState } from "react";
+import { useCallback, useState } from "react";
 import { expect, within } from "storybook/test";
 import { i18n } from "~/shared/lib/i18n";
+import { useSessionDraft } from "~/shared/lib/state";
 import { type Action, CopyableId } from "~/shared/ui/actions";
 import { columnHelper, DataTable, JsonViewer, KeyValueList } from "~/shared/ui/data-display";
 import { ConfirmDialog } from "~/shared/ui/dialogs";
-import { FilterSelect, SegmentedControl } from "~/shared/ui/inputs";
+import {
+  FilterSelect,
+  isJustified,
+  JUSTIFICATION_MAX,
+  JUSTIFICATION_MIN,
+  JustificationField,
+  SegmentedControl,
+} from "~/shared/ui/inputs";
 import { DetailPanel, PageHeader } from "~/shared/ui/layout";
 import { MetricTile } from "~/shared/ui/metrics";
 import {
@@ -15,22 +23,19 @@ import {
   Button,
   Callout,
   CalloutDescription,
-  Field,
-  FieldDescription,
-  FieldLabel,
   Input,
   Link,
   Tabs,
   TabsList,
   TabsTrigger,
-  Textarea,
 } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { AUDIT_EVENTS, type AuditEvent, EVENT_HASH, PREV_HASH } from "../data/audit";
 import { actorKindLabel, decisionBadge } from "../data/states";
+import { fitsViewport } from "../frame/fit";
 import { activeFormat } from "../frame/format";
 import { ScreenFrame } from "../frame/ScreenFrame";
-import { desktop, mobile, screenParameters } from "../frame/screen";
+import { desktop, mobile, mobile320, screenParameters } from "../frame/screen";
 
 function copyJson(): readonly [Action] {
   return [
@@ -54,7 +59,6 @@ function headerActions(): readonly [Action, Action] {
   ];
 }
 
-const MIN_JUSTIFICATION = 20;
 const noop = () => undefined;
 
 const helper = columnHelper<AuditEvent>();
@@ -352,7 +356,15 @@ function SummaryTab({ event }: { event: AuditEvent }) {
               ),
             },
             { label: "on_behalf_of", value: "user-04be" },
-            { label: t`Действие`, value: event.action.code },
+            {
+              label: t`Действие`,
+              value: (
+                <span className="flex flex-col leading-tight">
+                  <span className="font-mono text-caption">{event.action.code}</span>
+                  <span className="text-caption text-muted-foreground">{event.action.label}</span>
+                </span>
+              ),
+            },
             { label: t`Ресурс`, value: event.resource },
           ]}
         />
@@ -462,7 +474,9 @@ function EventPanel({
   );
 }
 
-// Спека волны 2: patterns §20 — будущий feature `RevealDialog` (форма обоснования + step-up §21).
+const isText = (value: unknown): value is string => typeof value === "string";
+
+/** Раскрытие данных (patterns §20): ConfirmDialog с обоснованием; введённое переживает редирект step-up. */
 function RevealDialog({
   open,
   onOpenChange,
@@ -471,12 +485,9 @@ function RevealDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useLingui();
-  const [text, setText] = useState("");
-  const counterId = useId();
-  const change = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => setText(event.target.value),
-    [],
-  );
+  // Текст обоснования живёт только в черновике: он же переживает редирект step-up
+  const [draft, saveDraft, clearDraft] = useSessionDraft("reveal-event", isText);
+  const text = draft ?? "";
   return (
     <ConfirmDialog
       open={open}
@@ -486,24 +497,19 @@ function RevealDialog({
       consequences={[t`Раскрытие запишется в журнал`, t`Данные видны только в этой панели`]}
       confirm={{
         label: t`Раскрыть`,
-        run: { onSelect: noop },
+        run: { onSelect: clearDraft },
         stepUp: true,
-        ...(text.trim().length < MIN_JUSTIFICATION
-          ? { disabledReason: t`Обоснование: минимум ${MIN_JUSTIFICATION} символов` }
-          : {}),
+        ...(isJustified(text)
+          ? {}
+          : {
+              disabledReason: t`Обоснование: от ${JUSTIFICATION_MIN} до ${JUSTIFICATION_MAX} символов`,
+            }),
       }}
     >
       <Callout tone="info">
         <CalloutDescription>{t`Потребуется подтверждение входа (MFA)`}</CalloutDescription>
       </Callout>
-      <Field>
-        <FieldLabel>{t`Обоснование`}</FieldLabel>
-        <Textarea value={text} onChange={change} aria-describedby={counterId} />
-        <FieldDescription id={counterId}>
-          {text.trim().length} {t`из`} {MIN_JUSTIFICATION}{" "}
-          {t`символов. Раскрытие будет записано в журнал`}
-        </FieldDescription>
-      </Field>
+      <JustificationField label={t`Обоснование`} value={text} onChange={saveDraft} />
     </ConfirmDialog>
   );
 }
@@ -590,7 +596,11 @@ export const Desktop1440: Story = {
   name: "Desktop 1440 · SecOps",
   play: async ({ canvasElement }) => {
     const body = within(canvasElement.ownerDocument.body);
-    await expect(await body.findByRole("dialog", { name: "Событие" })).toBeVisible();
+    const dialog = await body.findByRole("dialog", { name: "Событие" });
+    await expect(dialog).toBeVisible();
+    // «Действие»: подпись и код рядом, как в таблице, а не сырой код
+    const value = within(dialog).getByText("Действие").nextElementSibling;
+    await expect(value?.querySelectorAll("span span")).toHaveLength(2);
   },
 };
 
@@ -652,4 +662,32 @@ export const English: Story = {
     // Тип актора в таблице — подпись интерфейса, а не контент: по-английски
     await expect(body.getAllByText("Human").length).toBeGreaterThan(0);
   },
+};
+
+/** Топбар не шире окна на телефоне (WCAG 1.4.10): ширины 390 и 320, обе локали. */
+export const Fit390: Story = {
+  ...Mobile390,
+  name: "Телефон 390: топбар помещается",
+  play: fitsViewport,
+};
+
+export const Fit320: Story = {
+  ...Mobile390,
+  name: "Телефон 320: топбар помещается",
+  globals: mobile320,
+  play: fitsViewport,
+};
+
+export const Fit390English: Story = {
+  ...Mobile390,
+  name: "Телефон 390 EN: топбар помещается",
+  globals: { ...mobile, locale: "en" },
+  play: fitsViewport,
+};
+
+export const Fit320English: Story = {
+  ...Mobile390,
+  name: "Телефон 320 EN: топбар помещается",
+  globals: { ...mobile320, locale: "en" },
+  play: fitsViewport,
 };

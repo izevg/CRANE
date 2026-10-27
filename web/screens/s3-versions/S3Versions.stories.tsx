@@ -3,6 +3,7 @@ import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { expect, within } from "storybook/test";
+import { VersionFlags, VersionNumber, VersionStatus } from "~/entities/version";
 import { i18n } from "~/shared/lib/i18n";
 import { type Action, ActionButton, CopyableId } from "~/shared/ui/actions";
 import {
@@ -32,17 +33,14 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
-import { versionBadge } from "../data/states";
 import { PURL, SHA256, STATE_COUNTS, VERSION_ROWS, type VersionRow } from "../data/versions";
+import { fitsViewport } from "../frame/fit";
 import { activeFormat } from "../frame/format";
 import { Moment } from "../frame/Moment";
 import { ScreenFrame } from "../frame/ScreenFrame";
-import { desktop, mobile, screenParameters } from "../frame/screen";
+import { desktop, mobile, mobile320, screenParameters } from "../frame/screen";
 
 const SELECTED_ROW = /1\.4\.2/;
 /** Момент публикации выбранной версии: тот же, что первое событие ленты, таблицы и сведений. */
@@ -50,57 +48,21 @@ const SELECTED_AT = "2026-10-27T13:42:00Z";
 
 const helper = columnHelper<VersionRow>();
 
-/** Состояние + причина в одной ячейке (patterns §9): причина блокировки не прячется в флагах. */
-function StateCell({ row }: { row: VersionRow }) {
-  const { t } = useLingui();
-  return (
-    <span className="flex flex-wrap items-center gap-2">
-      <StatusBadge {...versionBadge(row.state)} />
-      {row.state === "blocked" ? (
-        <Tooltip>
-          <TooltipTrigger render={<Badge variant="destructive" tabIndex={0} />}>
-            {t`Экстренно · CVE-2026-31337`}
-          </TooltipTrigger>
-          <TooltipContent>{t`Исправлено в 4.17.21`}</TooltipContent>
-        </Tooltip>
-      ) : null}
-    </span>
-  );
-}
-
 const columns = helper.columns([
   helper.accessor("version", {
     header: () => i18n._(msg`Версия`),
     meta: { priority: 1 },
-    cell: (info) =>
-      info.row.original.state === "deleted" ? (
-        <s
-          className="font-mono text-muted-foreground"
-          title={i18n._(msg`Номер версии нельзя использовать повторно`)}
-        >
-          {info.getValue()}
-        </s>
-      ) : (
-        <span className="font-mono font-semibold tabular-nums">{info.getValue()}</span>
-      ),
+    cell: (info) => <VersionNumber name={info.getValue()} state={info.row.original.state} />,
   }),
   helper.accessor("state", {
     header: () => i18n._(msg`Состояние`),
     meta: { priority: 1 },
-    cell: (info) => <StateCell row={info.row.original} />,
+    cell: (info) => <VersionStatus version={info.row.original} />,
   }),
   helper.accessor("flags", {
     header: () => i18n._(msg`Флаги`),
     meta: { priority: 2 },
-    cell: (info) => (
-      <span className="flex gap-1">
-        {info.getValue().map((flag) => (
-          <Badge key={flag} variant="outline">
-            {flag}
-          </Badge>
-        ))}
-      </span>
-    ),
+    cell: (info) => <VersionFlags flags={info.getValue()} />,
   }),
   helper.accessor("publishedAt", {
     header: () => i18n._(msg`Опубликована`),
@@ -397,7 +359,7 @@ function VersionPanel({
       open={open}
       onOpenChange={onOpenChange}
       title={t`Версия 1.4.2`}
-      status={<StatusBadge {...versionBadge("quarantined")} />}
+      status={<VersionStatus version={{ state: "quarantined", block_reason: null }} />}
       menu={[
         {
           label: t`Открыть полностью`,
@@ -648,4 +610,32 @@ export const English: Story = {
     await expect(table?.textContent).not.toContain("Карантин");
     await expect(table?.textContent).not.toContain("Выпущена");
   },
+};
+
+/** Топбар не шире окна на телефоне (WCAG 1.4.10): ширины 390 и 320, обе локали. */
+export const Fit390: Story = {
+  ...Mobile390,
+  name: "Телефон 390: топбар помещается",
+  play: fitsViewport,
+};
+
+export const Fit320: Story = {
+  ...Mobile390,
+  name: "Телефон 320: топбар помещается",
+  globals: mobile320,
+  play: fitsViewport,
+};
+
+export const Fit390English: Story = {
+  ...Mobile390,
+  name: "Телефон 390 EN: топбар помещается",
+  globals: { ...mobile, locale: "en" },
+  play: fitsViewport,
+};
+
+export const Fit320English: Story = {
+  ...Mobile390,
+  name: "Телефон 320 EN: топбар помещается",
+  globals: { ...mobile320, locale: "en" },
+  play: fitsViewport,
 };

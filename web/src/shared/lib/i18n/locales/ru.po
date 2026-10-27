@@ -10,8 +10,14 @@ msgstr ""
 msgid " (откроется в новой вкладке)"
 msgstr " (откроется в новой вкладке)"
 
+msgid "— отличается на {distance, plural, one {# символ} few {# символа} many {# символов} other {# символа}} (возможный typosquat)"
+msgstr "— отличается на {distance, plural, one {# символ} few {# символа} many {# символов} other {# символа}} (возможный typosquat)"
+
 msgid ", требуется подтверждение входа"
 msgstr ", требуется подтверждение входа"
+
+msgid "{count, plural, one {{priority} · # находка} few {{priority} · # находки} many {{priority} · # находок} other {{priority} · # находки}}"
+msgstr "{count, plural, one {{priority} · # находка} few {{priority} · # находки} many {{priority} · # находок} other {{priority} · # находки}}"
 
 msgid "{count, plural, one {# непрочитанное} few {# непрочитанных} many {# непрочитанных} other {# непрочитанных}}"
 msgstr "{count, plural, one {# непрочитанное} few {# непрочитанных} many {# непрочитанных} other {# непрочитанных}}"
@@ -19,11 +25,26 @@ msgstr "{count, plural, one {# непрочитанное} few {# непрочи
 msgid "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
 msgstr "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
 
+msgid "{count} из {limit}"
+msgstr "{count} из {limit}"
+
+msgid "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
+msgstr "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
+
+msgid "{JUSTIFICATION_MAX, plural, one {Максимум # символ} few {Максимум # символа} many {Максимум # символов} other {Максимум # символа}}"
+msgstr "{JUSTIFICATION_MAX, plural, one {Максимум # символ} few {Максимум # символа} many {Максимум # символов} other {Максимум # символа}}"
+
+msgid "{JUSTIFICATION_MIN, plural, one {Минимум # символ} few {Минимум # символа} many {Минимум # символов} other {Минимум # символа}}"
+msgstr "{JUSTIFICATION_MIN, plural, one {Минимум # символ} few {Минимум # символа} many {Минимум # символов} other {Минимум # символа}}"
+
 msgid "{label}: {shown}"
 msgstr "{label}: {shown}"
 
 msgid "{label}: {shown}, {toneLabel}"
 msgstr "{label}: {shown}, {toneLabel}"
+
+msgid "{left, plural, one {Остался # символ} few {Осталось # символа} many {Осталось # символов} other {Осталось # символа}}"
+msgstr "{left, plural, one {Остался # символ} few {Осталось # символа} many {Осталось # символов} other {Осталось # символа}}"
 
 msgid "{shown}, уверенность {confidenceText}"
 msgstr "{shown}, уверенность {confidenceText}"
@@ -42,6 +63,12 @@ msgstr "{unread, plural, one {Уведомления, # непрочитанно
 
 msgid "CRANE, Реестр артефактов: на главную"
 msgstr "CRANE, Реестр артефактов: на главную"
+
+msgid "EOL"
+msgstr "EOL"
+
+msgid "Активен"
+msgstr "Активен"
 
 msgid "Безопасность"
 msgstr "Безопасность"
@@ -67,11 +94,17 @@ msgstr "Выбрать все загруженные"
 msgid "Выполняется…"
 msgstr "Выполняется…"
 
+msgid "Выпущена"
+msgstr "Выпущена"
+
 msgid "Главное меню"
 msgstr "Главное меню"
 
 msgid "Готово"
 msgstr "Готово"
+
+msgid "Действие «{actionLabel}» требует подтверждения вторым фактором"
+msgstr "Действие «{actionLabel}» требует подтверждения вторым фактором"
 
 msgid "Действия"
 msgstr "Действия"
@@ -87,6 +120,9 @@ msgstr "Другие действия"
 
 msgid "Ещё {hidden}"
 msgstr "Ещё {hidden}"
+
+msgid "Заблокирована"
+msgstr "Заблокирована"
 
 msgid "Загрузка"
 msgstr "Загрузка"
@@ -112,14 +148,26 @@ msgstr "Изменение: {change}"
 msgid "изменено: было {before}, стало {after}"
 msgstr "изменено: было {before}, стало {after}"
 
+msgid "Исправлено в {fixedIn}"
+msgstr "Исправлено в {fixedIn}"
+
 msgid "Ищем пакеты…"
 msgstr "Ищем пакеты…"
 
 msgid "К содержимому"
 msgstr "К содержимому"
 
+msgid "Карантин"
+msgstr "Карантин"
+
+msgid "Клиент пакетов"
+msgstr "Клиент пакетов"
+
 msgid "Код"
 msgstr "Код"
+
+msgid "Команда установки"
+msgstr "Команда установки"
 
 msgid "Командная палитра"
 msgstr "Командная палитра"
@@ -127,14 +175,23 @@ msgstr "Командная палитра"
 msgid "Контакт: {contact}"
 msgstr "Контакт: {contact}"
 
+msgid "Копировать {path}"
+msgstr "Копировать {path}"
+
 msgid "Копировать JSON"
 msgstr "Копировать JSON"
 
 msgid "Копировать request_id"
 msgstr "Копировать request_id"
 
+msgid "Копировать команду установки"
+msgstr "Копировать команду установки"
+
 msgid "Копировать токен"
 msgstr "Копировать токен"
+
+msgid "Копировать: {title}"
+msgstr "Копировать: {title}"
 
 msgid "корень"
 msgstr "корень"
@@ -153,6 +210,9 @@ msgstr "Навигационная цепочка"
 
 msgid "Навигация по разделам реестра"
 msgstr "Навигация по разделам реестра"
+
+msgid "Настроить вручную ({path})"
+msgstr "Настроить вручную ({path})"
 
 msgid "Не найдено или нет доступа"
 msgstr "Не найдено или нет доступа"
@@ -183,6 +243,9 @@ msgstr "Ничего не найдено по фильтрам"
 
 msgid "Новых уведомлений нет"
 msgstr "Новых уведомлений нет"
+
+msgid "Номер версии нельзя использовать повторно"
+msgstr "Номер версии нельзя использовать повторно"
 
 msgid "обновлено"
 msgstr "обновлено"
@@ -217,8 +280,20 @@ msgstr "Перейти, найти пакет или действие"
 msgid "Перейти, найти пакет или действие…"
 msgstr "Перейти, найти пакет или действие…"
 
+msgid "Переменные окружения"
+msgstr "Переменные окружения"
+
 msgid "Платформа"
 msgstr "Платформа"
+
+msgid "По правилу"
+msgstr "По правилу"
+
+msgid "Подробнее: {label}"
+msgstr "Подробнее: {label}"
+
+msgid "Подтвердите вход"
+msgstr "Подтвердите вход"
 
 msgid "Поиск и переходы"
 msgstr "Поиск и переходы"
@@ -232,6 +307,15 @@ msgstr "Показать таблицей"
 msgid "Поле"
 msgstr "Поле"
 
+msgid "После подтверждения вы вернётесь к действию, данные формы сохранятся"
+msgstr "После подтверждения вы вернётесь к действию, данные формы сохранятся"
+
+msgid "Последняя"
+msgstr "Последняя"
+
+msgid "Похоже на"
+msgstr "Похоже на"
+
 msgid "Правило: {ruleId}"
 msgstr "Правило: {ruleId}"
 
@@ -240,6 +324,9 @@ msgstr "Проверьте адрес или имя пакета"
 
 msgid "Проверьте сеть — данные обновятся, когда связь вернётся"
 msgstr "Проверьте сеть — данные обновятся, когда связь вернётся"
+
+msgid "Продолжить в Keycloak"
+msgstr "Продолжить в Keycloak"
 
 msgid "Прочие ({count})"
 msgstr "Прочие ({count})"
@@ -313,14 +400,41 @@ msgstr "Тема: {modeLabel}"
 msgid "Тёмная"
 msgstr "Тёмная"
 
+msgid "Токен не показывается: используйте cctl или переменную окружения."
+msgstr "Токен не показывается: используйте cctl или переменную окружения."
+
+msgid "Точное совпадение"
+msgstr "Точное совпадение"
+
 msgid "Уведомления"
 msgstr "Уведомления"
 
 msgid "уверенность {confidenceText}"
 msgstr "уверенность {confidenceText}"
 
+msgid "Удалена"
+msgstr "Удалена"
+
 msgid "удалено"
 msgstr "удалено"
+
+msgid "Установка"
+msgstr "Установка"
+
+msgid "Устарел"
+msgstr "Устарел"
+
+msgid "Файл {path}"
+msgstr "Файл {path}"
+
+msgid "Шаг 1. Однократная настройка"
+msgstr "Шаг 1. Однократная настройка"
+
+msgid "Шаг 2. Установка"
+msgstr "Шаг 2. Установка"
+
+msgid "Экстренно"
+msgstr "Экстренно"
 
 msgid "Я сохранил токен"
 msgstr "Я сохранил токен"

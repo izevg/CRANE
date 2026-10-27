@@ -1,4 +1,5 @@
 import { i18n } from "@lingui/core";
+import { readStored, writeStored } from "~/shared/lib/state";
 
 export const LOCALES = ["ru", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
@@ -12,20 +13,12 @@ export function isLocale(value: unknown): value is Locale {
 }
 
 function readStoredLocale(): Locale {
-  try {
-    const value = window.localStorage.getItem(STORAGE_KEY);
-    return isLocale(value) ? value : DEFAULT_LOCALE;
-  } catch {
-    return DEFAULT_LOCALE;
-  }
+  return readStored("local", STORAGE_KEY, isLocale) ?? DEFAULT_LOCALE;
 }
 
+/** Если хранилище недоступно, выбор живёт до перезагрузки. */
 function writeStoredLocale(locale: Locale): void {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, locale);
-  } catch {
-    // хранилище недоступно: выбор живёт до перезагрузки
-  }
+  writeStored("local", STORAGE_KEY, locale);
 }
 
 async function loadMessages(locale: Locale) {

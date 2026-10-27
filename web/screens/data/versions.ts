@@ -1,13 +1,13 @@
 // biome-ignore-all lint/style/noMagicNumbers: детерминированные данные макетов, не продуктовый код
+import type { BlockReason, VersionFlags, VersionState } from "~/shared/api";
 import { PEOPLE } from "./common";
-
-export type VersionState = "released" | "quarantined" | "blocked" | "deleted";
 
 export type VersionRow = {
   id: string;
   version: string;
   state: VersionState;
-  flags: readonly string[];
+  block_reason: BlockReason | null;
+  flags: VersionFlags;
   /** ISO 8601 (UTC): одно событие — одно время в таблице, панели и ленте. */
   publishedAt: string;
   /** Человек — ФИО, робот — префикс credential и пайплайн. */
@@ -47,21 +47,21 @@ function stateOf(version: string): VersionState {
   return DELETED.has(version) ? "deleted" : "released";
 }
 
-function flagsOf(version: string): readonly string[] {
-  const flags: string[] = [];
-  if (version === "1.4.1") {
-    flags.push("latest");
-  }
-  if (version === "1.4.2") {
-    flags.push("next");
-  }
-  if (version.startsWith("1.1.")) {
-    flags.push("deprecated");
-  }
-  if (version === "1.0.3") {
-    flags.push("yanked");
-  }
-  return flags;
+// i18n-fixture: сообщение автора пакета об устаревании — контент витрины, а не текст интерфейса
+function flagsOf(version: string): VersionFlags {
+  return {
+    yanked: version === "1.0.3",
+    unlisted: false,
+    deprecated_message: version.startsWith("1.1.") ? "Используйте 1.4.x" : null,
+    dist_tags: version === "1.4.1" ? ["latest"] : version === "1.4.2" ? ["next"] : [],
+    mutable: false,
+  };
+}
+
+function reasonOf(version: string): BlockReason | null {
+  return BLOCKED.has(version)
+    ? { kind: "emergency", advisory_id: "CVE-2026-31337", fixed_in: "4.17.21" }
+    : null;
 }
 
 export const VERSION_ROWS: readonly VersionRow[] = NAMES.map((version, index) => {
@@ -70,6 +70,7 @@ export const VERSION_ROWS: readonly VersionRow[] = NAMES.map((version, index) =>
     id: `v-${version}`,
     version,
     state: stateOf(version),
+    block_reason: reasonOf(version),
     flags: flagsOf(version),
     publishedAt: new Date(FIRST - index * 6 * MS_PER_DAY - index * 1_137_000).toISOString(),
     by:

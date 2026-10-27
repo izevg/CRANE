@@ -35,16 +35,21 @@ type Props = TopbarProps & {
 
 function Crumbs({ trail, current }: TopbarProps["breadcrumbs"]) {
   return (
-    <Breadcrumb className="min-w-0">
+    <Breadcrumb className="min-w-0 flex-1">
       <BreadcrumbList className="flex-nowrap overflow-hidden">
+        {/*
+          Ниже sm виден только текущий раздел одной строкой с обрезкой: путь не помещается рядом с кнопками справа.
+          `max-sm:hidden` — вариант с медиа-запросом, он стоит в CSS позже базовых `inline-flex`, и порядок классов
+          не важен (cx не разрешает конфликты).
+        */}
         {trail.map((crumb) => (
           <Fragment key={`${crumb.label}:${crumb.href}`}>
-            <BreadcrumbItem>
+            <BreadcrumbItem className="max-sm:hidden">
               <BreadcrumbLink href={crumb.href} className={CRUMB} title={crumb.label}>
                 {crumb.label}
               </BreadcrumbLink>
             </BreadcrumbItem>
-            <BreadcrumbSeparator />
+            <BreadcrumbSeparator className="max-sm:hidden" />
           </Fragment>
         ))}
         <BreadcrumbItem>
@@ -71,10 +76,15 @@ export function Topbar({
     <header className="sticky top-0 z-20 flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-border bg-background px-4 sm:gap-3 lg:px-6 2xl:px-8">
       {sidebarToggle}
       <Crumbs {...breadcrumbs} />
-      <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+      {/*
+        Правая группа целиком остаётся в окне (shrink-0), сжимаются крошки слева: аккаунт и уведомления нельзя
+        вытеснять. Поиск на телефоне — иконка, статус режима скрыт (он есть в баннерах и на странице), а
+        переключатель workspace должен сам стать иконкой с именем.
+      */}
+      <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-3">
         <SearchButton onOpen={onOpenPalette} />
         {workspace}
-        {status}
+        {status === undefined ? null : <div className="hidden sm:block">{status}</div>}
         {notifications}
         {account}
       </div>

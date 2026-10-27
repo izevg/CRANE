@@ -10,8 +10,14 @@ msgstr ""
 msgid " (откроется в новой вкладке)"
 msgstr " (opens in a new tab)"
 
+msgid "— отличается на {distance, plural, one {# символ} few {# символа} many {# символов} other {# символа}} (возможный typosquat)"
+msgstr "— differs by {distance, plural, one {# character} other {# characters}} (possible typosquat)"
+
 msgid ", требуется подтверждение входа"
 msgstr ", sign-in confirmation required"
+
+msgid "{count, plural, one {{priority} · # находка} few {{priority} · # находки} many {{priority} · # находок} other {{priority} · # находки}}"
+msgstr "{count, plural, one {{priority} · # finding} other {{priority} · # findings}}"
 
 msgid "{count, plural, one {# непрочитанное} few {# непрочитанных} many {# непрочитанных} other {# непрочитанных}}"
 msgstr "{count, plural, one {# unread} other {# unread}}"
@@ -19,11 +25,26 @@ msgstr "{count, plural, one {# unread} other {# unread}}"
 msgid "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
 msgstr "{count, plural, one {# row selected} other {# rows selected}}"
 
+msgid "{count} из {limit}"
+msgstr "{count} of {limit}"
+
+msgid "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
+msgstr "{downloads, plural, one {# download in 30 d} other {# downloads in 30 d}}"
+
+msgid "{JUSTIFICATION_MAX, plural, one {Максимум # символ} few {Максимум # символа} many {Максимум # символов} other {Максимум # символа}}"
+msgstr "{JUSTIFICATION_MAX, plural, one {Maximum # character} other {Maximum # characters}}"
+
+msgid "{JUSTIFICATION_MIN, plural, one {Минимум # символ} few {Минимум # символа} many {Минимум # символов} other {Минимум # символа}}"
+msgstr "{JUSTIFICATION_MIN, plural, one {At least # character} other {At least # characters}}"
+
 msgid "{label}: {shown}"
 msgstr "{label}: {shown}"
 
 msgid "{label}: {shown}, {toneLabel}"
 msgstr "{label}: {shown}, {toneLabel}"
+
+msgid "{left, plural, one {Остался # символ} few {Осталось # символа} many {Осталось # символов} other {Осталось # символа}}"
+msgstr "{left, plural, one {# character left} other {# characters left}}"
 
 msgid "{shown}, уверенность {confidenceText}"
 msgstr "{shown}, confidence {confidenceText}"
@@ -42,6 +63,12 @@ msgstr "{unread, plural, one {Notifications, # unread} other {Notifications, # u
 
 msgid "CRANE, Реестр артефактов: на главную"
 msgstr "CRANE, Artifact registry: go to home"
+
+msgid "EOL"
+msgstr "EOL"
+
+msgid "Активен"
+msgstr "Active"
 
 msgid "Безопасность"
 msgstr "Security"
@@ -67,11 +94,17 @@ msgstr "Select all loaded"
 msgid "Выполняется…"
 msgstr "In progress…"
 
+msgid "Выпущена"
+msgstr "Released"
+
 msgid "Главное меню"
 msgstr "Main menu"
 
 msgid "Готово"
 msgstr "Done"
+
+msgid "Действие «{actionLabel}» требует подтверждения вторым фактором"
+msgstr "The \"{actionLabel}\" action needs second-factor confirmation"
 
 msgid "Действия"
 msgstr "Actions"
@@ -87,6 +120,9 @@ msgstr "More actions"
 
 msgid "Ещё {hidden}"
 msgstr "{hidden} more"
+
+msgid "Заблокирована"
+msgstr "Blocked"
 
 msgid "Загрузка"
 msgstr "Loading"
@@ -112,14 +148,26 @@ msgstr "Change: {change}"
 msgid "изменено: было {before}, стало {after}"
 msgstr "changed: was {before}, now {after}"
 
+msgid "Исправлено в {fixedIn}"
+msgstr "Fixed in {fixedIn}"
+
 msgid "Ищем пакеты…"
 msgstr "Searching packages…"
 
 msgid "К содержимому"
 msgstr "Skip to content"
 
+msgid "Карантин"
+msgstr "Quarantine"
+
+msgid "Клиент пакетов"
+msgstr "Package client"
+
 msgid "Код"
 msgstr "Code"
+
+msgid "Команда установки"
+msgstr "Install command"
 
 msgid "Командная палитра"
 msgstr "Command palette"
@@ -127,14 +175,23 @@ msgstr "Command palette"
 msgid "Контакт: {contact}"
 msgstr "Contact: {contact}"
 
+msgid "Копировать {path}"
+msgstr "Copy {path}"
+
 msgid "Копировать JSON"
 msgstr "Copy JSON"
 
 msgid "Копировать request_id"
 msgstr "Copy request_id"
 
+msgid "Копировать команду установки"
+msgstr "Copy install command"
+
 msgid "Копировать токен"
 msgstr "Copy token"
+
+msgid "Копировать: {title}"
+msgstr "Copy: {title}"
 
 msgid "корень"
 msgstr "root"
@@ -153,6 +210,9 @@ msgstr "Breadcrumbs"
 
 msgid "Навигация по разделам реестра"
 msgstr "Navigate the registry sections"
+
+msgid "Настроить вручную ({path})"
+msgstr "Configure manually ({path})"
 
 msgid "Не найдено или нет доступа"
 msgstr "Not found or no access"
@@ -183,6 +243,9 @@ msgstr "Nothing matches the filters"
 
 msgid "Новых уведомлений нет"
 msgstr "No new notifications"
+
+msgid "Номер версии нельзя использовать повторно"
+msgstr "Version number can't be reused"
 
 msgid "обновлено"
 msgstr "updated"
@@ -217,8 +280,20 @@ msgstr "Go to, find a package or an action"
 msgid "Перейти, найти пакет или действие…"
 msgstr "Go to, find a package or an action…"
 
+msgid "Переменные окружения"
+msgstr "Environment variables"
+
 msgid "Платформа"
 msgstr "Platform"
+
+msgid "По правилу"
+msgstr "By rule"
+
+msgid "Подробнее: {label}"
+msgstr "Details: {label}"
+
+msgid "Подтвердите вход"
+msgstr "Confirm sign-in"
 
 msgid "Поиск и переходы"
 msgstr "Search and navigate"
@@ -232,6 +307,15 @@ msgstr "Show as table"
 msgid "Поле"
 msgstr "Field"
 
+msgid "После подтверждения вы вернётесь к действию, данные формы сохранятся"
+msgstr "After confirming, you return to the action and your form data is kept"
+
+msgid "Последняя"
+msgstr "Latest"
+
+msgid "Похоже на"
+msgstr "Similar to"
+
 msgid "Правило: {ruleId}"
 msgstr "Rule: {ruleId}"
 
@@ -240,6 +324,9 @@ msgstr "Check the address or package name"
 
 msgid "Проверьте сеть — данные обновятся, когда связь вернётся"
 msgstr "Check your network — data will refresh when the connection returns"
+
+msgid "Продолжить в Keycloak"
+msgstr "Continue in Keycloak"
 
 msgid "Прочие ({count})"
 msgstr "Other ({count})"
@@ -313,14 +400,41 @@ msgstr "Theme: {modeLabel}"
 msgid "Тёмная"
 msgstr "Dark"
 
+msgid "Токен не показывается: используйте cctl или переменную окружения."
+msgstr "The token is not shown: use cctl or an environment variable."
+
+msgid "Точное совпадение"
+msgstr "Exact match"
+
 msgid "Уведомления"
 msgstr "Notifications"
 
 msgid "уверенность {confidenceText}"
 msgstr "confidence {confidenceText}"
 
+msgid "Удалена"
+msgstr "Deleted"
+
 msgid "удалено"
 msgstr "removed"
+
+msgid "Установка"
+msgstr "Install"
+
+msgid "Устарел"
+msgstr "Deprecated"
+
+msgid "Файл {path}"
+msgstr "File {path}"
+
+msgid "Шаг 1. Однократная настройка"
+msgstr "Step 1. One-time setup"
+
+msgid "Шаг 2. Установка"
+msgstr "Step 2. Install"
+
+msgid "Экстренно"
+msgstr "Emergency"
 
 msgid "Я сохранил токен"
 msgstr "I've saved the token"
