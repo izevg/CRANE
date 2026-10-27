@@ -80,7 +80,7 @@ export function DetailPanel({
   const docked = useBreakpoint("2xl");
   const titleId = useId();
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const wasOpen = useRef(false);
+  const wasOpen = useRef<boolean>(false);
 
   // Sheet двигает фокус сам (initialFocus/finalFocus); вручную это нужно только docked-панели.
   useEffect(() => {
