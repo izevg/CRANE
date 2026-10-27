@@ -81,6 +81,75 @@ export const FourWithMore: Story = {
   },
 };
 
+function centerY(rect: DOMRect): number {
+  return rect.top + rect.height / 2;
+}
+
+/** Центр первой строки текста: Range по первому текстовому узлу даёт прямоугольник строки, а не блока. */
+function firstLineCenter(element: Element): number {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const first = range.getClientRects()[0];
+  if (first === undefined) {
+    throw new Error("у текста нет строк");
+  }
+  return centerY(first);
+}
+
+const ICON_TOLERANCE = 2;
+const ICON_SIZE = 20;
+
+export const IconAlignment: Story = {
+  name: "Иконка 20 px по центру первой строки (одна и несколько строк, с действием)",
+  args: {
+    banners: [{ ...READ_ONLY, action: { label: "Статус платформы", run: { href: "/platform" } } }],
+  },
+  decorators: [
+    (Story) => (
+      <div className="w-[26rem]">
+        <Story />
+      </div>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const callout = canvasElement.querySelector("[data-slot=callout]");
+    const icon = callout?.querySelector("svg");
+    if (!(callout && icon)) {
+      throw new Error("нет баннера или иконки");
+    }
+    const text = within(callout as HTMLElement).getByText(READ_ONLY.text);
+    await expect(icon.getBoundingClientRect().width).toBeCloseTo(ICON_SIZE, 0);
+    // текст на 26rem переносится на несколько строк: иконка выровнена по первой
+    await expect(text.getClientRects().length).toBeGreaterThan(0);
+    await expect(
+      Math.abs(centerY(icon.getBoundingClientRect()) - firstLineCenter(text)),
+    ).toBeLessThanOrEqual(ICON_TOLERANCE);
+    const action = within(callout as HTMLElement).getByRole("link", { name: "Статус платформы" });
+    await expect(
+      Math.abs(centerY(action.getBoundingClientRect()) - firstLineCenter(text)),
+    ).toBeLessThanOrEqual(ICON_TOLERANCE);
+  },
+};
+
+export const IconAlignmentSingleLine: Story = {
+  name: "Иконка по центру однострочного баннера",
+  args: { banners: [LLM] },
+  play: async ({ canvasElement }) => {
+    const callout = canvasElement.querySelector("[data-slot=callout]");
+    const icon = callout?.querySelector("svg");
+    if (!(callout && icon)) {
+      throw new Error("нет баннера или иконки");
+    }
+    const text = within(callout as HTMLElement).getByText(LLM.text);
+    await expect(
+      Math.abs(centerY(icon.getBoundingClientRect()) - firstLineCenter(text)),
+    ).toBeLessThanOrEqual(ICON_TOLERANCE);
+    await expect(
+      Math.abs(centerY(icon.getBoundingClientRect()) - centerY(callout.getBoundingClientRect())),
+    ).toBeLessThanOrEqual(ICON_TOLERANCE);
+  },
+};
+
 export const UrgentP0: Story = {
   name: "Срочный P0: role=alert",
   args: { banners: [P0, READ_ONLY] },

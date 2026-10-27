@@ -48,9 +48,10 @@ function CollapseButton({
 function BannerItem({ banner, onCollapse }: { banner: Banner; onCollapse: Props["onCollapse"] }) {
   return (
     <Callout tone={banner.tone} {...(banner.urgent === true ? { live: "alert" as const } : {})}>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <span className="min-w-0 flex-1">{banner.text}</span>
-        <div className="flex items-center gap-2">
+        {/* -my-1.5: кнопка 32 px не растягивает строку выше 20 px и остаётся на уровне первой строки текста */}
+        <div className="-my-1.5 flex items-center gap-2">
           {banner.action ? <ActionButton action={banner.action} variant="ghost" /> : null}
           {banner.tone === "info" && onCollapse !== undefined ? (
             <CollapseButton banner={banner} onCollapse={onCollapse} />
