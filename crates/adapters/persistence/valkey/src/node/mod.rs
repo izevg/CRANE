@@ -87,10 +87,10 @@ impl Local {
 
     /// Кладёт в L1 запись, прочитанную из L2, когда поколение было `seen`. Если с тех пор
     /// пришла инвалидация, запись могла устареть, пока шла в L1: её нельзя оставлять.
-    pub(crate) fn admit(&self, name: String, entry: Cached, seen: u64) {
-        self.l1.insert(name.clone(), entry);
+    pub(crate) fn admit(&self, name: &str, entry: Cached, seen: u64) {
+        self.l1.insert(name.to_owned(), entry);
         if self.generation() != seen {
-            self.l1.invalidate(&name);
+            self.l1.invalidate(name);
         }
     }
 
@@ -202,7 +202,7 @@ mod tests {
         let seen = local.generation();
 
         // Act
-        local.admit(NAME.to_owned(), entry(), seen);
+        local.admit(NAME, entry(), seen);
 
         // Assert
         assert_eq!(local.l1.get(NAME), Some(entry()));
@@ -216,7 +216,7 @@ mod tests {
         local.invalidate("px:other");
 
         // Act
-        local.admit(NAME.to_owned(), entry(), seen);
+        local.admit(NAME, entry(), seen);
 
         // Assert
         assert_eq!(

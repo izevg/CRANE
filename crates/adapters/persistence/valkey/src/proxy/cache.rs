@@ -31,7 +31,7 @@ impl ProxyCache for Valkey {
             return Ok(None);
         };
         let entry = decode(raw).map_err(backend)?;
-        node.local.admit(name, entry.clone(), seen);
+        node.local.admit(&name, entry.clone(), seen);
         Ok(Some(entry))
     }
 

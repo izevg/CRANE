@@ -85,14 +85,14 @@ async fn release_and_sync(
     lease: Lease,
     marker: &ProxyKey,
 ) -> Result<(), LeaseError> {
-    let released = releaser.release(lease).await;
+    let outcome = releaser.release(lease).await;
     let updated = document(b"marker-updated");
     releaser
         .put(marker, updated.clone(), KEEP)
         .await
         .expect("put маркера");
     get_until(observer, marker, &updated).await;
-    released
+    outcome
 }
 
 fn marker(db: u8) -> ProxyKey {
