@@ -14,7 +14,7 @@ type CodeBlockProps = {
   /** Переносить длинные строки; по умолчанию строки прокручиваются по горизонтали. */
   wrap?: boolean;
   /** Секрет, хэш или токен: символы красятся по классам (до 64 знаков). Для команд и конфигов не включать. */
-  machine?: boolean;
+  marked?: boolean;
 };
 
 /**
@@ -27,7 +27,7 @@ export function CodeBlock({
   copyLabel,
   label,
   wrap = false,
-  machine = false,
+  marked = false,
 }: CodeBlockProps) {
   const { _ } = useLingui();
   const ref = useRef<HTMLPreElement>(null);
@@ -69,7 +69,7 @@ export function CodeBlock({
         )}
       >
         <code>
-          <MachineValue value={code} plain={!machine} />
+          <MachineValue value={code} marked={marked} />
         </code>
       </pre>
     </div>

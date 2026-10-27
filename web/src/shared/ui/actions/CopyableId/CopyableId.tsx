@@ -21,15 +21,15 @@ type CopyableIdProps = {
   full?: boolean;
   /** Начало доступного имени кнопки; к нему добавляется полное значение. */
   label?: string;
-  /** Без цветовой разметки классов символов: для значений не «машинного» вида (PURL, версия) и статусных фонов. */
-  plain?: boolean;
+  /** Размечать цветом по классам символов (по умолчанию да); `false` для значений не «машинного» вида (PURL, версия) и статусных фонов. */
+  marked?: boolean;
 };
 
 /**
  * Идентификатор с усечением в середине. Полное значение лежит в `title`, в доступном имени кнопки
  * и в скрытом для глаза тексте; копируется всегда полное значение.
  */
-export function CopyableId({ value, full = false, label, plain = false }: CopyableIdProps) {
+export function CopyableId({ value, full = false, label, marked = true }: CopyableIdProps) {
   const { _ } = useLingui();
   const copyLabel = label ?? _(DEFAULT_LABEL);
   const shown = full ? value : shorten(value);
@@ -37,7 +37,7 @@ export function CopyableId({ value, full = false, label, plain = false }: Copyab
   return (
     <span className="inline-flex max-w-full min-w-0 items-center gap-0.5 font-mono tabular-nums">
       <span title={value} className="min-w-0 wrap-anywhere">
-        <MachineValue value={shown} plain={plain} {...(shortened ? { fullValue: value } : {})} />
+        <MachineValue value={shown} marked={marked} {...(shortened ? { spoken: value } : {})} />
       </span>
       <CopyButton value={value} label={`${copyLabel}: ${value}`} className="shrink-0" />
     </span>

@@ -114,7 +114,7 @@ export const Uuid: Story = {
 
 export const SrOnlyFullValue: Story = {
   name: "Усечённое значение: скринридер получает полное",
-  args: { value: "9b3f…c3d1", fullValue: SHA256 },
+  args: { value: "9b3f…c3d1", spoken: SHA256 },
   play: async ({ canvasElement }) => {
     await expect(
       within(canvasElement).getByText(SHA256, { selector: ".sr-only" }),
@@ -148,10 +148,10 @@ export const DarkTheme: Story = {
 };
 
 export const PlainOnStatusBackground: Story = {
-  name: "На статусном фоне — plain, без разметки",
+  name: "На статусном фоне — marked={false}, без разметки",
   render: () => (
     <Callout tone="warning">
-      Хэш не совпал: <MachineValue value={SHA256} plain />
+      Хэш не совпал: <MachineValue value={SHA256} marked={false} />
     </Callout>
   ),
   play: async ({ canvasElement }) => {
@@ -195,8 +195,8 @@ export const InCopyableId: Story = {
 };
 
 export const InCodeBlock: Story = {
-  name: "CodeBlock machine: секрет на фоне code-bg",
-  render: () => <CodeBlock code="crp_a1B2-c3D4_e5F6" copyLabel="Копировать секрет" machine />,
+  name: "CodeBlock marked: секрет на фоне code-bg",
+  render: () => <CodeBlock code="crp_a1B2-c3D4_e5F6" copyLabel="Копировать секрет" marked />,
   play: async ({ canvasElement }) => {
     await expectDigit(canvasElement, "1");
     await expectSymbol(canvasElement, "_");
@@ -204,5 +204,22 @@ export const InCodeBlock: Story = {
     await expect(
       contrastRatio(getComputedStyle(digit).color, effectiveBackground(digit)),
     ).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  },
+};
+
+/** Размеченный слой сам ставит моноширинный шрифт: в контексте с гарнитурой текста (Tooltip, абзац) он не Onest. */
+export const OwnMonoFont: Story = {
+  name: "Слой разметки сам моноширинный",
+  render: () => (
+    <p className="font-sans">
+      <MachineValue value={SHA256} />
+    </p>
+  ),
+  play: async ({ canvasElement }) => {
+    const layer = canvasElement.querySelector("[data-slot=machine-value]");
+    if (!(layer instanceof HTMLElement)) {
+      throw new Error("нет размеченного слоя");
+    }
+    await expect(getComputedStyle(layer).fontFamily).toContain("JetBrains Mono");
   },
 };

@@ -54,7 +54,7 @@ function SecretDialogBody({ secret, title, onDone }: BodyProps) {
           <Callout tone="warning">
             <CalloutTitle>{_(WARNING)}</CalloutTitle>
           </Callout>
-          <CodeBlock code={secret} copyLabel={_(COPY)} machine />
+          <CodeBlock code={secret} copyLabel={_(COPY)} marked />
           <div className="flex items-center gap-2 text-body">
             <Checkbox id={checkboxId} checked={saved} onCheckedChange={setSaved} />
             <label htmlFor={checkboxId}>{_(SAVED)}</label>

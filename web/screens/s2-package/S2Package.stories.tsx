@@ -257,7 +257,7 @@ function RightColumn({ proxy }: { proxy: boolean }) {
               label: "PURL",
               value: (
                 <CopyableId
-                  plain
+                  marked={false}
                   value="pkg:npm/%40acme/ui@1.4.2"
                   label={tr(msg`Скопировать PURL`)}
                 />

@@ -5,10 +5,10 @@ import { type CharKind, splitSeries } from "./charClasses";
 type MachineValueProps = {
   /** Видимый текст (может быть усечён, например «a88d…6973»). */
   value: string;
-  /** Полное значение для скринридера, если видимое усечено; по умолчанию равно `value`. */
-  fullValue?: string;
-  /** Без разметки: на статусных фонах (callout, diff, badge) цвета токенов не рассчитаны. */
-  plain?: boolean;
+  /** Что произнесёт скринридер, если видимое значение усечено; по умолчанию равно `value`. */
+  spoken?: string;
+  /** Размечать цветом по классам символов; `false` на статусных фонах (callout, diff, badge): цвета токенов там не рассчитаны. */
+  marked?: boolean;
 };
 
 // Буквы остаются цветом текста родителя (--foreground, на инверсной поверхности — --inverse-foreground).
@@ -25,9 +25,9 @@ const KIND_CLASS = {
  * пробелов между ними, поэтому выделение и копирование дают точную строку, а раскладка не сдвигается.
  * Режим forced-colors не отключаем (`forced-color-adjust` не трогаем): система сама красит текст одним цветом.
  */
-export function MachineValue({ value, fullValue, plain = false }: MachineValueProps) {
-  const series = useMemo(() => (plain ? null : splitSeries(value)), [plain, value]);
-  if (series === null && fullValue === undefined) {
+export function MachineValue({ value, spoken, marked = true }: MachineValueProps) {
+  const series = useMemo(() => (marked ? splitSeries(value) : null), [marked, value]);
+  if (series === null && spoken === undefined) {
     return value;
   }
   return (
@@ -35,7 +35,7 @@ export function MachineValue({ value, fullValue, plain = false }: MachineValuePr
       <span
         aria-hidden="true"
         data-slot="machine-value"
-        className="selection:bg-[Highlight] selection:text-[HighlightText]"
+        className="font-mono selection:bg-[Highlight] selection:text-[HighlightText]"
       >
         {series === null
           ? value
@@ -45,7 +45,7 @@ export function MachineValue({ value, fullValue, plain = false }: MachineValuePr
               </span>
             ))}
       </span>
-      <span className="sr-only select-none">{fullValue ?? value}</span>
+      <span className="sr-only select-none">{spoken ?? value}</span>
     </>
   );
 }

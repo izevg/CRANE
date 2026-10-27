@@ -319,7 +319,9 @@ function SummaryTab() {
         items={[
           {
             label: "PURL",
-            value: <CopyableId plain value={PURL} full label={tr(msg`Скопировать PURL`)} />,
+            value: (
+              <CopyableId marked={false} value={PURL} full label={tr(msg`Скопировать PURL`)} />
+            ),
           },
           { label: tr(msg`Опубликована`), value: "27.10.2026, 13:42" },
           { label: tr(msg`Кем`), value: "crr_9f8e7d6c · ui-release" },
