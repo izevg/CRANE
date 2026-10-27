@@ -1,4 +1,4 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react";
 import { useCallback, useId } from "react";
 import {
   Badge,
@@ -11,9 +11,9 @@ import {
   TooltipTrigger,
 } from "../../primitives";
 import type { Action } from "./action";
+import { STEP_UP_HINT } from "./messages";
 
 const MFA = "MFA";
-const STEP_UP_HINT = ", требуется подтверждение входа";
 
 type ActionButtonVariant = "primary" | "secondary" | "ghost";
 type ChipVariant = "inherit" | "inverse" | "control";
@@ -27,6 +27,7 @@ export function ActionContent({
   /** Поверхность бейджа: на кнопке она своя (`inverse`/`control`), в пункте меню — цвет пункта. */
   chip?: ChipVariant;
 }) {
+  const { _ } = useLingui();
   return (
     <>
       {action.label}
@@ -35,7 +36,7 @@ export function ActionContent({
           <Badge variant={chip} className="ml-1">
             {MFA}
           </Badge>
-          <span className="sr-only">{STEP_UP_HINT}</span>
+          <span className="sr-only">{_(STEP_UP_HINT)}</span>
         </>
       ) : null}
     </>

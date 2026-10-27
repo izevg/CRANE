@@ -1,13 +1,15 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react";
 import { ChevronRightIcon } from "lucide-react";
 import type * as React from "react";
 import { cx } from "~/shared/lib/core";
+import { BREADCRUMB_LABEL } from "../text/messages";
 import { Link, type LinkProps } from "./link";
 
-const LABEL = "Навигационная цепочка";
-
 export function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
-  return <nav aria-label={LABEL} data-slot="breadcrumb" className={className} {...props} />;
+  const { _ } = useLingui();
+  return (
+    <nav aria-label={_(BREADCRUMB_LABEL)} data-slot="breadcrumb" className={className} {...props} />
+  );
 }
 
 export function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {

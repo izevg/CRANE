@@ -1,11 +1,10 @@
-// i18n: не мигрирован
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import { useLingui } from "@lingui/react";
 import { XIcon } from "lucide-react";
 import type * as React from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { Button } from "../../forms/toggle/button";
-
-const CLOSE = "Закрыть";
+import { CLOSE } from "../../text/messages";
 
 type DialogSize = "default" | "palette";
 
@@ -43,6 +42,7 @@ export function DialogContent({
   size?: DialogSize;
   flush?: boolean;
 }) {
+  const { _ } = useLingui();
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop
@@ -71,7 +71,7 @@ export function DialogContent({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={CLOSE}
+                aria-label={_(CLOSE)}
                 className="absolute top-4 right-4"
               />
             }

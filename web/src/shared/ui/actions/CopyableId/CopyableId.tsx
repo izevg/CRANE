@@ -1,10 +1,10 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react";
 import { MachineValue } from "../../primitives";
 import { CopyButton } from "../CopyButton/CopyButton";
+import { DEFAULT_LABEL } from "./messages";
 
 const HEAD = 4;
 const TAIL = 4;
-const DEFAULT_LABEL = "Скопировать ID";
 
 /** `a88d…6973`; значение, которое сокращение не сделало бы короче, остаётся целиком. */
 function shorten(value: string): string {
@@ -29,12 +29,9 @@ type CopyableIdProps = {
  * Идентификатор с усечением в середине. Полное значение лежит в `title`, в доступном имени кнопки
  * и в скрытом для глаза тексте; копируется всегда полное значение.
  */
-export function CopyableId({
-  value,
-  full = false,
-  label = DEFAULT_LABEL,
-  plain = false,
-}: CopyableIdProps) {
+export function CopyableId({ value, full = false, label, plain = false }: CopyableIdProps) {
+  const { _ } = useLingui();
+  const copyLabel = label ?? _(DEFAULT_LABEL);
   const shown = full ? value : shorten(value);
   const shortened = shown !== value;
   return (
@@ -42,7 +39,7 @@ export function CopyableId({
       <span title={value} className="min-w-0 wrap-anywhere">
         <MachineValue value={shown} plain={plain} {...(shortened ? { fullValue: value } : {})} />
       </span>
-      <CopyButton value={value} label={`${label}: ${value}`} className="shrink-0" />
+      <CopyButton value={value} label={`${copyLabel}: ${value}`} className="shrink-0" />
     </span>
   );
 }

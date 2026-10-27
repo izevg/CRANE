@@ -1,10 +1,9 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react";
 import { PauseIcon, PlayIcon } from "lucide-react";
 import { useCallback } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { Button } from "../../primitives";
-
-const LABEL = "Пауза автообновления";
+import { PAUSE_LABEL } from "./messages";
 
 type AutoRefreshToggleProps = WithClassName<{
   /** `true` — автообновление на паузе. */
@@ -17,6 +16,7 @@ type AutoRefreshToggleProps = WithClassName<{
  * Сам опрос живёт у вызывающего; компонент только сообщает о выборе.
  */
 export function AutoRefreshToggle({ paused, onPausedChange, className }: AutoRefreshToggleProps) {
+  const { _ } = useLingui();
   const toggle = useCallback(() => onPausedChange(!paused), [onPausedChange, paused]);
   const Glyph = paused ? PlayIcon : PauseIcon;
   return (
@@ -28,7 +28,7 @@ export function AutoRefreshToggle({ paused, onPausedChange, className }: AutoRef
       onClick={toggle}
     >
       <Glyph aria-hidden="true" />
-      {LABEL}
+      {_(PAUSE_LABEL)}
     </Button>
   );
 }
