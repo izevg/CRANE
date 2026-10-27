@@ -4,14 +4,13 @@
 
 CRANE sits in the path of every build, so we treat vulnerabilities in it as incidents. If you find one, please report it privately: that way users get the fix before attackers get the write-up.
 
+## About the project and commitments
+
+CRANE is pure OSS, forever: the project will never be sold. It has a single maintainer. There is no SLA, no guaranteed support period and no security team. Everything below is done on a best-effort basis, with no promises about timing.
+
 ## Supported versions
 
-| Version | Security fixes |
-| --- | --- |
-| Before the first release | Not applicable: there is no code yet, see "Design stage" below |
-| Latest minor release | ✅ |
-| Previous minor release | ✅ for 6 months after the next one ships |
-| Older | ❌ please upgrade: upgrades skipping at most one minor version are supported (section 16.4) |
+Security fixes go into the latest release. Backports to older versions are made when possible and are not guaranteed. Upgrades between versions: section 16.4.
 
 ## Reporting a vulnerability
 
@@ -28,16 +27,9 @@ CRANE sits in the path of every build, so we treat vulnerabilities in it as inci
 
 ## What happens next
 
-| Stage | Timeline |
-| --- | --- |
-| Acknowledgement | 3 business days |
-| Initial assessment and severity (CVSS) | 7 business days |
-| Fix for a critical issue | within 7 days |
-| Fix for a high issue | within 30 days |
-| Fix for a medium issue | within 90 days |
-| Low | in the next scheduled release |
+The steps are these, with no promised deadlines: we acknowledge the report, assess severity (CVSS), fix, and publish an advisory.
 
-Disclosure is coordinated: we publish an advisory once a fix is available, and no later than 90 days after the report unless we agree otherwise. A CVE ID is requested for each vulnerability. The advisory lists affected versions, the upgrade path, temporary mitigations and credit to the reporter.
+Disclosure is coordinated: the advisory is published once a fix is available; by default no later than 90 days after the report unless we agree otherwise. A CVE ID is requested for each vulnerability. The advisory lists affected versions, the upgrade path, temporary mitigations and credit to the reporter.
 
 ## Scope
 
@@ -57,7 +49,7 @@ Disclosure is coordinated: we publish an advisory once a fix is available, and n
 
 ## Design stage
 
-While there is no code, architectural weaknesses can be discussed in the open: open an issue labeled `architecture`, see [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md). The threat model and controls are described in [section 14](docs/product/14-security.md) (in Russian).
+Architectural weaknesses can be discussed in the open: open an issue labeled `architecture`, see [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md). The threat model and controls are described in [section 14](docs/product/14-security.md) (in Russian).
 
 ## Safe harbor
 
@@ -70,7 +62,7 @@ We will not pursue good-faith research as long as you:
 
 ## Verifying releases
 
-Images are signed with cosign, and each one ships with an SBOM and build provenance (section 14.3). Verify the signature before deploying:
+From v0.5.0 (when the repository goes public), releases are built in CI with SLSA provenance, cosign image signatures and an SBOM. CSAF advisories and VEX for each release are published when feasible. Verify the signature before deploying (section 14.3):
 
 ```bash
 cosign verify <CRANE image> \
@@ -79,3 +71,7 @@ cosign verify <CRANE image> \
 ```
 
 Exact values will be published with the first release.
+
+## Cyber Resilience Act
+
+CRANE is non-commercial free software and is not placed on the market in the course of a commercial activity (recital 18 of Regulation (EU) 2024/2847, the CRA). The project therefore does not assume manufacturer obligations. Whoever ships CRANE inside a commercial product evaluates their own obligations. This is not legal advice.

@@ -216,11 +216,13 @@ Open decisions: [section 19](docs/product/19-risks-open-decisions.md).
 
 The project is in the design stage, so the most valuable contribution right now is an architecture review: open an issue that links to the relevant documentation section. Repository layout, documentation and code guidelines, DCO sign-off and the review process are in [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md). By participating, you agree to the [Code of Conduct](CODE_OF_CONDUCT-EN.md).
 
-**Security issues** in CRANE must not be reported in public issues: private reporting, timelines and scope are in [SECURITY-EN.md](SECURITY-EN.md).
+**Security issues** in CRANE must not be reported in public issues: private reporting and scope are in [SECURITY-EN.md](SECURITY-EN.md).
 
 ## License
 
 [Apache License 2.0](LICENSE): an explicit patent grant and compatibility with the whole stack. See also [NOTICE](NOTICE).
+
+CRANE is pure OSS, forever: the project will never be sold. It has a single maintainer; there is no SLA, no guaranteed support period and no security team. Release security is best effort. CRANE is non-commercial free software and is not placed on the market in the course of a commercial activity (recital 18 of Regulation (EU) 2024/2847, the CRA), so the project does not assume manufacturer obligations; whoever ships CRANE in a commercial product evaluates their own obligations. This is not legal advice. Details: [SECURITY-EN.md](SECURITY-EN.md).
 
 <div align="center">
 <sub>Logo and artwork: <a href="brand/">brand/</a></sub>
