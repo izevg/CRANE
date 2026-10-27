@@ -6,6 +6,7 @@ import { type Expected, leaks, verify } from "./audit.ts";
 import { scenario, startCargo } from "./cargo.ts";
 import { docker, log, MS_PER_SECOND, timed, warn } from "./exec.ts";
 import { fullScenario } from "./full.ts";
+import { npmScenario, startNpm } from "./npm.ts";
 import { proxyScenario } from "./proxy.ts";
 import { describeStand, proxyRepo, type Stand } from "./stand.ts";
 import { parseArgs, parseCargo, type Which } from "./versions.ts";
@@ -33,6 +34,19 @@ function resolveTargets(which: Which[]): Target[] {
   });
 }
 
+/** Сценарий npm на последней версии клиента: после целей cargo и до полного сценария. */
+function exerciseNpm(stand: Stand): { version: string; events: Expected[] } {
+  const client = startNpm(stand);
+  try {
+    log(`npm ${client.version}: клиент готов`);
+    const events = npmScenario(stand, client);
+    log(`npm ${client.version}: сценарий пройден`);
+    return { version: client.version, events };
+  } finally {
+    client.stop();
+  }
+}
+
 /** Сценарий на каждой версии cargo, затем сверка аудита и поиск утечек. Возвращает число проблем. */
 function exercise(stand: Stand, targets: Target[], root: string, full: boolean): number {
   const expected: Expected[] = [];
@@ -50,6 +64,8 @@ function exercise(stand: Stand, targets: Target[], root: string, full: boolean):
       client.stop();
     }
   }
+  const npm = exerciseNpm(stand);
+  expected.push(...npm.events);
   const latest = targets.find((target) => target.which === "latest");
   if (full && latest !== undefined) {
     // Последним: офлайн необратим, после него стенд пригоден только для сверки журналов.
@@ -72,7 +88,7 @@ function exercise(stand: Stand, targets: Target[], root: string, full: boolean):
     warn(`утечка: ${name} найден в журналах контейнеров`);
   }
   log(
-    `cargo: ${versions.join(", ")}; ожидаемых событий аудита: ${expected.length}; ` +
+    `cargo: ${versions.join(", ")}; npm: ${npm.version}; ожидаемых событий аудита: ${expected.length}; ` +
       `расхождений: ${mismatches.length}; утечек: ${leaked.length}`,
   );
   return mismatches.length + leaked.length;

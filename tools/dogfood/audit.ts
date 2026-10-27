@@ -1,10 +1,13 @@
 // Проверка журнала crane после сценария: события аудита (OCSF, плоские ключи) и утечки секретов.
 // Чистые функции: вход — текст журнала и ожидания, выход — список расхождений.
 
-export type Operation = "publish" | "yank" | "unyank";
+export type Operation = "publish" | "yank" | "unyank" | "delete" | "deprecate" | "tag" | "untag";
+
+export type Outcome = "Success" | "Failure";
 
 export type Expected =
-  | { kind: "api"; agent: string; operation: Operation; purl: string }
+  /** `outcome` по умолчанию `Success`; отказ (например, повторная публикация tombstone) задаётся явно. */
+  | { kind: "api"; agent: string; operation: Operation; purl: string; outcome?: Outcome }
   /** Не меньше одного отказа аутентификации от этого клиента (число попыток cargo не детерминировано). */
   | { kind: "authFailure"; agent: string };
 
@@ -66,10 +69,28 @@ const AUTHENTICATION = 3002;
 const HTTP_OK_FROM = 200;
 const HTTP_OK_TO = 299;
 const SNIPPET_CHARS = 120;
-const ROUTES: Record<Operation, { method: string; path: RegExp }> = {
-  publish: { method: "PUT", path: /\/api\/v1\/crates\/new$/ },
-  yank: { method: "DELETE", path: /\/api\/v1\/crates\/[^/]+\/[^/]+\/yank$/ },
-  unyank: { method: "PUT", path: /\/api\/v1\/crates\/[^/]+\/[^/]+\/unyank$/ },
+interface Route {
+  method: string;
+  path: RegExp;
+}
+
+// Любой подходящий маршрут годится: одна операция может прийти разными запросами (у npm unpublish это
+// PUT документа и DELETE тарболла), а точные пути npm-маршрутов сверяют их собственные тесты сервера.
+const NPM_PATH = /^\/npm\/[^/]+\//;
+const ROUTES: Record<Operation, Route[]> = {
+  publish: [
+    { method: "PUT", path: /\/api\/v1\/crates\/new$/ },
+    { method: "PUT", path: NPM_PATH },
+  ],
+  yank: [{ method: "DELETE", path: /\/api\/v1\/crates\/[^/]+\/[^/]+\/yank$/ }],
+  unyank: [{ method: "PUT", path: /\/api\/v1\/crates\/[^/]+\/[^/]+\/unyank$/ }],
+  delete: [
+    { method: "PUT", path: NPM_PATH },
+    { method: "DELETE", path: NPM_PATH },
+  ],
+  deprecate: [{ method: "PUT", path: NPM_PATH }],
+  tag: [{ method: "PUT", path: NPM_PATH }],
+  untag: [{ method: "DELETE", path: NPM_PATH }],
 };
 
 const text = (value: unknown): string | undefined =>
@@ -157,13 +178,14 @@ function checkApiEvent(line: Line, access: Map<string, Line>, options: Options):
     return found;
   }
   const code = entry.status;
-  if (typeof code !== "number" || code < HTTP_OK_FROM || code > HTTP_OK_TO) {
-    fail("access", `статус запроса ${String(code)}, ожидался 2xx`);
+  const succeeded = typeof code === "number" && code >= HTTP_OK_FROM && code <= HTTP_OK_TO;
+  if (line.status === "Success" ? !succeeded : succeeded) {
+    fail("access", `статус запроса ${String(code)} не соответствует исходу ${String(line.status)}`);
   }
   const operation = text(line["api.operation"]);
-  const route = ROUTES[operation as Operation];
+  const routes: Route[] | undefined = ROUTES[operation as Operation];
   const path = text(entry.path) ?? "";
-  if (route === undefined || entry.method !== route.method || !route.path.test(path)) {
+  if (!routes?.some((route) => entry.method === route.method && route.path.test(path))) {
     fail("access", `запрос ${String(entry.method)} ${path} не соответствует операции`);
   }
   return found;
@@ -329,7 +351,9 @@ export function verify(craneNdjson: string, expected: Expected[], options: Optio
   }
   for (const agent of agents) {
     const wanted = expected.flatMap((e) =>
-      e.kind === "api" && e.agent === agent ? [`${e.operation} ${e.purl} Success`] : [],
+      e.kind === "api" && e.agent === agent
+        ? [`${e.operation} ${e.purl} ${e.outcome ?? "Success"}`]
+        : [],
     );
     const mine = api.filter(ownedBy(agent));
     mismatches.push(...diff(`6003 ${agent}`, wanted, mine.map(eventKey)));

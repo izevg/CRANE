@@ -113,7 +113,7 @@ export function proxyScenario(
 }
 
 /** Для каждого пути есть успешная строка, и все такие строки несут ожидаемое значение `cache`. */
-function expectCache(
+export function expectCache(
   paths: RegExp[],
   lines: ReturnType<typeof accessLines>,
   want: "miss" | "hit",

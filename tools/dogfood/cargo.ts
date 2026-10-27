@@ -31,10 +31,18 @@ export const craneCredentials = (token: string): Record<string, string> => ({
   [TOKEN_ENV]: token,
 });
 
-/** curl с токеном через stdin (`-K -`): секрет не виден в `ps`. `args` — всё остальное, включая URL. */
-export const authorizedCurl = (client: Client, token: string, args: string[]): Result =>
+/**
+ * curl с токеном через stdin (`-K -`): секрет не виден в `ps`. `args` — всё остальное, включая URL.
+ * `scheme` — схема заголовка (npm: `Bearer`); без неё токен идёт как есть, как у cargo.
+ */
+export const authorizedCurl = (
+  client: Client,
+  token: string,
+  args: string[],
+  scheme?: string,
+): Result =>
   client.exec(["curl", "--cacert", ROOT_CERT, "-K", "-", ...args], {
-    input: `header = "Authorization: ${token}"\n`,
+    input: `header = "Authorization: ${scheme === undefined ? "" : `${scheme} `}${token}"\n`,
   });
 
 /**
