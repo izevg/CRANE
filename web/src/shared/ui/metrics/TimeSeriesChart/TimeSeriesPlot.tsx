@@ -44,6 +44,8 @@ const STROKE_WIDTH = 2;
 const AREA_OPACITY = 0.08;
 const LABEL_OFFSET = 8;
 const LABEL_WEIGHT = 600;
+const MARKER_RADIUS = 4;
+const MARKER_GAP = 4;
 /** Запас справа под прямые подписи у конца линий. */
 const MARGIN = { top: 8, right: 96, bottom: 0, left: 0 };
 const TICK = { fill: "var(--muted-foreground)", fontSize: 12 };
@@ -60,22 +62,29 @@ type EndLabelProps = {
   color: string;
 };
 
-/** Прямая подпись ряда у его последней точки: легенда не нужна, цвет не единственный носитель. */
+/**
+ * Прямая подпись ряда у его последней точки. Текст — `--foreground` (контраст ≥ 4,5:1, WCAG 1.4.3),
+ * а цвет ряда вынесен в маркер рядом: `--chart-4/5` как цвет текста на карточке не проходят.
+ */
 function EndLabel({ x, y, index, text, lastIndex, color }: EndLabelProps) {
   if (index !== lastIndex) {
     return null;
   }
+  const cx = Number(x) + LABEL_OFFSET + MARKER_RADIUS;
   return (
-    <text
-      x={Number(x) + LABEL_OFFSET}
-      y={Number(y)}
-      dominantBaseline="middle"
-      fill={color}
-      fontSize={TICK.fontSize}
-      fontWeight={LABEL_WEIGHT}
-    >
-      {text}
-    </text>
+    <g>
+      <circle cx={cx} cy={Number(y)} r={MARKER_RADIUS} fill={color} />
+      <text
+        x={cx + MARKER_RADIUS + MARKER_GAP}
+        y={Number(y)}
+        dominantBaseline="middle"
+        fill="var(--foreground)"
+        fontSize={TICK.fontSize}
+        fontWeight={LABEL_WEIGHT}
+      >
+        {text}
+      </text>
+    </g>
   );
 }
 
