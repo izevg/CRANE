@@ -22,7 +22,7 @@
 | Publishing | Приём загрузок, потоковое хэширование, атомарная фиксация версии, state machine версии. | Незавершённая загрузка невидима; release неизменяем |
 | Proxy | Pull-through кэш upstream: TTL, negative cache, stale-while-revalidate, stale-if-error, singleflight. | Один upstream-запрос на объект при любой конкуренции |
 | Vulnerability intel | Синхронизация фидов, нормализация и дедупликация advisory, сопоставление с инвентарём по PURL, приоритет P0–P4, VEX, экстренный режим, SLA. | Модель только повышает приоритет; P0 не зависит от доступности модели |
-| Risk scoring | Сбор признаков, запрос оценок `exploit_relevance`, `blast_radius`, `license_virality` у systemone, хранение оценки как evidence с версией модели. | Оценка воспроизводима: модель, версия и хэш признаков сохраняются |
+| Risk scoring | Сбор признаков, запрос оценок `exploit_relevance`, `blast_radius`, `license_virality` у systemone, хранение оценки в `risk_score` с моделью, версией и хэшем признаков. | Оценка воспроизводима: модель, версия и хэш признаков сохраняются |
 | Security events | Формирование событий OCSF из аудита и доменных событий, доставка в SIEM с курсором на приёмник, приём ответных действий SOAR. | At-least-once, событие не теряется при недоступности SIEM |
 | Evidence | Единая модель доказательств по `predicate_type`: SBOM, сканы, attestations, подписи, quality gate; проверка Sigstore/PGP и trust root; findings; исключения с TTL. | Отчёт привязан к digest, версии сканера и базы |
 | License | Разбор SPDX expressions, определение лицензии из нескольких источников, оценка по политике с учётом контекста. | Unknown означает review required |
