@@ -7,7 +7,7 @@ SPA на React строится на собственном UI kit на Base UI:
 | Задача | Решение (лицензия) |
 | --- | --- |
 | Каркас | React 19, TypeScript, Vite (MIT) |
-| Компоненты | Собственный UI kit на Base UI (MIT), Tailwind CSS (MIT), lucide-react (ISC), sonner (MIT), motion (MIT) |
+| Компоненты | Собственный UI kit на Base UI (MIT), Tailwind CSS (MIT), lucide-react (ISC), sonner (MIT); анимации — CSS-токены кита и Base UI |
 | Данные | TanStack Query, Router, Table, Virtual (MIT); клиент API генерируется из OpenAPI (orval, MIT) |
 | Графики и граф зависимостей | Recharts (MIT), xyflow / React Flow (MIT) |
 | Markdown README | react-markdown + rehype-sanitize (MIT), подсветка Shiki (MIT) |
