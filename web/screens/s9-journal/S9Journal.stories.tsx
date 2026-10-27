@@ -1,4 +1,4 @@
-// i18n: не мигрирован
+import { msg } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type ChangeEvent, useCallback, useId, useState } from "react";
 import { expect, within } from "storybook/test";
@@ -35,6 +35,7 @@ import {
 } from "../data/audit";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
+import { tr } from "../frame/tr";
 
 // Макеты экранов — на русском; форматирование чисел фиксирует ru, активная локаль витрины им не нужна.
 const format = textFormat("ru");
@@ -46,11 +47,27 @@ const DECISION_TONE = {
 } as const satisfies Record<Decision, "success" | "error" | "warning">;
 
 const COPY_JSON: readonly [Action] = [
-  { label: "Копировать JSON", run: { onSelect: () => undefined } },
+  {
+    get label() {
+      return tr(msg`Копировать JSON`);
+    },
+    run: { onSelect: () => undefined },
+  },
 ];
 const HEADER_ACTIONS: readonly [Action, Action] = [
-  { label: "Проверить целостность", run: { onSelect: () => undefined } },
-  { label: "Экспорт", run: { onSelect: () => undefined }, stepUp: true },
+  {
+    get label() {
+      return tr(msg`Проверить целостность`);
+    },
+    run: { onSelect: () => undefined },
+  },
+  {
+    get label() {
+      return tr(msg`Экспорт`);
+    },
+    run: { onSelect: () => undefined },
+    stepUp: true,
+  },
 ];
 
 const MIN_JUSTIFICATION = 20;
@@ -59,12 +76,12 @@ const noop = () => undefined;
 const helper = columnHelper<AuditEvent>();
 const columns = helper.columns([
   helper.accessor("time", {
-    header: "Время UTC",
+    header: () => tr(msg`Время UTC`),
     meta: { priority: 1 },
     cell: (info) => <span className="font-mono text-caption tabular-nums">{info.getValue()}</span>,
   }),
   helper.accessor("actor", {
-    header: "Актор",
+    header: () => tr(msg`Актор`),
     meta: { priority: 1 },
     cell: (info) => (
       <span className="flex flex-col leading-tight">
@@ -74,7 +91,7 @@ const columns = helper.columns([
     ),
   }),
   helper.accessor("action", {
-    header: "Действие",
+    header: () => tr(msg`Действие`),
     meta: { priority: 1 },
     cell: (info) => (
       <span className="flex flex-col leading-tight">
@@ -83,33 +100,48 @@ const columns = helper.columns([
       </span>
     ),
   }),
-  helper.accessor("resource", { header: "Ресурс", meta: { priority: 2 } }),
+  helper.accessor("resource", { header: () => tr(msg`Ресурс`), meta: { priority: 2 } }),
   helper.accessor("decision", {
-    header: "Решение",
+    header: () => tr(msg`Решение`),
     meta: { priority: 1 },
     cell: (info) => (
       <StatusBadge tone={DECISION_TONE[info.getValue()]} label={DECISION_LABEL[info.getValue()]} />
     ),
   }),
   helper.accessor("rule", {
-    header: "Правило",
+    header: () => tr(msg`Правило`),
     meta: { priority: 2 },
     cell: (info) => <span className="font-mono text-caption">{info.getValue()}</span>,
   }),
-  helper.accessor("channel", { header: "Канал", meta: { priority: 3 } }),
+  helper.accessor("channel", { header: () => tr(msg`Канал`), meta: { priority: 3 } }),
   helper.accessor("requestId", {
     header: "request_id",
     meta: { priority: 3 },
-    cell: (info) => <CopyableId value={info.getValue()} label="Скопировать request_id" />,
+    cell: (info) => <CopyableId value={info.getValue()} label={tr(msg`Скопировать request_id`)} />,
   }),
 ]);
 
 const getRowId = (row: AuditEvent) => row.id;
 
 const PERIODS = [
-  { value: "24h", label: "Последние 24 часа" },
-  { value: "7d", label: "Последние 7 дней" },
-  { value: "30d", label: "Последние 30 дней" },
+  {
+    value: "24h",
+    get label() {
+      return tr(msg`Последние 24 часа`);
+    },
+  },
+  {
+    value: "7d",
+    get label() {
+      return tr(msg`Последние 7 дней`);
+    },
+  },
+  {
+    value: "30d",
+    get label() {
+      return tr(msg`Последние 30 дней`);
+    },
+  },
 ] as const;
 const ACTIONS = [
   { value: "package.version.blocked", label: "package.version.blocked" },
@@ -118,20 +150,55 @@ const ACTIONS = [
   { value: "audit.revealed", label: "audit.revealed" },
 ] as const;
 const DECISIONS = [
-  { value: "allow", label: "Разрешено" },
-  { value: "deny", label: "Отказ" },
-  { value: "challenge", label: "Нужен MFA" },
+  {
+    value: "allow",
+    get label() {
+      return tr(msg`Разрешено`);
+    },
+  },
+  {
+    value: "deny",
+    get label() {
+      return tr(msg`Отказ`);
+    },
+  },
+  {
+    value: "challenge",
+    get label() {
+      return tr(msg`Нужен MFA`);
+    },
+  },
 ] as const;
 const CHANNELS = ["UI", "CLI", "API", "CI", "A2A", "SOAR"].map((value) => ({
   value,
   label: value,
 }));
 const ACTOR_KINDS = [
-  { value: "all", label: "Все" },
-  { value: "human", label: "Человек" },
-  { value: "robot", label: "Робот" },
+  {
+    value: "all",
+    get label() {
+      return tr(msg`Все`);
+    },
+  },
+  {
+    value: "human",
+    get label() {
+      return tr(msg`Человек`);
+    },
+  },
+  {
+    value: "robot",
+    get label() {
+      return tr(msg`Робот`);
+    },
+  },
   { value: "workload", label: "Workload" },
-  { value: "agent", label: "Агент" },
+  {
+    value: "agent",
+    get label() {
+      return tr(msg`Агент`);
+    },
+  },
 ] as const;
 type ActorKind = (typeof ACTOR_KINDS)[number]["value"];
 
@@ -147,27 +214,27 @@ function Filters() {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <FilterSelect
-          label="Период"
-          allLabel="Всё время"
+          label={tr(msg`Период`)}
+          allLabel={tr(msg`Всё время`)}
           value={period}
           options={PERIODS}
           onValueChange={setPeriod}
         />
         <Input
-          aria-label="Актор (псевдоним)"
-          placeholder="Актор (псевдоним)"
+          aria-label={tr(msg`Актор (псевдоним)`)}
+          placeholder={tr(msg`Актор (псевдоним)`)}
           className="max-w-52"
         />
         <FilterSelect
-          label="Действие"
-          allLabel="Все действия"
+          label={tr(msg`Действие`)}
+          allLabel={tr(msg`Все действия`)}
           value={action}
           options={ACTIONS}
           onValueChange={setAction}
         />
         <FilterSelect
-          label="Решение"
-          allLabel="Любое решение"
+          label={tr(msg`Решение`)}
+          allLabel={tr(msg`Любое решение`)}
           value={decision}
           options={DECISIONS}
           onValueChange={setDecision}
@@ -175,30 +242,34 @@ function Filters() {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <SegmentedControl
-          label="Тип актора"
+          label={tr(msg`Тип актора`)}
           items={ACTOR_KINDS}
           value={kind}
           onValueChange={changeKind}
         />
         <FilterSelect
-          label="Канал"
-          allLabel="Все каналы"
+          label={tr(msg`Канал`)}
+          allLabel={tr(msg`Все каналы`)}
           value={channel}
           options={CHANNELS}
           onValueChange={setChannel}
         />
         <Input
-          aria-label="request_id или ресурс"
-          placeholder="request_id или ресурс"
+          aria-label={tr(msg`request_id или ресурс`)}
+          placeholder={tr(msg`request_id или ресурс`)}
           className="max-w-56"
         />
-        <Input aria-label="IP-подсеть" placeholder="IP-подсеть" className="max-w-40" />
+        <Input
+          aria-label={tr(msg`IP-подсеть`)}
+          placeholder={tr(msg`IP-подсеть`)}
+          className="max-w-40"
+        />
         <div className="ml-auto flex items-center gap-3">
           <Button variant="ghost" size="sm">
-            Сбросить
+            {tr(msg`Сбросить`)}
           </Button>
           <span className="text-body text-muted-foreground tabular-nums">
-            {format.count({ count: 18_420, capped: false })} событий
+            {format.count({ count: 18_420, capped: false })} {tr(msg`событий`)}
           </span>
         </div>
       </div>
@@ -213,24 +284,32 @@ function Tiles({ auditor }: { auditor: boolean }) {
     <div className="grid grid-cols-1 gap-4 @xl/page:grid-cols-2 @4xl/page:grid-cols-4">
       {auditor ? null : (
         <MetricTile
-          label="События за 24 ч"
+          label={tr(msg`События за 24 ч`)}
           value={18_420}
-          caption="пик 14:00 UTC"
+          caption={tr(msg`пик 14:00 UTC`)}
           delta={{ pct: 3.1, polarity: "neutral" }}
           spark={SPARK}
         />
       )}
       {auditor ? null : (
         <MetricTile
-          label="Отставание SIEM"
+          label={tr(msg`Отставание SIEM`)}
           value={4.2}
-          unit="с"
-          caption="порог 30 с"
+          unit={tr(msg`с`)}
+          caption={tr(msg`порог 30 с`)}
           spark={SPARK}
         />
       )}
-      <MetricTile label="Цепочка" value="Целостна" caption="проверено 14:00 UTC" />
-      <MetricTile label="Последний якорь WORM" value="14:00" caption="27.10.2026 · блок 18 442" />
+      <MetricTile
+        label={tr(msg`Цепочка`)}
+        value={tr(msg`Целостна`)}
+        caption={tr(msg`проверено 14:00 UTC`)}
+      />
+      <MetricTile
+        label={tr(msg`Последний якорь WORM`)}
+        value="14:00"
+        caption={tr(msg`27.10.2026 · блок 18 442`)}
+      />
     </div>
   );
 }
@@ -239,18 +318,21 @@ function Tiles({ auditor }: { auditor: boolean }) {
 function ChainBlock() {
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="text-h3">Цепочка</h3>
+      <h3 className="text-h3">{tr(msg`Цепочка`)}</h3>
       <KeyValueList
         items={[
           {
             label: "prev_hash",
-            value: <CopyableId value={PREV_HASH} label="Скопировать prev_hash" />,
+            value: <CopyableId value={PREV_HASH} label={tr(msg`Скопировать prev_hash`)} />,
           },
-          { label: "hash", value: <CopyableId value={EVENT_HASH} label="Скопировать hash" /> },
+          {
+            label: "hash",
+            value: <CopyableId value={EVENT_HASH} label={tr(msg`Скопировать hash`)} />,
+          },
         ]}
       />
       <div>
-        <StatusBadge tone="success" label="Звено проверено, якорь 14:00" />
+        <StatusBadge tone="success" label={tr(msg`Звено проверено, якорь 14:00`)} />
       </div>
     </section>
   );
@@ -271,9 +353,9 @@ function eventJson(event: AuditEvent) {
 }
 
 const PANEL_TABS = [
-  ["summary", "Сводка"],
-  ["context", "Контекст"],
-  ["json", "JSON"],
+  ["summary", msg`Сводка`],
+  ["context", msg`Контекст`],
+  ["json", msg`JSON`],
 ] as const;
 type PanelTab = (typeof PANEL_TABS)[number][0];
 
@@ -289,25 +371,25 @@ function SummaryTab({ event }: { event: AuditEvent }) {
       <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
         <KeyValueList
           items={[
-            { label: "Время", value: event.time },
+            { label: tr(msg`Время`), value: event.time },
             {
-              label: "Актор",
+              label: tr(msg`Актор`),
               value: (
                 <span className="flex flex-wrap items-center gap-2">
                   {event.actor.alias}
-                  <Badge variant="outline">Маскировано</Badge>
+                  <Badge variant="outline">{tr(msg`Маскировано`)}</Badge>
                 </span>
               ),
             },
             { label: "on_behalf_of", value: "user-04be" },
-            { label: "Действие", value: event.action.code },
-            { label: "Ресурс", value: event.resource },
+            { label: tr(msg`Действие`), value: event.action.code },
+            { label: tr(msg`Ресурс`), value: event.resource },
           ]}
         />
         <KeyValueList
           items={[
             {
-              label: "Решение",
+              label: tr(msg`Решение`),
               value: (
                 <StatusBadge
                   tone={DECISION_TONE[event.decision]}
@@ -315,17 +397,20 @@ function SummaryTab({ event }: { event: AuditEvent }) {
                 />
               ),
             },
-            { label: "Правила", value: event.rule },
-            { label: "Канал", value: `${event.channel} · cctl 1.8.2` },
+            { label: tr(msg`Правила`), value: event.rule },
+            { label: tr(msg`Канал`), value: `${event.channel} · cctl 1.8.2` },
             { label: "IP", value: "10.12.4.0/24" },
             {
               label: "request_id",
-              value: <CopyableId value={event.requestId} label="Скопировать request_id" />,
+              value: <CopyableId value={event.requestId} label={tr(msg`Скопировать request_id`)} />,
             },
             {
               label: "trace_id",
               value: (
-                <CopyableId value="4bf92f3577b34da6a3ce929d0e0e4736" label="Скопировать trace_id" />
+                <CopyableId
+                  value="4bf92f3577b34da6a3ce929d0e0e4736"
+                  label={tr(msg`Скопировать trace_id`)}
+                />
               ),
             },
           ]}
@@ -333,7 +418,10 @@ function SummaryTab({ event }: { event: AuditEvent }) {
       </div>
       <ChainBlock />
       <section className="flex flex-col gap-2">
-        <h3 className="text-h3">События того же запроса ({RELATED.length})</h3>
+        <h3 className="text-h3">
+          {tr(msg`События того же запроса (`)}
+          {RELATED.length})
+        </h3>
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {RELATED.map(([code, time]) => (
             <li key={code}>
@@ -367,7 +455,7 @@ function EventPanel({
     ? undefined
     : {
         primary: {
-          label: "Раскрыть данные",
+          label: tr(msg`Раскрыть данные`),
           run: { onSelect: onReveal },
           stepUp: true,
         } satisfies Action,
@@ -377,16 +465,16 @@ function EventPanel({
     <DetailPanel
       open={open}
       onOpenChange={onOpenChange}
-      title="Событие"
+      title={tr(msg`Событие`)}
       status={
         <StatusBadge tone={DECISION_TONE[event.decision]} label={DECISION_LABEL[event.decision]} />
       }
       tabs={
         <Tabs value={tab} onValueChange={changeTab}>
-          <TabsList variant="line" aria-label="Разделы события">
+          <TabsList variant="line" aria-label={tr(msg`Разделы события`)}>
             {PANEL_TABS.map(([value, label]) => (
               <TabsTrigger key={value} value={value}>
-                {label}
+                {tr(label)}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -398,14 +486,16 @@ function EventPanel({
       {tab === "context" ? (
         <KeyValueList
           items={[
-            { label: "Клиент", value: "cctl 1.8.2 (linux/amd64)" },
+            { label: tr(msg`Клиент`), value: "cctl 1.8.2 (linux/amd64)" },
             { label: "User-Agent", value: "cctl/1.8.2 go1.24" },
             { label: "Workspace", value: "platform" },
-            { label: "Сессия", value: "ses_5be0c1d4" },
+            { label: tr(msg`Сессия`), value: "ses_5be0c1d4" },
           ]}
         />
       ) : null}
-      {tab === "json" ? <JsonViewer label="JSON события" value={eventJson(event)} /> : null}
+      {tab === "json" ? (
+        <JsonViewer label={tr(msg`JSON события`)} value={eventJson(event)} />
+      ) : null}
     </DetailPanel>
   );
 }
@@ -428,26 +518,30 @@ function RevealDialog({
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Раскрыть данные события?"
-      description="Будут показаны логин и полный IP-адрес актора."
-      consequences={["Раскрытие запишется в журнал", "Данные видны только в этой панели"]}
+      title={tr(msg`Раскрыть данные события?`)}
+      description={tr(msg`Будут показаны логин и полный IP-адрес актора.`)}
+      consequences={[
+        tr(msg`Раскрытие запишется в журнал`),
+        tr(msg`Данные видны только в этой панели`),
+      ]}
       confirm={{
-        label: "Раскрыть",
+        label: tr(msg`Раскрыть`),
         run: { onSelect: noop },
         stepUp: true,
         ...(text.trim().length < MIN_JUSTIFICATION
-          ? { disabledReason: `Обоснование: минимум ${MIN_JUSTIFICATION} символов` }
+          ? { disabledReason: tr(msg`Обоснование: минимум ${MIN_JUSTIFICATION} символов`) }
           : {}),
       }}
     >
       <Callout tone="info">
-        <CalloutDescription>Потребуется подтверждение входа (MFA)</CalloutDescription>
+        <CalloutDescription>{tr(msg`Потребуется подтверждение входа (MFA)`)}</CalloutDescription>
       </Callout>
       <Field>
-        <FieldLabel>Обоснование</FieldLabel>
+        <FieldLabel>{tr(msg`Обоснование`)}</FieldLabel>
         <Textarea value={text} onChange={change} aria-describedby={counterId} />
         <FieldDescription id={counterId}>
-          {text.trim().length} из {MIN_JUSTIFICATION} символов. Раскрытие будет записано в журнал
+          {text.trim().length} {tr(msg`из`)} {MIN_JUSTIFICATION}{" "}
+          {tr(msg`символов. Раскрытие будет записано в журнал`)}
         </FieldDescription>
       </Field>
     </ConfirmDialog>
@@ -468,31 +562,33 @@ function S9Screen({ auditor = false, revealOpen = false }: ScreenProps) {
   const openReveal = useCallback(() => setReveal(true), []);
   const event = AUDIT_EVENTS.find((item) => item.id === selectedId) ?? AUDIT_EVENTS[0];
   const header = auditor
-    ? { caption: "Режим аудитора: данные маскированы" }
+    ? { caption: tr(msg`Режим аудитора: данные маскированы`) }
     : {
-        caption: "Хранение онлайн 12 месяцев, далее WORM-архив",
+        caption: tr(msg`Хранение онлайн 12 месяцев, далее WORM-архив`),
         secondary: HEADER_ACTIONS,
       };
   return (
-    <ScreenFrame active="audit" breadcrumbs={{ trail: [], current: "Журнал" }}>
+    <ScreenFrame active="audit" breadcrumbs={{ trail: [], current: tr(msg`Журнал`) }}>
       <div className="flex flex-col gap-6">
-        <PageHeader title="Журнал действий" {...header} />
+        <PageHeader title={tr(msg`Журнал действий`)} {...header} />
         <Callout tone="info">
-          <CalloutDescription>Каждый поиск записывается в журнал (audit.viewed)</CalloutDescription>
+          <CalloutDescription>
+            {tr(msg`Каждый поиск записывается в журнал (audit.viewed)`)}
+          </CalloutDescription>
         </Callout>
         <Tiles auditor={auditor} />
         <Filters />
         <div className="flex items-start gap-6">
-          <section aria-label="События" className="flex min-w-0 flex-1 flex-col gap-4">
+          <section aria-label={tr(msg`События`)} className="flex min-w-0 flex-1 flex-col gap-4">
             <DataTable
               columns={columns}
               data={[...AUDIT_EVENTS]}
               getRowId={getRowId}
-              caption="События журнала"
+              caption={tr(msg`События журнала`)}
               compact={panelOpen}
               selectedId={selectedId}
               onRowSelect={select}
-              loadMore={{ label: "Загрузить ещё", run: { onSelect: noop } }}
+              loadMore={{ label: tr(msg`Загрузить ещё`), run: { onSelect: noop } }}
             />
           </section>
           {event ? (
@@ -582,5 +678,15 @@ export const RevealDialogOpen: Story = {
     const body = within(canvasElement.ownerDocument.body);
     const dialog = await body.findByRole("alertdialog", { name: "Раскрыть данные события?" });
     await expect(within(dialog).getByRole("textbox", { name: "Обоснование" })).toBeVisible();
+  },
+};
+
+export const English: Story = {
+  ...Desktop1440,
+  name: "EN: подписи на английском",
+  globals: { ...desktop, locale: "en" },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await expect(await body.findByRole("dialog", { name: "Event" })).toBeVisible();
   },
 };

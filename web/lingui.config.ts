@@ -9,8 +9,9 @@ export default defineConfig({
   catalogs: [
     {
       path: "<rootDir>/src/shared/lib/i18n/locales/{locale}",
-      include: ["<rootDir>/src/"],
-      exclude: ["**/*.stories.tsx", "**/*.test.ts", "**/*.test.tsx"],
+      // Экраны витрины (web/screens) — тоже источник сообщений; их stories и есть экраны, а не фикстуры компонентов.
+      include: ["<rootDir>/src/", "<rootDir>/screens/"],
+      exclude: ["<rootDir>/src/**/*.stories.tsx", "**/*.test.ts", "**/*.test.tsx"],
     },
   ],
   // Без номеров строк: запись в каталоге меняется только вместе с самим сообщением, а не при сдвиге кода.

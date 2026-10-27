@@ -1,4 +1,4 @@
-// i18n: не мигрирован
+import { msg } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useCallback, useId, useState } from "react";
@@ -37,12 +37,19 @@ import {
 } from "../data/search";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
+import { tr } from "../frame/tr";
 
 // Макеты экранов — на русском; форматирование чисел фиксирует ru, активная локаль витрины им не нужна.
 const format = textFormat("ru");
 
 const FORMAT_SEGMENTS = [
-  { value: "all", label: "Все", count: 38 },
+  {
+    value: "all",
+    get label() {
+      return tr(msg`Все`);
+    },
+    count: 38,
+  },
   { value: "npm", label: "npm", count: 21 },
   { value: "pypi", label: "PyPI", count: 8 },
   { value: "maven", label: "Maven", count: 5 },
@@ -57,8 +64,15 @@ const DEGRADED: readonly Banner[] = [
   {
     id: "semantic",
     tone: "warning",
-    text: "Ассистенты недоступны: поиск работает без семантики",
-    action: { label: "Статус платформы", run: { href: "/status" } },
+    get text() {
+      return tr(msg`Ассистенты недоступны: поиск работает без семантики`);
+    },
+    action: {
+      get label() {
+        return tr(msg`Статус платформы`);
+      },
+      run: { href: "/status" },
+    },
   },
 ];
 
@@ -70,10 +84,10 @@ function ResultCard({ item }: { item: SearchResult }) {
       aria-labelledby={titleId}
       className="flex min-w-0 flex-col gap-1.5 rounded-xl bg-card p-4 shadow-card"
     >
-      {item.exact ? <p className="text-overline text-brand">Точное совпадение</p> : null}
+      {item.exact ? <p className="text-overline text-brand">{tr(msg`Точное совпадение`)}</p> : null}
       {item.typosquatOf ? (
         <Callout tone="warning" className="py-1 text-caption">
-          {`Похоже на ${item.typosquatOf} — 1 символ (возможный typosquat). `}
+          {tr(msg`Похоже на ${item.typosquatOf} — 1 символ (возможный typosquat). `)}
           <Link href={`/packages/${item.typosquatOf}`} className="underline">
             {item.typosquatOf}
           </Link>
@@ -87,12 +101,12 @@ function ResultCard({ item }: { item: SearchResult }) {
         </h3>
         <Badge variant="outline">{item.format}</Badge>
         <Badge variant="secondary">{`${item.repository} · ${item.workspace}`}</Badge>
-        {item.deprecated ? <StatusBadge tone="warning" label="Устарел" /> : null}
+        {item.deprecated ? <StatusBadge tone="warning" label={tr(msg`Устарел`)} /> : null}
         {item.risk ? (
           <span className="ml-auto">
             <StatusBadge
               tone={riskTone(item.risk.priority)}
-              label={`${item.risk.priority} · ${item.risk.findings} ${item.risk.findings === 1 ? "находка" : "находки"}`}
+              label={`${item.risk.priority} · ${item.risk.findings} ${item.risk.findings === 1 ? tr(msg`находка`) : tr(msg`находки`)}`}
             />
           </span>
         ) : null}
@@ -100,10 +114,12 @@ function ResultCard({ item }: { item: SearchResult }) {
       <p className="truncate text-body text-muted-foreground">{item.description}</p>
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
         <span className="flex items-center gap-2">
-          <span>{`Последняя ${item.version}`}</span>
+          <span>{tr(msg`Последняя ${item.version}`)}</span>
           <StatusBadge tone={item.state.tone} label={item.state.label} />
         </span>
-        <span className="tabular-nums">{`${format.number(item.downloads)} загрузок за 30 дн`}</span>
+        <span className="tabular-nums">
+          {tr(msg`${format.number(item.downloads)} загрузок за 30 дн`)}
+        </span>
         <span>{item.team}</span>
         <RelativeTime ts={item.updated} />
       </p>
@@ -119,13 +135,13 @@ function Facets() {
   return (
     <div className="flex flex-col gap-4">
       <FacetList
-        title="По форматам"
+        title={tr(msg`По форматам`)}
         items={FORMAT_FACETS}
         selected={formats}
         onToggle={toggleFormat}
       />
       <FacetList
-        title="По workspace"
+        title={tr(msg`По workspace`)}
         items={WORKSPACE_FACETS}
         selected={spaces}
         onToggle={toggleSpace}
@@ -147,28 +163,28 @@ function FiltersRow() {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
       <SegmentedControl
-        label="Формат пакета"
+        label={tr(msg`Формат пакета`)}
         items={FORMAT_SEGMENTS}
         value={format}
         onValueChange={setFormat}
       />
       <FilterSelect
-        label="Репозиторий"
-        allLabel="Все репозитории"
+        label={tr(msg`Репозиторий`)}
+        allLabel={tr(msg`Все репозитории`)}
         options={REPOSITORY_OPTIONS}
         value={repository}
         onValueChange={setRepository}
       />
       <FilterSelect
         label="Workspace"
-        allLabel="Workspace: все"
+        allLabel={tr(msg`Workspace: все`)}
         options={WORKSPACE_OPTIONS}
         value={workspace}
         onValueChange={setWorkspace}
       />
       <span className="flex items-center gap-2 text-body">
         <Switch aria-labelledby={switchLabelId} />
-        <span id={switchLabelId}>Показывать устаревшие</span>
+        <span id={switchLabelId}>{tr(msg`Показывать устаревшие`)}</span>
       </span>
     </div>
   );
@@ -181,14 +197,14 @@ function MobileFilters() {
         render={
           <Button variant="secondary" className="@4xl/page:hidden">
             <SlidersHorizontalIcon aria-hidden="true" />
-            Фильтры
+            {tr(msg`Фильтры`)}
           </Button>
         }
       />
       <SheetContent>
         <SheetHeader>
-          <SheetTitle>Фильтры</SheetTitle>
-          <SheetDescription>Форматы и workspace</SheetDescription>
+          <SheetTitle>{tr(msg`Фильтры`)}</SheetTitle>
+          <SheetDescription>{tr(msg`Форматы и workspace`)}</SheetDescription>
         </SheetHeader>
         <SheetBody>
           <Facets />
@@ -201,8 +217,13 @@ function MobileFilters() {
 function SearchBar({ query }: { query: string }) {
   return (
     <search className="flex gap-2">
-      <Input type="search" aria-label="Поиск пакетов" defaultValue={query} className="flex-1" />
-      <Button>Найти</Button>
+      <Input
+        type="search"
+        aria-label={tr(msg`Поиск пакетов`)}
+        defaultValue={query}
+        className="flex-1"
+      />
+      <Button>{tr(msg`Найти`)}</Button>
     </search>
   );
 }
@@ -212,10 +233,10 @@ function ResultsList() {
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
       <h2 id={headingId} className="sr-only">
-        Результаты поиска
+        {tr(msg`Результаты поиска`)}
       </h2>
       <p role="status" className="text-caption text-muted-foreground tabular-nums">
-        38 результатов · 74 мс
+        {tr(msg`38 результатов · 74 мс`)}
       </p>
       {RESULTS.map((item) => (
         <ResultCard key={item.id} item={item} />
@@ -229,14 +250,14 @@ function NothingFound({ query }: { query: string }) {
     <div className="flex flex-col items-center gap-4 rounded-xl bg-card py-4 shadow-card">
       <EmptyState
         variant="filtered"
-        title={`Ничего не нашлось по «${query}»`}
-        reset={{ label: "Сбросить фильтры", run: { onSelect: () => undefined } }}
+        title={tr(msg`Ничего не нашлось по «${query}»`)}
+        reset={{ label: tr(msg`Сбросить фильтры`), run: { onSelect: () => undefined } }}
       />
       <ul className="max-w-[60ch] list-disc space-y-1 pl-5 text-body text-muted-foreground">
-        <li>Проверьте формат: «format:npm» ищет только среди npm-пакетов</li>
-        <li>Уберите фильтры по репозиторию или workspace</li>
+        <li>{tr(msg`Проверьте формат: «format:npm» ищет только среди npm-пакетов`)}</li>
+        <li>{tr(msg`Уберите фильтры по репозиторию или workspace`)}</li>
         <li>
-          {"Возможно, вы искали "}
+          {tr(msg`Возможно, вы искали `)}
           <Link href="/packages/acme-ui" className="text-brand underline">
             @acme/ui
           </Link>
@@ -257,7 +278,10 @@ function SearchTab({ empty }: { empty: boolean }) {
         <div className="min-w-0 @4xl/page:col-span-8">
           {empty ? <NothingFound query={query} /> : <ResultsList />}
         </div>
-        <aside aria-label="Фильтры" className="hidden @4xl/page:col-span-4 @4xl/page:block">
+        <aside
+          aria-label={tr(msg`Фильтры`)}
+          className="hidden @4xl/page:col-span-4 @4xl/page:block"
+        >
           <Facets />
         </aside>
       </div>
@@ -270,21 +294,21 @@ function S1Page({ empty = false }: { empty?: boolean }) {
   return (
     <Tabs defaultValue="search" className="gap-4">
       <PageHeader
-        title="Поиск"
-        caption="Пакеты всех форматов в репозиториях, доступных вам"
+        title={tr(msg`Поиск`)}
+        caption={tr(msg`Пакеты всех форматов в репозиториях, доступных вам`)}
         tabs={
-          <TabsList variant="line" aria-label="Разделы поиска">
-            <TabsTrigger value="search">Поиск</TabsTrigger>
-            <TabsTrigger value="favorites">Избранное</TabsTrigger>
-            <TabsTrigger value="recent">Недавние</TabsTrigger>
+          <TabsList variant="line" aria-label={tr(msg`Разделы поиска`)}>
+            <TabsTrigger value="search">{tr(msg`Поиск`)}</TabsTrigger>
+            <TabsTrigger value="favorites">{tr(msg`Избранное`)}</TabsTrigger>
+            <TabsTrigger value="recent">{tr(msg`Недавние`)}</TabsTrigger>
           </TabsList>
         }
       />
       <TabsContent value="search">
         <SearchTab empty={empty} />
       </TabsContent>
-      <TabsContent value="favorites">Избранные пакеты появятся здесь</TabsContent>
-      <TabsContent value="recent">Недавно открытые пакеты появятся здесь</TabsContent>
+      <TabsContent value="favorites">{tr(msg`Избранные пакеты появятся здесь`)}</TabsContent>
+      <TabsContent value="recent">{tr(msg`Недавно открытые пакеты появятся здесь`)}</TabsContent>
     </Tabs>
   );
 }
@@ -295,7 +319,7 @@ function Screen({ empty = false, banners }: Props) {
   return (
     <ScreenFrame
       active="search"
-      breadcrumbs={{ trail: [], current: "Поиск" }}
+      breadcrumbs={{ trail: [], current: tr(msg`Поиск`) }}
       {...(banners ? { banners } : {})}
     >
       <S1Page empty={empty} />
@@ -340,4 +364,15 @@ export const NoResults: Story = {
 export const AssistantsUnavailable: Story = {
   name: "Баннер: ассистенты недоступны",
   args: { banners: DEGRADED },
+};
+
+export const English: Story = {
+  ...DesktopLight,
+  name: "EN: подписи на английском",
+  globals: { ...desktop, locale: "en" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("heading", { level: 1, name: "Search" })).toBeVisible();
+    await expect(canvas.getByText("38 results · 74 ms")).toBeVisible();
+  },
 };

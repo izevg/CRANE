@@ -1,4 +1,4 @@
-// i18n: не мигрирован
+import { msg } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { expect, within } from "storybook/test";
@@ -47,6 +47,7 @@ import {
 } from "../data/versions";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
+import { tr } from "../frame/tr";
 
 // Макеты экранов — на русском; форматирование чисел фиксирует ru, активная локаль витрины им не нужна.
 const format = textFormat("ru");
@@ -70,9 +71,9 @@ function StateCell({ row }: { row: VersionRow }) {
       {row.state === "blocked" ? (
         <Tooltip>
           <TooltipTrigger render={<Badge variant="destructive" tabIndex={0} />}>
-            Экстренно · CVE-2026-31337
+            {tr(msg`Экстренно · CVE-2026-31337`)}
           </TooltipTrigger>
-          <TooltipContent>Исправлено в 4.17.21</TooltipContent>
+          <TooltipContent>{tr(msg`Исправлено в 4.17.21`)}</TooltipContent>
         </Tooltip>
       ) : null}
     </span>
@@ -81,11 +82,14 @@ function StateCell({ row }: { row: VersionRow }) {
 
 const columns = helper.columns([
   helper.accessor("version", {
-    header: "Версия",
+    header: () => tr(msg`Версия`),
     meta: { priority: 1 },
     cell: (info) =>
       info.row.original.state === "deleted" ? (
-        <s className="text-muted-foreground" title="Номер версии нельзя использовать повторно">
+        <s
+          className="text-muted-foreground"
+          title={tr(msg`Номер версии нельзя использовать повторно`)}
+        >
           {info.getValue()}
         </s>
       ) : (
@@ -93,12 +97,12 @@ const columns = helper.columns([
       ),
   }),
   helper.accessor("state", {
-    header: "Состояние",
+    header: () => tr(msg`Состояние`),
     meta: { priority: 1 },
     cell: (info) => <StateCell row={info.row.original} />,
   }),
   helper.accessor("flags", {
-    header: "Флаги",
+    header: () => tr(msg`Флаги`),
     meta: { priority: 2 },
     cell: (info) => (
       <span className="flex gap-1">
@@ -111,12 +115,12 @@ const columns = helper.columns([
     ),
   }),
   helper.accessor("publishedAt", {
-    header: "Опубликована",
+    header: () => tr(msg`Опубликована`),
     meta: { priority: 2 },
     cell: (info) => <span className="tabular-nums">{info.getValue()}</span>,
   }),
   helper.accessor("by", {
-    header: "Кем",
+    header: () => tr(msg`Кем`),
     meta: { priority: 2 },
     cell: (info) => {
       const by = info.getValue();
@@ -124,7 +128,7 @@ const columns = helper.columns([
     },
   }),
   helper.accessor("source", {
-    header: "Источник",
+    header: () => tr(msg`Источник`),
     meta: { priority: 3 },
     cell: (info) => <span className="tabular-nums">{info.getValue()}</span>,
   }),
@@ -133,22 +137,57 @@ const columns = helper.columns([
 const getRowId = (row: VersionRow) => row.id;
 
 const SEGMENTS = [
-  { value: "all", label: "Все", count: STATE_COUNTS.all },
-  { value: "released", label: "Выпущенные", count: STATE_COUNTS.released },
-  { value: "quarantined", label: "Карантин", count: STATE_COUNTS.quarantined },
-  { value: "blocked", label: "Заблокированные", count: STATE_COUNTS.blocked },
-  { value: "deleted", label: "Удалённые", count: STATE_COUNTS.deleted },
+  {
+    value: "all",
+    get label() {
+      return tr(msg`Все`);
+    },
+    count: STATE_COUNTS.all,
+  },
+  {
+    value: "released",
+    get label() {
+      return tr(msg`Выпущенные`);
+    },
+    count: STATE_COUNTS.released,
+  },
+  {
+    value: "quarantined",
+    get label() {
+      return tr(msg`Карантин`);
+    },
+    count: STATE_COUNTS.quarantined,
+  },
+  {
+    value: "blocked",
+    get label() {
+      return tr(msg`Заблокированные`);
+    },
+    count: STATE_COUNTS.blocked,
+  },
+  {
+    value: "deleted",
+    get label() {
+      return tr(msg`Удалённые`);
+    },
+    count: STATE_COUNTS.deleted,
+  },
 ] as const;
 
 type Segment = (typeof SEGMENTS)[number]["value"];
 
 const rowActions = (row: VersionRow): readonly Action[] =>
   row.state === "deleted"
-    ? [{ label: "Открыть", run: { href: `/packages/acme-ui/versions/${row.version}` } }]
+    ? [{ label: tr(msg`Открыть`), run: { href: `/packages/acme-ui/versions/${row.version}` } }]
     : [
-        { label: "Открыть", run: { href: `/packages/acme-ui/versions/${row.version}` } },
-        { label: "Скачать SBOM", run: { onSelect: () => undefined } },
-        { label: "Удалить…", run: { onSelect: () => undefined }, destructive: true, stepUp: true },
+        { label: tr(msg`Открыть`), run: { href: `/packages/acme-ui/versions/${row.version}` } },
+        { label: tr(msg`Скачать SBOM`), run: { onSelect: () => undefined } },
+        {
+          label: tr(msg`Удалить…`),
+          run: { onSelect: () => undefined },
+          destructive: true,
+          stepUp: true,
+        },
       ];
 
 function Section({
@@ -171,45 +210,73 @@ function Section({
   );
 }
 
-const LIFECYCLE = [
-  {
-    id: "published",
-    time: "2026-10-27T13:42:00Z",
-    title: "Опубликована",
-    actor: "crr_9f8e7d6c · ui-release",
-    source: "pipeline #4521",
-  },
-  {
-    id: "sha",
-    time: "2026-10-27T13:42:10Z",
-    title: "SHA-256 подтверждён",
-    detail: <CopyableId value={SHA256} label="Скопировать SHA-256" />,
-  },
-  {
-    id: "scan",
-    time: "2026-10-27T13:48:00Z",
-    title: "Скан: найдена 1 уязвимость",
-    tone: "warning",
-    status: { tone: "warning", label: "Карантин" },
-    source: "Trivy",
-    link: { label: "CVE-2026-31337", run: { href: "/findings/CVE-2026-31337" } },
-  },
-  {
-    id: "gates",
-    time: "2026-10-27T13:49:00Z",
-    title: "Гейт безопасности: отказ",
-    tone: "error",
-    status: { tone: "error", label: "Не пройден" },
-  },
-  {
-    id: "request",
-    time: "2026-10-27T14:07:00Z",
-    title: "Запрос на продвижение в release",
-    tone: "info",
-    status: { tone: "info", label: "Ждёт AppSec" },
-    actor: "Иванов И.",
-  },
-] as const;
+const lifecycle = () =>
+  [
+    {
+      id: "published",
+      time: "2026-10-27T13:42:00Z",
+      get title() {
+        return tr(msg`Опубликована`);
+      },
+      actor: "crr_9f8e7d6c · ui-release",
+      source: "pipeline #4521",
+    },
+    {
+      id: "sha",
+      time: "2026-10-27T13:42:10Z",
+      get title() {
+        return tr(msg`SHA-256 подтверждён`);
+      },
+      detail: <CopyableId value={SHA256} label={tr(msg`Скопировать SHA-256`)} />,
+    },
+    {
+      id: "scan",
+      time: "2026-10-27T13:48:00Z",
+      get title() {
+        return tr(msg`Скан: найдена 1 уязвимость`);
+      },
+      tone: "warning",
+      status: {
+        tone: "warning",
+        get label() {
+          return tr(msg`Карантин`);
+        },
+      },
+      source: "Trivy",
+      link: { label: "CVE-2026-31337", run: { href: "/findings/CVE-2026-31337" } },
+    },
+    {
+      id: "gates",
+      time: "2026-10-27T13:49:00Z",
+      get title() {
+        return tr(msg`Гейт безопасности: отказ`);
+      },
+      tone: "error",
+      status: {
+        tone: "error",
+        get label() {
+          return tr(msg`Не пройден`);
+        },
+      },
+    },
+    {
+      id: "request",
+      time: "2026-10-27T14:07:00Z",
+      get title() {
+        return tr(msg`Запрос на продвижение в release`);
+      },
+      tone: "info",
+      status: {
+        tone: "info",
+        get label() {
+          return tr(msg`Ждёт AppSec`);
+        },
+      },
+      get actor() {
+        return tr(msg`Иванов И.`);
+      },
+    },
+  ] as const;
 
 const DIFF_ROWS = [
   { kind: "same", path: "name", text: '"name": "@acme/ui"' },
@@ -247,37 +314,43 @@ function SummaryTab() {
   return (
     <div className="flex flex-col gap-6">
       <Callout tone="warning">
-        <CalloutTitle>Продвижение в release заблокировано: 2 причины</CalloutTitle>
+        <CalloutTitle>{tr(msg`Продвижение в release заблокировано: 2 причины`)}</CalloutTitle>
         <CalloutDescription>
-          Находка CVE-2026-31337 (P1) в lodash 4.17.20 · нет одобрения AppSec.
+          {tr(msg`Находка CVE-2026-31337 (P1) в lodash 4.17.20 · нет одобрения AppSec.`)}
         </CalloutDescription>
       </Callout>
       <KeyValueList
         items={[
-          { label: "PURL", value: <CopyableId plain value={PURL} full label="Скопировать PURL" /> },
-          { label: "Опубликована", value: "27.10.2026, 13:42" },
-          { label: "Кем", value: "crr_9f8e7d6c · ui-release" },
-          { label: "Размер", value: format.bytes(188_416) },
-          { label: "SHA-256", value: <CopyableId value={SHA256} label="Скопировать SHA-256" /> },
-          { label: "Целевая стадия", value: "release" },
+          {
+            label: "PURL",
+            value: <CopyableId plain value={PURL} full label={tr(msg`Скопировать PURL`)} />,
+          },
+          { label: tr(msg`Опубликована`), value: "27.10.2026, 13:42" },
+          { label: tr(msg`Кем`), value: "crr_9f8e7d6c · ui-release" },
+          { label: tr(msg`Размер`), value: format.bytes(188_416) },
+          {
+            label: "SHA-256",
+            value: <CopyableId value={SHA256} label={tr(msg`Скопировать SHA-256`)} />,
+          },
+          { label: tr(msg`Целевая стадия`), value: "release" },
         ]}
       />
-      <Section title="История">
-        <Timeline label="История версии 1.4.2" items={LIFECYCLE} />
+      <Section title={tr(msg`История`)}>
+        <Timeline label={tr(msg`История версии 1.4.2`)} items={lifecycle()} />
       </Section>
       <Section
-        title="Изменения манифеста"
+        title={tr(msg`Изменения манифеста`)}
         aside={
           <ActionButton
             action={{
-              label: "Сравнить с 1.4.1",
+              label: tr(msg`Сравнить с 1.4.1`),
               run: { href: "/packages/acme-ui/compare/1.4.1...1.4.2" },
             }}
             variant="ghost"
           />
         }
       >
-        <DiffViewer label="Изменения манифеста 1.4.1 → 1.4.2" rows={DIFF_ROWS} />
+        <DiffViewer label={tr(msg`Изменения манифеста 1.4.1 → 1.4.2`)} rows={DIFF_ROWS} />
       </Section>
     </div>
   );
@@ -285,11 +358,11 @@ function SummaryTab() {
 
 function FilesTab() {
   return (
-    <Table aria-label="Файлы версии 1.4.2">
+    <Table aria-label={tr(msg`Файлы версии 1.4.2`)}>
       <TableHeader>
         <TableRow>
-          <TableHead>Путь</TableHead>
-          <TableHead className="text-right">Размер</TableHead>
+          <TableHead>{tr(msg`Путь`)}</TableHead>
+          <TableHead className="text-right">{tr(msg`Размер`)}</TableHead>
           <TableHead>SHA-256</TableHead>
         </TableRow>
       </TableHeader>
@@ -301,7 +374,7 @@ function FilesTab() {
             <TableCell>
               <CopyableId
                 value={`${SHA256.slice(index * 3)}${SHA256.slice(0, index * 3)}`}
-                label={`Скопировать SHA-256 файла ${path}`}
+                label={tr(msg`Скопировать SHA-256 файла ${path}`)}
               />
             </TableCell>
           </TableRow>
@@ -312,10 +385,10 @@ function FilesTab() {
 }
 
 const PANEL_TABS = [
-  ["summary", "Сводка"],
-  ["files", "Файлы"],
-  ["history", "История"],
-  ["metadata", "Метаданные"],
+  ["summary", msg`Сводка`],
+  ["files", msg`Файлы`],
+  ["history", msg`История`],
+  ["metadata", msg`Метаданные`],
 ] as const;
 
 type PanelTab = (typeof PANEL_TABS)[number][0];
@@ -325,14 +398,14 @@ function PanelContent({ tab }: { tab: PanelTab }) {
     return <FilesTab />;
   }
   if (tab === "history") {
-    return <Timeline label="История версии 1.4.2" items={LIFECYCLE} />;
+    return <Timeline label={tr(msg`История версии 1.4.2`)} items={lifecycle()} />;
   }
   if (tab === "metadata") {
     return (
       <div className="flex flex-col gap-6">
-        <JsonViewer label="Метаданные версии" value={METADATA} />
-        <Section title="Изменения манифеста">
-          <DiffViewer label="Изменения манифеста 1.4.1 → 1.4.2" rows={DIFF_ROWS} />
+        <JsonViewer label={tr(msg`Метаданные версии`)} value={METADATA} />
+        <Section title={tr(msg`Изменения манифеста`)}>
+          <DiffViewer label={tr(msg`Изменения манифеста 1.4.1 → 1.4.2`)} rows={DIFF_ROWS} />
         </Section>
       </div>
     );
@@ -355,26 +428,28 @@ function VersionPanel({
     <DetailPanel
       open={open}
       onOpenChange={onOpenChange}
-      title="Версия 1.4.2"
-      status={<StatusBadge tone="warning" label="Карантин" />}
-      menu={[{ label: "Открыть полностью", run: { href: "/packages/acme-ui/versions/1.4.2" } }]}
+      title={tr(msg`Версия 1.4.2`)}
+      status={<StatusBadge tone="warning" label={tr(msg`Карантин`)} />}
+      menu={[
+        { label: tr(msg`Открыть полностью`), run: { href: "/packages/acme-ui/versions/1.4.2" } },
+      ]}
       tabs={
         <Tabs value={tab} onValueChange={changeTab}>
-          <TabsList variant="line" aria-label="Разделы версии">
+          <TabsList variant="line" aria-label={tr(msg`Разделы версии`)}>
             {PANEL_TABS.map(([value, label]) => (
               <TabsTrigger key={value} value={value}>
-                {label}
+                {tr(label)}
               </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
       }
       footer={{
-        primary: { label: "Запросить одобрение", run: { onSelect: noop } },
+        primary: { label: tr(msg`Запросить одобрение`), run: { onSelect: noop } },
         secondary: [{ label: "Yank", run: { onSelect: noop } }],
         menu: [
-          { label: "Скачать SBOM и evidence", run: { onSelect: noop } },
-          { label: "Удалить…", run: { onSelect: noop }, destructive: true, stepUp: true },
+          { label: tr(msg`Скачать SBOM и evidence`), run: { onSelect: noop } },
+          { label: tr(msg`Удалить…`), run: { onSelect: noop }, destructive: true, stepUp: true },
         ],
       }}
     >
@@ -419,7 +494,7 @@ function S3Screen({ initialPanelOpen = true }: ScreenProps) {
       active="packages"
       breadcrumbs={{
         trail: [
-          { label: "Мои пакеты", href: "/packages" },
+          { label: tr(msg`Мои пакеты`), href: "/packages" },
           { label: "npm-hosted", href: "/repositories/npm-hosted" },
         ],
         current: "@acme/ui",
@@ -428,37 +503,37 @@ function S3Screen({ initialPanelOpen = true }: ScreenProps) {
       <div className="flex flex-col gap-6">
         <PageHeader
           title="@acme/ui"
-          status={<StatusBadge tone="success" label="Активен" />}
+          status={<StatusBadge tone="success" label={tr(msg`Активен`)} />}
           chips={
             <>
               <Badge variant="outline">npm</Badge>
               <Badge variant="outline">npm-hosted · hosted</Badge>
             </>
           }
-          caption="Библиотека интерфейсных компонентов команды web. Владелец: Иванов И."
+          caption={tr(msg`Библиотека интерфейсных компонентов команды web. Владелец: Иванов И.`)}
           stats={
             <>
-              <StatChip label="Версий" value={STATE_COUNTS.all} />
-              <StatChip label="Последняя" value="1.4.2" />
-              <StatChip label="Загрузок за 30 дн" value="12 340" />
+              <StatChip label={tr(msg`Версий`)} value={STATE_COUNTS.all} />
+              <StatChip label={tr(msg`Последняя`)} value="1.4.2" />
+              <StatChip label={tr(msg`Загрузок за 30 дн`)} value="12 340" />
             </>
           }
           tabs={
             <Tabs value="versions">
-              <TabsList variant="line" aria-label="Разделы пакета">
-                <TabsTrigger value="overview">Обзор</TabsTrigger>
-                <TabsTrigger value="versions">Версии</TabsTrigger>
-                <TabsTrigger value="risks">Риски</TabsTrigger>
-                <TabsTrigger value="members">Участники</TabsTrigger>
+              <TabsList variant="line" aria-label={tr(msg`Разделы пакета`)}>
+                <TabsTrigger value="overview">{tr(msg`Обзор`)}</TabsTrigger>
+                <TabsTrigger value="versions">{tr(msg`Версии`)}</TabsTrigger>
+                <TabsTrigger value="risks">{tr(msg`Риски`)}</TabsTrigger>
+                <TabsTrigger value="members">{tr(msg`Участники`)}</TabsTrigger>
               </TabsList>
             </Tabs>
           }
         />
         <div className="flex items-start gap-6">
-          <section aria-label="Версии" className="flex min-w-0 flex-1 flex-col gap-4">
+          <section aria-label={tr(msg`Версии`)} className="flex min-w-0 flex-1 flex-col gap-4">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <SegmentedControl
-                label="Состояние версий"
+                label={tr(msg`Состояние версий`)}
                 items={SEGMENTS}
                 value={segment}
                 onValueChange={changeSegment}
@@ -470,20 +545,20 @@ function S3Screen({ initialPanelOpen = true }: ScreenProps) {
                 </label>
               </div>
               <FilterSelect
-                label="Сортировка"
-                allLabel="Сначала новые"
+                label={tr(msg`Сортировка`)}
+                allLabel={tr(msg`Сначала новые`)}
                 value={sort}
                 options={[
-                  { value: "published", label: "Сначала старые" },
-                  { value: "downloads", label: "По загрузкам" },
+                  { value: "published", label: tr(msg`Сначала старые`) },
+                  { value: "downloads", label: tr(msg`По загрузкам`) },
                 ]}
                 onValueChange={setSort}
               />
               <Input
                 id={searchId}
                 type="search"
-                aria-label="Поиск по версии или тегу"
-                placeholder="Поиск по версии или тегу"
+                aria-label={tr(msg`Поиск по версии или тегу`)}
+                placeholder={tr(msg`Поиск по версии или тегу`)}
                 className="max-w-64"
                 value={query}
                 onChange={changeQuery}
@@ -493,15 +568,15 @@ function S3Screen({ initialPanelOpen = true }: ScreenProps) {
               columns={columns}
               data={[...rows]}
               getRowId={getRowId}
-              caption="Версии @acme/ui"
+              caption={tr(msg`Версии @acme/ui`)}
               compact={panelOpen}
               selectedId={selectedId}
               onRowSelect={select}
               actions={rowActions}
-              loadMore={{ label: "Загрузить ещё", run: { onSelect: noop } }}
+              loadMore={{ label: tr(msg`Загрузить ещё`), run: { onSelect: noop } }}
               empty={
                 <p className="p-6 text-center text-muted-foreground">
-                  Версий с такими условиями нет
+                  {tr(msg`Версий с такими условиями нет`)}
                 </p>
               }
             />
@@ -575,4 +650,14 @@ export const Mobile390: Story = {
 export const Mobile390Panel: Story = {
   name: "Mobile 390 · панель",
   globals: mobile,
+};
+
+export const English: Story = {
+  ...Desktop1440Sheet,
+  name: "EN: подписи на английском",
+  globals: { ...desktop, locale: "en" },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await expect(await body.findByRole("dialog", { name: "Version 1.4.2" })).toBeVisible();
+  },
 };

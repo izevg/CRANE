@@ -1,4 +1,5 @@
-// i18n: не мигрирован
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
 import { type ReactNode, useMemo } from "react";
 import type { Action } from "~/shared/ui/actions";
 import { columnHelper, DataTable } from "~/shared/ui/data-display";
@@ -6,13 +7,14 @@ import { PageHeader } from "~/shared/ui/layout";
 import { Badge, type Tone } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { PEOPLE, REPOSITORIES } from "../data/common";
+import { tr } from "../frame/tr";
 
 type PackageRow = {
   id: string;
   name: string;
   format: string;
   latest: string;
-  state: { tone: Tone; label: string };
+  state: { tone: Tone; label: MessageDescriptor };
   repository: string;
   downloads: number;
   owner: string;
@@ -36,13 +38,13 @@ const SEEDS = [
   { name: "serde", format: "Cargo", latest: "1.0.217", repo: 5 },
 ] as const;
 
-const RELEASED: PackageRow["state"] = { tone: "success", label: "Выпущена" };
+const RELEASED: PackageRow["state"] = { tone: "success", label: msg`Выпущена` };
 
 const STATES: readonly PackageRow["state"][] = [
   RELEASED,
   RELEASED,
-  { tone: "warning", label: "Карантин" },
-  { tone: "error", label: "Заблокирована" },
+  { tone: "warning", label: msg`Карантин` },
+  { tone: "error", label: msg`Заблокирована` },
 ];
 
 const ROWS_COUNT = 40;
@@ -73,32 +75,35 @@ function buildRows(): PackageRow[] {
 const helper = columnHelper<PackageRow>();
 const columns = helper.columns([
   helper.accessor("name", {
-    header: "Пакет",
+    header: () => tr(msg`Пакет`),
     meta: { priority: 1 },
     cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
   }),
   helper.accessor("format", {
-    header: "Формат",
+    header: () => tr(msg`Формат`),
     meta: { priority: 1 },
     cell: (info) => <Badge variant="outline">{info.getValue()}</Badge>,
   }),
-  helper.accessor("latest", { header: "Последняя", meta: { priority: 1 } }),
+  helper.accessor("latest", { header: () => tr(msg`Последняя`), meta: { priority: 1 } }),
   helper.accessor("state", {
-    header: "Состояние",
+    header: () => tr(msg`Состояние`),
     meta: { priority: 2 },
-    cell: (info) => <StatusBadge tone={info.getValue().tone} label={info.getValue().label} />,
+    cell: (info) => <StatusBadge tone={info.getValue().tone} label={tr(info.getValue().label)} />,
   }),
-  helper.accessor("repository", { header: "Репозиторий", meta: { priority: 2 } }),
+  helper.accessor("repository", { header: () => tr(msg`Репозиторий`), meta: { priority: 2 } }),
   helper.accessor("downloads", {
-    header: "Загрузок за 30 дн",
+    header: () => tr(msg`Загрузок за 30 дн`),
     meta: { priority: 3, numeric: true },
     cell: (info) => new Intl.NumberFormat("ru-RU").format(info.getValue()),
   }),
-  helper.accessor("owner", { header: "Владелец", meta: { priority: 3 } }),
+  helper.accessor("owner", { header: () => tr(msg`Владелец`), meta: { priority: 3 } }),
 ]);
 
 const getRowId = (row: PackageRow) => row.id;
-const PUBLISH: Action = { label: "Опубликовать пакет", run: { href: "/help/publish" } };
+const publishAction = (): Action => ({
+  label: tr(msg`Опубликовать пакет`),
+  run: { href: "/help/publish" },
+});
 
 type Props = {
   /** Плотная таблица (по умолчанию) или другое содержимое под заголовком. */
@@ -115,9 +120,9 @@ export function PackagesBackdrop({ loading = false, children }: Props) {
   return (
     <div className="flex flex-col gap-6 p-4 lg:p-6">
       <PageHeader
-        title="Мои пакеты"
-        caption="Пакеты ваших workspace во всех форматах"
-        primary={PUBLISH}
+        title={tr(msg`Мои пакеты`)}
+        caption={tr(msg`Пакеты ваших workspace во всех форматах`)}
+        primary={publishAction()}
       />
       {children ?? (
         <DataTable
@@ -125,7 +130,7 @@ export function PackagesBackdrop({ loading = false, children }: Props) {
           data={loading ? [] : rows}
           loading={loading}
           getRowId={getRowId}
-          caption="Мои пакеты"
+          caption={tr(msg`Мои пакеты`)}
         />
       )}
     </div>

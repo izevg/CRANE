@@ -1,5 +1,6 @@
-// i18n: не мигрирован
+import { msg } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { ComponentProps } from "react";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { showToast } from "~/shared/lib/state";
 import { ConfirmDialog } from "~/shared/ui/dialogs";
@@ -9,22 +10,35 @@ import { CommandPaletteView } from "~/widgets/command-palette";
 import { type NotificationItem, NotificationsCenter } from "~/widgets/notifications-center";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
+import { tr } from "../frame/tr";
 import { PackagesBackdrop } from "./PackagesBackdrop";
 
 const BELL = /^Уведомления/;
 const MORE_BANNERS = /Ещё 2/;
 const BODY = () => within(document.body);
 const REQUEST_ID = "req_01JBX7Q4M2K9T5V8N3PZ6H1WRD";
-const TRAIL = [{ label: "Каталог", href: "/search" }];
-const CRUMBS = { trail: TRAIL, current: "Мои пакеты" };
-const HOME = { label: "На главную", run: { href: "/" } } as const;
+const HOME = {
+  get label() {
+    return tr(msg`На главную`);
+  },
+  run: { href: "/" },
+} as const;
+
+/** Крошки строятся при рендере: текст зависит от активной локали, а `args` читаются при загрузке модуля. */
+function Frame(props: ComponentProps<typeof ScreenFrame>) {
+  const breadcrumbs = {
+    trail: [{ label: tr(msg`Каталог`), href: "/search" }],
+    current: tr(msg`Мои пакеты`),
+  };
+  return <ScreenFrame {...props} breadcrumbs={breadcrumbs} />;
+}
 
 const meta = {
   title: "Экраны/S10 Состояния и оверлеи",
   component: ScreenFrame,
   parameters: screenParameters,
   globals: desktop,
-  args: { active: "packages", breadcrumbs: CRUMBS, children: null },
+  args: { active: "packages", breadcrumbs: { trail: [], current: "" }, children: null },
 } satisfies Meta<typeof ScreenFrame>;
 
 export default meta;
@@ -42,9 +56,9 @@ const phone = (story: Story): Story => ({ ...story, globals: { ...mobile } });
 const loading: Story = {
   name: "1 Загрузка (8 скелетон-строк)",
   render: (args) => (
-    <ScreenFrame {...args}>
+    <Frame {...args}>
       <PackagesBackdrop loading />
-    </ScreenFrame>
+    </Frame>
   ),
   play: async () => {
     await expect(await BODY().findByText("Загрузка")).toBeInTheDocument();
@@ -59,17 +73,19 @@ export const LoadingMobile = phone(loading);
 const empty: Story = {
   name: "2 Пусто (первый запуск)",
   render: (args) => (
-    <ScreenFrame {...args}>
+    <Frame {...args}>
       <PackagesBackdrop>
         <EmptyState
           variant="first-run"
-          title="Пакетов пока нет"
-          description="Опубликуйте первый пакет в репозиторий вашего workspace или перенесите существующие из Nexus."
-          primary={{ label: "Как опубликовать", run: { href: "/help/publish" } }}
-          secondary={{ label: "Импорт из Nexus", run: { href: "/import/nexus" } }}
+          title={tr(msg`Пакетов пока нет`)}
+          description={tr(
+            msg`Опубликуйте первый пакет в репозиторий вашего workspace или перенесите существующие из Nexus.`,
+          )}
+          primary={{ label: tr(msg`Как опубликовать`), run: { href: "/help/publish" } }}
+          secondary={{ label: tr(msg`Импорт из Nexus`), run: { href: "/import/nexus" } }}
         />
       </PackagesBackdrop>
-    </ScreenFrame>
+    </Frame>
   ),
   play: async () => {
     await expect(await BODY().findByRole("link", { name: "Как опубликовать" })).toBeVisible();
@@ -84,29 +100,31 @@ export const EmptyMobile = phone(empty);
 const error: Story = {
   name: "3 Ошибка problem+json",
   render: (args) => (
-    <ScreenFrame {...args}>
+    <Frame {...args}>
       <div className="p-4 lg:p-6">
         <ProblemState
           headingLevel={1}
           problem={{
             kind: "error",
-            title: "Не удалось опубликовать",
-            detail: "Превышен размер публикации: 14 МБ при лимите 10 МБ",
+            title: tr(msg`Не удалось опубликовать`),
+            detail: tr(msg`Превышен размер публикации: 14 МБ при лимите 10 МБ`),
             ruleId: "max-publish-size",
             requestId: REQUEST_ID,
             remediation: [
-              "Уменьшите пакет: уберите артефакты сборки и тестовые данные из файлов публикации",
-              "Попросите владельца репозитория npm-hosted поднять лимит размера",
+              tr(
+                msg`Уменьшите пакет: уберите артефакты сборки и тестовые данные из файлов публикации`,
+              ),
+              tr(msg`Попросите владельца репозитория npm-hosted поднять лимит размера`),
             ],
             diagnostics: {
-              label: "Открыть диагностику",
+              label: tr(msg`Открыть диагностику`),
               run: { href: `/diagnostics/${REQUEST_ID}` },
             },
-            retry: { label: "Повторить", run: { onSelect: fn() } },
+            retry: { label: tr(msg`Повторить`), run: { onSelect: fn() } },
           }}
         />
       </div>
-    </ScreenFrame>
+    </Frame>
   ),
   play: async () => {
     await expect(
@@ -123,7 +141,7 @@ export const ProblemErrorMobile = phone(error);
 const forbidden: Story = {
   name: "4 Недостаточно прав (403)",
   render: (args) => (
-    <ScreenFrame {...args}>
+    <Frame {...args}>
       <div className="p-4 lg:p-6">
         <ProblemState
           headingLevel={1}
@@ -131,17 +149,17 @@ const forbidden: Story = {
             kind: "forbidden",
             ruleId: "ws-billing-readers",
             requestId: REQUEST_ID,
-            contact: "Петрова А. (владелец workspace billing)",
+            contact: tr(msg`Петрова А. (владелец workspace billing)`),
             remediation: [
-              "Запросите роль maintainer у владельца workspace",
-              "Повторите действие после подтверждения доступа",
+              tr(msg`Запросите роль maintainer у владельца workspace`),
+              tr(msg`Повторите действие после подтверждения доступа`),
             ],
-            requestAccess: { label: "Запросить доступ", run: { onSelect: fn() } },
+            requestAccess: { label: tr(msg`Запросить доступ`), run: { onSelect: fn() } },
             home: HOME,
           }}
         />
       </div>
-    </ScreenFrame>
+    </Frame>
   ),
   play: async () => {
     await expect(await BODY().findByRole("heading", { name: "Недостаточно прав" })).toBeVisible();
@@ -156,7 +174,7 @@ export const ForbiddenMobile = phone(forbidden);
 const notFound: Story = {
   name: "5 Не найдено или нет доступа (404)",
   render: (args) => (
-    <ScreenFrame {...args}>
+    <Frame {...args}>
       <div className="p-4 lg:p-6">
         <ProblemState
           headingLevel={1}
@@ -166,8 +184,8 @@ const notFound: Story = {
             search: (
               <input
                 type="search"
-                aria-label="Поиск пакета"
-                placeholder="Имя пакета"
+                aria-label={tr(msg`Поиск пакета`)}
+                placeholder={tr(msg`Имя пакета`)}
                 className="h-9 w-full rounded-md border border-input bg-card px-3 text-body"
               />
             ),
@@ -175,7 +193,7 @@ const notFound: Story = {
           }}
         />
       </div>
-    </ScreenFrame>
+    </Frame>
   ),
   play: async () => {
     await expect(
@@ -192,17 +210,31 @@ export const NotFoundMobile = phone(notFound);
 const PALETTE_NAV = [
   {
     id: "acme-pkgs",
-    label: "Пакеты workspace acme-platform",
+    get label() {
+      return tr(msg`Пакеты workspace acme-platform`);
+    },
     href: "/packages?ws=acme-platform",
-    hint: "Раздел",
+    get hint() {
+      return tr(msg`Раздел`);
+    },
   },
   {
     id: "acme-tokens",
-    label: "Токены acme-platform",
+    get label() {
+      return tr(msg`Токены acme-platform`);
+    },
     href: "/me/tokens?ws=acme-platform",
-    hint: "Доступ",
+    get hint() {
+      return tr(msg`Доступ`);
+    },
   },
-  { id: "audit", label: "Журнал", href: "/audit" },
+  {
+    id: "audit",
+    get label() {
+      return tr(msg`Журнал`);
+    },
+    href: "/audit",
+  },
 ] as const;
 
 const PALETTE_PACKAGES = [
@@ -231,10 +263,22 @@ const PALETTE_PACKAGES = [
 ] as const;
 
 const PALETTE_ACTIONS = [
-  { label: "Выпустить токен для acme-ci", run: { onSelect: fn() } },
-  { label: "Открыть диагностику по request_id", run: { href: "/diagnostics" } },
   {
-    label: "Отозвать токены acme-platform",
+    get label() {
+      return tr(msg`Выпустить токен для acme-ci`);
+    },
+    run: { onSelect: fn() },
+  },
+  {
+    get label() {
+      return tr(msg`Открыть диагностику по request_id`);
+    },
+    run: { href: "/diagnostics" },
+  },
+  {
+    get label() {
+      return tr(msg`Отозвать токены acme-platform`);
+    },
     run: { onSelect: fn() },
     stepUp: true,
     destructive: true,
@@ -245,9 +289,9 @@ const palette: Story = {
   name: "6 Командная палитра",
   render: (args) => (
     <>
-      <ScreenFrame {...args}>
+      <Frame {...args}>
         <PackagesBackdrop />
-      </ScreenFrame>
+      </Frame>
       <CommandPaletteView
         open
         onOpenChange={fn()}
@@ -281,9 +325,13 @@ const NOTIFICATIONS: readonly NotificationItem[] = [
     id: "n1",
     category: "security",
     tone: "error",
-    title: "P0 без действия: CVE-2026-31337 в @acme/ui 1.4.2",
+    get title() {
+      return tr(msg`P0 без действия: CVE-2026-31337 в @acme/ui 1.4.2`);
+    },
     time: ago(12),
-    caption: "@acme/ui · npm · SLA истёк",
+    get caption() {
+      return tr(msg`@acme/ui · npm · SLA истёк`);
+    },
     href: "/findings/CVE-2026-31337",
     unread: true,
   },
@@ -291,7 +339,9 @@ const NOTIFICATIONS: readonly NotificationItem[] = [
     id: "n2",
     category: "access",
     tone: "warning",
-    title: "Токен crp_9f8e7d6c истекает через 3 дня",
+    get title() {
+      return tr(msg`Токен crp_9f8e7d6c истекает через 3 дня`);
+    },
     time: ago(95),
     caption: "ci-deploy · acme-platform",
     href: "/me/tokens/crp_9f8e7d6c",
@@ -301,9 +351,13 @@ const NOTIFICATIONS: readonly NotificationItem[] = [
     id: "n3",
     category: "platform",
     tone: "warning",
-    title: "Квота billing: 85% хранилища",
+    get title() {
+      return tr(msg`Квота billing: 85% хранилища`);
+    },
     time: ago(180),
-    caption: "workspace billing · 34 из 40 ГБ",
+    get caption() {
+      return tr(msg`workspace billing · 34 из 40 ГБ`);
+    },
     href: "/platform/storages",
     unread: true,
   },
@@ -311,9 +365,13 @@ const NOTIFICATIONS: readonly NotificationItem[] = [
     id: "n4",
     category: "platform",
     tone: "warning",
-    title: "Upstream npmjs недоступен",
+    get title() {
+      return tr(msg`Upstream npmjs недоступен`);
+    },
     time: ago(240),
-    caption: "Данные от 25 окт, stale-if-error",
+    get caption() {
+      return tr(msg`Данные от 25 окт, stale-if-error`);
+    },
     href: "/platform",
     unread: false,
   },
@@ -321,7 +379,9 @@ const NOTIFICATIONS: readonly NotificationItem[] = [
     id: "n5",
     category: "security",
     tone: "success",
-    title: "lodash 4.17.21 выпущена из карантина",
+    get title() {
+      return tr(msg`lodash 4.17.21 выпущена из карантина`);
+    },
     time: ago(60 * 26),
     caption: "lodash · npm",
     href: "/packages/lodash",
@@ -331,7 +391,9 @@ const NOTIFICATIONS: readonly NotificationItem[] = [
     id: "n6",
     category: "access",
     tone: "info",
-    title: "Петрова А. одобрила запрос доступа к acme-billing-client",
+    get title() {
+      return tr(msg`Петрова А. одобрила запрос доступа к acme-billing-client`);
+    },
     time: ago(60 * 30),
     href: "/me/actions",
     unread: false,
@@ -344,9 +406,9 @@ const notifications: Story = {
   name: "7 Центр уведомлений",
   render: (args) => (
     <>
-      <ScreenFrame {...args}>
+      <Frame {...args}>
         <PackagesBackdrop />
-      </ScreenFrame>
+      </Frame>
       {/* Центр сам владеет колокольчиком-триггером: ставим его поверх колокольчика рамки. */}
       <div className={BELL_POSITION}>
         <NotificationsCenter
@@ -356,7 +418,7 @@ const notifications: Story = {
           onCategoryChange={fn()}
           onMarkRead={fn()}
           onReadAll={fn()}
-          loadMore={{ label: "Загрузить ещё", run: { onSelect: fn() } }}
+          loadMore={{ label: tr(msg`Загрузить ещё`), run: { onSelect: fn() } }}
         />
       </div>
     </>
@@ -383,18 +445,20 @@ const stepUp: Story = {
   name: "8 Step-up: подтвердите вход",
   render: (args) => (
     <>
-      <ScreenFrame {...args}>
+      <Frame {...args}>
         <PackagesBackdrop />
-      </ScreenFrame>
+      </Frame>
       <ConfirmDialog
         open
         onOpenChange={fn()}
-        title="Подтвердите вход"
-        description="Действие «Раскрыть данные события» требует подтверждения вторым фактором"
-        confirm={{ label: "Продолжить в Keycloak", run: { onSelect: fn() } }}
+        title={tr(msg`Подтвердите вход`)}
+        description={tr(
+          msg`Действие «Раскрыть данные события» требует подтверждения вторым фактором`,
+        )}
+        confirm={{ label: tr(msg`Продолжить в Keycloak`), run: { onSelect: fn() } }}
       >
         <p className="text-caption text-muted-foreground">
-          После подтверждения вы вернётесь к действию, данные формы сохранятся
+          {tr(msg`После подтверждения вы вернётесь к действию, данные формы сохранятся`)}
         </p>
       </ConfirmDialog>
     </>
@@ -416,24 +480,46 @@ const BANNERS: readonly Banner[] = [
     id: "p0",
     tone: "error",
     urgent: true,
-    text: "P0 без действия более 1 часа: CVE-2026-31337 в @acme/ui 1.4.2",
-    action: { label: "Открыть находку", run: { href: "/findings/CVE-2026-31337" } },
+    get text() {
+      return tr(msg`P0 без действия более 1 часа: CVE-2026-31337 в @acme/ui 1.4.2`);
+    },
+    action: {
+      get label() {
+        return tr(msg`Открыть находку`);
+      },
+      run: { href: "/findings/CVE-2026-31337" },
+    },
   },
   {
     id: "read-only",
     tone: "warning",
-    text: "Только чтение: основная БД недоступна, публикация отключена. Повторите через 2 мин",
-    action: { label: "Статус платформы", run: { href: "/platform" } },
+    get text() {
+      return tr(
+        msg`Только чтение: основная БД недоступна, публикация отключена. Повторите через 2 мин`,
+      );
+    },
+    action: {
+      get label() {
+        return tr(msg`Статус платформы`);
+      },
+      run: { href: "/platform" },
+    },
   },
   {
     id: "sod",
     tone: "warning",
-    text: "Включён режим разделения обязанностей: действия требуют второго подтверждения",
+    get text() {
+      return tr(msg`Включён режим разделения обязанностей: действия требуют второго подтверждения`);
+    },
   },
   {
     id: "upstream",
     tone: "warning",
-    text: "Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)",
+    get text() {
+      return tr(
+        msg`Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)`,
+      );
+    },
   },
 ];
 
@@ -441,9 +527,9 @@ const banners: Story = {
   name: "9 Стек баннеров (2 + «Ещё 2»)",
   args: { banners: BANNERS },
   render: (args) => (
-    <ScreenFrame {...args}>
+    <Frame {...args}>
       <PackagesBackdrop />
-    </ScreenFrame>
+    </Frame>
   ),
   play: async () => {
     await expect(await BODY().findByText(MORE_BANNERS)).toBeVisible();
@@ -458,9 +544,9 @@ export const BannersMobile = phone(banners);
 const toasts: Story = {
   name: "10 Тосты: успех и ошибка с request_id",
   render: (args) => (
-    <ScreenFrame {...args}>
+    <Frame {...args}>
       <PackagesBackdrop />
-    </ScreenFrame>
+    </Frame>
   ),
   play: async () => {
     showToast.success("Токен отозван. Применится в течение 5 секунд");
@@ -478,3 +564,13 @@ const toasts: Story = {
 export const Toasts = toasts;
 export const ToastsDark = dark(toasts);
 export const ToastsMobile = phone(toasts);
+
+export const EmptyEnglish: Story = {
+  ...empty,
+  name: "EN: подписи на английском",
+  globals: { ...desktop, locale: "en" },
+  play: async () => {
+    await expect(await BODY().findByText("No packages yet")).toBeInTheDocument();
+    await expect(await BODY().findByRole("link", { name: "How to publish" })).toBeVisible();
+  },
+};

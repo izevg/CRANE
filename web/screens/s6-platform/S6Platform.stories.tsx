@@ -1,4 +1,4 @@
-// i18n: не мигрирован
+import { msg } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   FlameIcon,
@@ -18,6 +18,7 @@ import { StatusBadge } from "~/shared/ui/status";
 import { PEOPLE, REPOSITORIES } from "../data/common";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
+import { tr } from "../frame/tr";
 
 // ---------------------------------------------------------------- данные
 
@@ -27,6 +28,7 @@ const format = textFormat("ru");
 const STALE_TEXT = /обновлено/;
 const TB = 1024 ** 4;
 
+// i18n-fixture: названия команд — контент витрины, а не текст интерфейса
 const BY_TEAM = [
   ["platform", "Платформа", 5.1],
   ["payments", "Платежи", 3.8],
@@ -40,6 +42,7 @@ const BY_TEAM = [
   ["labs", "Лаборатория", 0.1],
 ] as const;
 
+// i18n-fixture: названия форматов — контент витрины, а не текст интерфейса
 const BY_FORMAT = [
   ["npm", "npm", 7.4],
   ["oci", "OCI-образы", 5.6],
@@ -55,8 +58,18 @@ const BY_FORMAT = [
 
 type Dimension = "team" | "format";
 const DIMENSIONS = {
-  team: { rows: BY_TEAM, column: "Команда" },
-  format: { rows: BY_FORMAT, column: "Формат" },
+  team: {
+    rows: BY_TEAM,
+    get column() {
+      return tr(msg`Команда`);
+    },
+  },
+  format: {
+    rows: BY_FORMAT,
+    get column() {
+      return tr(msg`Формат`);
+    },
+  },
 } as const;
 
 const SPARK_VOLUME = [16.9, 17.1, 17.0, 17.4, 17.6, 17.9, 18.0, 18.2, 18.4];
@@ -88,10 +101,16 @@ const P99 = latency(128, 14, 2.4, 34);
 const OVER_SLO = P99.filter((point) => point.v > SLO_MS).length;
 const TIME = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const P95_PEAK = P95.reduce((best, point) => (point.v > best.v ? point : best));
-const SUMMARY =
-  `Задержки за 24 ч, шаг 5 мин. p95: в среднем ${format.number(Math.round(P95.reduce((sum, p) => sum + p.v, 0) / POINTS))} мс, ` +
-  `максимум ${format.number(P95_PEAK.v)} мс в ${TIME.format(P95_PEAK.t)}. ` +
-  `p99 выше SLO ${SLO_MS} мс ${format.number(OVER_SLO * 5)} мин из ${format.number(POINTS * 5)}.`;
+const summary = () => {
+  const average = format.number(Math.round(P95.reduce((sum, p) => sum + p.v, 0) / POINTS));
+  const peak = format.number(P95_PEAK.v);
+  const peakTime = TIME.format(P95_PEAK.t);
+  const overMinutes = format.number(OVER_SLO * 5);
+  const totalMinutes = format.number(POINTS * 5);
+  return tr(
+    msg`Задержки за 24 ч, шаг 5 мин. p95: в среднем ${average} мс, максимум ${peak} мс в ${peakTime}. p99 выше SLO ${SLO_MS} мс ${overMinutes} мин из ${totalMinutes}.`,
+  );
+};
 
 // ---------------------------------------------------------------- inline-блоки
 
@@ -109,31 +128,69 @@ const COMPONENTS: readonly Health[] = [
   {
     name: "Upstream npmjs",
     tone: "error",
-    label: "Недоступен",
-    caption: "с 13:42 · клиенты получают кэш до 7 дней",
+    get label() {
+      return tr(msg`Недоступен`);
+    },
+    get caption() {
+      return tr(msg`с 13:42 · клиенты получают кэш до 7 дней`);
+    },
     href: "/platform/upstreams",
   },
   {
-    name: "LLM-шлюз",
+    get name() {
+      return tr(msg`LLM-шлюз`);
+    },
     tone: "warning",
-    label: "Деградация",
-    caption: "таймаут 12 с · включена резервная модель",
+    get label() {
+      return tr(msg`Деградация`);
+    },
+    get caption() {
+      return tr(msg`таймаут 12 с · включена резервная модель`);
+    },
     href: "/platform/integrations",
   },
   {
     name: "PostgreSQL",
     tone: "success",
-    label: "Работает",
-    caption: "p95 1,8 мс",
+    get label() {
+      return tr(msg`Работает`);
+    },
+    get caption() {
+      return tr(msg`p95 1,8 мс`);
+    },
     href: "/status",
   },
-  { name: "Valkey", tone: "success", label: "Работает", caption: "p95 0,4 мс", href: "/status" },
-  { name: "S3 main", tone: "success", label: "Работает", caption: "p95 22 мс", href: "/status" },
+  {
+    name: "Valkey",
+    tone: "success",
+    get label() {
+      return tr(msg`Работает`);
+    },
+    get caption() {
+      return tr(msg`p95 0,4 мс`);
+    },
+    href: "/status",
+  },
+  {
+    name: "S3 main",
+    tone: "success",
+    get label() {
+      return tr(msg`Работает`);
+    },
+    get caption() {
+      return tr(msg`p95 22 мс`);
+    },
+    href: "/status",
+  },
   {
     name: "Trivy",
     tone: "success",
-    label: "Работает",
-    caption: "база v2026.10.27",
+    get label() {
+      return tr(msg`Работает`);
+    },
+    get caption() {
+      return tr(msg`база v2026.10.27`);
+    },
     href: "/platform/integrations",
   },
 ];
@@ -165,23 +222,52 @@ type Quick = { icon: LucideIcon; action: Action; caption: string };
 const QUICK: readonly Quick[] = [
   {
     icon: FlaskConicalIcon,
-    action: { label: "Пробный прогон retention", run: { onSelect: fn() } },
-    caption: "Покажет кандидатов на удаление; ничего не удаляет",
+    action: {
+      get label() {
+        return tr(msg`Пробный прогон retention`);
+      },
+      run: { onSelect: fn() },
+    },
+    get caption() {
+      return tr(msg`Покажет кандидатов на удаление; ничего не удаляет`);
+    },
   },
   {
     icon: Trash2Icon,
-    action: { label: "Применить retention", run: { onSelect: fn() }, stepUp: true },
-    caption: "Удалит 1 284 версии (212 ГБ) без возможности отката",
+    action: {
+      get label() {
+        return tr(msg`Применить retention`);
+      },
+      run: { onSelect: fn() },
+      stepUp: true,
+    },
+    get caption() {
+      return tr(msg`Удалит 1 284 версии (212 ГБ) без возможности отката`);
+    },
   },
   {
     icon: FlameIcon,
-    action: { label: "Прогреть кэш по lockfile", run: { href: "/platform/readiness" } },
-    caption: "Поставит загрузку зависимостей в очередь",
+    action: {
+      get label() {
+        return tr(msg`Прогреть кэш по lockfile`);
+      },
+      run: { href: "/platform/readiness" },
+    },
+    get caption() {
+      return tr(msg`Поставит загрузку зависимостей в очередь`);
+    },
   },
   {
     icon: ShieldCheckIcon,
-    action: { label: "Проверить целостность", run: { onSelect: fn() } },
-    caption: "Запустит асинхронную проверку, откроется E7",
+    action: {
+      get label() {
+        return tr(msg`Проверить целостность`);
+      },
+      run: { onSelect: fn() },
+    },
+    get caption() {
+      return tr(msg`Запустит асинхронную проверку, откроется E7`);
+    },
   },
 ];
 
@@ -264,43 +350,85 @@ function TopThree({
 const RETENTION_ROWS: readonly TopRow[] = [
   {
     id: "r1",
-    title: `Версии без загрузок 18 мес · ${REPOSITORIES[0].id}`,
-    caption: "612 версий · 94 ГБ",
-    badge: "правило 1",
+    get title() {
+      const repository = REPOSITORIES[0].id;
+      return tr(msg`Версии без загрузок 18 мес · ${repository}`);
+    },
+    get caption() {
+      return tr(msg`612 версий · 94 ГБ`);
+    },
+    get badge() {
+      return tr(msg`правило 1`);
+    },
   },
   {
     id: "r2",
-    title: `Snapshot-сборки старше 30 дн · ${REPOSITORIES[3].id}`,
-    caption: "498 версий · 71 ГБ",
-    badge: "правило 2",
+    get title() {
+      const repository = REPOSITORIES[3].id;
+      return tr(msg`Snapshot-сборки старше 30 дн · ${repository}`);
+    },
+    get caption() {
+      return tr(msg`498 версий · 71 ГБ`);
+    },
+    get badge() {
+      return tr(msg`правило 2`);
+    },
   },
   {
     id: "r3",
-    title: "Образы без тега старше 14 дн · oci-hosted",
-    caption: "174 версии · 47 ГБ",
-    badge: "правило 3",
+    get title() {
+      return tr(msg`Образы без тега старше 14 дн · oci-hosted`);
+    },
+    get caption() {
+      return tr(msg`174 версии · 47 ГБ`);
+    },
+    get badge() {
+      return tr(msg`правило 3`);
+    },
   },
 ];
 
-const DEAD_JOBS: readonly TopRow[] = [
-  { kind: "scan.trivy", attempts: 5, error: "Timeout connecting to Trivy", id: "j-4f2a" },
-  { kind: "storage.move", attempts: 3, error: "S3 PutObject: SlowDown (503)", id: "j-91cc" },
-  { kind: "import.nexus", attempts: 5, error: "connection reset by peer", id: "j-07be" },
-].map((job) => ({
-  id: job.id,
-  title: `${job.kind} · ${job.id}`,
-  caption: `попыток ${job.attempts} · Последняя ошибка: ${job.error}`,
-  action: { label: `Повторить ${job.id}`, run: { onSelect: fn() } },
-}));
+const deadJobs = (): readonly TopRow[] =>
+  [
+    { kind: "scan.trivy", attempts: 5, error: "Timeout connecting to Trivy", id: "j-4f2a" },
+    { kind: "storage.move", attempts: 3, error: "S3 PutObject: SlowDown (503)", id: "j-91cc" },
+    { kind: "import.nexus", attempts: 5, error: "connection reset by peer", id: "j-07be" },
+  ].map((job) => ({
+    id: job.id,
+    title: `${job.kind} · ${job.id}`,
+    caption: tr(msg`попыток ${job.attempts} · Последняя ошибка: ${job.error}`),
+    action: { label: tr(msg`Повторить ${job.id}`), run: { onSelect: fn() } },
+  }));
 
 const INTEGRITY_ROWS: readonly TopRow[] = [
   {
     id: "i1",
-    title: "Последняя проверка",
-    caption: `27 окт. 2026, 03:10 · 12 мин · запустил ${PEOPLE[1]}`,
+    get title() {
+      return tr(msg`Последняя проверка`);
+    },
+    get caption() {
+      const runBy = PEOPLE[1];
+      return tr(msg`27 окт. 2026, 03:10 · 12 мин · запустил ${runBy}`);
+    },
   },
-  { id: "i2", title: "Проверено", caption: "1 % объектов: 4 812 из 481 200" },
-  { id: "i3", title: "Следующая", caption: "28 окт. 2026, 03:10 по расписанию" },
+  {
+    id: "i2",
+    get title() {
+      return tr(msg`Проверено`);
+    },
+    get caption() {
+      return tr(msg`1 % объектов: 4 812 из 481 200`);
+    },
+  },
+  {
+    id: "i3",
+    get title() {
+      return tr(msg`Следующая`);
+    },
+    get caption() {
+      return tr(msg`28 окт. 2026, 03:10 по расписанию`);
+    },
+  },
 ];
 
 // ---------------------------------------------------------------- экран
@@ -313,44 +441,44 @@ function Tiles({ mode }: { mode: Mode }) {
     <div className="grid grid-cols-1 gap-4 @xl/page:grid-cols-2 @3xl/page:grid-cols-5">
       {degraded ? (
         <MetricTile
-          label="Объём хранилищ"
+          label={tr(msg`Объём хранилищ`)}
           value={18.4}
-          unit="ТБ"
+          unit={tr(msg`ТБ`)}
           delta={{ pct: 1.2, polarity: "neutral" }}
           spark={SPARK_VOLUME}
           stale={{ updatedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString() }}
         />
       ) : (
         <MetricTile
-          label="Объём хранилищ"
+          label={tr(msg`Объём хранилищ`)}
           value={18.4}
-          unit="ТБ"
+          unit={tr(msg`ТБ`)}
           delta={{ pct: 1.2, polarity: "neutral" }}
           spark={SPARK_VOLUME}
         />
       )}
       <MetricTile
-        label="Попадание в кэш"
+        label={tr(msg`Попадание в кэш`)}
         value={degraded ? null : 94.2}
         unit="%"
         spark={SPARK_HIT}
         reference={94}
       />
       <MetricTile
-        label="Upstream доступны"
+        label={tr(msg`Upstream доступны`)}
         value="4/5"
         tone="warning"
-        toneLabel="npmjs недоступен"
-        caption="с 13:42"
+        toneLabel={tr(msg`npmjs недоступен`)}
+        caption={tr(msg`с 13:42`)}
         spark={[5, 5, 5, 5, 5, 5, 4]}
       />
       <MetricTile
-        label="Очередь задач"
+        label={tr(msg`Очередь задач`)}
         value={42}
-        caption="старейшая 3 мин"
+        caption={tr(msg`старейшая 3 мин`)}
         spark={[12, 18, 40, 35, 52, 44, 42]}
       />
-      <MetricTile label="Последний бэкап" value="02:14" caption="RPO < 5 мин" />
+      <MetricTile label={tr(msg`Последний бэкап`)} value="02:14" caption={tr(msg`RPO < 5 мин`)} />
     </div>
   );
 }
@@ -365,20 +493,22 @@ function Usage() {
     }
   }, []);
   return (
-    <Panel title="Объём по командам и форматам">
+    <Panel title={tr(msg`Объём по командам и форматам`)}>
       <ToggleGroup
-        aria-label="Разрез"
+        aria-label={tr(msg`Разрез`)}
         size="sm"
         variant="outline"
         value={[dimension]}
         onValueChange={pick}
       >
-        <ToggleGroupItem value="team">По командам</ToggleGroupItem>
-        <ToggleGroupItem value="format">По форматам</ToggleGroupItem>
+        <ToggleGroupItem value="team">{tr(msg`По командам`)}</ToggleGroupItem>
+        <ToggleGroupItem value="format">{tr(msg`По форматам`)}</ToggleGroupItem>
       </ToggleGroup>
       <ShareBar
-        title={dimension === "team" ? "Доли объёма по командам" : "Доли объёма по форматам"}
-        columns={{ name: column, value: "Объём", share: "Доля" }}
+        title={
+          dimension === "team" ? tr(msg`Доли объёма по командам`) : tr(msg`Доли объёма по форматам`)
+        }
+        columns={{ name: column, value: tr(msg`Объём`), share: tr(msg`Доля`) }}
         items={rows.map(([id, label, tb]) => ({
           id,
           label,
@@ -386,7 +516,7 @@ function Usage() {
           display: format.bytes(tb * TB),
         }))}
         formatOther={format.bytes}
-        caption="Дедупликация сэкономила 4,2 ТБ"
+        caption={tr(msg`Дедупликация сэкономила 4,2 ТБ`)}
       />
     </Panel>
   );
@@ -401,29 +531,29 @@ function Header() {
   const [paused, setPaused] = useState(false);
   return (
     <PageHeader
-      title="Платформа"
-      status={<StatusBadge tone="success" label="Режим: норма" />}
-      caption="Хранилища, кэш, upstream и фоновые задачи"
+      title={tr(msg`Платформа`)}
+      status={<StatusBadge tone="success" label={tr(msg`Режим: норма`)} />}
+      caption={tr(msg`Хранилища, кэш, upstream и фоновые задачи`)}
       stats={
         <>
-          <StatChip label="Версия" value="0.5.0" />
-          <StatChip label="Хранилищ" value="4" />
-          <StatChip label="Репозиториев" value="18" />
+          <StatChip label={tr(msg`Версия`)} value="0.5.0" />
+          <StatChip label={tr(msg`Хранилищ`)} value="4" />
+          <StatChip label={tr(msg`Репозиториев`)} value="18" />
         </>
       }
       aside={
         <>
           <ToggleGroup
-            aria-label="Окно времени"
+            aria-label={tr(msg`Окно времени`)}
             size="sm"
             variant="outline"
             value={[window]}
             onValueChange={pickWindow}
           >
-            <ToggleGroupItem value="1h">1 ч</ToggleGroupItem>
-            <ToggleGroupItem value="6h">6 ч</ToggleGroupItem>
-            <ToggleGroupItem value="24h">24 ч</ToggleGroupItem>
-            <ToggleGroupItem value="7d">7 дн</ToggleGroupItem>
+            <ToggleGroupItem value="1h">{tr(msg`1 ч`)}</ToggleGroupItem>
+            <ToggleGroupItem value="6h">{tr(msg`6 ч`)}</ToggleGroupItem>
+            <ToggleGroupItem value="24h">{tr(msg`24 ч`)}</ToggleGroupItem>
+            <ToggleGroupItem value="7d">{tr(msg`7 дн`)}</ToggleGroupItem>
           </ToggleGroup>
           <AutoRefreshToggle paused={paused} onPausedChange={setPaused} />
         </>
@@ -436,7 +566,10 @@ function S6Platform({ mode = "normal" }: { mode?: Mode }) {
   return (
     <ScreenFrame
       active="overview"
-      breadcrumbs={{ trail: [{ label: "Платформа", href: "/platform" }], current: "Обзор" }}
+      breadcrumbs={{
+        trail: [{ label: tr(msg`Платформа`), href: "/platform" }],
+        current: tr(msg`Обзор`),
+      }}
     >
       <div className="flex flex-col gap-6">
         <Header />
@@ -446,17 +579,17 @@ function S6Platform({ mode = "normal" }: { mode?: Mode }) {
             <Usage />
           </div>
           <div className="@3xl/page:col-span-4">
-            <Panel title="Состояние компонентов" className="h-full">
+            <Panel title={tr(msg`Состояние компонентов`)} className="h-full">
               <HealthList />
             </Panel>
           </div>
           <div className="@3xl/page:col-span-8">
-            <Panel title="Запросы и задержки" className="h-full">
+            <Panel title={tr(msg`Запросы и задержки`)} className="h-full">
               <TimeSeriesChart
-                title="p50 / p95 / p99 за 24 ч"
-                summary={SUMMARY}
-                unit="мс"
-                slo={{ value: SLO_MS, label: `SLO ${SLO_MS} мс` }}
+                title={tr(msg`p50 / p95 / p99 за 24 ч`)}
+                summary={summary()}
+                unit={tr(msg`мс`)}
+                slo={{ value: SLO_MS, label: tr(msg`SLO ${SLO_MS} мс`) }}
                 series={[
                   { id: "p50", label: "p50", points: P50 },
                   { id: "p95", label: "p95", points: P95 },
@@ -466,36 +599,36 @@ function S6Platform({ mode = "normal" }: { mode?: Mode }) {
             </Panel>
           </div>
           <div className="@3xl/page:col-span-4">
-            <Panel title="Быстрые действия" className="h-full">
+            <Panel title={tr(msg`Быстрые действия`)} className="h-full">
               <QuickActions />
             </Panel>
           </div>
           <div className="@3xl/page:col-span-4">
             <Panel
-              title="Ближайшие удаления: 1 284 версии · 212 ГБ"
-              count="3 правила"
+              title={tr(msg`Ближайшие удаления: 1 284 версии · 212 ГБ`)}
+              count={tr(msg`3 правила`)}
               className="h-full"
             >
               <TopThree
                 rows={RETENTION_ROWS}
-                link={{ href: "/platform/retention", label: "Настроить retention" }}
+                link={{ href: "/platform/retention", label: tr(msg`Настроить retention`) }}
               />
             </Panel>
           </div>
           <div className="@3xl/page:col-span-4">
-            <Panel title="Мёртвые задачи: 3" count="3" className="h-full">
+            <Panel title={tr(msg`Мёртвые задачи: 3`)} count="3" className="h-full">
               <TopThree
-                rows={DEAD_JOBS}
-                link={{ href: "/platform/queues", label: "Открыть очередь" }}
+                rows={deadJobs()}
+                link={{ href: "/platform/queues", label: tr(msg`Открыть очередь`) }}
               />
             </Panel>
           </div>
           <div className="@3xl/page:col-span-4">
-            <Panel title="Проверка целостности: 0 ошибок, выборка 1 %" className="h-full">
-              <StatusBadge tone="success" label="Расхождений нет" />
+            <Panel title={tr(msg`Проверка целостности: 0 ошибок, выборка 1 %`)} className="h-full">
+              <StatusBadge tone="success" label={tr(msg`Расхождений нет`)} />
               <TopThree
                 rows={INTEGRITY_ROWS}
-                link={{ href: "/platform/integrity", label: "Открыть проверки" }}
+                link={{ href: "/platform/integrity", label: tr(msg`Открыть проверки`) }}
               />
             </Panel>
           </div>
@@ -543,5 +676,16 @@ export const TileDataStates: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("Нет данных")).toBeInTheDocument();
     await expect(canvas.getByText(STALE_TEXT)).toBeInTheDocument();
+  },
+};
+
+export const English: Story = {
+  ...Desktop1440,
+  name: "EN: подписи на английском",
+  globals: { ...desktop, locale: "en" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("heading", { level: 1, name: "Platform" })).toBeVisible();
+    await expect(canvas.getByText("Quick actions")).toBeVisible();
   },
 };
