@@ -85,6 +85,8 @@ pub(crate) const fn negative() -> NegativePolicy {
 pub(crate) enum Step {
     NotModified,
     Found(&'static [u8], Option<&'static str>),
+    /// 200 с объявленным `Cache-Control: max-age`.
+    FoundWithMaxAge(&'static [u8], Option<&'static str>, Duration),
     NotFound,
     Refused(EgressRefusal),
     Unavailable,
@@ -167,12 +169,19 @@ impl Upstream for FakeUpstream {
             Some(Step::Found(body, etag)) => Ok(UpstreamResponse::Found {
                 body: stream_of(vec![Ok(Bytes::from_static(body))]),
                 etag: etag.map(|etag| ETag::new(etag.to_owned())),
+                max_age: None,
+            }),
+            Some(Step::FoundWithMaxAge(body, etag, max_age)) => Ok(UpstreamResponse::Found {
+                body: stream_of(vec![Ok(Bytes::from_static(body))]),
+                etag: etag.map(|etag| ETag::new(etag.to_owned())),
+                max_age: Some(max_age),
             }),
             Some(Step::NotFound) => Ok(UpstreamResponse::NotFound),
             Some(Step::Refused(refusal)) => Err(UpstreamError::Refused(refusal)),
             Some(Step::BrokenBody) => Ok(UpstreamResponse::Found {
                 body: stream_of(vec![Err(io::Error::other("обрыв"))]),
                 etag: None,
+                max_age: None,
             }),
             Some(Step::Unavailable) | None => {
                 Err(UpstreamError::Unavailable("upstream лежит".into()))

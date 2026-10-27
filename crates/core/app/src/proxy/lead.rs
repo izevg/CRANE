@@ -87,14 +87,27 @@ pub(super) struct Job {
     pub(super) prev: Option<Cached>,
 }
 
-/// Тело, `ETag` и счётчик необновлений предыдущего документа.
-fn prev_document(job: &Job) -> Option<(&Bytes, Option<&ETag>, u32)> {
+/// Предыдущий документ: что нужно, чтобы подтвердить его по 304 или сравнить с новым 200.
+struct PrevDocument<'a> {
+    body: &'a Bytes,
+    etag: Option<&'a ETag>,
+    unchanged: u32,
+    max_age: Option<Duration>,
+}
+
+fn prev_document(job: &Job) -> Option<PrevDocument<'_>> {
     match job.prev.as_ref().map(|prev| &prev.state) {
         Some(CachedState::Document {
             body,
             etag,
             unchanged,
-        }) => Some((body, etag.as_ref(), *unchanged)),
+            max_age,
+        }) => Some(PrevDocument {
+            body,
+            etag: etag.as_ref(),
+            unchanged: *unchanged,
+            max_age: *max_age,
+        }),
         _ => None,
     }
 }
@@ -162,7 +175,7 @@ async fn fetch<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
 ) -> Outcome {
     // Условные запросы только для документов: артефакт неизменяем, его нечем «подтверждать».
     let validator = match job.target {
-        Target::Document { .. } => prev_document(job).and_then(|(_, etag, _)| etag),
+        Target::Document { .. } => prev_document(job).and_then(|prev| prev.etag),
         Target::Artifact { .. } => None,
     };
     let response = inner
@@ -182,28 +195,38 @@ async fn fetch<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
     let (state, keep_for) = match (response, job.target) {
         (UpstreamResponse::NotModified, Target::Document { policy }) => {
             // 304 без прежнего документа — сбой протокола upstream: отдавать нечего.
-            let (body, etag, unchanged) = prev_document(job).ok_or(UpstreamFailure::Unavailable)?;
-            let unchanged = unchanged.saturating_add(1);
+            let prev = prev_document(job).ok_or(UpstreamFailure::Unavailable)?;
+            let unchanged = prev.unchanged.saturating_add(1);
+            // У 304 своего срока в порте нет: действует последний объявленный upstream.
             let state = CachedState::Document {
-                body: body.clone(),
-                etag: etag.cloned(),
+                body: prev.body.clone(),
+                etag: prev.etag.cloned(),
                 unchanged,
+                max_age: prev.max_age,
             };
             (state, policy.keep_for(unchanged))
         }
         (UpstreamResponse::NotModified, Target::Artifact { .. }) => {
             return Err(UpstreamFailure::Unavailable.into());
         }
-        (UpstreamResponse::Found { body, etag }, Target::Document { policy }) => {
+        (
+            UpstreamResponse::Found {
+                body,
+                etag,
+                max_age,
+            },
+            Target::Document { policy },
+        ) => {
             let body = collect(body, inner.limits.max_document_bytes).await?;
             // 304 и «200 с тем же телом» одинаково значат «не изменилось».
             let unchanged = prev_document(job)
-                .filter(|(prev, _, _)| **prev == body)
-                .map_or(0, |(_, _, unchanged)| unchanged.saturating_add(1));
+                .filter(|prev| *prev.body == body)
+                .map_or(0, |prev| prev.unchanged.saturating_add(1));
             let state = CachedState::Document {
                 body,
                 etag,
                 unchanged,
+                max_age,
             };
             (state, policy.keep_for(unchanged))
         }

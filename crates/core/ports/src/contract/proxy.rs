@@ -36,6 +36,7 @@ fn document(text: &'static [u8], etag: Option<&str>) -> Cached {
             body: Bytes::from_static(text),
             etag: etag.map(|raw| ETag::new(raw.to_owned())),
             unchanged: 2,
+            max_age: None,
         },
     }
 }
@@ -50,6 +51,7 @@ pub async fn proxy_cache_contract<C: ProxyCache>(new: impl Fn() -> C) {
     keys_differ_by_repository_and_by_path(&new()).await;
     missing_entry_survives_round_trip(&new()).await;
     blob_entry_survives_round_trip(&new()).await;
+    document_max_age_survives_round_trip(&new()).await;
 }
 
 /// Проверяет реализацию `FetchLeases`; `new` создаёт чистый координатор для каждого сценария.
@@ -134,6 +136,30 @@ async fn keys_differ_by_repository_and_by_path<C: ProxyCache>(cache: &C) {
         found,
         (None, None),
         "запись видна только по ключу из того же репозитория и с тем же путём"
+    );
+}
+
+async fn document_max_age_survives_round_trip<C: ProxyCache>(cache: &C) {
+    // Arrange
+    let entry = Cached {
+        fetched_at: at(1_000),
+        state: CachedState::Document {
+            body: Bytes::from_static(b"{}"),
+            etag: Some(ETag::new("\"v1\"".to_owned())),
+            unchanged: 2,
+            max_age: Some(Duration::from_secs(600)),
+        },
+    };
+    cache.put(&key(), entry.clone(), KEEP).await.expect("put");
+
+    // Act
+    let result = cache.get(&key()).await;
+
+    // Assert
+    assert_eq!(
+        result.expect("get"),
+        Some(entry),
+        "объявленный upstream срок свежести переживает put/get без потерь"
     );
 }
 

@@ -11,12 +11,13 @@ mod common;
 use std::sync::Arc;
 
 use common::proxy::{
-    BrokenCache, Call, FakeUpstream, SharedBlobs, SharedLeases, Step, World, just_before, origin,
-    path, policy, secs,
+    BrokenCache, Call, FakeUpstream, SharedBlobs, SharedLeases, Step, World, just_before, key,
+    origin, path, policy, secs,
 };
 use crane_app::proxy::{CacheResult, ProxyEngine, ProxyError, ProxyLimits, UpstreamFailure};
 use crane_domain::proxy::EgressRefusal;
 use crane_memory::ManualClock;
+use crane_ports::proxy::{Cached, CachedState, ProxyCache};
 use futures_executor::block_on;
 
 const DOC: &str = "se/rd/serde";
@@ -120,6 +121,58 @@ fn not_modified_revalidation_renews_the_entry() {
     assert_eq!(served.result, CacheResult::Hit);
     assert_eq!(served.age, secs(50));
     assert!(served.revalidation.is_none());
+}
+
+#[test]
+fn upstream_max_age_is_stored_with_the_document() {
+    // Arrange
+    let world = World::new([Step::FoundWithMaxAge(b"v1", Some("e1"), secs(600))]);
+
+    // Act
+    let served = world.metadata(DOC);
+
+    // Assert
+    let entry = block_on(world.cache.get(&key(DOC))).unwrap();
+    assert!(served.is_ok());
+    assert!(matches!(
+        entry,
+        Some(Cached {
+            state: CachedState::Document {
+                max_age: Some(max_age),
+                ..
+            },
+            ..
+        }) if max_age == secs(600)
+    ));
+}
+
+#[test]
+fn not_modified_keeps_the_max_age_of_the_stored_document() {
+    // Arrange
+    let world = World::new([
+        Step::FoundWithMaxAge(b"v1", Some("e1"), secs(600)),
+        Step::NotModified,
+    ]);
+    world.metadata(DOC).unwrap();
+    world.advance(secs(200));
+
+    // Act
+    let served = world.metadata(DOC);
+
+    // Assert
+    let entry = block_on(world.cache.get(&key(DOC))).unwrap();
+    assert!(served.is_ok());
+    assert!(matches!(
+        entry,
+        Some(Cached {
+            state: CachedState::Document {
+                max_age: Some(max_age),
+                unchanged: 1,
+                ..
+            },
+            ..
+        }) if max_age == secs(600)
+    ));
 }
 
 #[test]

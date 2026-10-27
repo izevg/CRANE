@@ -4,6 +4,7 @@ mod cache;
 mod leases;
 
 use std::fmt;
+use std::time::Duration;
 
 use crane_domain::proxy::{EgressRefusal, UpstreamBase, UpstreamPath};
 
@@ -24,6 +25,8 @@ pub enum UpstreamResponse {
     Found {
         body: ByteStream,
         etag: Option<ETag>,
+        /// Срок свежести из `Cache-Control` upstream, целые секунды; `None` — срок не объявлен.
+        max_age: Option<Duration>,
     },
     NotFound,
 }
@@ -33,9 +36,10 @@ impl fmt::Debug for UpstreamResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotModified => f.write_str("NotModified"),
-            Self::Found { etag, .. } => f
+            Self::Found { etag, max_age, .. } => f
                 .debug_struct("Found")
                 .field("etag", etag)
+                .field("max_age", max_age)
                 .finish_non_exhaustive(),
             Self::NotFound => f.write_str("NotFound"),
         }
