@@ -11,8 +11,8 @@ use crane_domain::proxy::{MetadataPolicy, NegativePolicy, PathError, UpstreamPat
 use crane_domain::registry::{Checksum, DeletePolicy, PackageName, Sha1};
 use serde::Deserialize;
 
-use crate::dist::{parse_sri, sha512_of};
 use crate::route::tarball_version;
+use crate::sri::{parse_sri, sha512_of};
 
 pub const REGISTRY_HOST: &str = "registry.npmjs.org";
 

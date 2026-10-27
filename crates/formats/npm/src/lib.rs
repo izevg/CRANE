@@ -2,11 +2,11 @@
 //!
 //! `serde`-derive допустим только на границе проводного формата (formats, entry), не в ядре.
 
-mod dist;
 mod packument;
 mod proxy;
 mod reply;
 mod route;
+mod sri;
 mod write;
 
 pub use packument::{DocError, TarballBase, View, content_type, render_hosted, render_upstream};

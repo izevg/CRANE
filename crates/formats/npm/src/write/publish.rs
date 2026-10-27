@@ -11,9 +11,9 @@ use crane_domain::registry::{Checksum, Format, FormatMetadata, PackageName, Sha1
 use serde::{Deserialize, Serialize};
 
 use super::{Body, WriteError, parse_tag, string_field};
-use crate::dist::{parse_sri, sha512_of};
 use crate::packument::{Fields, Raw};
 use crate::route::tarball_file;
+use crate::sri::{parse_sri, sha512_of};
 
 /// Зависимости, которые ставит потребитель; `devDependencies` он не ставит, их не проверяем.
 const INSTALLED_DEPENDENCIES: [&str; 3] =
