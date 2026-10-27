@@ -28,6 +28,24 @@ describe("CodeBlock", () => {
     expect(await navigator.clipboard.readText()).toBe(COMMAND);
   });
 
+  it("область кода — регион с именем по умолчанию «Код»", () => {
+    // Arrange
+    // Act
+    render(<CodeBlock code={COMMAND} copyLabel="Копировать" />);
+
+    // Assert
+    expect(screen.getByRole("region", { name: "Код" })).toBeInTheDocument();
+  });
+
+  it("имя области задаётся пропом label", () => {
+    // Arrange
+    // Act
+    render(<CodeBlock code={COMMAND} copyLabel="Копировать" label="Команда установки" />);
+
+    // Assert
+    expect(screen.getByRole("region", { name: "Команда установки" })).toBeInTheDocument();
+  });
+
   it("показывает код текстом", () => {
     // Arrange
     // Act

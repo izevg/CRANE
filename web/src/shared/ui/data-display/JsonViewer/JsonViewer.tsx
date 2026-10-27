@@ -43,11 +43,13 @@ function Punct({ children }: { children: ReactNode }) {
 }
 
 function brackets(row: JsonRow): { open: string; close: string } {
-  return row.container === "array" ? { open: "[", close: "]" } : { open: "{", close: "}" };
+  return "container" in row && row.container === "array"
+    ? { open: "[", close: "]" }
+    : { open: "{", close: "}" };
 }
 
-function summary(row: JsonRow): string {
-  const size = row.size ?? 0;
+function summary(row: Extract<JsonRow, { kind: "collapsed" }>): string {
+  const size = row.size;
   const word = pluralRu(size, row.container === "array" ? ITEMS : KEYS);
   return `${formatNumber(size)} ${word}`;
 }
@@ -98,10 +100,10 @@ function RowBody({ row }: { row: JsonRow }) {
   return (
     <>
       <Label row={row} />
-      {row.container ? (
-        <Punct>{`${open}${close}`}</Punct>
+      {row.container === undefined ? (
+        <span className={scalarClass(row.value)}>{scalarText(row.value)}</span>
       ) : (
-        <span className={scalarClass(row.value)}>{scalarText(row.value ?? null)}</span>
+        <Punct>{`${open}${close}`}</Punct>
       )}
       {comma}
     </>

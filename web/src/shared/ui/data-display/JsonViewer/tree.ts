@@ -8,7 +8,7 @@ export type JsonValue =
 
 type Container = readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
-export type JsonRow = {
+type RowBase = {
   /** Уникальный ключ строки; у закрывающей скобки отличается от ключа открывающей. */
   rowId: string;
   /** Идентификатор узла, стабилен между свёртками. */
@@ -17,15 +17,17 @@ export type JsonRow = {
   /** Ключ объекта или индекс массива; у корня `null`. */
   label: string | null;
   isIndex: boolean;
-  kind: "leaf" | "open" | "close" | "collapsed";
-  /** Только для `leaf`: примитив либо пустой контейнер. */
-  value?: JsonValue;
-  /** Для `open`, `collapsed`, `close` и пустых контейнеров. */
-  container?: "object" | "array";
-  /** Для `collapsed`: число прямых потомков. */
-  size?: number;
   comma: boolean;
 };
+
+type ContainerKind = "object" | "array";
+
+/** Строка дерева. Поля зависят от `kind`, поэтому лишних необязательных свойств нет. */
+export type JsonRow =
+  | (RowBase & { kind: "leaf"; value: JsonValue; container?: ContainerKind })
+  | (RowBase & { kind: "open"; container: ContainerKind; size: number })
+  | (RowBase & { kind: "collapsed"; container: ContainerKind; size: number })
+  | (RowBase & { kind: "close"; container: ContainerKind });
 
 const ROOT_ID = "$";
 /** Дерево короче этого числа строк разворачивается целиком. */
