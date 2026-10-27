@@ -186,6 +186,7 @@ CRANE отдаёт телеметрию только в открытых фор�
 | Протоколы и API | `http_requests_total`, `http_request_duration_seconds` (histogram), `http_inflight_requests`, `http_response_bytes_total` | `format`, `op`, `status_class` |
 | Кэш и proxy | `cache_requests_total`, `singleflight_coalesced_total`, `upstream_requests_total`, `upstream_duration_seconds`, `upstream_up` | `layer` (l1, l2), `result` (hit, miss, stale), `upstream` |
 | Публикация и хранилище | `publish_total`, `publish_bytes_total`, `blob_objects`, `blob_bytes`, `gc_reclaimed_bytes_total`, `integrity_failures_total`, `storage_move_bytes_total`, `quota_usage_ratio` | `format`, `result`, `store`, `class`, `workspace` (top N + `other`) |
+| Скачивания и след команды | `downloads_total`, `download_bytes_total` (`source`: hosted, hit, stale, miss, coalesced), `metadata_requests_total` (metadata и индексы, в строки потока не пишутся) | `format`, `source` (кроме `metadata_requests_total`), `workspace` (top N + `other` + `none` для не распределённых) |
 | Доступ | `authz_decisions_total`, `auth_failures_total`, `authz_epoch_invalidations_total`, `credentials_expiring` | `decision`, `method`, `days` (7, 14, 30) |
 | Очереди и события | `jobs_queued`, `job_oldest_age_seconds` (`now() - min(run_at)` среди видимых задач), `job_dead_total` (рост `job_dead`), `job_duration_seconds`, `outbox_lag_seconds` (только внешняя доставка), `webhook_deliveries_total` | `kind`, `outcome` |
 | Уязвимости | `findings_open`, `findings_sla_breached`, `advisories_ingested_total`, `feed_lag_seconds`, `detection_time_seconds` (histogram: advisory → finding), `emergency_blocks_active`, `exceptions_expiring`, `vuln_db_age_seconds` | `priority`, `feed`, `scanner`, `days` |
@@ -194,7 +195,7 @@ CRANE отдаёт телеметрию только в открытых фор�
 | SIEM | `siem_events_total`, `siem_export_lag_seconds` | `sink`, `result` |
 | Зависимости и рантайм | `db_pool_connections`, `db_query_duration_seconds`, `valkey_errors_total`, `s3_request_duration_seconds`, `tokio_busy_ratio`, `build_info` | `state`, `query_class`, `op`, `version`, `commit` |
 
-**Бюджет кардинальности.** Имена пакетов, пользователи, IP и токены в метки не попадают. Метки по workspace ограничены top N с корзиной `other`. Цель не больше 5 000 рядов на реплику; превышение видно по самой метрике `crane_metric_series`.
+**Бюджет кардинальности.** Имена пакетов, пользователи, IP и токены в метки не попадают. Метки по workspace ограничены top N с корзиной `other` (и `none` для не распределённых), N = 10 по умолчанию. Пакет, версия, принципал, токен и IP никогда не метки. Бюджет скачиваний: 5 форматов × 5 `source` × 12 значений `workspace` × 2 (`downloads_total` и `download_bytes_total`) + 5 × 12 (`metadata_requests_total`) = 660 рядов из 5 000. Цель не больше 5 000 рядов на реплику; превышение видно по самой метрике `crane_metric_series`.
 
 ### Журналы
 
@@ -208,7 +209,7 @@ CRANE отдаёт телеметрию только в открытых фор�
 ### Трассировка
 
 -   **Протокол.** OTLP, распространение контекста по W3C Trace Context. Входящий `traceparent` от CI и внешних агентов принимается; к публичным upstream заголовки трассировки не отправляются.
--   **Spans.** `http.server` (операция протокола), `authz.decide`, `cache.lookup`, `upstream.fetch`, `blob.get` и `blob.put`, `db.query`, `job.run`, `ai.score`, `ai.complete`, `siem.deliver`, `a2a.task`.
+-   **Spans.** `http.server` (операция протокола; атрибут `crane.workspace` со slug команды атрибуции, идентификаторов людей в трассах нет), `authz.decide`, `cache.lookup`, `upstream.fetch`, `blob.get` и `blob.put`, `db.query`, `job.run`, `ai.score`, `ai.complete`, `siem.deliver`, `a2a.task`.
 -   **Сэмплирование.** Parent-based, 1% по умолчанию и 100% для ошибок и медленных запросов (через tail sampling в Collector). Exemplars связывают точки гистограмм с трассами.
 
 ### SLO и алерты

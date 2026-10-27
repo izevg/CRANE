@@ -8,7 +8,12 @@
 erDiagram
   WORKSPACE ||--o{ REPOSITORY : owns
   WORKSPACE ||--o{ NAMESPACE : reserves
-  WORKSPACE ||--o{ PRINCIPAL : "robots"
+  WORKSPACE ||--o{ PRINCIPAL : "robots, workloads"
+  WORKSPACE ||--o{ PACKAGE : "owns (без namespace)"
+  WORKSPACE ||--o{ ROLE_BINDING : members
+  WORKSPACE ||--o{ GROUP_MAPPING : maps
+  WORKSPACE ||--o{ ACCESS_GRANT : grantee
+  CREDENTIAL }o--o| WORKSPACE : attributed
   REPOSITORY ||--o{ PACKAGE : contains
   NAMESPACE ||--o{ PACKAGE : governs
   PACKAGE ||--o{ PACKAGE_VERSION : has
@@ -24,13 +29,12 @@ erDiagram
   PACKAGE_VERSION ||--o{ DEPENDENCY_EDGE : "depends on"
   PACKAGE_VERSION ||--o{ USAGE_EVIDENCE : "used by"
   PRINCIPAL ||--o{ CREDENTIAL : holds
-  PRINCIPAL ||--o{ ROLE_BINDING : granted
-  POLICY ||--o{ ROLE_BINDING : defines
+  PRINCIPAL ||--o{ ROLE_BINDING : holds
   PACKAGE_VERSION ||--o{ PROMOTION : moves
   AUDIT_EVENT }o--|| PRINCIPAL : actor
 ```
 
-*Рис. 9.1. Основные сущности и связи.*
+*Рис. 9.1. Основные сущности и связи. Workspace и есть «команда» (в UI и глоссарии): единица владения и членства, отдельной сущности «команда» нет (14.15). `POLICY` (Cedar) живёт отдельно: строки ролей из политик не выводятся.*
 
 ## Ключевые таблицы PostgreSQL
 
@@ -57,7 +61,8 @@ CREATE TABLE package (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- внутренний ключ, наружу не выдаётся
   repository_id uuid NOT NULL, namespace_id uuid,
   name_norm text NOT NULL, name_display text NOT NULL,
-  owner_workspace_id uuid, gitlab_project_id bigint,
+  owner_workspace_id uuid,           -- заполнен только у пакета без namespace (CHECK package_owner_once ниже)
+  gitlab_project_id bigint,
   lifecycle text NOT NULL DEFAULT 'active', -- active | deprecated | eol
   replacement_id bigint, description text,
   search_tsv tsvector GENERATED ALWAYS AS (...) STORED,
@@ -107,6 +112,7 @@ CREATE TABLE asset (
 CREATE TABLE credential (
   id uuid PRIMARY KEY, principal_id uuid NOT NULL,
   kind text NOT NULL,                -- personal | robot | workload
+  workspace_id uuid REFERENCES workspace,  -- команда атрибуции, фиксируется при выпуске и не меняется (14.15); NULL = не распределено
   prefix text UNIQUE NOT NULL,       -- 'crp_' | 'crr_' | 'crci_' + 8 символов, ищется по нему
   secret_hmac bytea NOT NULL,        -- HMAC-SHA256(pepper, secret)
   scopes jsonb NOT NULL, expires_at timestamptz NOT NULL,
@@ -115,6 +121,9 @@ CREATE TABLE credential (
 CREATE TABLE audit_event (
   id bigint GENERATED ALWAYS AS IDENTITY, ts timestamptz NOT NULL,
   actor uuid, action text, resource text, decision text, reason jsonb,
+  actor_kind principal_kind,         -- user | robot | workload; входит в hash
+  actor_name text,                   -- снимок логина, имени робота или пути CI-проекта на момент события; входит в hash
+  workspace_id uuid,                 -- команда атрибуции credential на момент события; входит в hash
   request_id text, prev_hash bytea NOT NULL, hash bytea NOT NULL
 ) PARTITION BY RANGE (ts);           -- помесячные партиции, append-only роль
 
@@ -196,6 +205,81 @@ CREATE INDEX CONCURRENTLY package_embedding_hnsw_<model> ON package_embedding
 
 Индекс строит задача воркера, а не статическая миграция: он зависит от модели, которую выбрал оператор. `SET STORAGE PLAIN` нужен потому, что, по README pgvector, планировщик не учитывает внешнее (out-of-line) хранение, а `halfvec(1024)` ≈ 2 КБ лежит на пороге TOAST. Эмбеддинг строится на пакет, а не на версию: текст составляют имя, описание, ключевые слова и README последней выпущенной версии; при изменении текста вектор пересчитывается. Алгоритм поиска и обоснование параметров: 10.10.
 
+### Команды, принципалы и роли
+
+Отдельной сущности «команда» нет: workspace и есть команда («Команда (workspace)» в UI). Это единица владения (namespaces, пакеты без namespace, репозитории, роботы, trust policies, квоты) и членства. Иерархии нет; позже ей можно добавить `workspace.parent_id` (решение 30 в 19). Роли людей хранятся только в `role_binding`: это временная таблица, а не «назначение роли» в прежнем смысле. Правила, жизненный цикл и API: 14.15, алгоритмы наблюдения и атрибуции: 10.16.
+
+```sql
+CREATE TYPE principal_kind AS ENUM ('user','robot','workload');
+CREATE TYPE binding_source AS ENUM ('idp','local','scim');
+
+CREATE TABLE workspace (               -- «Команда» в UI
+  id uuid PRIMARY KEY,                 -- UUIDv7; Cedar ссылается на него, не на slug
+  slug text NOT NULL UNIQUE,           -- не переиспользуется
+  display_name text NOT NULL, description text,
+  created_at timestamptz NOT NULL,
+  archived_at timestamptz);            -- NULL = активна
+
+CREATE TABLE principal (
+  id uuid PRIMARY KEY, kind principal_kind NOT NULL,
+  issuer text, subject text,           -- user: iss + sub; workload: iss + стабильный claim (GitLab project_id); robot: NULL
+  username text, display_name text, email text,  -- последнее увиденное; журнал хранит свой снимок
+  workspace_id uuid REFERENCES workspace,        -- robot и workload: команда-владелец, не меняется
+  epoch bigint NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL, disabled_at timestamptz,
+  UNIQUE (issuer, subject),
+  CHECK ((kind = 'user') = (workspace_id IS NULL)),
+  CHECK ((kind = 'robot') = (issuer IS NULL)));
+
+CREATE TABLE role_binding (            -- членство и роли во времени; только INSERT и закрытие
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  principal_id uuid NOT NULL REFERENCES principal,
+  workspace_id uuid REFERENCES workspace,        -- NULL: роль экземпляра
+  role text NOT NULL, source binding_source NOT NULL,
+  valid_from timestamptz NOT NULL, valid_to timestamptz,
+  CHECK (role IN ('reader','developer','maintainer','owner','appsec','secops','auditor','platform-admin')),
+  CHECK ((workspace_id IS NULL) = (role IN ('appsec','secops','auditor','platform-admin'))),
+  CHECK (valid_to IS NULL OR valid_to > valid_from));
+CREATE UNIQUE INDEX role_binding_open ON role_binding (principal_id, workspace_id, role, source)
+  NULLS NOT DISTINCT WHERE valid_to IS NULL;                       -- одна открытая строка на факт
+CREATE INDEX role_binding_by_principal ON role_binding (principal_id, valid_from);   -- «команды P на момент T»
+CREATE INDEX role_binding_members ON role_binding (workspace_id) WHERE valid_to IS NULL;  -- текущий состав
+
+CREATE TABLE group_mapping (           -- единственный путь прав из IdP
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_ref text NOT NULL,             -- нормализованная группа: путь, имя, id или 'role:<имя>'
+  workspace_id uuid REFERENCES workspace, role text NOT NULL,
+  created_by uuid NOT NULL REFERENCES principal, created_at timestamptz NOT NULL,
+  CONSTRAINT group_mapping_key UNIQUE NULLS NOT DISTINCT (group_ref, workspace_id, role),
+  CHECK ((workspace_id IS NULL) = (role IN ('appsec','secops','auditor','platform-admin'))));
+
+CREATE TABLE access_grant (            -- межкомандный доступ
+  id uuid PRIMARY KEY,
+  grantee_workspace_id uuid NOT NULL REFERENCES workspace,
+  role text NOT NULL CHECK (role IN ('reader','developer','maintainer')),
+  namespace_id uuid REFERENCES namespace, repository_id uuid REFERENCES repository,
+  granted_by uuid NOT NULL REFERENCES principal, created_at timestamptz NOT NULL,
+  expires_at timestamptz, revoked_at timestamptz,
+  CHECK (num_nonnulls(namespace_id, repository_id) = 1));
+CREATE INDEX access_grant_by_grantee ON access_grant (grantee_workspace_id) WHERE revoked_at IS NULL;
+
+-- изменения существующих таблиц (expand)
+ALTER TABLE namespace  ADD FOREIGN KEY (workspace_id) REFERENCES workspace;          -- NOT NULL уже в схеме
+ALTER TABLE repository ADD FOREIGN KEY (workspace_id) REFERENCES workspace;
+ALTER TABLE package    ADD CONSTRAINT package_owner_once
+  CHECK ((namespace_id IS NULL) = (owner_workspace_id IS NOT NULL)) NOT VALID;      -- затем VALIDATE
+ALTER TABLE credential ADD COLUMN workspace_id uuid REFERENCES workspace;          -- атрибуция при выпуске, не меняется
+ALTER TABLE audit_event ADD COLUMN actor_kind principal_kind,
+                        ADD COLUMN actor_name text,       -- снимок логина/имени робота/пути проекта на момент события, входит в hash
+                        ADD COLUMN workspace_id uuid;     -- атрибуция credential, входит в hash
+```
+
+-   **Владелец ресурса есть всегда.** `namespace.workspace_id NOT NULL` владеет именем и всеми пакетами внутри; `package.owner_workspace_id` заполнен только у пакетов без namespace, это выражает CHECK `package_owner_once`. Владелец пакета = `coalesce(namespace.workspace_id, package.owner_workspace_id)`. Осиротевших пакетов не бывает. Таблицы `namespace` касается здесь только FK на `workspace`; её колонки описаны выше.
+-   **`role_binding` меняется двумя операциями:** вставить открытую строку и закрыть открытую (`valid_to = now()`). Каждая операция пишет `audit_event` (`access.role_granted` / `access.role_revoked`) в той же транзакции, поэтому история защищена хэш-цепочкой. `valid_from` — момент, когда CRANE увидел факт (вход, обмен, опрос каталога, SCIM, admin event), а не время изменения в IdP.
+-   **Принципалы.** `user` — человек, ключ `(iss, sub)`; `robot` создаёт owner команды; `workload` — CI-проект или k8s ServiceAccount, один принципал на ключ `(iss, стабильный claim)` (для GitLab `project_id`, не путь), создаётся при первом обмене токена платформы. Потребитель (`consumer`) вида «проект» (группа «Граф» в перечне таблиц ниже) ссылается на workload-принципал: третьего понятия «проект» нет. Роботы и workload-принципалы между командами не передаются.
+-   **Роль в команде** = максимум по открытым строкам всех источников (reader < developer < maintainer < owner). Роли экземпляра (`appsec`, `secops`, `auditor`, `platform-admin`) хранятся с `workspace_id IS NULL`. Cedar читает только `role_binding` (через кэш с эпохой), токен IdP только наблюдается.
+-   **Миграции.** Проектируются, SQL-файлов нет. Номер `0002` занят npm-миграцией, файл получает следующий свободный номер в момент реализации: v0.4.0 — `<NNNN>_access.sql`, `<NNNN>_download_event.sql`; v0.6.0 — `<NNNN>_access_grant.sql`, `<NNNN>_download_daily.sql`. В v0.2.0 workspace — константный UUID по умолчанию; миграция v0.4.0 вставляет строку `workspace` с этим id (slug `default`) и добавляет FK.
+
 ## Реализовано в v0.1.0
 
 В `crane-pg` реализован минимальный срез; остальные колонки и таблицы из схемы выше добавляются позже nullable-расширением (expand).
@@ -249,7 +333,9 @@ CREATE TABLE asset (
 | `sha512`, `sha1`, `md5`, `media_type` | Форматы, которым нужны эти дайджесты и типы |
 | таблица `blob_store` | Второе физическое хранилище; пока `store_id` — текст без FK |
 | `package_embedding` | Векторный поиск, P3 / v1.2.0 |
-| `download_event` | v0.4.0, вместе с журналом аудита |
+| `download_event` | v0.4.0, вместе с журналом аудита (колонки `workspace_id`, `bytes`, `source` входят в `CREATE TABLE` сразу, до появления потока) |
+| `workspace`, `principal`, `role_binding`, `group_mapping`, FK на `workspace`, `credential.workspace_id`, `actor_kind`/`actor_name`/`workspace_id` в `audit_event` | v0.4.0, вместе с доступом и командами (14.15) |
+| `access_grant`, `download_daily` | v0.6.0 (P1): межкомандный доступ и суточный агрегат следа |
 | таблица `evidence` | v0.6.0 (P1): таблица целиком, первый вид — provenance из claims; v1.1.0 добавляет виды без миграции |
 
 ## Масштаб L: каталог
@@ -323,6 +409,8 @@ CREATE TABLE asset (
 Решение владельца: фиксируются **100%** успешных скачиваний файлов (вместо выборки 10%). Поток идёт в отдельную партиционированную таблицу доступа с большим объёмом записи, а не в `audit_event` с хэш-цепочкой.
 
 ```sql
+CREATE TYPE dl_source AS ENUM ('hosted','hit','stale','miss','coalesced');
+
 CREATE TABLE download_event (
   ts timestamptz NOT NULL,
   repository_id uuid NOT NULL,       -- hosted или proxy: откуда отдано
@@ -330,6 +418,9 @@ CREATE TABLE download_event (
   blob_sha256 bytea NOT NULL,        -- какой файл отдан; совпадает с индикатором компрометации
   actor uuid,                        -- принципал
   credential_id uuid,                -- каким токеном; ни секрета, ни его хэша
+  workspace_id uuid,                 -- копия credential.workspace_id; NULL = не распределено
+  bytes bigint NOT NULL,             -- сколько байт авторизовано к отдаче
+  source dl_source NOT NULL,         -- hosted | hit | stale | miss | coalesced
   client_ip inet,
   request_id uuid NOT NULL
 ) PARTITION BY RANGE (ts);           -- суточные партиции, роль только INSERT
@@ -346,8 +437,39 @@ CREATE INDEX ON download_event_YYYYMMDD USING brin (ts);              -- поч�
 -   Запись пакетная, `COPY` из каждой реплики API: раз в 1 с или по 5 000 строк.
 -   Партиции создаёт заранее задача воркера, удаляются они через `DROP` (без `DELETE`: нет мёртвых строк и нагрузки на vacuum).
 -   User agent и путь не хранятся: они есть в access-логе stdout.
+-   **Атрибуция.** `workspace_id` — копия `credential.workspace_id`: команду фиксирует выпуск токена (14.15), скачивание ничего не вычисляет. Суммы по командам аддитивны, двойного счёта нет. `NULL` — «не распределено» (человек из нескольких команд не выбрал одну, 10.16).
+-   **`bytes`** — сколько байт авторизовано к отдаче: для Range длина диапазона, для presigned-редиректа размер объекта или диапазона. Завершил ли клиент передачу, CRANE не знает.
+-   **`source`** описывает, откуда взят файл. `hosted` — hosted-репозиторий; `hit` — свежий кэш proxy; `stale` — устаревший кэш (SWR или stale-if-error); `miss` — этот запрос повёл выборку из upstream, то есть инициатор холодной загрузки; `coalesced` — присоединился к чужой выборке (в процессе через общий future или на другой реплике через lease Valkey). «Кто вызвал холодную загрузку» = строки `source = 'miss'`, egress по команде = сумма `bytes` при `miss`. Если клиент-лидер оборвал соединение, а выборка дошла до кэша, строки лидера нет: выборка видна в журнале `crane::upstream` и в метрике `upstream_requests_total` (решение 36 в 19).
+-   **Что в строки не пишется.** Метаданные (packument, индекс) не пишутся из-за объёма: их считает метрика по команде. «Установка» = скачивание файла; кэш клиента событий не даёт (решение 35). Групповых (виртуальных) репозиториев в модели нет; появятся — `via_repository_id` как nullable expand (решение 37).
+-   **Запрос «что качала команда T».** Индекса по команде на сырых строках нет: множество `actor` (строки `role_binding` команды за окно плюс её роботы и workload-принципалы) → существующий индекс `(actor, ts)` → фильтр `workspace_id`. Для отчётов по командам служит суточный агрегат (ниже).
+-   **Потери в записи.** Режим `drop` остаётся по умолчанию: доступность скачиваний не зависит от БД аудита (`reject` — выбор оператора). Реплика при отбрасывании `n` строк делает `INCRBY dlx:<час> n` в Valkey (TTL 48 ч, best effort) и увеличивает метрику; часовая задача пишет дайджест `audit.download_digest {hour, rows, dropped_known, sha256}`. Полноту диапазона отдаёт `coverage { dropped_known, hours_without_digest[] }` (14.13). Строки несброшенного буфера упавшей реплики не считает никто, поэтому признака «полно» нет.
 
-**Объём для L (оценка, не замер).** L = 50–200 тыс. CI-задач в сутки, ≈ 1 500 запросов на задачу (раздел 3), примерно половина из них скачивания файлов: ≈ 35–150 млн строк в сутки. Строка ≈ 250 Б (heap, два btree и BRIN): ≈ 9–37 ГБ в сутки, за 90 суток ≈ 0,8–3,3 ТБ. Поэтому онлайн-окно по умолчанию: 90 суток в L и 12 месяцев в S и M. Старые партиции архивируются в сжатом виде в WORM-хранилище объектов. В L поток может жить в отдельном tablespace или в отдельном экземпляре PostgreSQL, чтобы не раздувать бэкапы и реплики каталога.
+**Объём для L (оценка, не замер).** L = 50–200 тыс. CI-задач в сутки, ≈ 1 500 запросов на задачу (раздел 3), примерно половина из них скачивания файлов: ≈ 35–150 млн строк в сутки. Строка ≈ 250 Б (heap, два btree и BRIN): ≈ 9–37 ГБ в сутки, за 90 суток ≈ 0,8–3,3 ТБ. Поэтому онлайн-окно по умолчанию: 90 суток в L и 12 месяцев в S и M. Старые партиции архивируются в сжатом виде в WORM-хранилище объектов. В L поток может жить в отдельном tablespace или в отдельном экземпляре PostgreSQL, чтобы не раздувать бэкапы и реплики каталога. Три добавленные колонки (`workspace_id` 16 Б, `bytes` 8 Б, `source` 4 Б) укладываются в погрешность оценки строки.
+
+### Суточный агрегат скачиваний
+
+Сырые строки живут 12 месяцев в S и M и 90 дней в L, а отчётам FinOps и SecOps нужен горизонт длиннее. Для него служит агрегат `download_daily`: он не заменяет сырые строки и не содержит личностей.
+
+```sql
+CREATE TABLE download_daily (          -- агрегат для FinOps и SecOps, дольше сырых строк
+  day date NOT NULL,                   -- сутки UTC
+  workspace_id uuid,                   -- NULL = не распределено
+  repository_id uuid NOT NULL,
+  purl text NOT NULL,                  -- с версией; уровень пакета — префиксом
+  source dl_source NOT NULL,
+  principal_kind principal_kind NOT NULL,
+  downloads bigint NOT NULL, bytes bigint NOT NULL,  -- только аддитивные меры
+  CONSTRAINT download_daily_key UNIQUE NULLS NOT DISTINCT (day, workspace_id, repository_id, purl, source, principal_kind)
+) PARTITION BY RANGE (day);            -- помесячно, удаление DROP партиции, срок 400 дней
+CREATE INDEX ON download_daily (workspace_id, day);
+CREATE INDEX ON download_daily (purl text_pattern_ops, day);
+```
+
+-   **Сетка:** сутки × команда × репозиторий × `purl@версия` × `source` × вид принципала. Меры только аддитивные (`downloads`, `bytes`): число уникальных людей и машин суммированием не получить, его считают из сырых событий в их окне.
+-   **Построение.** Задача воркера `usage.rollup_day` запускается после дайджеста последнего часа суток UTC (10.16). Она идемпотентна: в одной транзакции `DELETE WHERE day = d` и `INSERT … SELECT … GROUP BY` из закрытой партиции; `principal_kind` берётся JOIN-ом с `principal`.
+-   **Хранение.** Помесячные партиции, 400 дней по умолчанию во всех профилях (`CRANE_USAGE_RETENTION_DAYS`), удаление `DROP` партиции (решение 40).
+-   **Объём для L (оценка, не замер).** 1–2 млн строк в сутки, ≈ 200 Б на строку с индексами: ≈ 0,2–0,4 ГБ в сутки, ≈ 80–160 ГБ за 400 дней.
+-   **Читатели.** Карточка пакета (`/packages/.../downloads`) берёт закрытые дни из агрегата, текущий день — из сырой партиции по индексу `(purl, ts)`. Какие разрезы доступны в агрегате, а какие только в сырых событиях: 14.13.
 
 ## Очередь задач
 
@@ -390,13 +512,13 @@ RETURNING id, kind, payload, attempts;
 
 | Группа | Таблицы |
 | --- | --- |
-| Каталог | `workspace`, `repository`, `namespace`, `namespace_owner_history`, `package`, `package_version`, `asset`, `blob`, `blob_store`, `dist_tag` (npm), `upload_session` |
+| Каталог | `workspace`, `repository`, `namespace`, `package`, `package_version`, `asset`, `blob`, `blob_store`, `dist_tag` (npm), `upload_session` |
 | Поиск | `package_embedding` |
-| Доступ | `principal`, `group_mapping` (Keycloak → роли), `role_binding`, `policy` (Cedar), `credential`, `trust_policy` (издатель OIDC и claims → права) |
+| Доступ | `principal`, `role_binding` (членство и роли во времени), `group_mapping` (группа IdP → команда и роль или роль экземпляра), `access_grant` (межкомандный доступ), `policy` (Cedar), `credential`, `trust_policy` (издатель OIDC и claims → права) |
 | Безопасность | `evidence`, `finding` (приоритет, SLA, источник), `exception`, `license_decision`, `license_policy`, `promotion`, `approval` |
 | Уязвимости и скоринг | `advisory`, `feed_cursor`, `risk_score`, `vex_statement`, `emergency_block`, `break_glass_grant` |
-| Граф | `dependency_edge`, `usage_evidence`, `consumer` (проект, сборка, деплой) |
-| Эксплуатация | `job`, `job_dead`, `outbox`, `webhook_subscription`, `webhook_delivery`, `idempotency_key`, `retention_rule`, `retention_hold`, `quota_usage`, `audit_event`, `download_event`, `siem_sink`, `siem_cursor` |
+| Граф | `dependency_edge`, `usage_evidence`, `consumer` (проект, сборка, деплой; `consumer` вида «проект» = workload-принципал, 14.15) |
+| Эксплуатация | `job`, `job_dead`, `outbox`, `webhook_subscription`, `webhook_delivery`, `idempotency_key`, `retention_rule`, `retention_hold`, `quota_usage`, `audit_event`, `download_event`, `download_daily`, `siem_sink`, `siem_cursor` |
 
 ## Жизненный цикл версии
 
@@ -439,6 +561,7 @@ stateDiagram-v2
 | `rl:<principal>:<bucket>` | Теоретическое время прибытия GCRA; Lua-скрипт атомарно. |
 | `ep:<principal>` | Эпоха авторизации; инкремент при отзыве, блокировке, смене групп. |
 | `dl:<version>` | Счётчик скачиваний; сбрасывается в PostgreSQL пакетно раз в минуту. |
+| `dlx:<час>` | Счётчик строк потока скачиваний, отброшенных репликами за час (`INCRBY`, best effort); читает часовая задача для `dropped_known` в дайджесте. TTL 48 ч. |
 | канал `inv` | Pub/sub инвалидаций: metadata, эпохи, политики. Для proxy payload — имя изменившегося ключа (`px:…`); его публикуют запись в кэш и снятие lease, подписчик сбрасывает L1 и будит ждущих. |
 
 Угловые скобки в именах ключей — нотация; литеральные `{…}` в ключах не используются, потому что в Valkey Cluster это hash tag.
