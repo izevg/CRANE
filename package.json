@@ -2,7 +2,7 @@
   "name": "crane",
   "private": true,
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.23.0",
   "engines": {

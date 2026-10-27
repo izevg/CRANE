@@ -312,15 +312,15 @@ dependencies = [
 
 [[package]]
 name = "crane-access"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-analyzer"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-app"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "crane-domain",
@@ -333,7 +333,7 @@ dependencies = [
 
 [[package]]
 name = "crane-domain"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "semver",
  "thiserror",
@@ -342,11 +342,11 @@ dependencies = [
 
 [[package]]
 name = "crane-feeds"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-format-cargo"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "crane-domain",
@@ -358,27 +358,27 @@ dependencies = [
 
 [[package]]
 name = "crane-format-maven"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-format-npm"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-format-nuget"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-format-pypi"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-gitlab"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-http"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "axum",
  "axum-extra",
@@ -403,15 +403,15 @@ dependencies = [
 
 [[package]]
 name = "crane-keycloak"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-llm"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-memory"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "crane-domain",
@@ -424,7 +424,7 @@ dependencies = [
 
 [[package]]
 name = "crane-objstore"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "crane-domain",
@@ -439,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "crane-pg"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "crane-domain",
  "crane-ports",
@@ -451,7 +451,7 @@ dependencies = [
 
 [[package]]
 name = "crane-ports"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "crane-domain",
@@ -463,7 +463,7 @@ dependencies = [
 
 [[package]]
 name = "crane-server"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "axum",
  "crane-app",
@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "crane-siem"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "crane-domain",
  "crane-ports",
@@ -501,23 +501,23 @@ dependencies = [
 
 [[package]]
 name = "crane-systemone"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-trivy"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-upstream"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-valkey"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crane-worker"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "crc"
