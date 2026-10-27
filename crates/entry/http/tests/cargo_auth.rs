@@ -96,7 +96,7 @@ fn unknown_cargo_path_without_token_is_unauthorized() {
 fn publish_without_token_is_unauthorized() {
     // Arrange
     let api = Api::new();
-    let body = common::publish_body("demo-crate", "1.0.0", CRATE);
+    let body = common::cargo::publish_body("demo-crate", "1.0.0", CRATE);
 
     // Act
     let reply = api.with_headers(Method::PUT, "/cargo/internal/api/v1/crates/new", &[], body);
@@ -146,7 +146,10 @@ fn published_with_etag() -> (Api, String) {
 fn index_if_none_match(api: &Api, condition: &str) -> common::Reply {
     api.with_headers(
         Method::GET,
-        &format!("/cargo/{REPO}/index/{}", common::index_path("demo-crate")),
+        &format!(
+            "/cargo/{REPO}/index/{}",
+            common::cargo::index_path("demo-crate")
+        ),
         &[("authorization", TOKEN), ("if-none-match", condition)],
         Vec::new(),
     )

@@ -12,7 +12,8 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use axum::http::Method;
-use common::{Api, REPO, TOKEN, capture_logs, request};
+use common::capture::capture_logs;
+use common::{Api, REPO, TOKEN, request};
 use crane_memory::{ManualClock, MemoryAudit, SequentialIdGen};
 use crane_siem::OcsfLogSink;
 
@@ -62,7 +63,7 @@ fn logs_never_contain_presented_credentials_but_do_contain_audit_events() {
             Method::PUT,
             &publish_uri,
             &[("authorization", TOKEN)],
-            common::publish_body("demo-crate", "1.0.0", CRATE),
+            common::cargo::publish_body("demo-crate", "1.0.0", CRATE),
             None,
         ),
     ];

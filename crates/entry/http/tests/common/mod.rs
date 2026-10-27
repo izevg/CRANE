@@ -7,13 +7,13 @@
     reason = "dead_code: фикстуры общие для тестовых бинарей; unwrap в тестах = падение теста"
 )]
 
+pub(crate) mod capture;
+pub(crate) mod cargo;
 pub(crate) mod npm;
 pub(crate) mod proxy;
 
-use std::cell::RefCell;
-use std::io;
 use std::net::SocketAddr;
-use std::sync::{Arc, Once};
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use axum::Router;
@@ -34,10 +34,11 @@ use crane_ports::audit::AuditSink;
 use crane_ports::registry::Catalog;
 use crane_ports::system::IdGen;
 use http_body_util::BodyExt;
-use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
+use serde_json::Value;
 use tokio::runtime::{Builder, Runtime};
 use tower::ServiceExt;
+
+use self::cargo::{index_path, publish_body};
 
 pub(crate) const TOKEN: &str = "s3cret-token";
 pub(crate) const PUBLIC_URL: &str = "https://crane.example";
@@ -302,119 +303,4 @@ pub(crate) fn request(
         request.extensions_mut().insert(ConnectInfo(peer));
     }
     request
-}
-
-thread_local! {
-    /// Журнал текущего перехвата на этом потоке; `None` — вне перехвата.
-    static CAPTURE: RefCell<Option<Vec<u8>>> = const { RefCell::new(None) };
-}
-
-/// Писатель глобального subscriber'а: дописывает строку в буфер перехвата текущего потока.
-#[derive(Clone, Copy)]
-struct RoutedWriter;
-
-impl io::Write for RoutedWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        CAPTURE.with(|slot| {
-            if let Some(sink) = slot.borrow_mut().as_mut() {
-                sink.extend_from_slice(buf);
-            }
-        });
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for RoutedWriter {
-    type Writer = Self;
-
-    fn make_writer(&'a self) -> Self::Writer {
-        *self
-    }
-}
-
-/// Снимает перехват потока и при панике теста.
-struct CaptureGuard;
-
-impl Drop for CaptureGuard {
-    fn drop(&mut self) {
-        CAPTURE.with(|slot| slot.borrow_mut().take());
-    }
-}
-
-/// Выполняет `run` и возвращает результат вместе с JSON-журналом, как его пишет сервер.
-///
-/// Subscriber ставится глобальным ровно один раз на бинарь, а не через `with_default` на каждый
-/// тест. Scoped-диспетчеры соседних параллельных тестов портят глобальный кэш интереса
-/// callsite'ов: пока зарегистрирован единственный диспетчер, tracing-core считает интерес по
-/// диспетчеру потока, впервые дошедшего до callsite. Поток без своего диспетчера кэширует
-/// `Interest::never`, и событие пропадает у всех. С постоянным глобальным subscriber'ом
-/// интерес не зависит от потока, а изоляция тестов обеспечивается маршрутом по потоку:
-/// запрос исполняется на `current_thread` runtime в том же потоке, что и перехват.
-///
-/// Граница: события фоновых задач (например, spawn ревалидации), которые `run` не дождался,
-/// в этот перехват не попадают; они могут попасть в следующий перехват того же потока
-/// или потеряться.
-pub(crate) fn capture_logs<R>(run: impl FnOnce() -> R) -> (R, String) {
-    static INSTALL: Once = Once::new();
-    INSTALL.call_once(|| {
-        let subscriber = tracing_subscriber::fmt()
-            .json()
-            .flatten_event(true)
-            .with_writer(RoutedWriter)
-            .finish();
-        tracing::subscriber::set_global_default(subscriber).unwrap();
-    });
-    CAPTURE.with(|slot| *slot.borrow_mut() = Some(Vec::new()));
-    let guard = CaptureGuard;
-    let result = run();
-    let bytes = CAPTURE
-        .with(|slot| slot.borrow_mut().take())
-        .unwrap_or_default();
-    drop(guard);
-    (result, String::from_utf8(bytes).unwrap())
-}
-
-/// Раскладка индекса для коротких тестовых имён длиной >= 4.
-pub(crate) fn index_path(name: &str) -> String {
-    format!("{}/{}/{name}", &name[0..2], &name[2..4])
-}
-
-/// Тело `PUT /api/v1/crates/new`: длина JSON, JSON, длина крейта, крейт.
-pub(crate) fn publish_body(name: &str, vers: &str, krate: &[u8]) -> Vec<u8> {
-    let meta = json!({
-        "name": name,
-        "vers": vers,
-        "deps": [{
-            "name": "serde", "version_req": "^1.0", "features": ["derive"],
-            "optional": false, "default_features": true, "target": null,
-            "kind": "normal", "registry": null, "explicit_name_in_toml": null
-        }],
-        "features": { "default": ["std"], "std": [] },
-        "description": "тестовый крейт",
-        "license": "MIT"
-    })
-    .to_string();
-    let mut out = Vec::new();
-    out.extend_from_slice(&u32::try_from(meta.len()).unwrap().to_le_bytes());
-    out.extend_from_slice(meta.as_bytes());
-    out.extend_from_slice(&u32::try_from(krate.len()).unwrap().to_le_bytes());
-    out.extend_from_slice(krate);
-    out
-}
-
-pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
-/// Единственная строка индекса как JSON.
-pub(crate) fn single_index_line(reply: &Reply) -> Value {
-    let text = reply.text();
-    let mut lines = text.lines();
-    let line = lines.next().unwrap();
-    assert!(lines.next().is_none(), "ожидалась одна строка: {text}");
-    serde_json::from_str(line).unwrap()
 }

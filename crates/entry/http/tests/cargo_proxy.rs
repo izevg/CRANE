@@ -12,8 +12,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::http::{Method, StatusCode};
+use common::capture::capture_logs;
+use common::cargo::sha256_hex;
 use common::proxy::{FakeUpstream, NAME, Proxy, Step};
-use common::{Api, PUBLIC_URL, REPO, Reply, TOKEN, capture_logs, sha256_hex};
+use common::{Api, PUBLIC_URL, REPO, Reply, TOKEN};
 use crane_domain::proxy::EgressRefusal;
 use crane_memory::ManualClock;
 
@@ -314,7 +316,7 @@ fn hosted_repository_next_to_proxy_keeps_working() {
 fn publish_to_proxy_is_method_not_allowed() {
     // Arrange
     let world = world();
-    let body = common::publish_body("demo-crate", "1.0.0", CRATE);
+    let body = common::cargo::publish_body("demo-crate", "1.0.0", CRATE);
 
     // Act
     let reply = world.api.authed(
