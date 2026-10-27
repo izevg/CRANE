@@ -34,7 +34,7 @@ tasks:
     desc: Типы и тесты tools/ и конфигов в корне
     cmds:
       - pnpm exec tsc -p tsconfig.json
-      - node --test tools/lint-structure/checks.test.ts tools/lint-structure/aaa.test.ts tools/prune-worktrees.test.ts
+      - node --test "tools/**/*.test.ts"
 
   rust:fmt:
     desc: cargo fmt --check
@@ -83,6 +83,14 @@ tasks:
       - helm lint deploy/helm/crane --set existingSecret=crane-env
       - helm template crane deploy/helm/crane --set existingSecret=crane-env --set ingress.enabled=true >/dev/null
 
+  dogfood:
+    desc: "Dogfood: временный стенд compose + настоящий cargo (последняя стабильная)"
+    cmds: [node tools/dogfood/index.ts]
+
+  e2e:
+    desc: "E2E: стенд compose + cargo двух последних стабильных версий (нужен Docker)"
+    cmds: [node tools/dogfood/index.ts --cargo latest,previous]
+
   gate:
     desc: "Полный гейт перед PR release/* → main (юниты, e2e, мутации по дифу релиза, Playwright). В CI не запускается"
     vars:
@@ -96,6 +104,7 @@ tasks:
       - task: check
       # Поднимает PostgreSQL: шаг cargo mutants ниже рассчитывает, что БД уже работает.
       - task: rust:test:pg
+      - task: e2e
       - mkdir -p out
       - git diff {{.BASE}}...HEAD > out/gate.diff
       - >-
