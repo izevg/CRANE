@@ -28,7 +28,7 @@ tasks:
 
   lint:
     desc: Biome на весь репозиторий (tools, конфиги, web)
-    cmds: [pnpm exec biome check .]
+    cmds: [pnpm exec biome check --error-on-warnings .]
 
   tools:check:
     desc: Типы и тесты tools/ и конфигов в корне
@@ -57,8 +57,11 @@ tasks:
       - task: rust:deny
 
   web:check:
-    desc: typecheck, Steiger, knip, depcruise
+    desc: typecheck, ESLint (SonarJS), Steiger, knip, depcruise
     cmds: [pnpm --filter web run check]
+  web:lint:
+    desc: ESLint + SonarJS, предупреждения запрещены
+    cmds: [pnpm --filter web run lint]
   web:test:
     desc: Vitest
     cmds: [pnpm --filter web run test]

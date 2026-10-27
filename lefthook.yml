@@ -14,7 +14,10 @@ pre-commit:
       run: task rust:fmt
     biome:
       glob: "*.{ts,tsx,js,json,css}"
-      run: pnpm exec biome check --no-errors-on-unmatched {staged_files}
+      run: pnpm exec biome check --error-on-warnings --no-errors-on-unmatched {staged_files}
+    sonarjs:
+      glob: "web/**/*.{ts,tsx}"
+      run: task web:lint
 
 pre-push:
   parallel: true
