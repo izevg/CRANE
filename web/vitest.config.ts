@@ -49,6 +49,9 @@ export default mergeConfig(
           optimizeDeps: { include: PREBUNDLED },
           test: {
             name: "storybook",
+            // Локальная машина, оба проекта идут в одном `task web:test`: каждый воркер в browser-режиме
+            // держит свою вкладку Chromium, поэтому лимит воркеров = лимит одновременных вкладок.
+            maxWorkers: 2,
             browser: {
               enabled: true,
               headless: true,

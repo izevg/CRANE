@@ -8,6 +8,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       name: "unit",
+      // Локальная машина: unit и story-тесты запускаются вместе, jsdom-воркеры не должны занимать все ядра.
+      maxWorkers: 4,
       environment: "jsdom",
       include: ["src/**/*.test.{ts,tsx}"],
       setupFiles: ["./test/setup.ts"],
