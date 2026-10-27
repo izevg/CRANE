@@ -89,7 +89,7 @@ tasks:
 
   e2e:
     desc: "E2E: стенд compose + cargo двух последних стабильных версий (нужен Docker)"
-    cmds: [node tools/dogfood/index.ts --cargo latest,previous]
+    cmds: ["node tools/dogfood/index.ts --cargo latest,previous"]
 
   gate:
     desc: "Полный гейт перед PR release/* → main (юниты, e2e, мутации по дифу релиза, Playwright). В CI не запускается"
