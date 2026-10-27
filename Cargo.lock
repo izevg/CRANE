@@ -416,6 +416,7 @@ dependencies = [
  "bytes",
  "crane-domain",
  "crane-ports",
+ "futures-channel",
  "futures-executor",
  "futures-util",
  "sha2 0.10.9",

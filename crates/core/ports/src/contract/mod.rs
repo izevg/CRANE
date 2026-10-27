@@ -5,6 +5,8 @@
 
 mod blob;
 mod catalog;
+mod proxy;
 
 pub use blob::blob_store_contract;
 pub use catalog::catalog_contract;
+pub use proxy::{fetch_leases_contract, proxy_cache_contract};
