@@ -247,7 +247,7 @@ gc.sweep():
 
 ## 10.10 Поиск: гибридное ранжирование
 
-Поиск сочетает лексическую и векторную ноги, слияние по рангам, необязательный реранкер и эвристики порядка. Основа: статьи владельца [1] и [2], документация pgvector и PostgreSQL. Числа из [1] и [2] получены на RAG-корпусе (вики и реестр, векторы размерности 2000), а не на CRANE; их следует читать как «в [2] …», а не как свойства CRANE. Своё у CRANE: фильтр ACL до ранжирования и эмбеддинги на пакет (раздел 9, `package_embedding`). В [1] ACL нет.
+Поиск сочетает лексическую и векторную ноги, слияние по рангам, необязательный реранкер и эвристики порядка. Основа: статьи владельца [1] и [2], документация pgvector и PostgreSQL. Числа из [1] и [2] получены на RAG-корпусе (вики и реестр, векторы размерности 2000), а не на CRANE. Своё у CRANE: фильтр ACL до ранжирования и эмбеддинги на пакет (раздел 9, `package_embedding`). В [1] ACL нет.
 
 ```
 fn search(q, principal, filters):
@@ -264,7 +264,7 @@ fn search(q, principal, filters):
     return top(ordered, 20) with highlights
 ```
 
-Прежняя схема (`ef_search 64` при `top 200`) была ошибочной: без итеративного сканирования HNSW возвращает не больше `ef_search` строк.
+Без итеративного скана HNSW возвращает не больше `hnsw.ef_search` строк, поэтому `ef_search` не меньше `LIMIT` ноги или включённый итеративный скан.
 
 | Параметр | Значение | Основание |
 | --- | --- | --- |
@@ -309,7 +309,7 @@ fn search(q, principal, filters):
 **Источники**
 
 1.  «Гибридный поиск для RAG: как «ноги» усиливают друг друга», 2026-10-25, <https://ezhukov.space/posts/hybrid-search-rag.md>.
-2.  «Indexes for Hybrid Search in PostgreSQL: halfvec, HNSW and RUM in Practice», 2026-10-25, <https://ezhukov.space/posts/postgres-hybrid-indexes.md>.
+2.  «Индексы под гибридный поиск в PostgreSQL: halfvec, HNSW и RUM на практике», 2026-10-25, <https://ezhukov.space/posts/postgres-hybrid-indexes.md>.
 3.  pgvector README: <https://github.com/pgvector/pgvector> (итеративные сканы с 0.8.0, `ef_search` 40 по умолчанию, HNSW по `halfvec` до 4 000 измерений); документация PostgreSQL о частичных индексах: <https://www.postgresql.org/docs/17/indexes-partial.html>.
 
 ## 10.11 Outbox и webhooks
