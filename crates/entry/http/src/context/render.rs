@@ -8,14 +8,10 @@ use crane_format_cargo::render_errors;
 use crane_format_npm::render_error as render_npm_error;
 use serde_json::json;
 
-use crate::error::{Dialect, ErrorBody};
+use crate::error::{Dialect, ErrorBody, ProblemKind};
 
 /// Спека 04: клиенты и CI повторяют 503, окно failover PostgreSQL 10–30 с, поэтому просим подождать 10 с.
 const RETRY_AFTER_SECONDS: HeaderValue = HeaderValue::from_static("10");
-
-/// Тип проблемы (RFC 9457) для 503: отличает «хранилище недоступно, повторите» от общего `about:blank`.
-const STORAGE_UNREACHABLE_TYPE: &str = "urn:crane:problem:storage-unreachable";
-const GENERIC_TYPE: &str = "about:blank";
 
 /// Подставляет тело вместо пустого, если ответ несёт `ErrorBody`; остальные ответы не трогает.
 pub(super) fn render_error(mut response: Response, id: &RequestId) -> Response {
@@ -26,26 +22,34 @@ pub(super) fn render_error(mut response: Response, id: &RequestId) -> Response {
     let dialect = response.extensions_mut().remove::<Dialect>();
     let (content_type, text) = match (error, dialect) {
         // Клиенты cargo и npm показывают пользователю только текст ошибки, поэтому id уходит суффиксом.
-        (ErrorBody::Detail(detail), Some(Dialect::Cargo)) => (
+        (ErrorBody::Detail { detail, .. }, Some(Dialect::Cargo)) => (
             "application/json",
             render_errors(&format!("{detail} (request_id {})", id.as_str())),
         ),
-        (ErrorBody::Detail(detail), Some(Dialect::Npm)) => (
+        (ErrorBody::Detail { detail, .. }, Some(Dialect::Npm)) => (
             "application/json",
             render_npm_error(&format!("{detail} (request_id {})", id.as_str())),
         ),
-        (ErrorBody::Detail(detail), None) => (
+        (ErrorBody::Detail { detail, kind }, None) => (
             "application/problem+json",
             problem(
                 status,
                 status.canonical_reason().unwrap_or("Error"),
                 &detail,
+                kind,
                 id,
             ),
         ),
-        (ErrorBody::Problem { title, detail }, _) => (
+        (
+            ErrorBody::Problem {
+                title,
+                detail,
+                kind,
+            },
+            _,
+        ) => (
             "application/problem+json",
-            problem(status, title, detail, id),
+            problem(status, title, detail, kind, id),
         ),
     };
     *response.body_mut() = Body::from(text);
@@ -59,14 +63,15 @@ pub(super) fn render_error(mut response: Response, id: &RequestId) -> Response {
 }
 
 /// json!, а не format!: detail и id могут содержать символы, требующие экранирования.
-fn problem(status: StatusCode, title: &str, detail: &str, id: &RequestId) -> String {
-    let kind = if status == StatusCode::SERVICE_UNAVAILABLE {
-        STORAGE_UNREACHABLE_TYPE
-    } else {
-        GENERIC_TYPE
-    };
+fn problem(
+    status: StatusCode,
+    title: &str,
+    detail: &str,
+    kind: ProblemKind,
+    id: &RequestId,
+) -> String {
     json!({
-        "type": kind,
+        "type": kind.uri(),
         "title": title,
         "status": status.as_u16(),
         "detail": detail,
@@ -89,7 +94,7 @@ mod tests {
     use super::*;
 
     fn rendered(dialect: Option<Dialect>) -> (String, String) {
-        let response = render_with(StatusCode::BAD_REQUEST, dialect);
+        let response = render_with(StatusCode::BAD_REQUEST, dialect, ProblemKind::Blank);
         let content_type = response.headers()[header::CONTENT_TYPE]
             .to_str()
             .unwrap()
@@ -97,11 +102,12 @@ mod tests {
         (content_type, body_text(response))
     }
 
-    fn render_with(status: StatusCode, dialect: Option<Dialect>) -> Response {
+    fn render_with(status: StatusCode, dialect: Option<Dialect>, kind: ProblemKind) -> Response {
         let mut response = status.into_response();
-        response
-            .extensions_mut()
-            .insert(ErrorBody::Detail("плохой запрос".to_owned()));
+        response.extensions_mut().insert(ErrorBody::Detail {
+            detail: "плохой запрос".to_owned(),
+            kind,
+        });
         if let Some(dialect) = dialect {
             response.extensions_mut().insert(dialect);
         }
@@ -128,7 +134,7 @@ mod tests {
 
         // Act
         let actual = statuses.map(|status| {
-            render_with(status, Some(Dialect::Cargo))
+            render_with(status, Some(Dialect::Cargo), ProblemKind::Blank)
                 .headers()
                 .get(header::RETRY_AFTER)
                 .cloned()
@@ -139,22 +145,42 @@ mod tests {
     }
 
     #[test]
-    fn service_unavailable_problem_has_its_own_type_and_cargo_body_is_unchanged() {
+    fn problem_type_follows_the_kind_of_the_error_not_the_status() {
         // Arrange
-        let dialects = [None, Some(Dialect::Cargo)];
+        let kinds = [ProblemKind::StorageUnreachable, ProblemKind::Blank];
 
         // Act
-        let actual = dialects
-            .map(|dialect| body_text(render_with(StatusCode::SERVICE_UNAVAILABLE, dialect)));
+        let actual =
+            kinds.map(|kind| body_text(render_with(StatusCode::SERVICE_UNAVAILABLE, None, kind)));
 
         // Assert
-        let [problem, cargo] = actual;
+        let types = actual
+            .map(|body| serde_json::from_str::<serde_json::Value>(&body).unwrap()["type"].clone());
         assert_eq!(
-            (problem.contains(STORAGE_UNREACHABLE_TYPE), cargo),
-            (
-                true,
-                r#"{"errors":[{"detail":"плохой запрос (request_id req-1)"}]}"#.to_owned()
-            )
+            types,
+            [
+                serde_json::json!("urn:crane:problem:storage-unreachable"),
+                serde_json::json!("about:blank")
+            ]
+        );
+    }
+
+    #[test]
+    fn cargo_body_of_an_unreachable_error_keeps_the_dialect_shape() {
+        // Arrange
+        let kind = ProblemKind::StorageUnreachable;
+
+        // Act
+        let body = body_text(render_with(
+            StatusCode::SERVICE_UNAVAILABLE,
+            Some(Dialect::Cargo),
+            kind,
+        ));
+
+        // Assert
+        assert_eq!(
+            body,
+            r#"{"errors":[{"detail":"плохой запрос (request_id req-1)"}]}"#
         );
     }
 

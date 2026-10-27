@@ -156,8 +156,8 @@ mod tests {
     use std::time::Duration;
 
     use object_store::ClientConfigKey;
+    use object_store::RetryConfig;
     use object_store::aws::{AmazonS3Builder, AmazonS3ConfigKey};
-    use object_store::{BackoffConfig, RetryConfig};
 
     use super::*;
 
@@ -216,7 +216,7 @@ mod tests {
             .with_retry(RetryConfig {
                 max_retries: 0,
                 retry_timeout: Duration::from_secs(1),
-                backoff: BackoffConfig::default(),
+                ..RetryConfig::default()
             })
             .build()
             .unwrap();

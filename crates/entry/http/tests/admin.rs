@@ -27,6 +27,7 @@ use tower::ServiceExt;
 #[derive(Clone, Copy)]
 enum Probe {
     Fails,
+    Unreachable,
     Hangs,
 }
 
@@ -47,6 +48,7 @@ impl BlobStore for ProbeBlobs {
         async move {
             match probe {
                 Probe::Fails => Err(BlobError::Backend("s3://b?key=SECRETPW".into())),
+                Probe::Unreachable => Err(BlobError::Unreachable("s3://b?key=SECRETPW".into())),
                 Probe::Hangs => pending().await,
             }
         }
@@ -79,6 +81,25 @@ fn get(router: &Router, uri: &str) -> (StatusCode, String, Value) {
     })
 }
 
+fn get_with_retry_after(router: &Router, uri: &str) -> (StatusCode, Option<String>, Value) {
+    let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    runtime.block_on(async {
+        let request = Request::builder().uri(uri).body(Body::empty()).unwrap();
+        let response = router.clone().oneshot(request).await.unwrap();
+        let (parts, body) = response.into_parts();
+        let bytes = body.collect().await.unwrap().to_bytes();
+        let retry_after = parts
+            .headers
+            .get("retry-after")
+            .map(|value| value.to_str().unwrap().to_owned());
+        (
+            parts.status,
+            retry_after,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    })
+}
+
 #[test]
 fn ready_with_healthy_stores_answers_ok() {
     // Arrange
@@ -104,7 +125,34 @@ fn ready_with_failing_store_is_problem_json_503_without_leaking_the_cause() {
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(content_type, "application/problem+json");
     assert_eq!(body["title"], "Service Unavailable");
-    assert_eq!(body["detail"], "хранилище недоступно");
+    assert_eq!(body["detail"], "хранилище не готово");
+    assert_eq!(body["type"], "about:blank");
+    assert!(!body.to_string().contains("SECRETPW"), "{body}");
+}
+
+#[test]
+fn ready_with_unreachable_store_is_503_with_its_own_type_and_retry_after() {
+    // Arrange
+    let router = admin_router(registry(ProbeBlobs(Probe::Unreachable)));
+
+    // Act
+    let (status, retry_after, body) = get_with_retry_after(&router, "/healthz/ready");
+
+    // Assert
+    assert_eq!(
+        (
+            status,
+            retry_after.as_deref(),
+            &body["type"],
+            &body["detail"]
+        ),
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Some("10"),
+            &Value::from("urn:crane:problem:storage-unreachable"),
+            &Value::from("хранилище временно недоступно")
+        )
+    );
     assert!(!body.to_string().contains("SECRETPW"), "{body}");
 }
 

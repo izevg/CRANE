@@ -136,7 +136,7 @@ pub fn is_public_s3_param(key: &str, value: &str) -> bool {
 const RETRY_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_RETRIES: usize = 3;
 
-pub(crate) fn retry() -> RetryConfig {
+fn retry() -> RetryConfig {
     RetryConfig {
         max_retries: MAX_RETRIES,
         retry_timeout: RETRY_TIMEOUT,

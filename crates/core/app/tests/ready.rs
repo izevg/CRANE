@@ -12,7 +12,7 @@ use common::Seed;
 use common::faults::{DownCatalog, OpenFailsBlobs};
 use crane_app::registry::RegistryError;
 use crane_domain::registry::{Format, Sha256};
-use crane_ports::registry::{BlobError, CatalogError};
+use crane_ports::registry::BlobError;
 use futures_executor::block_on;
 
 #[test]
@@ -37,7 +37,7 @@ fn unreachable_catalog_makes_registry_not_ready() {
 
     // Assert
     assert!(
-        matches!(result, Err(RegistryError::Backend(_))),
+        matches!(result, Err(RegistryError::Unreachable(_))),
         "{result:?}"
     );
 }
@@ -56,24 +56,6 @@ fn blob_backend_failure_makes_registry_not_ready() {
     // Assert
     assert!(
         matches!(result, Err(RegistryError::Backend(_))),
-        "{result:?}"
-    );
-}
-
-#[test]
-fn blob_unreachable_makes_registry_not_ready_as_unreachable() {
-    // Arrange
-    let registry = Seed::new().registry_with(
-        |catalog| catalog,
-        |blobs| OpenFailsBlobs::new(blobs, || BlobError::Unreachable("нет связи".into())),
-    );
-
-    // Act
-    let result = block_on(registry.ready());
-
-    // Assert
-    assert!(
-        matches!(result, Err(RegistryError::Unreachable(_))),
         "{result:?}"
     );
 }
@@ -107,22 +89,4 @@ fn unknown_repository_is_not_found_and_known_one_is_returned() {
 
     // Assert
     assert_eq!(results, [Err(true), Ok(common::HOSTED.to_owned())]);
-}
-
-#[test]
-fn unreachable_storage_errors_keep_their_kind() {
-    // Arrange
-    let catalog = CatalogError::Unreachable("нет связи".into());
-    let blob = BlobError::Unreachable("нет связи".into());
-
-    // Act
-    let mapped = [RegistryError::from(catalog), RegistryError::from(blob)];
-
-    // Assert
-    assert!(
-        mapped
-            .iter()
-            .all(|error| matches!(error, RegistryError::Unreachable(_))),
-        "недоступность хранилища — 503, а не 500: {mapped:?}"
-    );
 }

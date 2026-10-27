@@ -13,18 +13,37 @@ use crane_domain::registry::VersionState;
 const INTERNAL_DETAIL: &str = "внутренняя ошибка сервера";
 /// Единственный текст клиенту при недоступном хранилище: адреса и причины остаются в журнале.
 const UNREACHABLE_DETAIL: &str = "хранилище временно недоступно";
+const NOT_READY_DETAIL: &str = "хранилище не готово";
 const UPSTREAM_DETAIL: &str = "upstream недоступен";
+
+/// Тип проблемы RFC 9457 (поле `type` вне форматов). Задаётся тем, кто создаёт ошибку,
+/// а не выводится из статуса: один и тот же 503 бывает «хранилище не отвечает» и «не готов».
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProblemKind {
+    Blank,
+    StorageUnreachable,
+}
+
+impl ProblemKind {
+    pub(crate) const fn uri(self) -> &'static str {
+        match self {
+            Self::Blank => "about:blank",
+            Self::StorageUnreachable => "urn:crane:problem:storage-unreachable",
+        }
+    }
+}
 
 /// Что именно писать в тело ошибки. Ответ несёт его в расширениях с пустым телом:
 /// id запроса известен только внешнему слою, он и рендерит тело (`context::render`).
 #[derive(Debug, Clone)]
 pub(crate) enum ErrorBody {
     /// Текст для клиента; оболочку (`{"errors":[…]}`, `{"error":…}` или RFC 9457) выбирает `Dialect`.
-    Detail(String),
+    Detail { detail: String, kind: ProblemKind },
     /// RFC 9457.
     Problem {
         title: &'static str,
         detail: &'static str,
+        kind: ProblemKind,
     },
 }
 
@@ -33,6 +52,7 @@ pub(crate) enum ErrorBody {
 pub(crate) struct ClientError {
     status: StatusCode,
     detail: String,
+    kind: ProblemKind,
 }
 
 impl ClientError {
@@ -40,6 +60,7 @@ impl ClientError {
         Self {
             status,
             detail: detail.into(),
+            kind: ProblemKind::Blank,
         }
     }
 
@@ -53,15 +74,25 @@ impl ClientError {
 
     /// 500 с обобщённым текстом: причину видит только журнал.
     pub(crate) fn internal(source: &(dyn Error + 'static)) -> Self {
-        let (status, detail) = internal(source);
-        Self { status, detail }
+        // Текст источника может содержать адреса и пути хранилища: клиенту он не нужен.
+        tracing::error!(error = %chain(source), "внутренняя ошибка запроса");
+        Self::new(StatusCode::INTERNAL_SERVER_ERROR, INTERNAL_DETAIL)
+    }
+
+    /// 503: хранилище не отвечает, повтор позже имеет смысл. Это отказ среды, а не баг, поэтому warn.
+    pub(crate) fn unreachable(source: &(dyn Error + 'static)) -> Self {
+        // Цепочка может содержать хост хранилища: она только в журнале.
+        tracing::warn!(error = %chain(source), "хранилище недоступно");
+        Self {
+            kind: ProblemKind::StorageUnreachable,
+            ..Self::new(StatusCode::SERVICE_UNAVAILABLE, UNREACHABLE_DETAIL)
+        }
     }
 }
 
 impl From<RegistryError> for ClientError {
     fn from(error: RegistryError) -> Self {
-        let (status, detail) = describe(&error);
-        Self { status, detail }
+        describe(&error)
     }
 }
 
@@ -73,10 +104,7 @@ impl From<ProxyError> for ClientError {
             ProxyError::Upstream(_)
             | ProxyError::DigestMismatch { .. }
             | ProxyError::TooLarge { .. } => Self::new(StatusCode::BAD_GATEWAY, UPSTREAM_DETAIL),
-            ProxyError::Unreachable(_) => {
-                let (status, detail) = unreachable(&error);
-                Self { status, detail }
-            }
+            ProxyError::Unreachable(_) => Self::unreachable(&error),
             ProxyError::Backend(_) => Self::internal(&error),
         }
     }
@@ -85,9 +113,10 @@ impl From<ProxyError> for ClientError {
 impl IntoResponse for ClientError {
     fn into_response(self) -> Response {
         let mut response = self.status.into_response();
-        response
-            .extensions_mut()
-            .insert(ErrorBody::Detail(self.detail));
+        response.extensions_mut().insert(ErrorBody::Detail {
+            detail: self.detail,
+            kind: self.kind,
+        });
         response
     }
 }
@@ -117,6 +146,7 @@ pub(crate) async fn mark_dialect(
 pub(crate) struct Problem {
     status: StatusCode,
     detail: &'static str,
+    kind: ProblemKind,
 }
 
 impl Problem {
@@ -124,15 +154,28 @@ impl Problem {
         Self {
             status: StatusCode::NOT_FOUND,
             detail: "маршрут не найден",
+            kind: ProblemKind::Blank,
         }
     }
 }
 
 impl Problem {
-    pub(crate) const fn storage_unavailable() -> Self {
+    /// Проба готовности: хранилище не отвечает (тот же тип и текст, что у `ClientError::unreachable`).
+    pub(crate) const fn unreachable() -> Self {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
-            detail: "хранилище недоступно",
+            detail: UNREACHABLE_DETAIL,
+            kind: ProblemKind::StorageUnreachable,
+        }
+    }
+
+    /// Проба готовности: хранилище ответило ошибкой (конфигурация или баг), а не молчанием.
+    /// Сервис не готов, но «повторите позже» не обещаем: тип общий.
+    pub(crate) const fn not_ready() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            detail: NOT_READY_DETAIL,
+            kind: ProblemKind::Blank,
         }
     }
 }
@@ -143,6 +186,7 @@ impl IntoResponse for Problem {
         response.extensions_mut().insert(ErrorBody::Problem {
             title: self.status.canonical_reason().unwrap_or("Error"),
             detail: self.detail,
+            kind: self.kind,
         });
         response
     }
@@ -165,26 +209,7 @@ pub(crate) fn chain(error: &(dyn Error + 'static)) -> String {
     text
 }
 
-fn internal(source: &(dyn Error + 'static)) -> (StatusCode, String) {
-    // Текст источника может содержать адреса и пути хранилища: клиенту он не нужен.
-    tracing::error!(error = %chain(source), "внутренняя ошибка запроса");
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        INTERNAL_DETAIL.to_owned(),
-    )
-}
-
-/// 503: хранилище не отвечает, повтор позже имеет смысл. Это отказ среды, а не баг, поэтому warn.
-fn unreachable(source: &(dyn Error + 'static)) -> (StatusCode, String) {
-    // Цепочка может содержать хост хранилища: она только в журнале.
-    tracing::warn!(error = %chain(source), "хранилище недоступно");
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        UNREACHABLE_DETAIL.to_owned(),
-    )
-}
-
-fn describe(error: &RegistryError) -> (StatusCode, String) {
+fn describe(error: &RegistryError) -> ClientError {
     let status = match error {
         RegistryError::RepositoryNotFound
         | RegistryError::VersionNotFound
@@ -200,10 +225,10 @@ fn describe(error: &RegistryError) -> (StatusCode, String) {
         }
         RegistryError::DigestMismatch { .. } => StatusCode::UNPROCESSABLE_ENTITY,
         RegistryError::Body(_) => StatusCode::BAD_REQUEST,
-        RegistryError::Unreachable(_) => return unreachable(error),
-        RegistryError::Backend(_) => return internal(error),
+        RegistryError::Unreachable(_) => return ClientError::unreachable(error),
+        RegistryError::Backend(_) => return ClientError::internal(error),
     };
-    (status, error.to_string())
+    ClientError::new(status, error.to_string())
 }
 
 #[cfg(test)]
@@ -274,7 +299,7 @@ mod tests {
         ];
 
         // Act
-        let actual = cases.each_ref().map(|(error, _)| describe(error).0);
+        let actual = cases.each_ref().map(|(error, _)| describe(error).status);
 
         // Assert
         assert_eq!(actual, cases.map(|(_, expected)| expected));
@@ -333,7 +358,7 @@ mod tests {
         let error = RegistryError::Backend("postgres://u:SECRET@h/db".into());
 
         // Act
-        let (_, detail) = describe(&error);
+        let detail = describe(&error).detail;
 
         // Assert
         assert_eq!(detail, INTERNAL_DETAIL);
@@ -345,7 +370,7 @@ mod tests {
         let error = RegistryError::Unreachable("postgres://u:SECRET@h/db".into());
 
         // Act
-        let (_, detail) = describe(&error);
+        let detail = describe(&error).detail;
 
         // Assert
         assert_eq!(detail, UNREACHABLE_DETAIL);
@@ -357,7 +382,7 @@ mod tests {
         let error = RegistryError::VersionExists;
 
         // Act
-        let (_, detail) = describe(&error);
+        let detail = describe(&error).detail;
 
         // Assert
         assert_eq!(detail, "версия уже существует");
