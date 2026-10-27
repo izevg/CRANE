@@ -2,7 +2,7 @@
 
 ## Claude Code
 
-- Все правила проекта — в `AGENTS.md` (импортируется выше). Здесь только то, что специфично для Claude Code.
-- Атрибуция в коммитах и PR выключена на уровне проекта (`.claude/settings.json`: `attribution.commit` и `attribution.pr` пустые). Не добавляйте `Co-Authored-By` и «Generated with» вручную.
-- Вехи `ROADMAP.md` обязательны (см. «Дорожная карта» в `AGENTS.md`). Работу ведите в worktree: инструмент `EnterWorktree` (каталог `.claude/worktrees/`) или `claude --worktree`; не правьте файлы в основном каталоге.
-- Перед коммитом прогоняйте проверки из таблицы команд; хуки `lefthook` выполнятся сами, не обходите их.
+- All project rules are in `AGENTS.md` (imported above). This file holds only what is specific to Claude Code.
+- Attribution in commits and PRs is disabled at the project level (`.claude/settings.json`: `attribution.commit` and `attribution.pr` are empty). Do not add `Co-Authored-By` or "Generated with" by hand.
+- The `ROADMAP.md` milestones are mandatory (see "Roadmap" in `AGENTS.md`). Work in a worktree: the `EnterWorktree` tool (directory `.claude/worktrees/`) or `claude --worktree`; do not edit files in the main directory.
+- Before committing, run the checks from the commands table; the `lefthook` hooks run on their own, do not bypass them.
