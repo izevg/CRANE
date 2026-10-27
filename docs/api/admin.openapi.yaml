@@ -20,12 +20,12 @@ info:
     | --- | --- |
     | `x-crane-phase`, `x-crane-since` | Фаза и версия поставки |
     | `x-crane-action` | Действие Cedar `<контекст>:<глагол>` (для журнала `audit:read`, `audit:reveal_pii`, `audit:export`, как в 14.12) |
-    | `x-crane-step-up` | Требует свежего MFA (step-up, раздел 13); без него 401 с `WWW-Authenticate` по RFC 9470 |
-    | `x-crane-step-up-when` | Условие, при котором операции с `x-crane-step-up: false` всё же нужен step-up (например, `kind = personal`) |
+    | `x-crane-step-up` | Операция может потребовать свежий MFA; тогда и только тогда 401 = `StepUpRequired` (`WWW-Authenticate` по RFC 9470) |
+    | `x-crane-step-up-when` | Сужает `true`: условие, при котором step-up нужен; описано здесь и только здесь |
     | `x-crane-audit` | `{event, ocsf_class}` или `null` для чтений без аудита (классы 14.9: 3002, 3001, 6003, 2002, 2003, 2004) |
     | `x-crane-open-question` | Неясность продукта, решение за владельцем |
 
-    Флаги `x-crane-step-up` совпадают со списком опасных действий раздела 14.12; расхождение ловит контракт-тест.
+    Точный перечень операций со step-up - эти флаги; раздел 14.12 даёт критерий.
 
     ## Адресация
 
@@ -41,7 +41,7 @@ info:
 
     ## Заголовки и условные запросы
 
-    Каждый ответ несёт `X-Request-Id`. Мутации принимают `Idempotency-Key` (обязателен для POST; хранится 24 часа вместе с хэшем запроса; повтор с другим телом - 422 `idempotency-key-reuse`). Кэшируемые GET отдают `ETag` и принимают `If-None-Match` (304). Изменение политик и настроек требует `If-Match` (412). Ключ идемпотентности действует в пределах principal; ответы с секретом не сохраняются, повтор даёт 409 `idempotency-replay-secret` без секрета.
+    Каждый ответ несёт `X-Request-Id`. Мутации принимают `Idempotency-Key` (обязателен для POST; хранится 24 часа вместе с хэшем запроса; повтор с другим телом - 422 `idempotency-key-reuse`). Кэшируемые GET отдают `ETag` и принимают `If-None-Match` (304). Изменение политик и настроек требует `If-Match` (412). Правила ключа - параметр `Idempotency-Key`.
 
     ## Права строк
 
@@ -2105,9 +2105,9 @@ paths:
       - platform
       summary: Изменить защитные настройки
       description: |-
-        Ослабление защиты (`mutable: true`, `dev_skip_quarantine: true`, смена `upstream_url`) - событие SIEM High «Ослабление политики» до применения изменения.
+        Тело по виду репозитория (`kind` должен совпадать с репозиторием, иначе 422). Ослабление защиты - событие SIEM High до применения.
 
-        Роли: appsec (`mutable`, `dev_skip_quarantine`), platform-admin (`upstream_url`).
+        Роли: appsec (hosted), platform-admin (proxy).
       operationId: updateRepositoryProtection
       x-crane-phase: P0
       x-crane-since: v0.4.0
@@ -2277,7 +2277,7 @@ paths:
       - access
       summary: Создать политику доверия
       description: |-
-        Правило со scope записи (publish) действует, только если условия требуют `ref_protected = true` и список имён пакетов; сервер добавляет это требование сам и отвечает 422 `write-scope-requires-protected-ref`, если условие явно ослаблено. Пайплайны merge request и из форков (`source_project_path` ≠ `project_path`) получают только чтение (10.5).
+        422 `write-scope-requires-protected-ref` - правило со scope записи без условия `ref_protected = true` и списка имён пакетов. Пайплайны MR и форков получают только чтение (10.5).
 
         Роли: owner.
       operationId: createTrustPolicy
@@ -2360,7 +2360,7 @@ paths:
       - access
       summary: Изменить политику доверия
       description: |-
-        Правило со scope записи (publish) действует, только если условия требуют `ref_protected = true` и список имён пакетов; сервер добавляет это требование сам и отвечает 422 `write-scope-requires-protected-ref`, если условие явно ослаблено. Пайплайны merge request и из форков (`source_project_path` ≠ `project_path`) получают только чтение (10.5).
+        422 `write-scope-requires-protected-ref` - правило со scope записи без условия `ref_protected = true` и списка имён пакетов. Пайплайны MR и форков получают только чтение (10.5).
 
         Роли: owner.
       operationId: updateTrustPolicy
@@ -4335,7 +4335,7 @@ paths:
       description: |-
         Массовое действие: 200 с результатом по каждой находке.
 
-        VEX не меняет состояние версии и никогда не снимает блокировку: экстренная блокировка снимается только `POST /emergency-blocks/{block_id}/lift`. Для advisory вредоносного пакета (`MAL-*`, `is_malware`) VEX запрещён: 422 `vex-not-applicable-malware`. Находки P0 и P1 и находки заблокированных версий принимает только appsec; maintainer и owner получают для них 403 `vex-requires-appsec`. Каждое заявление пишется в журнал, заявление по P0, P1 или заблокированной версии дополнительно уходит в SIEM с серьёзностью High (14.9).
+        Для advisory вредоносного пакета (`MAL-*`, `is_malware`) VEX запрещён: 422 `vex-not-applicable-malware`. Находки P0 и P1 и находки заблокированных версий принимает только appsec; maintainer и owner получают для них 403 `vex-requires-appsec`. Правила: 14.7.
 
         Роли: maintainer, owner (свои пакеты, находки P2–P4 незаблокированных версий); appsec (любые).
       operationId: createVexStatements
@@ -6592,7 +6592,7 @@ paths:
       - agents
       summary: Подтвердить план
       description: |-
-        Одноразово, TTL 10 минут, привязано к хэшу плана. Step-up требуется, если skill = `create_exception`; тогда 401 `StepUpRequired`. Истёкший план - 410 `plan-expired`.
+        Одноразово, TTL 10 минут, привязано к хэшу плана. Истёкший план - 410 `plan-expired`.
 
         Подтверждение только из UI (cookie BFF): токеном агента или любым bearer план не подтверждается, иначе агент подтвердил бы свой же план (13).
 
@@ -6601,11 +6601,11 @@ paths:
       x-crane-phase: P3
       x-crane-since: v1.2.0
       x-crane-action: agent:confirm_plan
-      x-crane-step-up: false
+      x-crane-step-up: true
+      x-crane-step-up-when: план с skill = create_exception
       x-crane-audit:
         event: agent.plan_confirmed
         ocsf_class: 6003
-      x-crane-step-up-when: skill = create_exception
       x-crane-rel: crane:confirm-plan
       security:
       - session: []

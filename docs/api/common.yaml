@@ -600,7 +600,7 @@ components:
       - released
       - blocked
       - deleted
-      description: Состояние версии.
+      description: 'Действующее состояние версии - вердикт видимости `served()` (10.2): решения о самой версии и действующие правила (экстренные блокировки, окно карантина). Есть и у proxy-версии без строки в каталоге.'
     LifecycleState:
       title: LifecycleState
       type: string
@@ -1137,7 +1137,7 @@ components:
     Typosquat:
       title: Typosquat
       type: object
-      description: Кандидат typosquatting для proxy-результата.
+      description: 'Кандидат typosquatting для proxy-результата. Ссылка на карточку настоящего пакета - `_links.crane:similar-to` элемента поиска.'
       properties:
         similar_to:
           type: string
@@ -1145,18 +1145,11 @@ components:
         similar_to_purl:
           type: string
           description: Package URL настоящего пакета без версии, на который похоже имя.
-        similar_to_href:
-          type:
-          - string
-          - 'null'
-          format: uri-reference
-          description: Путь карточки настоящего пакета `/packages/{format}/{repository}/{name}` в репозитории, видимом вызывающему; null, если такого нет.
         distance:
           type: integer
       required:
       - similar_to
       - similar_to_purl
-      - similar_to_href
       - distance
     Highlight:
       title: Highlight
@@ -1231,7 +1224,7 @@ components:
           description: P3.
         _links:
           $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, crane:package, crane:versions, crane:favorite, crane:unfavorite'
+          description: 'Ссылки HAL: self, crane:package, crane:versions, crane:favorite, crane:unfavorite, crane:similar-to (нет ссылки - настоящего пакета нет в видимых репозиториях)'
       required:
       - purl_base
       - name
@@ -4200,7 +4193,7 @@ components:
     VexCreate:
       title: VexCreate
       type: object
-      description: Нужен `finding_ids` либо `advisory_id` с `version_range`. Находки разных advisory дают 422 `bulk-vex-single-advisory`. VEX не меняет состояние версии; ограничения по ролям и malware - в описании `POST /vex-statements`.
+      description: Нужен `finding_ids` либо `advisory_id` с `version_range`. Находки разных advisory дают 422 `bulk-vex-single-advisory`. Ограничения по ролям и malware - в описании `POST /vex-statements`.
       x-crane-open-question: Поле `justification` - машинный код обоснования OpenVEX/CycloneDX (кандидат на enum VexJustification) или свободный текст? Сейчас строка без ограничений.
       properties:
         finding_ids:
@@ -5325,27 +5318,48 @@ components:
       - format
       - kind
       - workspace
-    RepositoryProtection:
-      title: RepositoryProtection
+    HostedRepositoryProtection:
+      title: HostedRepositoryProtection
       type: object
-      description: Защитные настройки репозитория. Меняются только отдельной операцией со step-up (14.12); каждое изменение - событие SIEM «Ослабление политики».
+      description: 'Защитные настройки hosted-репозитория; меняет appsec. `mutable` - только Maven SNAPSHOT, иначе 422.'
       properties:
+        kind:
+          type: string
+          const: hosted
         mutable:
           type: boolean
-          description: Только Maven-репозиторий SNAPSHOT; для остальных форматов и release - 422.
         dev_skip_quarantine:
           type: boolean
-          description: Только hosted dev-репозиторий; для proxy - 422 (quarantine новых upstream-версий не отключается).
-        upstream_url:
-          type:
-          - string
-          - 'null'
-          format: uri
-          description: Только proxy (у hosted - null); хост из allowlist экземпляра (16.8).
+          description: Только dev-репозиторий.
       required:
+      - kind
       - mutable
       - dev_skip_quarantine
+    ProxyRepositoryProtection:
+      title: ProxyRepositoryProtection
+      type: object
+      description: Защитные настройки proxy-репозитория; меняет platform-admin. Хост из allowlist экземпляра (16.8).
+      properties:
+        kind:
+          type: string
+          const: proxy
+        upstream_url:
+          type: string
+          format: uri
+      required:
+      - kind
       - upstream_url
+    RepositoryProtection:
+      title: RepositoryProtection
+      description: 'Защитные настройки репозитория по его виду. Меняются только отдельной операцией со step-up (14.12); каждое изменение - событие SIEM «Ослабление политики».'
+      oneOf:
+      - $ref: '#/components/schemas/HostedRepositoryProtection'
+      - $ref: '#/components/schemas/ProxyRepositoryProtection'
+      discriminator:
+        propertyName: kind
+        mapping:
+          hosted: '#/components/schemas/HostedRepositoryProtection'
+          proxy: '#/components/schemas/ProxyRepositoryProtection'
     RepositoryPatch:
       title: RepositoryPatch
       type: object
@@ -7536,17 +7550,15 @@ components:
         - access
         summary: Выпустить токен
         description: |-
-          Выпуск `session` (12 ч, но не дольше сессии IdP; это `cctl setup` и `cctl login --refresh`, заменяет `/tokens/session` из раздела 13) или `personal` (до 90 дней по политике, только со step-up). Секрет есть только в этом ответе (`Cache-Control: no-store`).
-
-          Выпускать токены может только человек со своей интерактивной сессией IdP: cookie BFF или JWT IdP, полученный входом пользователя (authorization code + PKCE, в том числе loopback, или device code) и его продлением. Токен CRANE (`crp_`, `crr_`, `crci_`) и JWT сервисного аккаунта (client credentials) выпуск не проходят: 403 `interactive-login-required`. Scopes нового токена не шире текущих прав человека; запрос шире даёт 403 `scope-exceeds-principal`. Команда атрибуции фиксируется при выпуске: 14.15. 401 `StepUpRequired` возможен только для `kind = personal`.
+          Выпуск `session` (≤ 12 ч и не дольше сессии IdP) или `personal` (≤ 90 дней по политике). Секрет только в этом ответе (`Cache-Control: no-store`). 403 `interactive-login-required` - вызов не из интерактивной сессии IdP человека; 403 `scope-exceeds-principal` - scopes шире прав вызывающего. Правила и причины: 13 «Правила выпуска».
 
           Роли: любой аутентифицированный человек.
         operationId: createToken
         x-crane-phase: P0
         x-crane-since: v0.4.0
         x-crane-action: token:create
-        x-crane-step-up: false
-        x-crane-step-up-when: kind = personal
+        x-crane-step-up: true
+        x-crane-step-up-when: тело запроса kind = personal
         x-crane-audit:
           event: token.created
           ocsf_class: 3001
@@ -8310,7 +8322,7 @@ components:
         - access
         summary: Выпустить или ротировать credential
         description: |-
-          Ротация: второй секрет выпускается заранее, оба действуют 24 часа, затем старый отзывается. Секрет есть только в этом ответе. Выпуск секрета равносилен созданию робота, поэтому требует того же step-up и той же интерактивной сессии IdP: токены CRANE получают 403 `interactive-login-required`. Scopes credential - ровно scopes робота, расширить их при выпуске нельзя.
+          Ротация: второй секрет выпускается заранее, оба действуют 24 часа, затем старый отзывается. Секрет есть только в этом ответе. Scopes credential - ровно scopes робота. 403 `interactive-login-required` - вызов не из интерактивной сессии IdP человека. Правила: 13.
 
           Роли: owner.
         operationId: issueRobotCredential
