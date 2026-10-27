@@ -59,6 +59,9 @@ pub enum PublishError {
     Version(#[source] VersionError),
 }
 
+/// Стабильный код отказа публикации из-за зависимости на сторонний реестр.
+pub const FOREIGN_REGISTRY_DEPENDENCY: &str = "foreign-registry-dependency";
+
 /// Зависимость ссылается на реестр, из которого CRANE публиковать не даёт.
 ///
 /// Значения взяты из недоверенного тела и обрезаны до 128 символов; в `Display` попадает

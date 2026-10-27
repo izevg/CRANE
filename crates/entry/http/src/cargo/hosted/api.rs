@@ -10,17 +10,18 @@ use axum::extract::{Extension, Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
-use crane_app::registry::{Coordinate, Publish, Upload};
+use crane_app::registry::{Coordinate, Publish, Refusal, Upload};
 use crane_domain::access::Caller;
-use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
-use crane_domain::registry::{Format, PackageName, Version};
+use crane_domain::registry::{Format, FormatMetadata, PackageName, Version};
 use crane_format_cargo::{
-    MetadataError, asset_path, parse_publish, render_ok, render_owners, render_publish_ok,
+    CargoPublish, FOREIGN_REGISTRY_DEPENDENCY, MetadataError, asset_path, parse_publish, render_ok,
+    render_owners, render_publish_ok,
 };
 use crane_ports::registry::{BlobStore, Catalog};
 use futures_util::stream;
 
 use super::{Shared, repo_base};
+use crate::cargo::CargoSettings;
 use crate::error::{ClientError, chain};
 
 const JSON: &str = "application/json";
@@ -42,6 +43,30 @@ fn json_ok(body: String) -> Response {
     ([(header::CONTENT_TYPE, JSON)], body).into_response()
 }
 
+/// Метаданные для индекса либо отказ политики формата, который аудирует use case
+/// (единственная точка эмиссии аудита).
+fn index_metadata(
+    request: &CargoPublish,
+    settings: &CargoSettings,
+    repo: &str,
+) -> Result<Result<FormatMetadata, Refusal>, ClientError> {
+    // Адрес индекса строится так же, как база в `config.json`: именно его cargo подставляет
+    // в `registry` зависимостей этого репозитория.
+    let own_index = format!("sparse+{}/index/", repo_base(settings, repo));
+    match request.index_metadata(&own_index) {
+        Ok(metadata) => Ok(Ok(metadata)),
+        Err(MetadataError::Foreign(foreign)) => Ok(Err(Refusal {
+            code: FOREIGN_REGISTRY_DEPENDENCY,
+            // Значения недоверенные: обрезаны в формате, `{:?}` экранирует управляющие символы.
+            reason: format!(
+                "сторонний реестр: зависимость {:?}, registry {:?}",
+                foreign.dependency, foreign.registry
+            ),
+        })),
+        Err(error @ MetadataError::Serialize(_)) => Err(ClientError::internal(&error)),
+    }
+}
+
 pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
     Extension(caller): Extension<Caller>,
@@ -57,33 +82,7 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
         package: request.name.clone(),
         version: request.version.clone(),
     };
-    // Адрес индекса строится так же, как база в `config.json`: именно его cargo подставляет
-    // в `registry` зависимостей этого репозитория.
-    let own_index = format!(
-        "sparse+{}/index/",
-        repo_base(&shared.settings, &coordinate.repository)
-    );
-    let metadata = match request.index_metadata(&own_index) {
-        Ok(metadata) => metadata,
-        Err(MetadataError::Foreign(foreign)) => {
-            // Попытка увести сборки потребителей мимо CRANE: это событие ИБ, а не просто 400.
-            // Значения недоверенные, `{:?}` экранирует управляющие символы в журнале.
-            shared.audit.record(AuditEvent {
-                actor: Some(caller.principal.clone()),
-                request: caller.request.clone(),
-                action: AuditAction::Publish(coordinate),
-                outcome: Outcome::Failure {
-                    code: None,
-                    reason: format!(
-                        "сторонний реестр: зависимость {:?}, registry {:?}",
-                        foreign.dependency, foreign.registry
-                    ),
-                },
-            });
-            return Err(ClientError::bad_request(chain(&foreign)));
-        }
-        Err(error @ MetadataError::Serialize(_)) => return Err(ClientError::internal(&error)),
-    };
+    let metadata = index_metadata(&request, &shared.settings, &coordinate.repository)?;
 
     // crates.io тоже отвергает смену написания, и мы отказываем явной ошибкой. Каталог при этом
     // сам держит инвариант: первое записанное написание побеждает даже в гонке (`name_display`
@@ -121,7 +120,7 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
                     // Cargo хэш не присылает: cksum берётся из CAS.
                     declared: Vec::new(),
                 },
-                metadata: Ok(metadata),
+                metadata,
                 tags: Vec::new(),
             },
         )

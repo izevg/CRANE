@@ -182,7 +182,7 @@ fn publish_with_foreign_dependency_registry_is_rejected_and_audited() {
                     version: Version::parse(Format::Cargo, "1.0.0").unwrap(),
                 }),
                 outcome: Outcome::Failure {
-                    code: None,
+                    code: Some("foreign-registry-dependency"),
                     reason: "сторонний реестр: зависимость \"serde\", \
                              registry \"sparse+https://evil.example/index/\""
                         .to_owned()
