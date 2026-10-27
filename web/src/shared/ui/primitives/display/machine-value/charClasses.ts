@@ -5,7 +5,7 @@ export type CharKind = "digit" | "symbol" | "letter";
 export type Series = { kind: CharKind; text: string; start: number };
 
 /** Длиннее — без разметки: сотни цветных span стоят дороже, чем помогают глазу. */
-export const MAX_MARKED_LENGTH = 64;
+const MAX_MARKED_LENGTH = 64;
 
 const ELLIPSIS = "…";
 const ASCII_PRINTABLE_FIRST = 0x21;

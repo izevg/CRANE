@@ -1,5 +1,6 @@
+// biome-ignore-all lint/style/noMagicNumbers: граница «≤ 64 знаков» из требования записана литералами намеренно, без импорта константы
 import { describe, expect, it } from "vitest";
-import { classOf, MAX_MARKED_LENGTH, splitSeries } from "./charClasses";
+import { classOf, splitSeries } from "./charClasses";
 
 describe("splitSeries", () => {
   it("«a1_B-9» делится на серии букв, цифр и знаков", () => {
@@ -63,7 +64,7 @@ describe("splitSeries", () => {
 
   it("значение длиннее 64 знаков не размечается", () => {
     // Arrange
-    const value = "a".repeat(MAX_MARKED_LENGTH + 1);
+    const value = "a".repeat(65);
 
     // Act
     const actual = splitSeries(value);
@@ -74,7 +75,7 @@ describe("splitSeries", () => {
 
   it("значение ровно в 64 знака размечается", () => {
     // Arrange
-    const value = "1".repeat(MAX_MARKED_LENGTH);
+    const value = "1".repeat(64);
 
     // Act
     const actual = splitSeries(value);
