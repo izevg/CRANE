@@ -1,8 +1,9 @@
+// i18n: не мигрирован
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useCallback, useId, useState } from "react";
 import { expect, within } from "storybook/test";
-import { formatNumber } from "~/shared/lib/text";
+import { textFormat } from "~/shared/lib/text";
 import { FacetList, FilterSelect, SegmentedControl } from "~/shared/ui/inputs";
 import { PageHeader } from "~/shared/ui/layout";
 import {
@@ -36,6 +37,9 @@ import {
 } from "../data/search";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
+
+// Макеты экранов — на русском; форматирование чисел фиксирует ru, активная локаль витрины им не нужна.
+const format = textFormat("ru");
 
 const FORMAT_SEGMENTS = [
   { value: "all", label: "Все", count: 38 },
@@ -99,7 +103,7 @@ function ResultCard({ item }: { item: SearchResult }) {
           <span>{`Последняя ${item.version}`}</span>
           <StatusBadge tone={item.state.tone} label={item.state.label} />
         </span>
-        <span className="tabular-nums">{`${formatNumber(item.downloads)} загрузок за 30 дн`}</span>
+        <span className="tabular-nums">{`${format.number(item.downloads)} загрузок за 30 дн`}</span>
         <span>{item.team}</span>
         <RelativeTime ts={item.updated} />
       </p>

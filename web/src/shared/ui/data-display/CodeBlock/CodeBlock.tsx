@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { useLayoutEffect, useRef } from "react";
 import { cx } from "~/shared/lib/core";
 import { CopyButton } from "../../actions";

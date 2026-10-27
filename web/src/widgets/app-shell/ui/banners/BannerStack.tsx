@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { useCallback, useEffect, useRef, useState } from "react";
 import { announce } from "~/shared/lib/a11y";
 import { type Action, ActionButton } from "~/shared/ui/actions";

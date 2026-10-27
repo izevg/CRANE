@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { cx } from "~/shared/lib/core";
-import { formatCount, formatNumber } from "~/shared/lib/text";
+import { useTextFormat } from "~/shared/lib/i18n";
+import type { TextFormat } from "~/shared/lib/text";
 import { ToggleGroup, ToggleGroupItem } from "~/shared/ui/primitives";
 
 /** Счётчик: число или усечённый подсчёт сервера («1 000+»). */
@@ -24,8 +25,8 @@ type SegmentedControlProps<V extends string> = {
 
 const SEPARATOR = " ";
 
-function formatSegmentCount(count: SegmentCount): string {
-  return typeof count === "number" ? formatNumber(count) : formatCount(count);
+function formatSegmentCount(count: SegmentCount, format: TextFormat): string {
+  return typeof count === "number" ? format.number(count) : format.count(count);
 }
 
 /**
@@ -39,6 +40,7 @@ export function SegmentedControl<V extends string>({
   label,
   className,
 }: SegmentedControlProps<V>) {
+  const format = useTextFormat();
   const handleChange = useCallback(
     (next: readonly string[]) => {
       const picked = items.find((item) => item.value === next[0]);
@@ -64,7 +66,7 @@ export function SegmentedControl<V extends string>({
             <>
               {SEPARATOR}
               <span className="text-caption text-muted-foreground tabular-nums">
-                {formatSegmentCount(item.count)}
+                {formatSegmentCount(item.count, format)}
               </span>
             </>
           )}

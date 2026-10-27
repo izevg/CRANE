@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
 import { Button } from "~/shared/ui/primitives";
 

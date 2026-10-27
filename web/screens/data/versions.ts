@@ -1,4 +1,5 @@
 // biome-ignore-all lint/style/noMagicNumbers: детерминированные данные макетов, не продуктовый код
+// i18n: не мигрирован
 import { PEOPLE } from "./common";
 
 export type VersionState = "released" | "quarantined" | "blocked" | "deleted";

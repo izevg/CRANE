@@ -1,7 +1,9 @@
+// i18n: не мигрирован
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { formatCount, formatNumber, formatPercent } from "~/shared/lib/text";
+import { useTextFormat } from "~/shared/lib/i18n";
+import type { TextFormat } from "~/shared/lib/text";
 import { Card, Link, Skeleton, TONE_SURFACE, toneGlyph } from "~/shared/ui/primitives";
 import { RelativeTime } from "~/shared/ui/status";
 import { Sparkline } from "../Sparkline/Sparkline";
@@ -97,6 +99,7 @@ function deltaStyle({ pct, polarity }: TileDelta): string {
 }
 
 function DeltaChip({ delta }: { delta: TileDelta }) {
+  const format = useTextFormat();
   const Glyph = delta.pct >= 0 ? ArrowUpIcon : ArrowDownIcon;
   const sign = delta.pct < 0 ? MINUS : "";
   return (
@@ -109,19 +112,20 @@ function DeltaChip({ delta }: { delta: TileDelta }) {
       <Glyph className="size-3" aria-hidden="true" />
       <span className="sr-only">{DELTA_PREFIX}</span>
       {sign}
-      {formatPercent(Math.abs(delta.pct) / PERCENT)}
+      {format.percent(Math.abs(delta.pct) / PERCENT)}
     </span>
   );
 }
 
-function formatValue(value: Exclude<TileValue, null>): string {
+function formatValue(value: Exclude<TileValue, null>, format: TextFormat): string {
   if (typeof value === "number") {
-    return formatNumber(value);
+    return format.number(value);
   }
-  return typeof value === "string" ? value : formatCount(value);
+  return typeof value === "string" ? value : format.count(value);
 }
 
 function Value({ value, unit }: { value: TileValue; unit: string | undefined }) {
+  const format = useTextFormat();
   if (value === null) {
     return <span className="text-metric-xl">{NO_VALUE}</span>;
   }
@@ -134,7 +138,7 @@ function Value({ value, unit }: { value: TileValue; unit: string | undefined }) 
           text ? "min-w-0 truncate whitespace-nowrap text-metric" : "text-metric-xl",
         )}
       >
-        {formatValue(value)}
+        {formatValue(value, format)}
       </span>
       {unit ? (
         <span className="ml-1 text-body text-muted-foreground">
@@ -188,8 +192,9 @@ function linkName(
   value: TileValue,
   unit: string | undefined,
   toneLabel: string | undefined,
+  format: TextFormat,
 ): string {
-  const number = value === null ? NO_DATA_NAME : formatValue(value);
+  const number = value === null ? NO_DATA_NAME : formatValue(value, format);
   const shown = value === null || !unit ? number : `${number}${UNIT_SEPARATOR}${unit}`;
   const name = `${label}${NAME_SEPARATOR}${shown}`;
   return toneLabel === undefined ? name : `${name}${TONE_SEPARATOR}${toneLabel}`;
@@ -221,6 +226,7 @@ function Head({ linked, children }: { linked: LinkedHead | null; children: React
 
 export function MetricTile(props: MetricTileProps) {
   const { label, value, unit, caption, delta, spark, reference, href, stale, className } = props;
+  const format = useTextFormat();
   const labelId = useId();
   const footerId = useId();
   const tone = resolveTone(props);
@@ -243,7 +249,11 @@ export function MetricTile(props: MetricTileProps) {
       <Head
         linked={
           linked
-            ? { href, name: linkName(label, value, unit, tone?.label), describedBy: footerId }
+            ? {
+                href,
+                name: linkName(label, value, unit, tone?.label, format),
+                describedBy: footerId,
+              }
             : null
         }
       >

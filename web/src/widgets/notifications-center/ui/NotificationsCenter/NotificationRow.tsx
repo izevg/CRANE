@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { useCallback } from "react";
 import { cx } from "~/shared/lib/core";
 import { Link, TONE_TEXT, toneGlyph } from "~/shared/ui/primitives";

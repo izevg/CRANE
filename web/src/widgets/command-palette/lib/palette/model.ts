@@ -1,4 +1,6 @@
-import { formatNumber } from "~/shared/lib/text";
+// i18n: не мигрирован
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, plural } from "@lingui/core/macro";
 import type { Action } from "~/shared/ui/actions";
 
 export type NavigationEntry = { id: string; label: string; href: string; hint?: string };
@@ -81,8 +83,6 @@ export function pickTarget(option: PaletteOption): { href: string } | { run: () 
   return "href" in run ? { href: run.href } : { run: run.onSelect };
 }
 
-const RESULTS = "Результатов: ";
-
 /**
  * Итог поиска для скринридера (в живой регион `Status`). Пустой ввод не объявляется: при открытии палитры
  * шум не нужен. Пустой результат не дублируем: «Ничего не найдено» объявляет сам `Autocomplete.Empty`.
@@ -93,10 +93,15 @@ export function resultsStatus({
 }: {
   query: string;
   groups: readonly PaletteGroup[];
-}): string | null {
+}): MessageDescriptor | null {
   const total = groups.reduce((sum, group) => sum + group.items.length, 0);
   if (query.trim() === "" || total === 0) {
     return null;
   }
-  return `${RESULTS}${formatNumber(total)}`;
+  return msg`${plural(total, {
+    one: "Результатов: #",
+    few: "Результатов: #",
+    many: "Результатов: #",
+    other: "Результатов: #",
+  })}`;
 }

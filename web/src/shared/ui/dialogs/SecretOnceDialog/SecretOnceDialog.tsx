@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { useCallback, useId, useState } from "react";
 import { type Action, ActionButton } from "../../actions";
 import { CodeBlock } from "../../data-display";

@@ -141,7 +141,7 @@ export const Capped: Story = {
 };
 
 export const Stale: Story = {
-  name: "Ошибка опроса: обновлено 3 мин назад",
+  name: "Ошибка опроса: обновлено 3 мин. назад",
   render: () => (
     <MetricTile
       label="Объём хранилищ"

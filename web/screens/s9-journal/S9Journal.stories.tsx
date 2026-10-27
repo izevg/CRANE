@@ -1,7 +1,8 @@
+// i18n: не мигрирован
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type ChangeEvent, useCallback, useId, useState } from "react";
 import { expect, within } from "storybook/test";
-import { formatCount } from "~/shared/lib/text";
+import { textFormat } from "~/shared/lib/text";
 import { type Action, CopyableId } from "~/shared/ui/actions";
 import { columnHelper, DataTable, JsonViewer, KeyValueList } from "~/shared/ui/data-display";
 import { ConfirmDialog } from "~/shared/ui/dialogs";
@@ -34,6 +35,9 @@ import {
 } from "../data/audit";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
+
+// Макеты экранов — на русском; форматирование чисел фиксирует ru, активная локаль витрины им не нужна.
+const format = textFormat("ru");
 
 const DECISION_TONE = {
   allow: "success",
@@ -194,7 +198,7 @@ function Filters() {
             Сбросить
           </Button>
           <span className="text-body text-muted-foreground tabular-nums">
-            {formatCount({ count: 18_420, capped: false })} событий
+            {format.count({ count: 18_420, capped: false })} событий
           </span>
         </div>
       </div>

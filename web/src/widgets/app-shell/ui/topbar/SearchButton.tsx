@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { SearchIcon } from "lucide-react";
 import { Kbd } from "~/shared/ui/status";
 

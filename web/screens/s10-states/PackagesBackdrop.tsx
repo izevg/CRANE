@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { type ReactNode, useMemo } from "react";
 import type { Action } from "~/shared/ui/actions";
 import { columnHelper, DataTable } from "~/shared/ui/data-display";

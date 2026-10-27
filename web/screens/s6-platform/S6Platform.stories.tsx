@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   FlameIcon,
@@ -8,7 +9,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { expect, fn, within } from "storybook/test";
-import { formatBytes, formatNumber } from "~/shared/lib/text";
+import { textFormat } from "~/shared/lib/text";
 import { type Action, ActionButton, AutoRefreshToggle } from "~/shared/ui/actions";
 import { PageHeader } from "~/shared/ui/layout";
 import { MetricTile, ShareBar, StatChip, TimeSeriesChart } from "~/shared/ui/metrics";
@@ -19,6 +20,9 @@ import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
 
 // ---------------------------------------------------------------- данные
+
+// Макеты экранов — на русском; форматирование чисел фиксирует ru, активная локаль витрины им не нужна.
+const format = textFormat("ru");
 
 const STALE_TEXT = /обновлено/;
 const TB = 1024 ** 4;
@@ -85,9 +89,9 @@ const OVER_SLO = P99.filter((point) => point.v > SLO_MS).length;
 const TIME = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
 const P95_PEAK = P95.reduce((best, point) => (point.v > best.v ? point : best));
 const SUMMARY =
-  `Задержки за 24 ч, шаг 5 мин. p95: в среднем ${formatNumber(Math.round(P95.reduce((sum, p) => sum + p.v, 0) / POINTS))} мс, ` +
-  `максимум ${formatNumber(P95_PEAK.v)} мс в ${TIME.format(P95_PEAK.t)}. ` +
-  `p99 выше SLO ${SLO_MS} мс ${formatNumber(OVER_SLO * 5)} мин из ${formatNumber(POINTS * 5)}.`;
+  `Задержки за 24 ч, шаг 5 мин. p95: в среднем ${format.number(Math.round(P95.reduce((sum, p) => sum + p.v, 0) / POINTS))} мс, ` +
+  `максимум ${format.number(P95_PEAK.v)} мс в ${TIME.format(P95_PEAK.t)}. ` +
+  `p99 выше SLO ${SLO_MS} мс ${format.number(OVER_SLO * 5)} мин из ${format.number(POINTS * 5)}.`;
 
 // ---------------------------------------------------------------- inline-блоки
 
@@ -379,9 +383,9 @@ function Usage() {
           id,
           label,
           value: tb * TB,
-          display: formatBytes(tb * TB),
+          display: format.bytes(tb * TB),
         }))}
-        formatOther={formatBytes}
+        formatOther={format.bytes}
         caption="Дедупликация сэкономила 4,2 ТБ"
       />
     </Panel>

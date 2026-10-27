@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { CopyableId } from "~/shared/ui/actions";
 
 const RULE = "Правило";

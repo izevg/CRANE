@@ -1,6 +1,7 @@
+// i18n: не мигрирован
 import { Meter } from "@base-ui/react/meter";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { formatNumber } from "~/shared/lib/text";
+import { useTextFormat } from "~/shared/lib/i18n";
 import { Badge, TONE_STRONG, type Tone } from "~/shared/ui/primitives";
 
 type ScoreBarProps = WithClassName<{
@@ -32,12 +33,7 @@ const CONFIDENCE_PREFIX = "уверенность ";
 const MODEL_PREFIX = "модель ";
 const VALUE_TEXT_SEPARATOR = ", ";
 
-function format(value: number): string {
-  return formatNumber(value, {
-    minimumFractionDigits: FRACTION_DIGITS,
-    maximumFractionDigits: FRACTION_DIGITS,
-  });
-}
+const FRACTION = { minimumFractionDigits: FRACTION_DIGITS, maximumFractionDigits: FRACTION_DIGITS };
 
 function clamp(value: number): number {
   return Number.isFinite(value) ? Math.min(Math.max(value, MIN), MAX) : MIN;
@@ -60,6 +56,8 @@ export function ScoreBar({
   badge,
   className,
 }: ScoreBarProps) {
+  const text = useTextFormat();
+  const format = (n: number): string => text.number(n, FRACTION);
   const score = clamp(value);
   const shown = format(score);
   const confidenceText = confidence === undefined ? null : format(clamp(confidence));

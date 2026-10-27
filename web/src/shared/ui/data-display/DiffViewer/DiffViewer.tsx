@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { useMemo } from "react";
 import { cx } from "~/shared/lib/core";
 

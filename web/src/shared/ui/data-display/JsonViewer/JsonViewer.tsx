@@ -1,3 +1,6 @@
+// i18n: не мигрирован
+import { plural } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -6,7 +9,6 @@ import {
 } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { formatNumber, pluralRu } from "~/shared/lib/text";
 import { CopyButton } from "../../actions";
 import { Button } from "../../primitives";
 import { collapseAll, defaultCollapsed, flatten, type JsonRow, type JsonValue } from "./tree";
@@ -20,8 +22,6 @@ const EXPAND_ALL = "Развернуть всё";
 const COLLAPSE_ALL = "Свернуть всё";
 const COPY_JSON = "Копировать JSON";
 const REGION = "JSON";
-const KEYS = ["ключ", "ключа", "ключей"] as const;
-const ITEMS = ["элемент", "элемента", "элементов"] as const;
 const INDENT_REM = 1;
 const JSON_INDENT = 2;
 
@@ -48,10 +48,13 @@ function brackets(row: JsonRow): { open: string; close: string } {
     : { open: "{", close: "}" };
 }
 
-function summary(row: Extract<JsonRow, { kind: "collapsed" }>): string {
+/** «3 элемента» / «12 ключей»: свёрнутый контейнер. Склонение — ICU plural, порядок слов зависит от языка. */
+function Summary({ row }: { row: Extract<JsonRow, { kind: "collapsed" }> }) {
+  const { t } = useLingui();
   const size = row.size;
-  const word = pluralRu(size, row.container === "array" ? ITEMS : KEYS);
-  return `${formatNumber(size)} ${word}`;
+  return row.container === "array"
+    ? t`${plural(size, { one: "# элемент", few: "# элемента", many: "# элементов", other: "# элемента" })}`
+    : t`${plural(size, { one: "# ключ", few: "# ключа", many: "# ключей", other: "# ключа" })}`;
 }
 
 function Label({ row }: { row: JsonRow }) {
@@ -92,7 +95,9 @@ function RowBody({ row }: { row: JsonRow }) {
       <>
         <Label row={row} />
         <Punct>{`${open}…${close}`}</Punct>
-        <span className="ml-2 text-muted-foreground">{summary(row)}</span>
+        <span className="ml-2 text-muted-foreground">
+          <Summary row={row} />
+        </span>
         {comma}
       </>
     );

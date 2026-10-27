@@ -1,6 +1,7 @@
+// i18n: не мигрирован
 import { type ReactNode, useId } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { formatNumber, formatPercent } from "~/shared/lib/text";
+import { useTextFormat } from "~/shared/lib/i18n";
 import {
   Table,
   TableBody,
@@ -71,12 +72,13 @@ export function ShareBar({
   title,
   columns,
   items,
-  formatOther = formatNumber,
+  formatOther,
   caption,
   className,
 }: ShareBarProps) {
   const titleId = useId();
-  const segments = toSegments(items, formatOther);
+  const format = useTextFormat();
+  const segments = toSegments(items, formatOther ?? ((sum) => format.number(sum)));
   const total = segments.reduce((sum, segment) => sum + segment.value, 0);
   const share = (value: number) => (total > 0 ? value / total : 0);
 
@@ -120,7 +122,7 @@ export function ShareBar({
               </TableCell>
               <TableCell className="text-right tabular-nums">{segment.display}</TableCell>
               <TableCell className="text-right tabular-nums">
-                {formatPercent(share(segment.value))}
+                {format.percent(share(segment.value))}
               </TableCell>
             </TableRow>
           ))}

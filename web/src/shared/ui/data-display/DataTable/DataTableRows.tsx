@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { FlexRender, type Header, type Row, type RowData } from "@tanstack/react-table";
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from "lucide-react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";

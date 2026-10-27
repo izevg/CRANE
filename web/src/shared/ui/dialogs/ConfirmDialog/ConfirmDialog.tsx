@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { type ReactNode, useCallback, useId, useRef } from "react";
 import { type Action, ActionButton } from "../../actions";
 import {

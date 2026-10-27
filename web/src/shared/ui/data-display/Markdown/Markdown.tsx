@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { lazy, Suspense } from "react";
 import { Skeleton } from "../../primitives";
 

@@ -1,7 +1,7 @@
+// i18n: не мигрирован
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useCallback, useId, useMemo, useState } from "react";
 import { expect, within } from "storybook/test";
-import { pluralRu } from "~/shared/lib/text";
 import { type Action, CopyableId } from "~/shared/ui/actions";
 import { CodeBlock, columnHelper, DataTable } from "~/shared/ui/data-display";
 import { SecretOnceDialog } from "~/shared/ui/dialogs";
@@ -39,6 +39,13 @@ const SECRET = "crp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4";
 const EXPIRY_WARNING_DAYS = 14;
 const UNUSED_WARNING_DAYS = 30;
 const DAYS = ["день", "дня", "дней"] as const;
+const RU_PLURALS = new Intl.PluralRules("ru");
+
+// Макеты экранов — на русском: склонение по правилам ru, активная локаль витрины ему не нужна.
+function pluralRu(count: number, forms: readonly [string, string, string]): string {
+  const category = RU_PLURALS.select(Math.abs(count));
+  return category === "one" ? forms[0] : category === "few" ? forms[1] : forms[2];
+}
 
 type Scope = "active" | "revoked" | "all";
 

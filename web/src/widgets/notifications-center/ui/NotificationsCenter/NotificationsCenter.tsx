@@ -1,3 +1,5 @@
+// i18n: не мигрирован
+import { useLingui } from "@lingui/react";
 import { useCallback, useState } from "react";
 import { type Action, ActionButton } from "~/shared/ui/actions";
 import {
@@ -103,6 +105,7 @@ export function NotificationsCenter({
   onMarkRead,
   onReadAll,
 }: Props) {
+  const { _ } = useLingui();
   const [open, setOpen] = useState(false);
   const active = tabOf(category);
 
@@ -147,7 +150,7 @@ export function NotificationsCenter({
                       <span aria-hidden="true" className="text-caption tabular-nums">
                         {count}
                       </span>
-                      <span className="sr-only">{`, ${unreadPhrase(count)}`}</span>
+                      <span className="sr-only">{`, ${_(unreadPhrase(count))}`}</span>
                     </>
                   ) : null}
                 </TabsTrigger>

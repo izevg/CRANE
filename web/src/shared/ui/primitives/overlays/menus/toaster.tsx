@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import type { CSSProperties } from "react";
 import { Toaster as Sonner } from "sonner";
 import { useColorMode } from "~/shared/lib/state";

@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { ChevronRightIcon } from "lucide-react";
 import type * as React from "react";
 import { cx } from "~/shared/lib/core";

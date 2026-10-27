@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { PauseIcon, PlayIcon } from "lucide-react";
 import { useCallback } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";

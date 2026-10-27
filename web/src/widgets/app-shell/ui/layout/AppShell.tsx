@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { type MouseEvent, type ReactNode, useCallback, useRef, useState } from "react";
 import { cx, useBreakpoint } from "~/shared/lib/core";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "~/shared/ui/primitives";

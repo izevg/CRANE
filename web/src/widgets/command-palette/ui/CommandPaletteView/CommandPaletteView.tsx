@@ -1,4 +1,6 @@
+// i18n: не мигрирован
 import { Autocomplete } from "@base-ui/react/autocomplete";
+import { useLingui } from "@lingui/react";
 import { useCallback, useMemo, useState } from "react";
 import type { Action } from "~/shared/ui/actions";
 import { Dialog, DialogContent, DialogTitle, Skeleton } from "~/shared/ui/primitives";
@@ -107,6 +109,7 @@ export function CommandPaletteView({
   actions,
   onNavigate,
 }: Props) {
+  const { _ } = useLingui();
   const [ownQuery, setOwnQuery] = useState("");
   const value = query ?? ownQuery;
   const groups = useMemo(
@@ -155,7 +158,8 @@ export function CommandPaletteView({
     [onNavigate, handleOpenChange],
   );
 
-  const statusText = packagesLoading ? SEARCHING : resultsStatus({ query: value, groups });
+  const results = resultsStatus({ query: value, groups });
+  const statusText = packagesLoading ? SEARCHING : results === null ? null : _(results);
   const showSkeletons = packagesLoading && packages.length === 0;
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

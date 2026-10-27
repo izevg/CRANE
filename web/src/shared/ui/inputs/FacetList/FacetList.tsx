@@ -1,6 +1,6 @@
 import { CheckIcon } from "lucide-react";
 import { useCallback, useId } from "react";
-import { formatCount } from "~/shared/lib/text";
+import { useTextFormat } from "~/shared/lib/i18n";
 import { Card } from "~/shared/ui/primitives";
 
 type FacetItem = {
@@ -35,6 +35,7 @@ type FacetRowProps = {
 };
 
 function FacetRow({ item, pressed, max, onToggle }: FacetRowProps) {
+  const format = useTextFormat();
   const handleClick = useCallback(() => onToggle(item.value), [item.value, onToggle]);
   return (
     <li>
@@ -56,7 +57,7 @@ function FacetRow({ item, pressed, max, onToggle }: FacetRowProps) {
             <span className="wrap-anywhere">{item.label}</span>
           </span>
           {SEPARATOR}
-          <span className="shrink-0 tabular-nums">{formatCount(item.count)}</span>
+          <span className="shrink-0 tabular-nums">{format.count(item.count)}</span>
         </span>
         <span aria-hidden="true" className="h-1 w-full overflow-hidden rounded-full bg-muted">
           <span

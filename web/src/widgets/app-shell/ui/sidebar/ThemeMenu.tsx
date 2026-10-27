@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { CheckIcon, type LucideIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useCallback } from "react";

@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { CircleHelpIcon, DotIcon, type LucideIcon } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { cx } from "~/shared/lib/core";

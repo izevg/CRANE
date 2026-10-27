@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { InboxIcon, type LucideIcon } from "lucide-react";
 import { cx } from "~/shared/lib/core";
 import { type Action, ActionButton } from "~/shared/ui/actions";

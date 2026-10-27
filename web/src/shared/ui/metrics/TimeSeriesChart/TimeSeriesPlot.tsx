@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatDateTime } from "~/shared/lib/text";
+import { useLocale, useTextFormat } from "~/shared/lib/i18n";
 import {
   formatValueWithUnit,
   lastIndexOf,
@@ -114,12 +114,17 @@ function SeriesLine({ item, color, lastIndex, filled }: SeriesLineProps) {
 /** График на Recharts. Грузится отдельным чанком; без анимации, чтобы опрос не «мигал» линиями. */
 export function TimeSeriesPlot({ series, slo, unit, area }: PlotProps) {
   const rows = mergeSeries(series);
-  const tick = makeTickFormatter(rows);
+  const locale = useLocale();
+  const format = useTextFormat();
+  const tick = makeTickFormatter(rows, locale);
   const filled = area && series.length === 1;
-  const formatTooltipLabel = useCallback((label: ReactNode) => formatDateTime(Number(label)), []);
+  const formatTooltipLabel = useCallback(
+    (label: ReactNode) => format.dateTime(Number(label)),
+    [format],
+  );
   const formatTooltipValue = useCallback(
-    (value: unknown) => formatValueWithUnit(Number(value), unit),
-    [unit],
+    (value: unknown) => formatValueWithUnit(Number(value), unit, format),
+    [unit, format],
   );
 
   return (

@@ -1,6 +1,7 @@
+// i18n: не мигрирован
 import { lazy, Suspense, useCallback, useId, useState } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
-import { formatDateTime } from "~/shared/lib/text";
+import { useTextFormat } from "~/shared/lib/i18n";
 import {
   Button,
   Skeleton,
@@ -38,6 +39,7 @@ const NO_VALUE = "—";
 const PLOT_HEIGHT = "h-60";
 
 function DataTable({ series, unit }: { series: readonly Series[]; unit: string | undefined }) {
+  const format = useTextFormat();
   const rows = mergeSeries(series);
   return (
     <Table>
@@ -54,12 +56,12 @@ function DataTable({ series, unit }: { series: readonly Series[]; unit: string |
       <TableBody>
         {rows.map((row) => (
           <TableRow key={row.t}>
-            <TableCell>{formatDateTime(row.t)}</TableCell>
+            <TableCell>{format.dateTime(row.t)}</TableCell>
             {series.map((item) => {
               const value = row[item.id];
               return (
                 <TableCell key={item.id} className="text-right tabular-nums">
-                  {value === undefined ? NO_VALUE : formatValueWithUnit(value, unit)}
+                  {value === undefined ? NO_VALUE : formatValueWithUnit(value, unit, format)}
                 </TableCell>
               );
             })}

@@ -1,4 +1,5 @@
 // biome-ignore-all lint/style/noMagicNumbers: детерминированные данные макетов, не продуктовый код
+// i18n: не мигрирован
 type ActorKind = "Человек" | "Робот" | "Workload" | "Агент";
 export type Decision = "allow" | "deny" | "challenge";
 type Channel = "UI" | "CLI" | "API" | "CI" | "A2A" | "SOAR";

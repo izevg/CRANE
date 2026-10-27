@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { Link } from "~/shared/ui/primitives";
 import logoLight from "~brand/crane-logo.svg?url";
 import logoDark from "~brand/crane-logo-dark.svg?url";

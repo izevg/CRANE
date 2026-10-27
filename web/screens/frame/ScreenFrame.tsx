@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import {
   DatabaseIcon,
   FileCheckIcon,

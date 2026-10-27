@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ChevronDownIcon } from "lucide-react";
 import { useCallback, useState } from "react";

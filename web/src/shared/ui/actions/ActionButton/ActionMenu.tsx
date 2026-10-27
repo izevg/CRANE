@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { MoreHorizontalIcon } from "lucide-react";
 import {
   Button,

@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import { CopyButton } from "../CopyButton/CopyButton";
 
 const HEAD = 4;

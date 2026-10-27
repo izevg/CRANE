@@ -1,3 +1,4 @@
+// i18n: не мигрирован
 import type { ComponentProps } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";

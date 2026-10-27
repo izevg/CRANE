@@ -1,7 +1,8 @@
+// i18n: не мигрирован
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { expect, within } from "storybook/test";
-import { formatBytes } from "~/shared/lib/text";
+import { textFormat } from "~/shared/lib/text";
 import { type Action, ActionButton, CopyableId } from "~/shared/ui/actions";
 import {
   columnHelper,
@@ -46,6 +47,9 @@ import {
 } from "../data/versions";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
+
+// Макеты экранов — на русском; форматирование чисел фиксирует ru, активная локаль витрины им не нужна.
+const format = textFormat("ru");
 
 const TONE = {
   released: "success",
@@ -247,7 +251,7 @@ function SummaryTab() {
           { label: "PURL", value: <CopyableId value={PURL} full label="Скопировать PURL" /> },
           { label: "Опубликована", value: "27.10.2026, 13:42" },
           { label: "Кем", value: "crr_9f8e7d6c · ui-release" },
-          { label: "Размер", value: formatBytes(188_416) },
+          { label: "Размер", value: format.bytes(188_416) },
           { label: "SHA-256", value: <CopyableId value={SHA256} label="Скопировать SHA-256" /> },
           { label: "Целевая стадия", value: "release" },
         ]}
@@ -287,7 +291,7 @@ function FilesTab() {
         {FILES.map(([path, size], index) => (
           <TableRow key={path}>
             <TableCell className="font-mono text-caption">{path}</TableCell>
-            <TableCell className="text-right tabular-nums">{formatBytes(size)}</TableCell>
+            <TableCell className="text-right tabular-nums">{format.bytes(size)}</TableCell>
             <TableCell>
               <CopyableId
                 value={`${SHA256.slice(index * 3)}${SHA256.slice(0, index * 3)}`}
