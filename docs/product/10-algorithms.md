@@ -60,7 +60,7 @@ fn fetch(repo, key):                                    // key = нормали�
 
 ```rust
 fn served(v, rules, now, caller) -> Result<(), Unavailable>:   // одно правило видимости для hosted и proxy
-    if r = rules.deny(v.format, v.name, v.version):            // активные emergency_block и MAL-* (не отозванные)
+    if r = rules.deny(v.format, v.name, v.version):            // активные emergency_block (в том числе созданные из MAL-*)
         if !(artifact_path and break_glass(caller, v)): return Blocked(r)
     if v.row and v.row.state != Released: return v.row.state  // hold, ручная блокировка, удаление
     if v.repo.kind == proxy and !v.promoted
@@ -123,11 +123,12 @@ on revoke(credential) | block(user) | groups_changed(user):
 ```rust
 fn issue(req, kind):                                     // POST /tokens, /robots/{id}/credentials
     p = authenticate(req)
-    require(p.is_human() and p.interactive_idp_session)  // токен CRANE или client credentials → 403
+    require(p.credential in [BffSession, IdpUserLogin])  // токен CRANE и client credentials → 403
     if kind in [personal, robot_secret]: require(context.mfa)   // свежий MFA (раздел 13)
     require(req.scopes ⊆ rights(p, kind))                // только сужение
     ttl = min(req.ttl, policy.max_ttl(kind))
-    if kind == session: ttl = min(ttl, 12h, p.idp_session_left)
+    if kind == session: ttl = min(ttl, 12h, p.idp_refresh_expiry)
+    // естественное истечение сессии IdP; досрочный конец — Back-Channel Logout → эпоха (10.4, 13)
     // команда атрибуции фиксируется при выпуске: 14.15
     return mint(prefix(kind), scopes = req.scopes, ttl)
 ```
@@ -143,7 +144,8 @@ fn exchange(id_token):
                       // pipeline_source, job_id, pipeline_id, user_login, environment
     rules = trust_policy.matching(c.project_path)         // явные проекты, не wildcard по умолчанию
     scopes = rules.filter(|r| r.matches(c.ref, c.ref_type, c.ref_protected)).union()
-    // запись только из защищённого ref вне merge request; проект-источник MR отличается от целевого у форка
+    // запись только из защищённого ref вне merge request; проект-источник MR отличается от целевого у форка;
+    // иначе только чтение; scope publish — только имена из правила trust policy
     can_write = c.ref_protected and c.ref_type in [tag, branch]
                 and c.pipeline_source != "merge_request_event"
                 and c.source_project_path == c.project_path
@@ -156,7 +158,6 @@ fn exchange(id_token):
 
 Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Эти claims пишутся и как evidence (`predicate_type = https://slsa.dev/provenance/v1`, `kind = jwt`, `trust = crane`, `signer_issuer` = `iss` токена, `signer_san` = `project_path` без ref (ref законно меняется от версии к версии), `facts` = `repo` (тот же `project_path`), commit, pipeline, job, `ref`, `ref_protected`, `pipeline_source`), поэтому gate provenance и правило регрессии (10.6.1) читают один источник и для hosted. Такая provenance выпущена CRANE, а не подписана сборочной платформой, поэтому сама по себе не означает SLSA Build L2; L2 дают attestations из CI (`trust = publisher`). Это закрывает требование связи публикации с project, commit, pipeline и job.
 
-Scope записи выдаётся, только если `ref_protected`, `ref_type` — тег или ветка и пайплайн не из merge request; проверка `source_project_path != project_path` ловит форк (claim GitLab ID token: проект с исходным кодом в merge request). Иначе токен получает только чтение. Scope publish ограничен списком имён пакетов из правила trust policy; срок `crci_` со scope записи по умолчанию 5 минут. Правило регрессии (10.6.1) сравнивает и `facts.ref_protected`: версия из незащищённой ветки после истории из защищённых получает hold.
 
 ## 10.6 Promotion и gates
 
