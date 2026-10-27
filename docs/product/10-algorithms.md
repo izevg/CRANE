@@ -412,21 +412,24 @@ fn readiness(lockfile_or_sbom):
 
 ## 10.16 Членство, атрибуция и суточный агрегат
 
-Роли людей из IdP попадают в CRANE одним путём: нормализатор claims (13) даёт множество групп, `group_mapping` превращает его в права, `observe` приводит открытые строки `role_binding` источника в соответствие с правами. Cedar читает только `role_binding` (14.15).
+Роли людей из IdP попадают в CRANE одним путём: нормализатор claims (13) даёт множество групп, `group_mapping` превращает его в права, `observe` приводит открытые строки `role_binding` источника `idp` в соответствие с правами. Cedar читает только `role_binding` (14.15).
 
 ```rust
-// observe: вызывается при входе, обмене, обновлении crp_, опросе каталога, admin event и SCIM
-fn observe(p, source, groups: GroupClaim):
-    let CompleteGroups(g) = match groups {
-        Complete(g) => g,
-        Overage | Absent => return Unchanged,            // неизвестно не равно пусто: ничего не закрываем
-    }
-    wanted = resolve(g, mappings)                        // чистая функция домена, ниже
-    open   = role_binding.open_rows(p, source)
-    tx:
-        for r in open - wanted:  close(r, valid_to = now()); audit("access.role_revoked")
-        for r in wanted - open:  insert(r, valid_from = now()); audit("access.role_granted")
-        if changed: p.epoch += 1; valkey.publish("inv", Epoch(p.id))   // отзыв ≤ 5 с (10.4)
+// Вызывающий (адаптер или entry) сопоставляет GroupClaim и зовёт observe только для Complete:
+//   match identity.groups { Complete(g) => observe(p, &g, via), Overage | Absent => skip }
+// неизвестно не равно пусто: при Overage и Absent роли не меняются
+
+// observe: use case; via: login | exchange | refresh | directory | scim | admin_event
+fn observe(p, groups: &CompleteGroups, via: Via):
+    wanted = resolve(groups, mappings)                   // чистая функция домена, ниже
+    role_bindings.reconcile(p, Source::Idp, wanted, via)
+
+// RoleBindings::reconcile: одна транзакция
+tx:
+    open = role_binding.open_rows(p, source)
+    for r in open - wanted:  close(r, valid_to = now()); audit("access.role_revoked", via)
+    for r in wanted - open:  insert(r, valid_from = now()); audit("access.role_granted", via)
+    if changed: p.epoch += 1; valkey.publish("inv", Epoch(p.id))   // отзыв ≤ 5 с (10.4)
 
 fn resolve(g: &CompleteGroups, mappings: &[GroupMapping]) -> BTreeSet<Grant>:
     g.filter(|ref| mappings.has(ref))                    // группа без маппинга ничего не даёт
@@ -435,7 +438,7 @@ fn resolve(g: &CompleteGroups, mappings: &[GroupMapping]) -> BTreeSet<Grant>:
      .collect()
 ```
 
-`valid_from` и `valid_to` ставит момент наблюдения, а не изменения в IdP; открытая строка одна на факт (`role_binding_open`), поэтому повторное наблюдение идемпотентно. Локальные строки (`source = local`) `observe` не трогает: их меняет owner команды через API.
+`valid_from` и `valid_to` ставит момент наблюдения, а не изменения в IdP; открытая строка одна на факт (`role_binding_open`), поэтому повторное наблюдение идемпотентно. Локальные строки (`source = local`) `reconcile` для `Source::Idp` не трогает: их меняет owner команды через API.
 
 ```rust
 // attribute: чистая функция, команда скачиваний фиксируется при выпуске credential
@@ -443,7 +446,7 @@ fn attribute(principal, requested: Option<WorkspaceId>, teams_now: &[WorkspaceId
     -> Result<Attribution, AttributionError>:
     match principal.kind:
         robot | workload => Team(principal.workspace)    // requested игнорируется
-        user => match requested:
+        human => match requested:
             Some(w) if w in teams_now => Team(w)
             Some(_)                   => Err(NotAMember)
             None if teams_now.len() == 1 => Team(teams_now[0])
@@ -481,8 +484,8 @@ fn access.directory_sync():
         for m in directory.members(g):
             if m.active: members[m.subject].insert(g)
             else:        principal(m.subject).epoch += 1 // отключён в IdP: отзыв ≤ 5 с по 10.4
-    for p in principals_with_open_rows(idp) + members.keys():
-        observe(p, idp, Complete(members[p.subject] or {}))   // кого в группе больше нет, у того строки idp закрываются
+    for p in principals_with_open_rows(idp) + known(members.keys()):   // субъекты без principal пропускаются: принципал создаётся при первом входе (JIT)
+        observe(p, &CompleteGroups(members[p.subject] or {}), Via::Directory)   // кого в группе больше нет, у того строки idp закрываются
 ```
 
 Число уникальных людей и машин агрегат не хранит. Опрос каталога и приём push (admin events, SCIM) вызывают один и тот же `observe`: 13.

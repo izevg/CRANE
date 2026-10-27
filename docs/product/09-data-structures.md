@@ -121,7 +121,7 @@ CREATE TABLE credential (
 CREATE TABLE audit_event (
   id bigint GENERATED ALWAYS AS IDENTITY, ts timestamptz NOT NULL,
   actor uuid, action text, resource text, decision text, reason jsonb,
-  actor_kind principal_kind,         -- user | robot | workload; входит в hash
+  actor_kind principal_kind,         -- human | robot | workload; входит в hash
   actor_name text,                   -- снимок логина, имени робота или пути CI-проекта на момент события; входит в hash
   workspace_id uuid,                 -- команда атрибуции credential на момент события; входит в hash
   request_id text, prev_hash bytea NOT NULL, hash bytea NOT NULL
@@ -210,8 +210,8 @@ CREATE INDEX CONCURRENTLY package_embedding_hnsw_<model> ON package_embedding
 Отдельной сущности «команда» нет: workspace и есть команда («Команда (workspace)» в UI). Это единица владения (namespaces, пакеты без namespace, репозитории, роботы, trust policies, квоты) и членства. Иерархии нет; позже ей можно добавить `workspace.parent_id` (решение 30 в 19). Роли людей хранятся только в `role_binding`: это временная таблица, а не «назначение роли» в прежнем смысле. Правила, жизненный цикл и API: 14.15, алгоритмы наблюдения и атрибуции: 10.16.
 
 ```sql
-CREATE TYPE principal_kind AS ENUM ('user','robot','workload');
-CREATE TYPE binding_source AS ENUM ('idp','local','scim');
+CREATE TYPE principal_kind AS ENUM ('human','robot','workload');
+CREATE TYPE binding_source AS ENUM ('idp','local');   -- кто утверждает факт; канал наблюдения (via) пишется в reason события
 
 CREATE TABLE workspace (               -- «Команда» в UI
   id uuid PRIMARY KEY,                 -- UUIDv7; Cedar ссылается на него, не на slug
@@ -222,13 +222,13 @@ CREATE TABLE workspace (               -- «Команда» в UI
 
 CREATE TABLE principal (
   id uuid PRIMARY KEY, kind principal_kind NOT NULL,
-  issuer text, subject text,           -- user: iss + sub; workload: iss + стабильный claim (GitLab project_id); robot: NULL
+  issuer text, subject text,           -- human: iss + sub; workload: iss + стабильный claim (GitLab project_id); robot: NULL
   username text, display_name text, email text,  -- последнее увиденное; журнал хранит свой снимок
   workspace_id uuid REFERENCES workspace,        -- robot и workload: команда-владелец, не меняется
   epoch bigint NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL, disabled_at timestamptz,
   UNIQUE (issuer, subject),
-  CHECK ((kind = 'user') = (workspace_id IS NULL)),
+  CHECK ((kind = 'human') = (workspace_id IS NULL)),
   CHECK ((kind = 'robot') = (issuer IS NULL)));
 
 CREATE TABLE role_binding (            -- членство и роли во времени; только INSERT и закрытие
@@ -275,9 +275,8 @@ ALTER TABLE audit_event ADD COLUMN actor_kind principal_kind,
 ```
 
 -   **Владелец ресурса есть всегда.** `namespace.workspace_id NOT NULL` владеет именем и всеми пакетами внутри; `package.owner_workspace_id` заполнен только у пакетов без namespace, это выражает CHECK `package_owner_once`. Владелец пакета = `coalesce(namespace.workspace_id, package.owner_workspace_id)`. Осиротевших пакетов не бывает. Таблицы `namespace` касается здесь только FK на `workspace`; её колонки описаны выше.
--   **`role_binding` меняется двумя операциями:** вставить открытую строку и закрыть открытую (`valid_to = now()`). Каждая операция пишет `audit_event` (`access.role_granted` / `access.role_revoked`) в той же транзакции, поэтому история защищена хэш-цепочкой. `valid_from` — момент, когда CRANE увидел факт (вход, обмен, опрос каталога, SCIM, admin event), а не время изменения в IdP.
--   **Принципалы.** `user` — человек, ключ `(iss, sub)`; `robot` создаёт owner команды; `workload` — CI-проект или k8s ServiceAccount, один принципал на ключ `(iss, стабильный claim)` (для GitLab `project_id`, не путь), создаётся при первом обмене токена платформы. Потребитель (`consumer`) вида «проект» (группа «Граф» в перечне таблиц ниже) ссылается на workload-принципал: третьего понятия «проект» нет. Роботы и workload-принципалы между командами не передаются.
--   **Роль в команде** = максимум по открытым строкам всех источников (reader < developer < maintainer < owner). Роли экземпляра (`appsec`, `secops`, `auditor`, `platform-admin`) хранятся с `workspace_id IS NULL`. Cedar читает только `role_binding` (через кэш с эпохой), токен IdP только наблюдается.
+-   **`role_binding` меняется двумя операциями:** вставить открытую строку и закрыть открытую (`valid_to = now()`). Каждая операция пишет `audit_event` (`access.role_granted` / `access.role_revoked`) в той же транзакции, поэтому история защищена хэш-цепочкой. `valid_from` — момент, когда CRANE увидел факт, а не время изменения в IdP; канал наблюдения (`via`) лежит в `reason` события.
+-   **Принципалы и роли.** Виды принципалов (`human`, `robot`, `workload`), эффективная роль и правила — в 14.15. Потребитель (`consumer`) вида «проект» (группа «Граф» в перечне таблиц ниже) ссылается на workload-принципал: третьего понятия «проект» нет.
 -   **Миграции.** Проектируются, SQL-файлов нет. Номер `0002` занят npm-миграцией, файл получает следующий свободный номер в момент реализации: v0.4.0 — `<NNNN>_access.sql`, `<NNNN>_download_event.sql`; v0.6.0 — `<NNNN>_access_grant.sql`, `<NNNN>_download_daily.sql`. В v0.2.0 workspace — константный UUID по умолчанию; миграция v0.4.0 вставляет строку `workspace` с этим id (slug `default`) и добавляет FK.
 
 ## Реализовано в v0.1.0
@@ -416,7 +415,7 @@ CREATE TABLE download_event (
   repository_id uuid NOT NULL,       -- hosted или proxy: откуда отдано
   purl text NOT NULL,                -- pkg:npm/event-stream@3.3.6; переживает удаление версии и архив
   blob_sha256 bytea NOT NULL,        -- какой файл отдан; совпадает с индикатором компрометации
-  actor uuid,                        -- принципал
+  actor uuid NOT NULL,               -- принципал; анонимных скачиваний нет (default deny)
   credential_id uuid,                -- каким токеном; ни секрета, ни его хэша
   workspace_id uuid,                 -- копия credential.workspace_id; NULL = не распределено
   bytes bigint NOT NULL,             -- сколько байт авторизовано к отдаче

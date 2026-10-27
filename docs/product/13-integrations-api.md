@@ -33,13 +33,13 @@ pub trait IdentityVerifier: Send + Sync {
     async fn verify(&self, bearer: &str) -> Result<VerifiedIdentity, VerifyError>;
 }
 // VerifiedIdentity { issuer, subject, username, display, email, groups: GroupClaim, auth: AuthStrength, expires_at }
-// GroupClaim::{ Complete(CompleteGroups), Overage, Absent }  - «пусто» и «неизвестно» различаются типом
+// GroupClaim::{ Complete(CompleteGroups), Overage, Absent }  - «пусто» и «неизвестно» различаются типом; use case observe(p, &CompleteGroups, via) вызывают только для Complete
 // AuthStrength { acr: Option<String>, amr: Vec<String>, auth_time: Option<Timestamp> }
 pub trait Directory: Send + Sync {        // только pull, по группам из group_mapping
     async fn members(&self, group: &GroupRef) -> Result<Vec<DirectoryMember>, DirectoryError>;
 }   // DirectoryMember { subject, active }; «нет каталога» = Option<Arc<dyn Directory>> == None
 pub trait RoleBindings: Send + Sync {     // имя совпадает с таблицей role_binding
-    async fn observe(&self, p: PrincipalId, source: Source, grants: &BTreeSet<Grant>) -> Result<Diff, StoreError>; // атомарно с audit_event
+    async fn reconcile(&self, p: PrincipalId, source: Source, grants: &BTreeSet<Grant>, via: Via) -> Result<Diff, StoreError>; // атомарно с audit_event
     async fn set_local(&self, p: PrincipalId, ws: WorkspaceId, role: Role, on: bool, by: PrincipalId) -> Result<Diff, StoreError>;
     async fn active_at(&self, p: PrincipalId, at: Timestamp) -> Result<Vec<Grant>, StoreError>;
 }
@@ -64,7 +64,6 @@ oidc:
       - { claim: groups, format: path, prefix: /crane/ }     # format: path | name | id
       - { claim: resource_access.crane.roles, as: "role:" }   # роли нормализуются в GroupRef с префиксом
     nested: as_emitted     # as_emitted | expand_parents (только format: path: /a/b даёт и /a)
-  overage: fail_closed     # fail_closed | directory: при Overage брать группы из каталога (если он есть)
   mfa:
     acr_accepted: ["gold"]          # Keycloak LoA, Okta urn:okta:loa:2fa:any
     amr_accepted: ["mfa", "hwk", "otp"]
@@ -80,7 +79,7 @@ access:
 
 -   **Префикс.** Учитываются только группы, начинающиеся с `prefix`; остальные отбрасываются до маппинга. Токен в памяти меньше, чужие группы не попадают в журнал.
 -   **Вложенность.** `as_emitted` берёт группы как их отдал IdP. `expand_parents` (только `format: path`) добавляет родителей: `/a/b` даёт и `/a`. Нужен там, где провайдер отдаёт только прямые группы (Keycloak, по исходному коду mapper).
--   **Overage.** Если IdP не вместил группы в токен (Entra: `_claim_names`/`_claim_sources`), результат `GroupClaim::Overage`. При `overage: fail_closed` роли из токена не меняются: ничего не закрывается и не открывается. При `overage: directory` группы берутся из каталога, если он настроен. «Пусто» и «неизвестно» различаются типом: `observe` принимает только `CompleteGroups`.
+-   **Overage.** Если IdP не вместил группы в токен (Entra: `_claim_names`/`_claim_sources`), результат `GroupClaim::Overage`. Роли из токена не меняются: ничего не закрывается и не открывается (`observe` вызывается только для `Complete`; режима «взять группы из каталога» нет, overage всегда fail closed). Обход для Entra — «группы, назначенные приложению» или SCIM. «Пусто» и «неизвестно» различаются типом.
 -   **Локальное членство.** Флаг `access.local_membership` (`allow` по умолчанию; `deny` — организация запрещает права мимо IdP) управляет только строками источника `local` (14.15).
 
 **Свежесть MFA.** `context.mfa` для Cedar — чистая функция: `(acr ∈ acr_accepted ИЛИ amr ∩ amr_accepted ≠ ∅ ИЛИ assume_idp_enforced) И auth_time есть И now − auth_time ≤ max_age`. Нет `auth_time` → не свежо (fail closed). Step-up — повторный вход с `max_age=0` (и `acr_values`, если профиль их поддерживает); BFF и CLI запускают его по `401 insufficient_user_authentication`. Step-up всегда требует свежего MFA, а без `auth_time` подтвердить его нельзя: опасные действия недоступны. Правила выпуска токенов и список опасных действий описаны в разделах 13 и 14; здесь только вычисление `context.mfa`.
@@ -92,7 +91,7 @@ access:
 | Способ | Когда работает | Что делает |
 | --- | --- | --- |
 | JIT из токена | Всегда: вход, обмен, обновление `crp_` через refresh | `observe` по группам токена |
-| Pull | Только если настроен `Directory` (Keycloak) | Задача `access.directory_sync` раз в 5 мин: проходит по группам из `group_mapping`, закрывает строки `idp` у тех, кого в группе больше нет, повышает эпоху неактивных (отзыв ≤ 5 с, 10.4) |
+| Pull | Только если настроен `Directory` (Keycloak) | Задача `access.directory_sync` раз в 5 мин: проходит по группам из `group_mapping`, закрывает строки `idp` у тех, кого в группе больше нет, повышает эпоху неактивных (отзыв ≤ 5 с, 10.4); субъекты каталога без `principal` пропускаются, принципал создаётся при первом входе |
 | Push | Keycloak admin events; SCIM (Entra, Okta, Authentik) | Приём события вызывает `observe`; SCIM: `Users.active`, `Groups.members` |
 
 **Деградация без расширений Keycloak** (admin events, Admin REST). Без pull и push удаление человека из группы в IdP закрывает строку `role_binding` только при его следующем входе или обновлении токена; до этого роль остаётся открытой. Отключённый в IdP пользователь теряет доступ не позже `session_ttl_without_directory` (потолок `crp_`, по умолчанию 1 ч вместо 12 ч) или истечения refresh. Отзыв при блокировке идёт не за секунды, а за этот срок; отчёт о пересмотре доступа показывает «наблюдалось в момент» (`valid_from`), а не состояние IdP. Риск и митигирование: раздел 19.
@@ -105,7 +104,7 @@ access:
 | Authentik | `groups` в scope `profile` по умолчанию; в ID token — при «Include claims in id_token»; формат и вложенность не проверены | не проверено | не проверено → `assume_idp_enforced` или проверить на стенде | не проверено | да (`/application/o/device/`, нужен device-code flow бренда) | не используется | SCIM provider (исходящий push, событийно + полная синхронизация раз в час) | JIT + SCIM; второй IdP в compose-тесте |
 | Zitadel | нативного `groups` нет; роли проекта `urn:zitadel:iam:org:project:roles` (по запросу) или группы через Action | — | `amr` (RFC 8176), `acr` | да | да | не используется | исходящего SCIM нет (только входящий) | JIT по ролям проекта (`as: "role:"`) + TTL |
 | Okta | `groups` только с настроенным фильтром; имена | 100; при превышении запрос токена падает (не усечение) → узкий фильтр/префикс обязателен | `amr` всегда (`pwd`, `mfa`, `otp`, `hwk`…), `acr_values` `urn:okta:loa:2fa:any` | да | да (native-приложения) | не используется | не проверено (вероятно, через парное SAML/SWA-приложение): по документации SCIM provisioning в Okta рассчитан на SAML/SWA-интеграции из App Integration Wizard, а не на OIDC-приложение; Event Hooks | JIT; SCIM не проверено |
-| Entra ID | `groups` = GUID объектов (имена только для синхронизированных из AD или `ApplicationGroup`); включает вложенные (кроме «групп, назначенных приложению») → `format: id` | 200 в JWT с учётом вложенных; при превышении `groups` нет, есть `_claim_names`/`_claim_sources` → `GroupClaim::Overage` → `fail_closed` (роли из токена не меняются) | `amr` содержит `mfa`; step-up через `claims` с `acrs` (auth context, нужен P1); `acr` только v1 | да | да | не используется (Graph `transitiveMemberOf` не реализуем, решение 34) | SCIM provisioning (не-галерейное приложение) | JIT с «группами, назначенными приложению» (обходит overage) + SCIM |
+| Entra ID | `groups` = GUID объектов (имена только для синхронизированных из AD или `ApplicationGroup`); включает вложенные (кроме «групп, назначенных приложению») → `format: id` | 200 в JWT с учётом вложенных; при превышении `groups` нет, есть `_claim_names`/`_claim_sources` → `GroupClaim::Overage` → роли из токена не меняются | `amr` содержит `mfa`; step-up через `claims` с `acrs` (auth context, нужен P1); `acr` только v1 | да | да | не используется (Graph `transitiveMemberOf` не реализуем, решение 34) | SCIM provisioning (не-галерейное приложение) | JIT с «группами, назначенными приложению» (обходит overage) + SCIM |
 | Google Workspace | групп в ID token нет | — | `amr` только если включено в настройках Google Auth Platform и запрошено через `claims`; может отсутствовать; `acr` нет | да | только «TV and limited input»-клиенты, scopes `openid email profile` | Cloud Identity Groups API требует платных редакций — не реализуем | исходящий SCIM только для каталожных приложений | Локальное членство (`local`), вход через Google |
 | Dex | `groups` при scope `groups`; формат от коннектора | от коннектора | `acr`/`amr` нет | не проверено (в списке claims Dex нет) → считать «нет» | да, но не в `grantTypes` по умолчанию — включить | нет | нет | JIT + TTL; без `auth_time` опасные действия недоступны, `assume_idp_enforced` не помогает (нет свежести) |
 | GitLab | `groups_direct` в ID token (прямые, пути); `groups` и `https://gitlab.org/claims/groups/{owner,maintainer,developer}` только в userinfo | нет | `acr`/`amr` нет → `assume_idp_enforced` (группа требует 2FA) | да | да: с 17.2 за флагом, GA в 17.9 (исправление CVE-2025-0549 в 17.9.8 / 17.10.6 / 17.11.2) | не используется | system hooks (`user_add_to_group`, `user_remove_from_group`), блокировки пользователя нет — не реализуем | JIT по `groups_direct` + TTL |
@@ -133,7 +132,7 @@ CRANE никогда не будет подключаться к LDAP или Act
 | Сервисные аккаунты автоматизации | confidential | Client Credentials | Jenkins, Argo CD, скрипты: обмен токена на краткоживущий токен CRANE (ниже) |
 | Группы `/crane/<workspace>/<роль>` | группы | — | Источник прав в команде: маппинг группы в `group_mapping` даёт роль `owner`, `maintainer`, `developer` или `reader`; сама группа команду не создаёт |
 
-Мапперы в клиентах: аудитория `crane`, членство в группах (Group Membership mapper, полный путь, claim `groups`), client roles клиента `crane`, `preferred_username`, `email`, `acr` (Level of Authentication) и `amr` (AMR mapper). Свежесть MFA и step-up вычисляются по `acr`/`amr` и `auth_time` (выше). Соглашение профиля `/crane/<slug>/<роль>` разбирается однозначно, потому что slug команды ограничен грамматикой (14.15): группа с неизвестным slug или ролью игнорируется и фиксируется событием `access.group_unmapped`. Каталог (Admin REST) и admin events включаются как расширения профиля: без них действует деградация, описанная выше.
+Мапперы в клиентах: аудитория `crane`, членство в группах (Group Membership mapper, полный путь, claim `groups`), client roles клиента `crane`, `preferred_username`, `email`, `acr` (Level of Authentication) и `amr` (AMR mapper). Свежесть MFA и step-up вычисляются по `acr`/`amr` и `auth_time` (выше). Имя группы `/crane/<slug>/<роль>` — только рекомендация по именованию: UI предзаполняет `group_ref` при создании маппинга, путь не разбирается, права идут только через явный `group_mapping` (14.15). Каталог (Admin REST) и admin events включаются как расширения профиля: без них действует деградация, описанная выше.
 
 ### Какие токены принимает CRANE
 

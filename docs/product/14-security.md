@@ -276,7 +276,7 @@ SOAR-платформа получает события через webhooks и �
 
 ## 14.12 Ролевая модель и разделение обязанностей
 
-Роли людей хранятся в CRANE в таблице `role_binding` (членство во времени, 14.15); решения Cedar считаются только по ней. Токен IdP лишь наблюдается: нормализатор claims (раздел 13) превращает группы и роли из токена в `GroupRef`, а отображает их в команды и роли только `group_mapping`. Роли экземпляра приходят, например, из client roles Keycloak клиента `crane` (`role:<имя>` без команды), роли в workspace — из групп (в профиле Keycloak `/crane/<slug>/<роль>`). Роли можно вести и локально, без IdP (14.15).
+Роли людей хранятся в CRANE в таблице `role_binding` (членство во времени, 14.15); решения Cedar считаются только по ней. Токен IdP лишь наблюдается: нормализатор claims (раздел 13) превращает группы и роли из токена в `GroupRef`, а отображает их в команды и роли только `group_mapping`. Роли экземпляра приходят, например, из client roles Keycloak клиента `crane` (`role:<имя>` без команды), роли в workspace — из групп (в профиле Keycloak рекомендуемое имя `/crane/<slug>/<роль>`, 14.15). Роли можно вести и локально, без IdP (14.15).
 
 ### Роли людей
 
@@ -397,7 +397,7 @@ when { principal.roles.contains("platform-admin") && context.sod_mode == "strict
 
 ### Аудит скачиваний
 
-С v0.4.0 каждое успешное скачивание файла артефакта (не запросы metadata и индекса) даёт одну строку. Решение владельца: 100% скачиваний, а не выборка 10%. Поля строки: время, репозиторий (hosted или proxy), PURL и SHA-256 отданного файла (так видны и скачивания через proxy), участник (principal), идентификатор credential (какой токен; никогда не секрет и не его хэш), команда атрибуции (`workspace_id`, копия `credential.workspace_id`; `NULL` — «не распределено»), `bytes` (сколько байт авторизовано к отдаче; факт завершения передачи клиентом неизвестен), `source` (`hosted`, `hit`, `stale`, `miss`, `coalesced`), IP клиента, `request_id`.
+С v0.4.0 каждое успешное скачивание файла артефакта (не запросы metadata и индекса) даёт одну строку. Решение владельца: 100% скачиваний, а не выборка 10%. Поля строки: время, репозиторий (hosted или proxy), PURL и SHA-256 отданного файла (так видны и скачивания через proxy), участник (principal, обязателен: анонимных скачиваний нет, default deny), идентификатор credential (какой токен; никогда не секрет и не его хэш), команда атрибуции (`workspace_id`, копия `credential.workspace_id`; `NULL` — «не распределено»), `bytes` (сколько байт авторизовано к отдаче; факт завершения передачи клиентом неизвестен), `source` (`hosted`, `hit`, `stale`, `miss`, `coalesced`), IP клиента, `request_id`.
 
 **Атрибуция при выпуске.** Команду, на которую списывается скачивание, фиксирует выпуск credential, а не само скачивание (решение 31 в 19): скачивание копирует значение без вычислений, суммы по командам аддитивны. Человеку в нескольких командах нужен токен на команду (`cctl login --team <slug>`, переключатель в SPA); без выбора скачивания идут в «не распределено». Атрибуция отражает момент выпуска: смена состава команд посреди сессии её не меняет до перевыпуска (14.15). Claims CI при обмене пишутся в `reason` события `credential.issued`, поэтому «скачивания pipeline P» находятся в два шага: `download_event.credential_id` → событие `credential.issued` (форензик).
 
@@ -408,9 +408,9 @@ when { principal.roles.contains("platform-admin") && context.sod_mode == "strict
 -   **Покрытие.** Ответы сырых событий и экспорт несут `coverage { dropped_known, hours_without_digest[] }`: сумма известных потерь по диапазону и часы, для которых дайджеста нет. Данные берутся из событий дайджеста (24 в сутки; частичный индекс `audit_event (ts) WHERE action = 'audit.download_digest'` на партициях). Строки несброшенного буфера упавшей реплики не считает никто, поэтому признака «полно» нет. Агрегат и метрики `coverage` не отдают.
 -   **Путь записи.** Каждая реплика API буферизует строки и сбрасывает их через COPY раз в 1 с. Буфер ограничен только временем: строки, не сброшенные за 10 минут (5 минут запаса до дайджеста на расхождение часов), теряются и считаются (`crane_download_audit_dropped_total` и событие SIEM). Реплика при отбрасывании `n` строк делает `INCRBY dlx:<час> n` в Valkey (TTL 48 ч, best effort). Сбой реплики теряет не больше несброшенного буфера. Политика при недоступной записи: `drop` (по умолчанию во всех профилях) или `reject` (скачивание получает 503, пока поток нельзя записать). `reject` — осознанный выбор оператора: он меняет доступность скачиваний при отказе первичного PostgreSQL (раздел 4) на полноту записи.
 -   **Запрос.** «Кто скачал версию X между T1 и T2»: `GET /api/v1/audit/downloads?purl=…&from=…&to=…` и `cctl audit downloads`. В v0.4.0 доступ только у `secops` (API и `cctl audit downloads`); каждый запрос записывается в журнал событием `audit.viewed`. Маскированный доступ для `auditor` появляется в v1.1.0 вместе с маскированием журнала.
--   **Разрезы: агрегат и сырые события.** Суточный агрегат хранится 400 дней, сырые строки — 12 месяцев в S и M и 90 дней в L.
+-   **Разрезы: агрегат и сырые события.** Суточный агрегат и сырые строки хранятся разные сроки (см. «Срок хранения»).
 
-    | Разрез | Агрегат (400 дней) | Сырые события (окно) |
+    | Разрез | Агрегат | Сырые события (окно) |
     | --- | --- | --- |
     | Команда, репозиторий, тип репозитория | да | да |
     | Пакет и версия (`purl`) | да | да |
@@ -421,7 +421,7 @@ when { principal.roles.contains("platform-admin") && context.sod_mode == "strict
     | Число уникальных людей и машин | нет | да |
     | `coverage` | нет | да |
 
--   **Отчёты по следу команды.** `GET /api/v1/usage/downloads` (`workspace`, `repository`, `purl`, `source`, `principal_kind`, `from`, `to`, `group_by`) отдаёт агрегат только в `hal+json`: owner видит только свою команду (Cedar по атрибуту ресурса), platform-admin и secops — все. Файлы (CSV, NDJSON и другое) выдаёт единый механизм экспорта `POST /api/v1/audit/exports` с `stream: events | downloads | usage` и `format: csv | json | ndjson | ocsf`: обоснование, хэш файла и якорь; `downloads` — только у secops, `usage` — у secops, platform-admin и owner (фильтр по своей команде обязателен). Экспорт требует step-up, как прежде, и пишет `audit.exported`. Метаданные (packument, индекс) в строки не пишутся и считаются метрикой по команде (16.6).
+-   **Отчёты по следу команды.** `GET /api/v1/usage/downloads` (`workspace`, `repository`, `purl`, `source`, `principal_kind`, `from`, `to`, `group_by`) отдаёт агрегат только в `hal+json`; owner видит только свою команду (Cedar по атрибуту ресурса). Файлы (CSV, NDJSON и другое) выдаёт единый механизм экспорта `POST /api/v1/audit/exports` с `stream: events | downloads | usage`: обоснование, хэш файла и якорь, step-up, событие `audit.exported`. Потоки `downloads` и `usage` доступны с v0.6.0, поток `events` (журнал) — с v1.1.0. Роли по операциям — OpenAPI. Метаданные (packument, индекс) в строки не пишутся и считаются метрикой по команде (16.6).
 -   **Срок хранения.** Удаляются целые партиции, строчного DELETE нет. Онлайн по умолчанию 12 месяцев в профилях S и M и 90 дней в L; более старые партиции архивируются в объекты WORM со сжатием. Срок настраивается. Агрегат `download_daily` хранится 400 дней во всех профилях (`CRANE_USAGE_RETENTION_DAYS`). Оценка объёма для L — в разделе 9.
 
 ## 14.14 Пакет для аудитора
@@ -436,7 +436,7 @@ when { principal.roles.contains("platform-admin") && context.sod_mode == "strict
 
 **Команда ≡ workspace.** Отдельной сущности «команда» нет: workspace и есть команда («Команда (workspace)» в UI), единица владения (namespaces, пакеты без namespace, репозитории, роботы, trust policies, квоты) и членства. Иерархии нет (решение 30 в 19). В коде, API, метриках и Cedar пишется `workspace`. Cedar ссылается на uuid workspace, не на slug, поэтому переименование slug политики не меняет; slug не переиспользуется никогда. Таблицы: раздел 9, «Команды, принципалы и роли».
 
-**Грамматика slug.** `^[a-z0-9][a-z0-9-]{1,62}$`: без `/`, заглавных букв и точек. Slug не равен имени роли (`reader`, `developer`, `maintainer`, `owner`, `appsec`, `secops`, `auditor`, `platform-admin`) и не равен `role`. Поэтому соглашение Keycloak `/crane/<slug>/<роль>` разбирается однозначно. Группа с неизвестным slug или ролью игнорируется и записывается событием `access.group_unmapped` (кроме названия группы, персональных данных в нём нет). Расширить регулярное выражение можно позже, сузить нельзя (решение 43 в 19).
+**Грамматика slug.** `^[a-z0-9][a-z0-9-]{1,62}$`: slug безопасен в URL и не переиспользуется. Соглашение Keycloak `/crane/<slug>/<роль>` — только рекомендация по именованию групп: UI предзаполняет `group_ref` при создании маппинга, путь не разбирается, права идут только через явный `group_mapping`. Расширить регулярное выражение можно позже, сузить нельзя (решение 43 в 19).
 
 ### Жизненный цикл
 
@@ -452,13 +452,13 @@ when { principal.roles.contains("platform-admin") && context.sod_mode == "strict
 
 ### Принципалы, роли и источники
 
-Принципал: `user` (человек, ключ `(iss, sub)`), `robot` (создаёт owner команды), `workload` (CI-проект или k8s ServiceAccount: один принципал на ключ `(iss, стабильный claim)`, для GitLab `project_id`, не путь). Workload создаётся при первом обмене токена платформы, его команда — команда trust policy. Если подошедшие правила trust policy принадлежат больше чем одной команде, обмен отклоняется (fail closed) с диагностикой. Роботы и workload-принципалы между командами не передаются: отключить и создать нового. Смена IdP создаёт новых людей (новый `iss`); склейка вне объёма (решение 38). Потребитель (`consumer`) вида «проект» в графе — это workload-принципал, третьего понятия «проект» нет.
+Принципал: `human` (человек, ключ `(iss, sub)`), `robot` (создаёт owner команды), `workload` (CI-проект или k8s ServiceAccount: один принципал на ключ `(iss, стабильный claim)`, для GitLab `project_id`, не путь). Workload создаётся при первом обмене токена платформы, его команда — команда trust policy. Если подошедшие правила trust policy принадлежат больше чем одной команде, обмен отклоняется (fail closed) с диагностикой. Роботы и workload-принципалы между командами не передаются: отключить и создать нового. Смена IdP создаёт новых людей (новый `iss`); склейка вне объёма (решение 38). Потребитель (`consumer`) вида «проект» в графе — это workload-принципал, третьего понятия «проект» нет.
 
-Роли людей — только через `role_binding`. Строка: принципал, команда (`NULL` = роль экземпляра), роль, источник (`idp` | `local` | `scim`), `valid_from`, `valid_to`. Операций две: вставить открытую строку и закрыть открытую (`valid_to = now()`). Каждая из них — событие `audit_event` в той же транзакции (`access.role_granted` / `access.role_revoked`, OCSF 3001), поэтому история защищена хэш-цепочкой. `valid_from` — момент, когда CRANE увидел факт (вход, обмен, опрос каталога, SCIM, admin event), а не время изменения в IdP. Эффективная роль в команде = максимум по открытым строкам всех источников (reader < developer < maintainer < owner). Cedar читает только `role_binding` (через кэш с эпохой), токен IdP только наблюдается.
+Роли людей — только через `role_binding` (строка и операции: раздел 9). Источник строки — кто утверждает факт: `idp` (наблюдается из токена, каталога или push) или `local` (owner команды через API). Канал наблюдения (`via`: login, exchange, refresh, directory, scim, admin_event) пишется в `reason` событий `access.role_granted` / `access.role_revoked` (OCSF 3001) в той же транзакции, поэтому история защищена хэш-цепочкой. `valid_from` — момент, когда CRANE увидел факт, а не время изменения в IdP. Эффективная роль в команде = максимум по открытым строкам обоих источников (reader < developer < maintainer < owner). Cedar читает только `role_binding` (через кэш с эпохой), токен IdP только наблюдается. `GET /workspaces/{workspace}/members` отдаёт текущие (`valid_to = null`) строки той же схемы; прошлое — только `…/members/history` (owner, secops, auditor).
 
 -   **Один путь прав из IdP.** Нормализованные группы и роли отображает только `group_mapping` (группа → команда и роль, либо роль экземпляра при `workspace_id NULL`). Команды создаются в CRANE; группа IdP команду не создаёт. Маппинги ведёт только platform-admin со step-up (решение 41).
 -   **Локальное членство** (`source = local`): owner команды добавляет и убирает роли через API. Флаг экземпляра `access.local_membership: allow | deny` (по умолчанию `allow`; `deny` — организация запрещает права мимо IdP). Режимов idp, local и hybrid как настройки нет: команда с маппингом управляется IdP, локальные строки — добавка; без маппинга — только локально; «hybrid» = маппинг плюс локальные строки.
--   **Наблюдение.** `observe(principal, source, CompleteGroups)` вычисляет `resolve(groups, mappings)`, делает diff с открытыми строками источника, лишние закрывает, новые открывает. Список групп должен быть полным: при `Overage` или `Absent` ничего не закрывается (это выражено в типе; 10.16).
+-   **Наблюдение.** Use case `observe(p, groups: &CompleteGroups, via)` вычисляет `resolve` и приводит открытые строки источника `idp` в соответствие (`RoleBindings::reconcile`, 10.16). Принимает только полный список групп: `Overage` и `Absent` до него не доходят, поэтому ничего не закрывается (13).
 -   **Без каталога и push** роль, снятая в IdP, живёт до следующего входа или обновления токена (13, раздел 19).
 
 ### Владение и передача
@@ -469,18 +469,18 @@ when { principal.roles.contains("platform-admin") && context.sod_mode == "strict
 
 ### Межкомандный доступ
 
-`access_grant`: команда-владелец ресурса даёт другой команде роль `reader`, `developer` или `maintainer` на свой namespace или репозиторий, с необязательным сроком. Создаёт owner команды-владельца ресурса (step-up), отзывает он же или platform-admin. По умолчанию приватные репозитории чужих команд не видны (`404`). Cedar: политика-шаблон, связанная со строкой `access_grant`:
+`access_grant`: команда-владелец ресурса даёт другой команде роль `reader`, `developer` или `maintainer` на свой namespace или репозиторий, с необязательным сроком. Создаёт owner команды-владельца ресурса (step-up), отзывает он же или platform-admin. По умолчанию приватные репозитории чужих команд не видны (`404`). Грант получают не все члены команды-получателя, а те, чья роль в ней не ниже роли гранта: грант `maintainer` — maintainer и owner, `reader` — все. Cedar: политика-шаблон, связанная со строкой `access_grant`:
 
 ```cedar
 permit (principal in ?principal, action in <действия роли>, resource in ?resource);
-// ?principal = Workspace::"<uuid>" грантополучателя; ?resource = Namespace::"<uuid>" или Repository::"<uuid>"
+// ?principal = Role::"<ws-грантополучателя>/<роль гранта>"; ?resource = Namespace::"<uuid>" или Repository::"<uuid>"
 ```
 
 Два сценария. Команда A читает приватный репозиторий команды B: B даёт A `reader` на репозиторий. Платформенная команда даёт продуктовой публиковать в общий namespace: `maintainer` на namespace.
 
 ### Иерархия Cedar
 
-`User/Robot/Workload in Role::"<ws-uuid>/<role>"`, `Role in Workspace::"<ws-uuid>"`; `Package in Namespace` (или `Package in Workspace` без namespace), `Namespace in Workspace`, `Repository in Workspace`.
+Роли — иерархия сущностей: `Role::"<ws>/owner" in Role::"<ws>/maintainer" in Role::"<ws>/developer" in Role::"<ws>/reader" in Workspace::"<ws>"` (`<ws>` — uuid workspace). Принципалы: `Human/Robot/Workload in Role::"<ws>/<role>"` по открытым строкам `role_binding`. Ресурсы: `Package in Namespace` (или `Package in Workspace` без namespace), `Namespace in Workspace`, `Repository in Workspace`.
 
 ### Атрибуция скачиваний
 
@@ -488,24 +488,4 @@ permit (principal in ?principal, action in <действия роли>, resource
 
 ### Права на команды и след
 
-Точный контракт — OpenAPI; ниже роли и фазы.
-
-| Операция | Роли (Cedar) | Фаза | Step-up | Аудит |
-| --- | --- | --- | --- | --- |
-| `GET /workspaces` | platform-admin; остальные видят свои | P0 v0.4.0 | нет | — |
-| `POST /workspaces` | platform-admin | P0 v0.4.0 | нет | `workspace.created` 6003 |
-| `GET /workspaces/{workspace}` | члены команды, platform-admin, secops, auditor | P0 v0.4.0 | нет | — |
-| `PATCH /workspaces/{workspace}` | owner команды, platform-admin | P0 v0.4.0 | нет | `workspace.updated` 6003 |
-| `POST /workspaces/{workspace}/archive`, `/unarchive` | platform-admin | P0 v0.4.0 | да | `workspace.archived` / `workspace.unarchived` 6003 |
-| `GET /workspaces/{workspace}/members` (`at`, `role`, `source`) | члены команды, platform-admin, secops, auditor | P0 v0.4.0 | нет | — |
-| `PUT/DELETE /workspaces/{workspace}/members/{principal_id}/roles/{role}` (только source `local`) | owner команды | P0 v0.4.0 | нет | `access.role_granted` / `access.role_revoked` 3001 |
-| `GET /workspaces/{workspace}/members/history` (`from`, `to`) | owner команды, secops, auditor | P0 v0.4.0 | нет | — |
-| `GET/POST /group-mappings`, `DELETE /group-mappings/{mapping_id}` | platform-admin | P0 v0.4.0 | POST, DELETE: да | `access.group_mapping_created` / `_deleted` 3001 |
-| `GET/POST /access-grants`, `POST /access-grants/{grant_id}/revoke` | owner команды-владельца ресурса (создание, отзыв), owner грантополучателя (чтение), platform-admin | P1 v0.6.0 | POST: да | `access.grant_created` / `access.grant_revoked` 3001 |
-| `POST /ownership-transfers` | owner обеих команд или platform-admin | P1 v0.6.0 | да | `ownership.transferred` 6003 |
-| `GET /audit/downloads` | secops (auditor маскированно — v1.1.0) | P0 v0.4.0 | нет | `audit.viewed` 6003 |
-| `GET /usage/downloads` (`workspace`, `repository`, `purl`, `source`, `principal_kind`, `from`, `to`, `group_by`) | owner — только своя команда (Cedar по атрибуту ресурса), platform-admin, secops | P1 v0.6.0 | нет | — |
-| `POST /audit/exports` + `stream: events \| downloads \| usage`, `format: csv \| json \| ndjson \| ocsf` | events, downloads: secops; usage: secops, platform-admin, owner (фильтр по своей команде обязателен) | events — как было; downloads, usage — P1 v0.6.0 | да (как было) | `audit.exported` |
-| `POST /tokens` + поле `workspace` | как было (зона security) | как было | как было | `credential.issued` |
-
-CSV и NDJSON выдаются только через `/audit/exports` (один механизм экспорта); `GET /usage/downloads` отдаёт только `hal+json`.
+Права и фазы операций — OpenAPI `docs/api/admin.openapi.yaml` (`x-crane-action`, `x-crane-step-up`, «Роли»). Правило одно: CSV и NDJSON выдаются только через `/audit/exports` (один механизм экспорта), `GET /usage/downloads` отдаёт только `hal+json`.
