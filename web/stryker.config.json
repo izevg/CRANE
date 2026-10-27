@@ -4,7 +4,7 @@
   "vitest": {
     "configFile": "vitest.unit.config.ts"
   },
-  "plugins": ["@stryker-mutator/vitest-runner"],
+  "plugins": ["@stryker-mutator/vitest-runner", "../tools/stryker-lingui/ignorer.ts"],
   "mutate": [
     "src/**/*.{ts,tsx}",
     "!src/**/*.test.{ts,tsx}",
@@ -18,7 +18,5 @@
     "break": 70
   },
   "ignoreStatic": true,
-  "mutator": {
-    "excludedMutations": ["BlockStatement", "ObjectLiteral", "StringLiteral"]
-  }
+  "ignorers": ["lingui-macros"]
 }
