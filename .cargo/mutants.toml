@@ -21,4 +21,8 @@ exclude_re = [
   "replace \\+ with \\* in <impl IdGen for SequentialIdGen>::generate",
   # Тонкая обёртка над SystemTime::now без логики: проверять нечего, кроме самой платформы.
   "impl Clock for SystemClock",
+  # Корень сборки процесса: разбор роли, запуск и инициализация логов проверяет e2e-стенд
+  # (`task e2e`: настоящий cargo против сервера в Compose), а не юнит-тесты. Логика фильтра
+  # журнала ИБ вынесена в `log_filter` и мутируется как обычно.
+  "entry/server/src/main\\.rs:\\d+:\\d+: replace (main|execute|init_logging)\\b",
 ]
