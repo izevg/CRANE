@@ -7,7 +7,7 @@ import { PageHeader } from "~/shared/ui/layout";
 import { Badge, type Tone } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { PEOPLE, REPOSITORIES } from "../data/common";
-import { tr } from "../frame/tr";
+import { activeFormat, tr } from "../frame/tr";
 
 type PackageRow = {
   id: string;
@@ -94,7 +94,7 @@ const columns = helper.columns([
   helper.accessor("downloads", {
     header: () => tr(msg`Загрузок за 30 дн`),
     meta: { priority: 3, numeric: true },
-    cell: (info) => new Intl.NumberFormat("ru-RU").format(info.getValue()),
+    cell: (info) => activeFormat().number(info.getValue()),
   }),
   helper.accessor("owner", { header: () => tr(msg`Владелец`), meta: { priority: 3 } }),
 ]);

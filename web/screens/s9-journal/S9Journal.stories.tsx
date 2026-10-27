@@ -2,7 +2,6 @@ import { msg } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type ChangeEvent, useCallback, useId, useState } from "react";
 import { expect, within } from "storybook/test";
-import { textFormat } from "~/shared/lib/text";
 import { type Action, CopyableId } from "~/shared/ui/actions";
 import { columnHelper, DataTable, JsonViewer, KeyValueList } from "~/shared/ui/data-display";
 import { ConfirmDialog } from "~/shared/ui/dialogs";
@@ -35,10 +34,7 @@ import {
 } from "../data/audit";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
-import { tr } from "../frame/tr";
-
-// Макеты экранов — на русском; форматирование чисел фиксирует ru, активная локаль витрины им не нужна.
-const format = textFormat("ru");
+import { activeFormat, tr } from "../frame/tr";
 
 const DECISION_TONE = {
   allow: "success",
@@ -269,7 +265,7 @@ function Filters() {
             {tr(msg`Сбросить`)}
           </Button>
           <span className="text-body text-muted-foreground tabular-nums">
-            {format.count({ count: 18_420, capped: false })} {tr(msg`событий`)}
+            {activeFormat().count({ count: 18_420, capped: false })} {tr(msg`событий`)}
           </span>
         </div>
       </div>

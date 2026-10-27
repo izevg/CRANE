@@ -3,7 +3,6 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useCallback, useId, useState } from "react";
 import { expect, within } from "storybook/test";
-import { textFormat } from "~/shared/lib/text";
 import { FacetList, FilterSelect, SegmentedControl } from "~/shared/ui/inputs";
 import { PageHeader } from "~/shared/ui/layout";
 import {
@@ -37,10 +36,7 @@ import {
 } from "../data/search";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
-import { tr } from "../frame/tr";
-
-// Макеты экранов — на русском; форматирование чисел фиксирует ru, активная локаль витрины им не нужна.
-const format = textFormat("ru");
+import { activeFormat, tr } from "../frame/tr";
 
 const FORMAT_SEGMENTS = [
   {
@@ -118,7 +114,7 @@ function ResultCard({ item }: { item: SearchResult }) {
           <StatusBadge tone={item.state.tone} label={item.state.label} />
         </span>
         <span className="tabular-nums">
-          {tr(msg`${format.number(item.downloads)} загрузок за 30 дн`)}
+          {tr(msg`${activeFormat().number(item.downloads)} загрузок за 30 дн`)}
         </span>
         <span>{item.team}</span>
         <RelativeTime ts={item.updated} />

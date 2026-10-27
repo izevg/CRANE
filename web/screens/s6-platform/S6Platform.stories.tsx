@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { expect, fn, within } from "storybook/test";
-import { textFormat } from "~/shared/lib/text";
+import { i18n } from "~/shared/lib/i18n";
 import { type Action, ActionButton, AutoRefreshToggle } from "~/shared/ui/actions";
 import { PageHeader } from "~/shared/ui/layout";
 import { MetricTile, ShareBar, StatChip, TimeSeriesChart } from "~/shared/ui/metrics";
@@ -18,14 +18,12 @@ import { StatusBadge } from "~/shared/ui/status";
 import { PEOPLE, REPOSITORIES } from "../data/common";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
-import { tr } from "../frame/tr";
+import { activeFormat, tr } from "../frame/tr";
 
 // ---------------------------------------------------------------- данные
 
-// Макеты экранов — на русском; форматирование чисел фиксирует ru, активная локаль витрины им не нужна.
-const format = textFormat("ru");
-
 const STALE_TEXT = /обновлено/;
+const TB_EN = /\d\.\d TB/;
 const TB = 1024 ** 4;
 
 // i18n-fixture: названия команд — контент витрины, а не текст интерфейса
@@ -99,14 +97,17 @@ const P50 = latency(28, 4, 0.3, 4);
 const P95 = latency(88, 12, 1.1, 22);
 const P99 = latency(128, 14, 2.4, 34);
 const OVER_SLO = P99.filter((point) => point.v > SLO_MS).length;
-const TIME = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
+const formatBytes = (bytes: number): string => activeFormat().bytes(bytes);
+
+const timeOf = (ts: number): string =>
+  new Intl.DateTimeFormat(i18n.locale, { hour: "2-digit", minute: "2-digit" }).format(ts);
 const P95_PEAK = P95.reduce((best, point) => (point.v > best.v ? point : best));
 const summary = () => {
-  const average = format.number(Math.round(P95.reduce((sum, p) => sum + p.v, 0) / POINTS));
-  const peak = format.number(P95_PEAK.v);
-  const peakTime = TIME.format(P95_PEAK.t);
-  const overMinutes = format.number(OVER_SLO * 5);
-  const totalMinutes = format.number(POINTS * 5);
+  const average = activeFormat().number(Math.round(P95.reduce((sum, p) => sum + p.v, 0) / POINTS));
+  const peak = activeFormat().number(P95_PEAK.v);
+  const peakTime = timeOf(P95_PEAK.t);
+  const overMinutes = activeFormat().number(OVER_SLO * 5);
+  const totalMinutes = activeFormat().number(POINTS * 5);
   return tr(
     msg`Задержки за 24 ч, шаг 5 мин. p95: в среднем ${average} мс, максимум ${peak} мс в ${peakTime}. p99 выше SLO ${SLO_MS} мс ${overMinutes} мин из ${totalMinutes}.`,
   );
@@ -513,9 +514,9 @@ function Usage() {
           id,
           label,
           value: tb * TB,
-          display: format.bytes(tb * TB),
+          display: activeFormat().bytes(tb * TB),
         }))}
-        formatOther={format.bytes}
+        formatOther={formatBytes}
         caption={tr(msg`Дедупликация сэкономила 4,2 ТБ`)}
       />
     </Panel>
@@ -687,5 +688,7 @@ export const English: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole("heading", { level: 1, name: "Platform" })).toBeVisible();
     await expect(canvas.getByText("Quick actions")).toBeVisible();
+    // Размеры в легенде — в формате английской локали: «5.1 TB», а не «5,1 ТБ»
+    await expect(canvas.getAllByText(TB_EN).length).toBeGreaterThan(0);
   },
 };
