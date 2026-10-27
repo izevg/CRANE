@@ -67,7 +67,7 @@
   - Файлы: path · размер · SHA-256.
   - История: Timeline полностью.
   - Метаданные: JsonViewer + DiffViewer.
-  - Sticky footer: primary по контексту (`Запросить одобрение` в карантине; иначе нет) · secondary «Yank»/«Unyank» (только если есть ссылка `crane:yank`/`crane:unyank`) · «…» (Скачать, Удалить…, Открыть полностью).
+  - Sticky footer: primary по контексту (`Запросить одобрение` в карантине; иначе нет) · secondary «Yank»/«Unyank» (только если есть ссылка `crane:yank`/`crane:unyank`) · «…» (Скачать SBOM и evidence — через `/api` по ссылке `crane:content`, Удалить…, Открыть полностью).
 
 **Исправить.** Таблица не обрезается при открытой панели (приоритеты колонок). «Курсорная пагинация · Показано 6 из 48» → только «Загрузить ещё». «Yank (отозвать)» → «Yank» с подсказкой по формату (в Cargo «можно вернуть», в PyPI «скрыть от новых установок»). Иконка «скачать» без подписи в подвале — убрать в меню.
 
@@ -123,7 +123,7 @@
 - Плитки (5): Объём хранилищ (+дельта) · Попадание в кэш (спарклайн) · Upstream доступны 4/5 (warning, caption «npmjs недоступен») · Очередь задач 42 (caption «старейшая 3 мин») · Последний бэкап 02:14 (caption «RPO < 5 мин»). Плитка «Системный статус» — убрана.
 - 8/4: «Объём по командам и форматам» (полоса долей + легенда-таблица, сегменты «По командам · По форматам», caption «Дедупликация сэкономила 4,2 ТБ» — оставить из S6) | «Состояние компонентов» (§3).
 - 8/4: «Запросы и задержки» (p50/p95/p99 линиями, SLO 150 мс пунктиром) | «Быстрые действия» (§32): Пробный прогон retention (синхронный → результат в Sheet со списком кандидатов), Прогреть кэш по lockfile (→ E8), Проверить целостность (→ асинхронная проверка, переход в E7).
-- 3 × 4: «Ближайшие удаления: 1 284 версии · 212 ГБ» (топ-3 правил + «Настроить retention») · «Мёртвые задачи: 3» (топ-3 с kind, attempts, ошибкой; «Открыть очередь»; одиночный «Повторить» — open question) · «Проверка целостности: 0 ошибок, выборка 1 %».
+- 3 × 4: «Ближайшие удаления: 1 284 версии · 212 ГБ» (топ-3 правил + «Настроить retention») · «Мёртвые задачи: 3» (топ-3 с kind, attempts, ошибкой; «Открыть очередь»; одиночный «Повторить» на строке, массового нет) · «Проверка целостности: 0 ошибок, выборка 1 %».
 
 **Исправить.** Убрать «Выгрузить отчёт» как primary (нет в документации для админа; если нужно — I1). Убрать «Журнал инцидентов», «Перезапустить все (3)». Не обрезать названия быстрых действий. Ошибки задач на английском («Timeout connecting to Trivy») — показываем как есть, это сырой текст ошибки, но с подписью «Последняя ошибка».
 
@@ -138,15 +138,15 @@
 **Композиция.**
 - Баннер (error, `role="alert"` один раз): «P0 без действия более 1 часа: CVE-2026-31337 в @acme/ui 1.4.2 · Открыть находку» — из `oldest_unhandled_p0`.
 - PageHeader: h1 «Находки» · caption · StatChip «Обновлено 2 мин назад». Действия: secondary «Политики и гейты» (ссылка). Без primary.
-- Плитки: P0 открыто · Просрочено SLA · В KEV · Отставание фидов · Экстренные блокировки (caption «1 ждёт подтверждения SecOps»). Каждая — ссылка на фильтр.
+- Плитки: P0 открыто · Просрочено SLA · В KEV · Отставание фидов · Экстренные блокировки (caption «активных: 1»). Каждая — ссылка на фильтр.
 - Фильтры: сегменты приоритета со счётчиками «Все · P0 1 · P1 6 · P2 23 · P3 51 · P4 140» · переключатели KEV, Malware, Просрочено · select Команда, Экосистема, Область · поиск «CVE, пакет, PURL».
 - Таблица (сортировка приоритет ↓, SLA ↑). Колонки по приоритету: P1 — чекбокс, Приоритет, SLA, Бюллетень (+ алиас caption), Пакет@версия; P2 — exploit_relevance, Команда, Развёрнуто; P3 (с 2xl или через «Колонки») — CVSS, EPSS, KEV, Malware, Исправлено в, blast_radius, Источник приоритета, Область, Статус, Задача.
 - Чекбоксы и BulkActionBar (§22) показываются, только если у коллекции есть ссылки `crane:vex-statements` / `crane:exceptions` / `crane:issues`: «Принять VEX» (только один advisory) · «Исключение с TTL» (MFA) · «Создать задачи» · ×.
-- Правая колонка (с 2xl рядом, иначе под таблицей): «Экстренные блокировки» (предложенные/активные; AppSec — «Предложить блокировку», подтверждение — у SecOps), «Фиды» (лаг по каждому; warning > 30 мин), «Лицензии на проверку» (топ-3 по вирусности).
+- Правая колонка (с 2xl рядом, иначе под таблицей): «Экстренные блокировки» (активные; блокирует AppSec сам, без подтверждения SecOps; вредоносные пакеты блокируются автоматически и помечены «авто»), «Фиды» (лаг по каждому; warning > 30 мин), «Лицензии на проверку» (топ-3 по вирусности).
 
 **Исправить.** Убрать primary «Принять VEX» и «Экспорт в CSV» (не описан), «Настроить гейты» → ссылка. Убрать курсор «cur_sec_…» и «Показано 5 из 221». Убрать цветные чипы экосистем. Плитка «Фиды 4 мин» — без «9 источников онлайн» лейбла-бейджа (в caption). Кнопка «Экспорт» из bulk-панели — убрать.
 
-**Данные.** `GET /findings?priority&kev&malware&overdue&team&ecosystem&scope&q&sort=-priority,sla_due_at&cursor` → строка `{id, priority, priority_source, sla{due_at,state}|null, status, advisory{id,aliases[]}, purl, ecosystem, cvss, epss, epss_percentile, kev, malware, fixed_in?, scores[], dep_scope, deployed, team, issue?}`; `GET /findings/summary` → `by_priority, overdue, kev, emergency_blocks{active, awaiting_confirmation}, oldest_unhandled_p0`; `GET /feeds`; `GET /emergency-blocks?state=proposed|active`; `GET /license-reviews?sort=-virality&limit=3`. Массовые: `POST /vex-statements|/exceptions|/issues {finding_ids[]…}` → `results[]`. Каденс сводки 30 с; новые строки — пилюля «Новых: N · Показать».
+**Данные.** `GET /findings?priority&kev&malware&overdue&team&ecosystem&scope&q&sort=-priority,sla_due_at&cursor` → строка `{id, priority, priority_source, sla{due_at,state}|null, status, advisory{id,aliases[]}, purl, ecosystem, cvss, epss, epss_percentile, kev, malware, fixed_in?, scores[], dep_scope, deployed, team, issue?}`; `GET /findings/summary` → `by_priority, overdue, kev, emergency_blocks{active}, oldest_unhandled_p0`; `GET /feeds`; `GET /emergency-blocks?state=active`; `GET /license-reviews?sort=-virality&limit=3`. Массовые: `POST /vex-statements|/exceptions|/issues {finding_ids[]…}` → `results[]`. Каденс сводки 30 с; новые строки — пилюля «Новых: N · Показать».
 
 **Приёмка.** Сегменты приоритета — toggle group с `aria-pressed` и счётчиком в имени; выделение строк клавиатурой (Space на чекбоксе), BulkActionBar объявляется «Выбрано 3»; «Принять VEX» при разных advisory disabled с видимой причиной; при 1440 таблица без горизонтального скролла в наборе P1+P2.
 
@@ -155,12 +155,12 @@
 Макет: `mocks/s8_light/screen.png`. Архетип B. Роль: AppSec; владелец пакета видит в режиме чтения со своими действиями (VEX по своим пакетам).
 
 **Композиция.**
-- PageHeader: h1 «CVE-2026-31337 · lodash 4.17.20» (+ копирование id) · caption «npm · pkg:npm/lodash@4.17.20» · ряд: пилюля «P1 Критично», чип SLA «осталось 14 ч 20 мин», StatusBadge «Открыта», StatChips «CVSS 9,8», «EPSS 0,61 (98-й перцентиль)», «В KEV», «Исправлено в 4.17.21». Действия: primary «Принять VEX» · secondary «Исключение» (MFA) · «Создать задачу» · «…» → «Предложить экстренную блокировку» (не красная заливка).
+- PageHeader: h1 «CVE-2026-31337 · lodash 4.17.20» (+ копирование id) · caption «npm · pkg:npm/lodash@4.17.20» · ряд: пилюля «P1 Критично», чип SLA «осталось 14 ч 20 мин», StatusBadge «Открыта», StatChips «CVSS 9,8», «EPSS 0,61 (98-й перцентиль)», «В KEV», «Исправлено в 4.17.21». Действия: primary «Принять VEX» · secondary «Исключение» (MFA) · «Создать задачу» · «…» → «Экстренная блокировка…» (destructive-пункт меню, не красная заливка; открывает диалог последствий + MFA, ссылка `crane:block`).
 - 8/4. Слева: «Влияние» (§15: сводка, чипы уровней со счётчиками, таблица 4 колонок уровней, «Загрузить ещё») → «Почему P1» (§18, P3) → «История приоритета» (§16, теги «по правилу / фид / модель / вручную»). Справа: «Сведения» (KeyValue: бюллетень, алиасы, CWE, вектор CVSS, источник приоритета, затронутые версии, исправлено в) → «Оценки systemone» (§14) → «Связанные» (VEX, исключения, задача ACME-1182).
 
-**Исправить.** Убрать вторые крошки, «Контекст: Production-кластер», чип «3,9 мс · кэш», «Колонки» в карточке (переносится в общий механизм). Колонка «Окружение» — убрать до появления данных. «Critical risk» модели → убрать. «Регламент: подтверждает в течение 30 мин» — убрать (нет в документации). «KEV Exploit Active» → «В KEV».
+**Исправить.** Убрать вторые крошки, «Контекст: Production-кластер», чип «3,9 мс · кэш», «Колонки» в карточке (переносится в общий механизм). Колонка «Окружение» — не показывается, пока API не отдаёт evidence о развёртывании (решение владельца 27.10.2026). «Critical risk» модели → убрать. «Регламент: подтверждает в течение 30 мин» — убрать (нет в документации). «KEV Exploit Active» → «В KEV».
 
-**Данные.** `GET /findings/{id}` (+ `scores[{kind,value,confidence,factors[],model,model_version,shadow}]`, `priority_source`, `sla`), `GET /findings/{id}/impact?level=&cursor` → `consumers[{project, version, team, downloads, lockfile, sbom, deployed}]` + `counts`, `GET /findings/{id}/history`, `GET /findings/{id}/explanation` (P3; 503 `ai-unavailable`). Действия: `POST /vex-statements`, `POST /exceptions` (MFA), `POST /issues` — со списком из одной находки; `POST /emergency-blocks` (предложить).
+**Данные.** `GET /findings/{id}` (+ `scores[{kind,value,confidence,factors[],model,model_version,shadow}]`, `priority_source`, `sla`), `GET /findings/{id}/impact?level=&cursor` → `consumers[{project, version, team, downloads, lockfile, sbom, deployed}]` + `counts`, `GET /findings/{id}/history`, `GET /findings/{id}/explanation` (P3; 503 `ai-unavailable`). Действия: `POST /vex-statements`, `POST /exceptions` (MFA), `POST /issues` — со списком из одной находки; `POST /emergency-blocks` (сразу активна, step-up MFA; снятие — `…/lift`).
 
 **Приёмка.** Каждая ячейка уровня читается скринридером как «Lockfile: да»; при 503 объяснения страница без ошибок, вместо карточки — info-строка; отсчёт SLA не объявляется live region.
 
@@ -199,7 +199,7 @@
 | 9 Баннеры | Оставить порядок; убрать ФИО из SoD-баннера и техжаргон |
 | 10 Тосты | Оставить; ошибка с копированием request_id |
 
-**Данные.** `GET /status` (mode, degraded[], feeds_max_lag_s, banners[]), `GET /me` (`_links` разделов, `sod_mode`), `GET /notifications?category&cursor`, `POST /notifications/read`, `GET /diagnostics/{request_id}` (P1), `GET /search?limit=8&fields=name,format,latest` для палитры.
+**Данные.** `GET /status` (mode, degraded[], feeds_max_lag_s, banners[]), `GET /me` (`_links` разделов, `sod_mode`), `GET /notifications?category&unread&cursor`, `GET /notifications/unread-count`, `POST /notifications/{id}/read`, `POST /notifications/read-all {category?}`, `GET /diagnostics/{request_id}` (P1), `GET /search?limit=8&fields=name,format,latest` для палитры.
 
 ---
 
@@ -216,7 +216,7 @@
 ### B. Каталог
 | B1 Поиск | P0 | I | 5, 6 | S1 | — |
 | --- | --- | --- | --- | --- | --- |
-| B2 Избранное и недавние | P1 | I + A | 6, 7 | `GET /me/recent`, `/me/favorites` | «Устаревшие в моих зависимостях» — ОВ (нет источника данных) |
+| B2 Избранное и недавние | P1 | I + A | 6, 7 | `GET /me/recent`, `/me/favorites`; P3: `GET /me/outdated-dependencies` | Панель «Устаревшие в моих зависимостях» — P3 (нужен граф потребителей), до P3 не показывается |
 | B3 Карточка пакета | P0 | B | 1, 7, 8, 9 | S2 | — |
 | B4 Версии | P0 | A + C | 9, 16, 17 | S3 | — |
 | B5 Версия (полная) | P0/P2 | B | 11–13, 23 | S3 панель + S4 | Вкладки «Находки», «Лицензия», «Evidence», «Продвижение» — P2 |
@@ -245,14 +245,14 @@
 | E3 Репозитории | P0 | A + B + J | 8, 26 | список + настройки | StickySaveBar; таблица TTL proxy |
 | E4 Upstream | P1 | A | 3, 9 | `{name, status, since, latency_p95_ms, rpm, coalesced_ratio, stale_served_24h, allowlist}` | Последствие для клиентов в caption |
 | E5 Квоты | P1 | A | 2 (RingGauge) | `{workspace, bytes, warn_bytes, hard_bytes, trend}` | RingGauge с текстом %, не только дугой |
-| E6 Retention и GC | P1 | A + результат | 23, 32 | `POST /retention/dry-runs` (синхронно, `_embedded["crane:candidates"]` + `next`), `POST /retention/runs {rule_id, reason}` | «Применить» — деструктивный диалог с причиной; step-up — ОВ |
+| E6 Retention и GC | P1 | A + результат | 23, 32 | `POST /retention/dry-runs` (синхронно, `_embedded["crane:candidates"]` + `next`), `POST /retention/runs {rule_id, reason}` | «Применить» — деструктивный диалог с причиной, кнопка с бейджем MFA (step-up обязателен); пробный прогон — без MFA |
 | E7 Целостность | P1 | A | 27 | `POST/GET /integrity/checks` | Асинхронный прогресс |
-| E8 Готовность и прогрев | P1 | J + A | 2, 32 | `POST /readiness`, `POST /cache/warmups` (202) | Drag-and-drop с альтернативой кнопкой «Выбрать файл» (WCAG 2.5.7) |
-| E9 Очереди | P1 | A + C | 16, 17 | `{kind, queued, oldest_age_s, running, failed_24h}`, dead jobs | «Повторить» одиночный — ОВ |
+| E8 Готовность и прогрев | P1 | J + A | 2, 32 | `POST /readiness`, `POST /cache/warmups` (202) | MUST: drag-and-drop с альтернативой кнопкой «Выбрать файл» (WCAG 2.2 2.5.7) |
+| E9 Очереди | P1 | A + C | 16, 17 | `{kind, queued, oldest_age_s, running, failed_24h}`, dead jobs, `POST /jobs/{id}/retry` | «Повторить» — только одиночный, по строке и в панели; массового нет |
 | E10 Бэкапы | P1 | D | 16 | ОВ (ресурс не согласован) | Timeline бэкапов, PITR-окно |
 | E11 Импорт из Nexus | P1 | G | 16, 27 | ОВ | Идемпотентные шаги |
 | E12 Вебхуки | P2 | A + C | 24 | доставки `{event_id, status, attempts, next_retry_at}` | Секрет один раз |
-| E13 Интеграции и AI | P1–P3 | B (карточки) + A | 3 | `{role, endpoint, model, timeout_ms, limits, fallback_order, breaker, key{is_set, updated_at}}` | Порядок fallback — кнопки ↑/↓, не только drag (2.5.7) |
+| E13 Интеграции и AI | P1–P3 | B (карточки) + A | 3 | `{role, endpoint, model, timeout_ms, limits, fallback_order, breaker, key{is_set, updated_at}}` | MUST: порядок fallback — кнопки ↑/↓, не только drag (WCAG 2.2 2.5.7) |
 | E14 Workspaces | P1 | A + Sheet | — | ОВ (лёгкий список) | — |
 | E15 Статус системы | P0 | D (упрощённый) | 3 | `GET /status` | Доступен всем ролям |
 
@@ -262,7 +262,7 @@
 | F2 Находка | B | S8 |
 | F3 Бюллетень | B + J | 8, 16; алиасы чипами-ссылками; источники полей — provenance-чипы |
 | F4 Фиды | A + D | 3, 4 (гистограмма времени обнаружения + SLO 15 мин) |
-| F5 Экстренный режим | A + C | 16, 23; `{advisory, versions, proposed_by, proposed_at, confirmed_by?, review_due_at, auto}`; «Предложить» (AppSec) и «Подтвердить» (SecOps, MFA) — раздельно; роль подтверждения — ОВ |
+| F5 Экстренный режим | A + C | 16, 23; `{advisory, versions, blocked_by, blocked_at, review_due_at, auto}`; AppSec блокирует сам: «Заблокировать» (MFA, `crane:block`) → сразу активна; «Снять» (`…/lift`) при исправлении или VEX; вредоносные — автоматически (бейдж «авто»); SecOps видит только чтение |
 | F6 Исключения | A + Sheet | 10, 21; состояния requested/active/expired/revoked; строки SOAR «требует одобрения человека» |
 | F7 VEX | A + Sheet | 9 |
 | F8 Лицензии на проверку | E + C | 13, 14; решение с обязательным комментарием |
@@ -273,7 +273,7 @@
 | F13 Метрики | D | 2, 4 (SLO-линии, shadow vs боевая) |
 
 ### G. SecOps (P2)
-| G1 Рабочий стол | D | 2, 31; ожидающие подтверждения блокировки с «Подтвердить» (MFA) |
+| G1 Рабочий стол | D | 2, 31; активные экстренные блокировки — только чтение, ссылкой в F5 |
 | --- | --- | --- |
 | G2 Журнал | F + C | S9 |
 | G3 Событие | C | S9 панель |
@@ -281,7 +281,7 @@
 | G5 Приёмники SIEM | A + Sheet | caption «изменение записывается в журнал до применения» |
 | G6 Правила Sigma | A | бейджи серьёзности |
 | G7 Нарушения SoD | A | баннер режима warn |
-| G8 Отзыв токенов | A | `GET /tokens?prefix=` ; субъект — ФИО (рабочий атрибут), ОВ подтверждён be-lead как допустимый |
+| G8 Отзыв токенов | A | `GET /tokens?prefix=` ; субъект — ФИО (рабочий атрибут, согласовано с be-lead) |
 | G9 SOAR | A + B | `incident_ref`, `Idempotency-Key` в KeyValue |
 
 ### H–K
@@ -292,4 +292,6 @@
 | J1 Граф | новый | React Flow; альтернатива «Таблица» обязательна (граф недоступен скринридеру и клавиатуре без неё) |
 | J2 Ассистент | H | 18; отключён при `ai.available=false` |
 | J3 Подтверждение A2A | K | 21; `{plan_hash, task_id, skill, resource, params, effect, expires_at, requires_mfa}`; таймер без live-объявления каждую секунду, объявление за 1 мин до истечения; истёкший — 410 |
-| K1–K3 | оверлеи | 27–30 |
+| K1 Командная палитра | P0, v0.4.0 | оверлей | 29 | `GET /me` → `_links`, `GET /search?limit=8&fields=…` | Объём продукта, не предложение |
+| K2 Центр уведомлений | P0, v0.4.0 | оверлей | 28 | `GET /notifications?category&unread&cursor`, `GET /notifications/unread-count`, `POST /notifications/{id}/read`, `POST /notifications/read-all` | Объём продукта; элемент несёт `crane:target`, `crane:mark-read` |
+| K3 Системные состояния | P0 | оверлеи и страницы | 27, 30 | — | — |
