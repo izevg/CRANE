@@ -1,4 +1,5 @@
-import { msg } from "@lingui/core/macro";
+// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
+import { t } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useCallback, useId, useState } from "react";
@@ -34,43 +35,42 @@ import {
   type SearchResult,
   WORKSPACE_FACETS,
 } from "../data/search";
+import { versionBadge } from "../data/states";
+import { activeFormat } from "../frame/format";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
-import { activeFormat, tr } from "../frame/tr";
 
-const FORMAT_SEGMENTS = [
-  {
-    value: "all",
-    get label() {
-      return tr(msg`Все`);
+function formatSegments() {
+  return [
+    {
+      value: "all",
+      label: t`Все`,
+      count: 38,
     },
-    count: 38,
-  },
-  { value: "npm", label: "npm", count: 21 },
-  { value: "pypi", label: "PyPI", count: 8 },
-  { value: "maven", label: "Maven", count: 5 },
-  { value: "nuget", label: "NuGet", count: 3 },
-  { value: "cargo", label: "Cargo", count: 1 },
-] as const;
+    { value: "npm", label: "npm", count: 21 },
+    { value: "pypi", label: "PyPI", count: 8 },
+    { value: "maven", label: "Maven", count: 5 },
+    { value: "nuget", label: "NuGet", count: 3 },
+    { value: "cargo", label: "Cargo", count: 1 },
+  ] as const;
+}
 
 const REPOSITORY_OPTIONS = REPOSITORIES.map((repo) => ({ value: repo.id, label: repo.id }));
 const WORKSPACE_OPTIONS = WORKSPACES.map((name) => ({ value: name, label: name }));
 
-const DEGRADED: readonly Banner[] = [
-  {
-    id: "semantic",
-    tone: "warning",
-    get text() {
-      return tr(msg`Ассистенты недоступны: поиск работает без семантики`);
-    },
-    action: {
-      get label() {
-        return tr(msg`Статус платформы`);
+function degraded(): readonly Banner[] {
+  return [
+    {
+      id: "semantic",
+      tone: "warning",
+      text: t`Ассистенты недоступны: поиск работает без семантики`,
+      action: {
+        label: t`Статус платформы`,
+        run: { href: "/status" },
       },
-      run: { href: "/status" },
     },
-  },
-];
+  ];
+}
 
 // Спека волны 2: patterns §6 — будущий widgets/search-results/ResultCard
 function ResultCard({ item }: { item: SearchResult }) {
@@ -80,10 +80,10 @@ function ResultCard({ item }: { item: SearchResult }) {
       aria-labelledby={titleId}
       className="flex min-w-0 flex-col gap-1.5 rounded-xl bg-card p-4 shadow-card"
     >
-      {item.exact ? <p className="text-overline text-brand">{tr(msg`Точное совпадение`)}</p> : null}
+      {item.exact ? <p className="text-overline text-brand">{t`Точное совпадение`}</p> : null}
       {item.typosquatOf ? (
         <Callout tone="warning" className="py-1 text-caption">
-          {tr(msg`Похоже на ${item.typosquatOf} — 1 символ (возможный typosquat). `)}
+          {t`Похоже на ${item.typosquatOf} — 1 символ (возможный typosquat). `}
           <Link href={`/packages/${item.typosquatOf}`} className="underline">
             {item.typosquatOf}
           </Link>
@@ -97,12 +97,12 @@ function ResultCard({ item }: { item: SearchResult }) {
         </h3>
         <Badge variant="outline">{item.format}</Badge>
         <Badge variant="secondary">{`${item.repository} · ${item.workspace}`}</Badge>
-        {item.deprecated ? <StatusBadge tone="warning" label={tr(msg`Устарел`)} /> : null}
+        {item.deprecated ? <StatusBadge tone="warning" label={t`Устарел`} /> : null}
         {item.risk ? (
           <span className="ml-auto">
             <StatusBadge
               tone={riskTone(item.risk.priority)}
-              label={`${item.risk.priority} · ${item.risk.findings} ${item.risk.findings === 1 ? tr(msg`находка`) : tr(msg`находки`)}`}
+              label={`${item.risk.priority} · ${item.risk.findings} ${item.risk.findings === 1 ? t`находка` : t`находки`}`}
             />
           </span>
         ) : null}
@@ -110,11 +110,13 @@ function ResultCard({ item }: { item: SearchResult }) {
       <p className="truncate text-body text-muted-foreground">{item.description}</p>
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
         <span className="flex items-center gap-2">
-          <span>{tr(msg`Последняя ${item.version}`)}</span>
-          <StatusBadge tone={item.state.tone} label={item.state.label} />
+          <span className="inline-flex gap-1">
+            <span>{t`Последняя`}</span> <span className="font-mono">{item.version}</span>
+          </span>
+          <StatusBadge {...versionBadge(item.state)} />
         </span>
         <span className="tabular-nums">
-          {tr(msg`${activeFormat().number(item.downloads)} загрузок за 30 дн`)}
+          {t`${activeFormat().number(item.downloads)} загрузок за 30 дн`}
         </span>
         <span>{item.team}</span>
         <RelativeTime ts={item.updated} />
@@ -131,13 +133,13 @@ function Facets() {
   return (
     <div className="flex flex-col gap-4">
       <FacetList
-        title={tr(msg`По форматам`)}
+        title={t`По форматам`}
         items={FORMAT_FACETS}
         selected={formats}
         onToggle={toggleFormat}
       />
       <FacetList
-        title={tr(msg`По workspace`)}
+        title={t`По workspace`}
         items={WORKSPACE_FACETS}
         selected={spaces}
         onToggle={toggleSpace}
@@ -159,28 +161,28 @@ function FiltersRow() {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
       <SegmentedControl
-        label={tr(msg`Формат пакета`)}
-        items={FORMAT_SEGMENTS}
+        label={t`Формат пакета`}
+        items={formatSegments()}
         value={format}
         onValueChange={setFormat}
       />
       <FilterSelect
-        label={tr(msg`Репозиторий`)}
-        allLabel={tr(msg`Все репозитории`)}
+        label={t`Репозиторий`}
+        allLabel={t`Все репозитории`}
         options={REPOSITORY_OPTIONS}
         value={repository}
         onValueChange={setRepository}
       />
       <FilterSelect
         label="Workspace"
-        allLabel={tr(msg`Workspace: все`)}
+        allLabel={t`Workspace: все`}
         options={WORKSPACE_OPTIONS}
         value={workspace}
         onValueChange={setWorkspace}
       />
       <span className="flex items-center gap-2 text-body">
         <Switch aria-labelledby={switchLabelId} />
-        <span id={switchLabelId}>{tr(msg`Показывать устаревшие`)}</span>
+        <span id={switchLabelId}>{t`Показывать устаревшие`}</span>
       </span>
     </div>
   );
@@ -193,14 +195,14 @@ function MobileFilters() {
         render={
           <Button variant="secondary" className="@4xl/page:hidden">
             <SlidersHorizontalIcon aria-hidden="true" />
-            {tr(msg`Фильтры`)}
+            {t`Фильтры`}
           </Button>
         }
       />
       <SheetContent>
         <SheetHeader>
-          <SheetTitle>{tr(msg`Фильтры`)}</SheetTitle>
-          <SheetDescription>{tr(msg`Форматы и workspace`)}</SheetDescription>
+          <SheetTitle>{t`Фильтры`}</SheetTitle>
+          <SheetDescription>{t`Форматы и workspace`}</SheetDescription>
         </SheetHeader>
         <SheetBody>
           <Facets />
@@ -213,13 +215,8 @@ function MobileFilters() {
 function SearchBar({ query }: { query: string }) {
   return (
     <search className="flex gap-2">
-      <Input
-        type="search"
-        aria-label={tr(msg`Поиск пакетов`)}
-        defaultValue={query}
-        className="flex-1"
-      />
-      <Button>{tr(msg`Найти`)}</Button>
+      <Input type="search" aria-label={t`Поиск пакетов`} defaultValue={query} className="flex-1" />
+      <Button>{t`Найти`}</Button>
     </search>
   );
 }
@@ -229,10 +226,10 @@ function ResultsList() {
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
       <h2 id={headingId} className="sr-only">
-        {tr(msg`Результаты поиска`)}
+        {t`Результаты поиска`}
       </h2>
       <p role="status" className="text-caption text-muted-foreground tabular-nums">
-        {tr(msg`38 результатов · 74 мс`)}
+        {t`38 результатов · 74 мс`}
       </p>
       {RESULTS.map((item) => (
         <ResultCard key={item.id} item={item} />
@@ -246,14 +243,14 @@ function NothingFound({ query }: { query: string }) {
     <div className="flex flex-col items-center gap-4 rounded-xl bg-card py-4 shadow-card">
       <EmptyState
         variant="filtered"
-        title={tr(msg`Ничего не нашлось по «${query}»`)}
-        reset={{ label: tr(msg`Сбросить фильтры`), run: { onSelect: () => undefined } }}
+        title={t`Ничего не нашлось по «${query}»`}
+        reset={{ label: t`Сбросить фильтры`, run: { onSelect: () => undefined } }}
       />
       <ul className="max-w-[60ch] list-disc space-y-1 pl-5 text-body text-muted-foreground">
-        <li>{tr(msg`Проверьте формат: «format:npm» ищет только среди npm-пакетов`)}</li>
-        <li>{tr(msg`Уберите фильтры по репозиторию или workspace`)}</li>
+        <li>{t`Проверьте формат: «format:npm» ищет только среди npm-пакетов`}</li>
+        <li>{t`Уберите фильтры по репозиторию или workspace`}</li>
         <li>
-          {tr(msg`Возможно, вы искали `)}
+          {t`Возможно, вы искали `}
           <Link href="/packages/acme-ui" className="text-brand underline">
             @acme/ui
           </Link>
@@ -274,10 +271,7 @@ function SearchTab({ empty }: { empty: boolean }) {
         <div className="min-w-0 @4xl/page:col-span-8">
           {empty ? <NothingFound query={query} /> : <ResultsList />}
         </div>
-        <aside
-          aria-label={tr(msg`Фильтры`)}
-          className="hidden @4xl/page:col-span-4 @4xl/page:block"
-        >
+        <aside aria-label={t`Фильтры`} className="hidden @4xl/page:col-span-4 @4xl/page:block">
           <Facets />
         </aside>
       </div>
@@ -290,33 +284,33 @@ function S1Page({ empty = false }: { empty?: boolean }) {
   return (
     <Tabs defaultValue="search" className="gap-4">
       <PageHeader
-        title={tr(msg`Поиск`)}
-        caption={tr(msg`Пакеты всех форматов в репозиториях, доступных вам`)}
+        title={t`Поиск`}
+        caption={t`Пакеты всех форматов в репозиториях, доступных вам`}
         tabs={
-          <TabsList variant="line" aria-label={tr(msg`Разделы поиска`)}>
-            <TabsTrigger value="search">{tr(msg`Поиск`)}</TabsTrigger>
-            <TabsTrigger value="favorites">{tr(msg`Избранное`)}</TabsTrigger>
-            <TabsTrigger value="recent">{tr(msg`Недавние`)}</TabsTrigger>
+          <TabsList variant="line" aria-label={t`Разделы поиска`}>
+            <TabsTrigger value="search">{t`Поиск`}</TabsTrigger>
+            <TabsTrigger value="favorites">{t`Избранное`}</TabsTrigger>
+            <TabsTrigger value="recent">{t`Недавние`}</TabsTrigger>
           </TabsList>
         }
       />
       <TabsContent value="search">
         <SearchTab empty={empty} />
       </TabsContent>
-      <TabsContent value="favorites">{tr(msg`Избранные пакеты появятся здесь`)}</TabsContent>
-      <TabsContent value="recent">{tr(msg`Недавно открытые пакеты появятся здесь`)}</TabsContent>
+      <TabsContent value="favorites">{t`Избранные пакеты появятся здесь`}</TabsContent>
+      <TabsContent value="recent">{t`Недавно открытые пакеты появятся здесь`}</TabsContent>
     </Tabs>
   );
 }
 
-type Props = { empty?: boolean; banners?: readonly Banner[] };
+type Props = { empty?: boolean; assistantsDown?: boolean };
 
-function Screen({ empty = false, banners }: Props) {
+function Screen({ empty = false, assistantsDown = false }: Props) {
   return (
     <ScreenFrame
       active="search"
-      breadcrumbs={{ trail: [], current: tr(msg`Поиск`) }}
-      {...(banners ? { banners } : {})}
+      breadcrumbs={{ trail: [], current: t`Поиск` }}
+      {...(assistantsDown ? { banners: degraded() } : {})}
     >
       <S1Page empty={empty} />
     </ScreenFrame>
@@ -359,7 +353,7 @@ export const NoResults: Story = {
 
 export const AssistantsUnavailable: Story = {
   name: "Баннер: ассистенты недоступны",
-  args: { banners: DEGRADED },
+  args: { assistantsDown: true },
 };
 
 export const English: Story = {

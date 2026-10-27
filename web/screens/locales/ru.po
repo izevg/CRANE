@@ -36,9 +36,6 @@ msgstr "{repo}: чтение"
 msgid "@acme/ui · npm · SLA истёк"
 msgstr "@acme/ui · npm · SLA истёк"
 
-msgid "02 окт 2026, 11:30"
-msgstr "02 окт 2026, 11:30"
-
 msgid "1 % объектов: 4 812 из 481 200"
 msgstr "1 % объектов: 4 812 из 481 200"
 
@@ -48,23 +45,11 @@ msgstr "1 ч"
 msgid "12 мар 2025"
 msgstr "12 мар 2025"
 
-msgid "14 окт 2026, 17:03"
-msgstr "14 окт 2026, 17:03"
-
 msgid "174 версии · 47 ГБ"
 msgstr "174 версии · 47 ГБ"
 
-msgid "18 сен 2026, 08:47"
-msgstr "18 сен 2026, 08:47"
-
-msgid "21 окт 2026, 09:15"
-msgstr "21 окт 2026, 09:15"
-
 msgid "24 ч"
 msgstr "24 ч"
-
-msgid "27 окт 2026, 13:42"
-msgstr "27 окт 2026, 13:42"
 
 msgid "27 окт. 2026, 03:10 · 12 мин · запустил {runBy}"
 msgstr "27 окт. 2026, 03:10 · 12 мин · запустил {runBy}"
@@ -156,8 +141,8 @@ msgstr "SLA: осталось 2 дн"
 msgid "SLO {SLO_MS} мс"
 msgstr "SLO {SLO_MS} мс"
 
-msgid "Snapshot-сборки старше 30 дн · {repository}"
-msgstr "Snapshot-сборки старше 30 дн · {repository}"
+msgid "Snapshot-сборки старше 30 дн · {mavenRepository}"
+msgstr "Snapshot-сборки старше 30 дн · {mavenRepository}"
 
 msgid "Upstream npmjs недоступен"
 msgstr "Upstream npmjs недоступен"
@@ -228,8 +213,8 @@ msgstr "Версии @acme/ui"
 msgid "Версии 48"
 msgstr "Версии 48"
 
-msgid "Версии без загрузок 18 мес · {repository}"
-msgstr "Версии без загрузок 18 мес · {repository}"
+msgid "Версии без загрузок 18 мес · {npmRepository}"
+msgstr "Версии без загрузок 18 мес · {npmRepository}"
 
 msgid "Версий"
 msgstr "Версий"
@@ -814,10 +799,6 @@ msgstr "Последний якорь WORM"
 msgid "Последняя"
 msgstr "Последняя"
 
-#. placeholder {0}: item.version
-msgid "Последняя {0}"
-msgstr "Последняя {0}"
-
 msgid "Последняя проверка"
 msgstr "Последняя проверка"
 
@@ -1167,6 +1148,9 @@ msgstr "Точное совпадение"
 
 msgid "Уберите фильтры по репозиторию или workspace"
 msgstr "Уберите фильтры по репозиторию или workspace"
+
+msgid "Удалена"
+msgstr "Удалена"
 
 msgid "Удалённые"
 msgstr "Удалённые"

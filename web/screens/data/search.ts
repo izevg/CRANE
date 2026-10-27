@@ -1,4 +1,5 @@
 import type { Tone } from "~/shared/ui/primitives";
+import type { VersionState } from "./versions";
 
 export type SearchResult = {
   id: string;
@@ -8,7 +9,7 @@ export type SearchResult = {
   workspace: string;
   description: string;
   version: string;
-  state: { tone: Tone; label: string };
+  state: Extract<VersionState, "released" | "quarantined" | "blocked">;
   downloads: number;
   team: string;
   updated: string;
@@ -27,9 +28,9 @@ export function riskTone(priority: keyof typeof RISK_TONE): Tone {
   return RISK_TONE[priority];
 }
 
-const RELEASED = { tone: "success", label: "Выпущена" } as const;
-const QUARANTINE = { tone: "warning", label: "Карантин" } as const;
-const BLOCKED = { tone: "error", label: "Заблокирована" } as const;
+const RELEASED = "released";
+const QUARANTINE = "quarantined";
+const BLOCKED = "blocked";
 
 export const RESULTS: readonly SearchResult[] = [
   {

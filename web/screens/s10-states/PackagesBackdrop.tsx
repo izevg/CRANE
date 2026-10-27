@@ -1,20 +1,22 @@
-import type { MessageDescriptor } from "@lingui/core";
-import { msg } from "@lingui/core/macro";
+// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
+import { t } from "@lingui/core/macro";
 import { type ReactNode, useMemo } from "react";
 import type { Action } from "~/shared/ui/actions";
 import { columnHelper, DataTable } from "~/shared/ui/data-display";
 import { PageHeader } from "~/shared/ui/layout";
-import { Badge, type Tone } from "~/shared/ui/primitives";
+import { Badge } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { PEOPLE, REPOSITORIES } from "../data/common";
-import { activeFormat, tr } from "../frame/tr";
+import { versionBadge } from "../data/states";
+import type { VersionState } from "../data/versions";
+import { activeFormat } from "../frame/format";
 
 type PackageRow = {
   id: string;
   name: string;
   format: string;
   latest: string;
-  state: { tone: Tone; label: MessageDescriptor };
+  state: VersionState;
   repository: string;
   downloads: number;
   owner: string;
@@ -38,14 +40,7 @@ const SEEDS = [
   { name: "serde", format: "Cargo", latest: "1.0.217", repo: 5 },
 ] as const;
 
-const RELEASED: PackageRow["state"] = { tone: "success", label: msg`Выпущена` };
-
-const STATES: readonly PackageRow["state"][] = [
-  RELEASED,
-  RELEASED,
-  { tone: "warning", label: msg`Карантин` },
-  { tone: "error", label: msg`Заблокирована` },
-];
+const STATES: readonly PackageRow["state"][] = ["released", "released", "quarantined", "blocked"];
 
 const ROWS_COUNT = 40;
 const DOWNLOADS_BASE = 137;
@@ -64,7 +59,7 @@ function buildRows(): PackageRow[] {
         round === 0 ? seed.name : `${seed.name}-${["next", "legacy", "core", "cli"][round - 1]}`,
       format: seed.format,
       latest: round === 0 ? seed.latest : `${round}.${index % PATCH_CYCLE}.${index % MINOR_CYCLE}`,
-      state: STATES[index % STATES.length] ?? RELEASED,
+      state: STATES[index % STATES.length] ?? "released",
       repository: REPOSITORIES[seed.repo]?.id ?? "npm-hosted",
       downloads: DOWNLOADS_BASE + ((index * DOWNLOADS_STEP) % DOWNLOADS_SPAN),
       owner: PEOPLE[index % PEOPLE.length] ?? PEOPLE[0],
@@ -75,33 +70,37 @@ function buildRows(): PackageRow[] {
 const helper = columnHelper<PackageRow>();
 const columns = helper.columns([
   helper.accessor("name", {
-    header: () => tr(msg`Пакет`),
+    header: () => t`Пакет`,
     meta: { priority: 1 },
     cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
   }),
   helper.accessor("format", {
-    header: () => tr(msg`Формат`),
+    header: () => t`Формат`,
     meta: { priority: 1 },
     cell: (info) => <Badge variant="outline">{info.getValue()}</Badge>,
   }),
-  helper.accessor("latest", { header: () => tr(msg`Последняя`), meta: { priority: 1 } }),
-  helper.accessor("state", {
-    header: () => tr(msg`Состояние`),
-    meta: { priority: 2 },
-    cell: (info) => <StatusBadge tone={info.getValue().tone} label={tr(info.getValue().label)} />,
+  helper.accessor("latest", {
+    header: () => t`Последняя`,
+    meta: { priority: 1 },
+    cell: (info) => <span className="font-mono">{info.getValue()}</span>,
   }),
-  helper.accessor("repository", { header: () => tr(msg`Репозиторий`), meta: { priority: 2 } }),
+  helper.accessor("state", {
+    header: () => t`Состояние`,
+    meta: { priority: 2 },
+    cell: (info) => <StatusBadge {...versionBadge(info.getValue())} />,
+  }),
+  helper.accessor("repository", { header: () => t`Репозиторий`, meta: { priority: 2 } }),
   helper.accessor("downloads", {
-    header: () => tr(msg`Загрузок за 30 дн`),
+    header: () => t`Загрузок за 30 дн`,
     meta: { priority: 3, numeric: true },
     cell: (info) => activeFormat().number(info.getValue()),
   }),
-  helper.accessor("owner", { header: () => tr(msg`Владелец`), meta: { priority: 3 } }),
+  helper.accessor("owner", { header: () => t`Владелец`, meta: { priority: 3 } }),
 ]);
 
 const getRowId = (row: PackageRow) => row.id;
 const publishAction = (): Action => ({
-  label: tr(msg`Опубликовать пакет`),
+  label: t`Опубликовать пакет`,
   run: { href: "/help/publish" },
 });
 
@@ -120,8 +119,8 @@ export function PackagesBackdrop({ loading = false, children }: Props) {
   return (
     <div className="flex flex-col gap-6 p-4 lg:p-6">
       <PageHeader
-        title={tr(msg`Мои пакеты`)}
-        caption={tr(msg`Пакеты ваших workspace во всех форматах`)}
+        title={t`Мои пакеты`}
+        caption={t`Пакеты ваших workspace во всех форматах`}
         primary={publishAction()}
       />
       {children ?? (
@@ -130,7 +129,7 @@ export function PackagesBackdrop({ loading = false, children }: Props) {
           data={loading ? [] : rows}
           loading={loading}
           getRowId={getRowId}
-          caption={tr(msg`Мои пакеты`)}
+          caption={t`Мои пакеты`}
         />
       )}
     </div>

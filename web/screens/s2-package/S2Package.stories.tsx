@@ -1,4 +1,5 @@
-import { msg } from "@lingui/core/macro";
+// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
+import { t } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ChevronDownIcon } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -19,14 +20,15 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
-  type Tone,
 } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import type { Banner } from "~/widgets/app-shell";
 import { PEOPLE, REPOSITORIES } from "../data/common";
+import { versionBadge } from "../data/states";
+import type { VersionState } from "../data/versions";
+import { Moment } from "../frame/Moment";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
-import { tr } from "../frame/tr";
 
 type Client = "npm" | "pnpm" | "yarn";
 
@@ -49,106 +51,74 @@ const TARBALL_SHA = "9b3f1c7ad04e5b82c6f01d3a7e48b9250c1f6d8e3a47b05c9d2e18f4a6b
 type VersionRow = {
   id: string;
   version: string;
-  state: { tone: Tone; label: string };
+  state: VersionState;
   flags: readonly string[];
-  published: string;
+  /** ISO 8601 (UTC). */
+  publishedAt: string;
   by: string;
 };
 
-const VERSIONS: readonly VersionRow[] = [
-  {
-    id: "1.4.2",
-    version: "1.4.2",
-    state: {
-      tone: "success",
-      get label() {
-        return tr(msg`Выпущена`);
-      },
+function versions(): readonly VersionRow[] {
+  return [
+    {
+      id: "1.4.2",
+      version: "1.4.2",
+      state: "released",
+      flags: ["latest"],
+      publishedAt: "2026-10-27T13:42:00Z",
+      by: "robot:ci-publisher",
     },
-    flags: ["latest"],
-    get published() {
-      return tr(msg`27 окт 2026, 13:42`);
+    {
+      id: "1.4.1",
+      version: "1.4.1",
+      state: "released",
+      flags: ["stable"],
+      publishedAt: "2026-10-21T09:15:00Z",
+      by: PEOPLE[1],
     },
-    by: "robot:ci-publisher",
-  },
-  {
-    id: "1.4.1",
-    version: "1.4.1",
-    state: {
-      tone: "success",
-      get label() {
-        return tr(msg`Выпущена`);
-      },
+    {
+      id: "1.4.0",
+      version: "1.4.0",
+      state: "quarantined",
+      flags: ["pre-release"],
+      publishedAt: "2026-10-14T17:03:00Z",
+      by: "robot:ci-publisher",
     },
-    flags: ["stable"],
-    get published() {
-      return tr(msg`21 окт 2026, 09:15`);
+    {
+      id: "1.3.9",
+      version: "1.3.9",
+      state: "blocked",
+      flags: ["yanked"],
+      publishedAt: "2026-10-02T11:30:00Z",
+      by: PEOPLE[2],
     },
-    by: PEOPLE[1],
-  },
-  {
-    id: "1.4.0",
-    version: "1.4.0",
-    state: {
-      tone: "warning",
-      get label() {
-        return tr(msg`Карантин`);
-      },
+    {
+      id: "1.3.8",
+      version: "1.3.8",
+      state: "released",
+      flags: ["deprecated"],
+      publishedAt: "2026-09-18T08:47:00Z",
+      by: PEOPLE[0],
     },
-    flags: ["pre-release"],
-    get published() {
-      return tr(msg`14 окт 2026, 17:03`);
-    },
-    by: "robot:ci-publisher",
-  },
-  {
-    id: "1.3.9",
-    version: "1.3.9",
-    state: {
-      tone: "error",
-      get label() {
-        return tr(msg`Заблокирована`);
-      },
-    },
-    flags: ["yanked"],
-    get published() {
-      return tr(msg`02 окт 2026, 11:30`);
-    },
-    by: PEOPLE[2],
-  },
-  {
-    id: "1.3.8",
-    version: "1.3.8",
-    state: {
-      tone: "success",
-      get label() {
-        return tr(msg`Выпущена`);
-      },
-    },
-    flags: ["deprecated"],
-    get published() {
-      return tr(msg`18 сен 2026, 08:47`);
-    },
-    by: PEOPLE[0],
-  },
-];
+  ];
+}
 
 const rowId = (row: VersionRow) => row.id;
 
 const helper = columnHelper<VersionRow>();
 const COLUMNS = helper.columns([
   helper.accessor("version", {
-    header: () => tr(msg`Версия`),
+    header: () => t`Версия`,
     meta: { priority: 1 },
-    cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
+    cell: (info) => <span className="font-mono font-semibold">{info.getValue()}</span>,
   }),
   helper.accessor("state", {
-    header: () => tr(msg`Состояние`),
+    header: () => t`Состояние`,
     meta: { priority: 1 },
-    cell: (info) => <StatusBadge tone={info.getValue().tone} label={info.getValue().label} />,
+    cell: (info) => <StatusBadge {...versionBadge(info.getValue())} />,
   }),
   helper.accessor("flags", {
-    header: () => tr(msg`Флаги`),
+    header: () => t`Флаги`,
     meta: { priority: 2 },
     cell: (info) => (
       <span className="flex gap-1">
@@ -160,8 +130,12 @@ const COLUMNS = helper.columns([
       </span>
     ),
   }),
-  helper.accessor("published", { header: () => tr(msg`Опубликована`), meta: { priority: 2 } }),
-  helper.accessor("by", { header: () => tr(msg`Кем`), meta: { priority: 3 } }),
+  helper.accessor("publishedAt", {
+    header: () => t`Опубликована`,
+    meta: { priority: 2 },
+    cell: (info) => <Moment iso={info.getValue()} />,
+  }),
+  helper.accessor("by", { header: () => t`Кем`, meta: { priority: 3 } }),
 ]);
 
 const DAY = 86_400_000;
@@ -171,15 +145,13 @@ const DOWNLOADS = Array.from({ length: 30 }, (_, i) => ({
   v: Math.round(380 + 90 * Math.sin(i / 4) + (i % 7) * 18 + i * 6),
 }));
 
-const STALE: Banner = {
-  id: "stale",
-  tone: "warning",
-  get text() {
-    return tr(
-      msg`Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)`,
-    );
-  },
-};
+function stale(): Banner {
+  return {
+    id: "stale",
+    tone: "warning",
+    text: t`Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)`,
+  };
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -198,19 +170,19 @@ function InstallSection() {
   const [manual, setManual] = useState(false);
   const toggleManual = useCallback(() => setManual((value) => !value), []);
   return (
-    <Section title={tr(msg`Установка`)}>
+    <Section title={t`Установка`}>
       <SegmentedControl
-        label={tr(msg`Клиент пакетов`)}
+        label={t`Клиент пакетов`}
         items={CLIENTS}
         value={client}
         onValueChange={setClient}
       />
       <div className="flex flex-col gap-2">
-        <h3 className="text-body font-semibold">{tr(msg`Шаг 1. Однократная настройка`)}</h3>
+        <h3 className="text-body font-semibold">{t`Шаг 1. Однократная настройка`}</h3>
         <CodeBlock
           code={SETUP}
-          copyLabel={tr(msg`Копировать команды настройки`)}
-          label={tr(msg`Команды настройки`)}
+          copyLabel={t`Копировать команды настройки`}
+          label={t`Команды настройки`}
         />
         <Button
           variant="ghost"
@@ -220,27 +192,27 @@ function InstallSection() {
           className="self-start"
         >
           <ChevronDownIcon aria-hidden="true" className={manual ? "rotate-180" : ""} />
-          {tr(msg`Настроить вручную (.npmrc)`)}
+          {t`Настроить вручную (.npmrc)`}
         </Button>
         {manual ? (
           <>
             <CodeBlock
               code={NPMRC}
-              copyLabel={tr(msg`Копировать строку .npmrc`)}
-              label={tr(msg`Файл .npmrc`)}
+              copyLabel={t`Копировать строку .npmrc`}
+              label={t`Файл .npmrc`}
             />
             <p className="text-caption text-muted-foreground">
-              {tr(msg`Токен не показывается: используйте cctl или переменную окружения.`)}
+              {t`Токен не показывается: используйте cctl или переменную окружения.`}
             </p>
           </>
         ) : null}
       </div>
       <div className="flex flex-col gap-2">
-        <h3 className="text-body font-semibold">{tr(msg`Шаг 2. Установка`)}</h3>
+        <h3 className="text-body font-semibold">{t`Шаг 2. Установка`}</h3>
         <CodeBlock
           code={INSTALL[client]}
-          copyLabel={tr(msg`Копировать команду установки`)}
-          label={tr(msg`Команда установки`)}
+          copyLabel={t`Копировать команду установки`}
+          label={t`Команда установки`}
         />
       </div>
     </Section>
@@ -250,38 +222,34 @@ function InstallSection() {
 function RightColumn({ proxy }: { proxy: boolean }) {
   return (
     <div className="flex flex-col gap-6">
-      <Section title={tr(msg`Метаданные`)}>
+      <Section title={t`Метаданные`}>
         <KeyValueList
           items={[
             {
               label: "PURL",
               value: (
-                <CopyableId
-                  marked={false}
-                  value="pkg:npm/%40acme/ui@1.4.2"
-                  label={tr(msg`Скопировать PURL`)}
-                />
+                <CopyableId marked={false} value="pkg:npm/%40acme/ui@1.4.2" label={t`Скопировать PURL`} />
               ),
             },
             {
               label: "SHA-256",
-              value: <CopyableId value={TARBALL_SHA} label={tr(msg`Скопировать SHA-256`)} />,
+              value: <CopyableId value={TARBALL_SHA} label={t`Скопировать SHA-256`} />,
             },
-            { label: tr(msg`Пространство имён`), value: "@acme/*" },
+            { label: t`Пространство имён`, value: "@acme/*" },
             {
-              label: tr(msg`Репозиторий`),
+              label: t`Репозиторий`,
               value: proxy ? `${REPOSITORIES[1].id} → registry.npmjs.org` : REPOSITORIES[0].id,
             },
             {
-              label: tr(msg`Лицензия`),
+              label: t`Лицензия`,
               value: (
                 <span className="flex flex-wrap items-center gap-2">
                   {"MIT"}
-                  <StatusBadge tone="success" label={tr(msg`Разрешена`)} />
+                  <StatusBadge tone="success" label={t`Разрешена`} />
                 </span>
               ),
             },
-            { label: tr(msg`Создан`), value: tr(msg`12 мар 2025`) },
+            { label: t`Создан`, value: t`12 мар 2025` },
             {
               label: "GitLab",
               value: (
@@ -297,33 +265,33 @@ function RightColumn({ proxy }: { proxy: boolean }) {
         />
       </Section>
       {/* Спека волны 2: patterns §10 — будущий features/risk-summary (панель «Риски» с приоритетом и SLA) */}
-      <Section title={tr(msg`Риски`)}>
+      <Section title={t`Риски`}>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge tone="warning" label={tr(msg`P1 · 1 находка`)} />
-          <Badge variant="outline">{tr(msg`SLA: осталось 2 дн`)}</Badge>
+          <StatusBadge tone="warning" label={t`P1 · 1 находка`} />
+          <Badge variant="outline">{t`SLA: осталось 2 дн`}</Badge>
         </div>
         <p className="text-body text-muted-foreground">
-          {tr(msg`Лицензии: всё разрешено. CVE-2026-31337 в зависимости lodash 4.17.20.`)}
+          {t`Лицензии: всё разрешено. CVE-2026-31337 в зависимости lodash 4.17.20.`}
         </p>
       </Section>
       {/* Спека волны 2: patterns §12 — будущий shared/ui/evidence (блок «Происхождение») */}
-      <Section title={tr(msg`Происхождение последней версии`)}>
+      <Section title={t`Происхождение последней версии`}>
         <KeyValueList
           items={[
-            { label: tr(msg`Пайплайн`), value: "#4521" },
+            { label: t`Пайплайн`, value: "#4521" },
             {
-              label: tr(msg`Коммит`),
+              label: t`Коммит`,
               value: (
                 <CopyableId
                   value="9f2c1ab4e7d03b58a1c6f20d93e47b85a0c1d2e3"
-                  label={tr(msg`Скопировать коммит`)}
+                  label={t`Скопировать коммит`}
                 />
               ),
             },
             { label: "Ref", value: "main" },
             {
-              label: tr(msg`Источник`),
-              value: <StatusBadge tone="success" label={tr(msg`из OIDC CI`)} />,
+              label: t`Источник`,
+              value: <StatusBadge tone="success" label={t`из OIDC CI`} />,
             },
           ]}
         />
@@ -340,10 +308,10 @@ function S2Package({ proxy = false }: { proxy?: boolean }) {
     <ScreenFrame
       active="packages"
       breadcrumbs={{
-        trail: [{ label: tr(msg`Мои пакеты`), href: "/packages" }],
+        trail: [{ label: t`Мои пакеты`, href: "/packages" }],
         current: "@acme/ui",
       }}
-      {...(proxy ? { banners: [STALE] } : {})}
+      {...(proxy ? { banners: [stale()] } : {})}
     >
       <div className="flex flex-col gap-6">
         <PageHeader
@@ -351,7 +319,7 @@ function S2Package({ proxy = false }: { proxy?: boolean }) {
           status={
             <StatusBadge
               tone={proxy ? "warning" : "success"}
-              label={proxy ? "Stale" : tr(msg`Активен`)}
+              label={proxy ? "Stale" : t`Активен`}
             />
           }
           chips={
@@ -362,36 +330,36 @@ function S2Package({ proxy = false }: { proxy?: boolean }) {
               </Badge>
             </>
           }
-          caption={tr(msg`Компоненты интерфейса CRANE и внутренних порталов`)}
+          caption={t`Компоненты интерфейса CRANE и внутренних порталов`}
           stats={
             <>
-              <StatChip label={tr(msg`Версий`)} value="48" />
-              <StatChip label={tr(msg`Последняя`)} value="1.4.2" />
-              <StatChip label={tr(msg`Загрузок за 30 дн`)} value="12 340" />
-              <StatChip label={tr(msg`Потребителей`)} value="63" />
-              <StatChip label={tr(msg`Команда`)} value="UI-kit" />
+              <StatChip label={t`Версий`} value="48" />
+              <StatChip label={t`Последняя`} value={<span className="font-mono">1.4.2</span>} />
+              <StatChip label={t`Загрузок за 30 дн`} value="12 340" />
+              <StatChip label={t`Потребителей`} value="63" />
+              <StatChip label={t`Команда`} value="UI-kit" />
             </>
           }
           tabs={
             <Tabs defaultValue="overview">
-              <TabsList variant="line" aria-label={tr(msg`Разделы пакета`)}>
-                <TabsTrigger value="overview">{tr(msg`Обзор`)}</TabsTrigger>
-                <TabsTrigger value="versions">{tr(msg`Версии 48`)}</TabsTrigger>
+              <TabsList variant="line" aria-label={t`Разделы пакета`}>
+                <TabsTrigger value="overview">{t`Обзор`}</TabsTrigger>
+                <TabsTrigger value="versions">{t`Версии 48`}</TabsTrigger>
                 <TabsTrigger value="readme">README</TabsTrigger>
-                <TabsTrigger value="risks">{tr(msg`Риски 1`)}</TabsTrigger>
-                <TabsTrigger value="consumers">{tr(msg`Потребители`)}</TabsTrigger>
-                <TabsTrigger value="settings">{tr(msg`Настройки`)}</TabsTrigger>
+                <TabsTrigger value="risks">{t`Риски 1`}</TabsTrigger>
+                <TabsTrigger value="consumers">{t`Потребители`}</TabsTrigger>
+                <TabsTrigger value="settings">{t`Настройки`}</TabsTrigger>
               </TabsList>
             </Tabs>
           }
-          primary={{ label: tr(msg`Скопировать команду`), run: { onSelect: copy } }}
-          secondary={[{ label: tr(msg`В избранное`), run: { onSelect: () => undefined } }]}
+          primary={{ label: t`Скопировать команду`, run: { onSelect: copy } }}
+          secondary={[{ label: t`В избранное`, run: { onSelect: () => undefined } }]}
           menu={[
-            { label: tr(msg`Назначить замену…`), run: { onSelect: () => undefined } },
-            { label: tr(msg`Запросить одобрение…`), run: { onSelect: () => undefined } },
-            { label: tr(msg`Настройки`), run: { href: "/packages/acme-ui/settings" } },
+            { label: t`Назначить замену…`, run: { onSelect: () => undefined } },
+            { label: t`Запросить одобрение…`, run: { onSelect: () => undefined } },
+            { label: t`Настройки`, run: { href: "/packages/acme-ui/settings" } },
             {
-              label: tr(msg`Объявить устаревшим…`),
+              label: t`Объявить устаревшим…`,
               run: { onSelect: () => undefined },
               destructive: true,
             },
@@ -400,21 +368,19 @@ function S2Package({ proxy = false }: { proxy?: boolean }) {
         <div className="grid grid-cols-1 gap-6 @5xl/page:grid-cols-12">
           <div className="flex min-w-0 flex-col gap-6 @5xl/page:col-span-8">
             <InstallSection />
-            <Section title={tr(msg`Последние версии`)}>
+            <Section title={t`Последние версии`}>
               <DataTable
                 columns={COLUMNS}
-                data={[...VERSIONS]}
+                data={[...versions()]}
                 getRowId={rowId}
-                caption={tr(msg`Последние версии @acme/ui`)}
+                caption={t`Последние версии @acme/ui`}
               />
             </Section>
-            <Section title={tr(msg`Динамика скачиваний`)}>
+            <Section title={t`Динамика скачиваний`}>
               <TimeSeriesChart
-                title={tr(msg`Скачивания за 30 дней`)}
-                summary={tr(
-                  msg`За 30 дней: 12 340 скачиваний, рост к началу периода, максимум 912 в сутки 27 окт`,
-                )}
-                series={[{ id: "downloads", label: tr(msg`Скачивания`), points: DOWNLOADS }]}
+                title={t`Скачивания за 30 дней`}
+                summary={t`За 30 дней: 12 340 скачиваний, рост к началу периода, максимум 912 в сутки 27 окт`}
+                series={[{ id: "downloads", label: t`Скачивания`, points: DOWNLOADS }]}
                 area
               />
             </Section>
@@ -464,7 +430,7 @@ export const ProxyStale: Story = {
   args: { proxy: true },
   play: async ({ canvasElement }) => {
     // Текст баннера дублируется в live-регионе (announce), поэтому совпадений может быть два
-    const [banner] = await within(canvasElement).findAllByText(STALE.text);
+    const [banner] = await within(canvasElement).findAllByText(stale().text);
     await expect(banner).toBeVisible();
   },
 };

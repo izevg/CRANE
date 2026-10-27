@@ -1,4 +1,5 @@
-import { msg } from "@lingui/core/macro";
+// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
+import { t } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   FlameIcon,
@@ -16,9 +17,9 @@ import { MetricTile, ShareBar, StatChip, TimeSeriesChart } from "~/shared/ui/met
 import { Badge, Card, Link, ToggleGroup, ToggleGroupItem } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { PEOPLE, REPOSITORIES } from "../data/common";
+import { activeFormat } from "../frame/format";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
-import { activeFormat, tr } from "../frame/tr";
 
 // ---------------------------------------------------------------- данные
 
@@ -55,20 +56,18 @@ const BY_FORMAT = [
 ] as const;
 
 type Dimension = "team" | "format";
-const DIMENSIONS = {
-  team: {
-    rows: BY_TEAM,
-    get column() {
-      return tr(msg`Команда`);
+function dimensions() {
+  return {
+    team: {
+      rows: BY_TEAM,
+      column: t`Команда`,
     },
-  },
-  format: {
-    rows: BY_FORMAT,
-    get column() {
-      return tr(msg`Формат`);
+    format: {
+      rows: BY_FORMAT,
+      column: t`Формат`,
     },
-  },
-} as const;
+  } as const;
+}
 
 const SPARK_VOLUME = [16.9, 17.1, 17.0, 17.4, 17.6, 17.9, 18.0, 18.2, 18.4];
 const SPARK_HIT = [93.1, 93.8, 94.4, 93.9, 94.6, 95.0, 94.2, 94.8, 94.2];
@@ -108,9 +107,7 @@ const summary = () => {
   const peakTime = timeOf(P95_PEAK.t);
   const overMinutes = activeFormat().number(OVER_SLO * 5);
   const totalMinutes = activeFormat().number(POINTS * 5);
-  return tr(
-    msg`Задержки за 24 ч, шаг 5 мин. p95: в среднем ${average} мс, максимум ${peak} мс в ${peakTime}. p99 выше SLO ${SLO_MS} мс ${overMinutes} мин из ${totalMinutes}.`,
-  );
+  return t`Задержки за 24 ч, шаг 5 мин. p95: в среднем ${average} мс, максимум ${peak} мс в ${peakTime}. p99 выше SLO ${SLO_MS} мс ${overMinutes} мин из ${totalMinutes}.`;
 };
 
 // ---------------------------------------------------------------- inline-блоки
@@ -125,81 +122,57 @@ type Health = {
 };
 
 // Сначала проблемные (patterns §3).
-const COMPONENTS: readonly Health[] = [
-  {
-    name: "Upstream npmjs",
-    tone: "error",
-    get label() {
-      return tr(msg`Недоступен`);
+function components(): readonly Health[] {
+  return [
+    {
+      name: "Upstream npmjs",
+      tone: "error",
+      label: t`Недоступен`,
+      caption: t`с 13:42 · клиенты получают кэш до 7 дней`,
+      href: "/platform/upstreams",
     },
-    get caption() {
-      return tr(msg`с 13:42 · клиенты получают кэш до 7 дней`);
+    {
+      name: t`LLM-шлюз`,
+      tone: "warning",
+      label: t`Деградация`,
+      caption: t`таймаут 12 с · включена резервная модель`,
+      href: "/platform/integrations",
     },
-    href: "/platform/upstreams",
-  },
-  {
-    get name() {
-      return tr(msg`LLM-шлюз`);
+    {
+      name: "PostgreSQL",
+      tone: "success",
+      label: t`Работает`,
+      caption: t`p95 1,8 мс`,
+      href: "/status",
     },
-    tone: "warning",
-    get label() {
-      return tr(msg`Деградация`);
+    {
+      name: "Valkey",
+      tone: "success",
+      label: t`Работает`,
+      caption: t`p95 0,4 мс`,
+      href: "/status",
     },
-    get caption() {
-      return tr(msg`таймаут 12 с · включена резервная модель`);
+    {
+      name: "S3 main",
+      tone: "success",
+      label: t`Работает`,
+      caption: t`p95 22 мс`,
+      href: "/status",
     },
-    href: "/platform/integrations",
-  },
-  {
-    name: "PostgreSQL",
-    tone: "success",
-    get label() {
-      return tr(msg`Работает`);
+    {
+      name: "Trivy",
+      tone: "success",
+      label: t`Работает`,
+      caption: t`база v2026.10.27`,
+      href: "/platform/integrations",
     },
-    get caption() {
-      return tr(msg`p95 1,8 мс`);
-    },
-    href: "/status",
-  },
-  {
-    name: "Valkey",
-    tone: "success",
-    get label() {
-      return tr(msg`Работает`);
-    },
-    get caption() {
-      return tr(msg`p95 0,4 мс`);
-    },
-    href: "/status",
-  },
-  {
-    name: "S3 main",
-    tone: "success",
-    get label() {
-      return tr(msg`Работает`);
-    },
-    get caption() {
-      return tr(msg`p95 22 мс`);
-    },
-    href: "/status",
-  },
-  {
-    name: "Trivy",
-    tone: "success",
-    get label() {
-      return tr(msg`Работает`);
-    },
-    get caption() {
-      return tr(msg`база v2026.10.27`);
-    },
-    href: "/platform/integrations",
-  },
-];
+  ];
+}
 
 function HealthList() {
   return (
     <ul className="flex flex-col">
-      {COMPONENTS.map((item) => (
+      {components().map((item) => (
         <li key={item.name} className="border-b last:border-b-0">
           <Link
             href={item.href}
@@ -220,62 +193,48 @@ function HealthList() {
 /** Спека волны 2: §32 — shared/ui/layout QuickActions. */
 type Quick = { icon: LucideIcon; action: Action; caption: string };
 
-const QUICK: readonly Quick[] = [
-  {
-    icon: FlaskConicalIcon,
-    action: {
-      get label() {
-        return tr(msg`Пробный прогон retention`);
+function quick(): readonly Quick[] {
+  return [
+    {
+      icon: FlaskConicalIcon,
+      action: {
+        label: t`Пробный прогон retention`,
+        run: { onSelect: fn() },
       },
-      run: { onSelect: fn() },
+      caption: t`Покажет кандидатов на удаление; ничего не удаляет`,
     },
-    get caption() {
-      return tr(msg`Покажет кандидатов на удаление; ничего не удаляет`);
-    },
-  },
-  {
-    icon: Trash2Icon,
-    action: {
-      get label() {
-        return tr(msg`Применить retention`);
+    {
+      icon: Trash2Icon,
+      action: {
+        label: t`Применить retention`,
+        run: { onSelect: fn() },
+        stepUp: true,
       },
-      run: { onSelect: fn() },
-      stepUp: true,
+      caption: t`Удалит 1 284 версии (212 ГБ) без возможности отката`,
     },
-    get caption() {
-      return tr(msg`Удалит 1 284 версии (212 ГБ) без возможности отката`);
-    },
-  },
-  {
-    icon: FlameIcon,
-    action: {
-      get label() {
-        return tr(msg`Прогреть кэш по lockfile`);
+    {
+      icon: FlameIcon,
+      action: {
+        label: t`Прогреть кэш по lockfile`,
+        run: { href: "/platform/readiness" },
       },
-      run: { href: "/platform/readiness" },
+      caption: t`Поставит загрузку зависимостей в очередь`,
     },
-    get caption() {
-      return tr(msg`Поставит загрузку зависимостей в очередь`);
-    },
-  },
-  {
-    icon: ShieldCheckIcon,
-    action: {
-      get label() {
-        return tr(msg`Проверить целостность`);
+    {
+      icon: ShieldCheckIcon,
+      action: {
+        label: t`Проверить целостность`,
+        run: { onSelect: fn() },
       },
-      run: { onSelect: fn() },
+      caption: t`Запустит асинхронную проверку, откроется E7`,
     },
-    get caption() {
-      return tr(msg`Запустит асинхронную проверку, откроется E7`);
-    },
-  },
-];
+  ];
+}
 
 function QuickActions() {
   return (
     <ul className="flex flex-col gap-3">
-      {QUICK.map(({ icon: Icon, action, caption }) => (
+      {quick().map(({ icon: Icon, action, caption }) => (
         <li key={action.label} className="flex items-start gap-3">
           <Icon aria-hidden="true" className="mt-2 size-5 shrink-0 text-muted-foreground" />
           <div className="flex min-w-0 flex-col items-start gap-1">
@@ -348,46 +307,30 @@ function TopThree({
   );
 }
 
-const RETENTION_ROWS: readonly TopRow[] = [
-  {
-    id: "r1",
-    get title() {
-      const repository = REPOSITORIES[0].id;
-      return tr(msg`Версии без загрузок 18 мес · ${repository}`);
+function retentionRows(): readonly TopRow[] {
+  const npmRepository = REPOSITORIES[0].id;
+  const mavenRepository = REPOSITORIES[3].id;
+  return [
+    {
+      id: "r1",
+      title: t`Версии без загрузок 18 мес · ${npmRepository}`,
+      caption: t`612 версий · 94 ГБ`,
+      badge: t`правило 1`,
     },
-    get caption() {
-      return tr(msg`612 версий · 94 ГБ`);
+    {
+      id: "r2",
+      title: t`Snapshot-сборки старше 30 дн · ${mavenRepository}`,
+      caption: t`498 версий · 71 ГБ`,
+      badge: t`правило 2`,
     },
-    get badge() {
-      return tr(msg`правило 1`);
+    {
+      id: "r3",
+      title: t`Образы без тега старше 14 дн · oci-hosted`,
+      caption: t`174 версии · 47 ГБ`,
+      badge: t`правило 3`,
     },
-  },
-  {
-    id: "r2",
-    get title() {
-      const repository = REPOSITORIES[3].id;
-      return tr(msg`Snapshot-сборки старше 30 дн · ${repository}`);
-    },
-    get caption() {
-      return tr(msg`498 версий · 71 ГБ`);
-    },
-    get badge() {
-      return tr(msg`правило 2`);
-    },
-  },
-  {
-    id: "r3",
-    get title() {
-      return tr(msg`Образы без тега старше 14 дн · oci-hosted`);
-    },
-    get caption() {
-      return tr(msg`174 версии · 47 ГБ`);
-    },
-    get badge() {
-      return tr(msg`правило 3`);
-    },
-  },
-];
+  ];
+}
 
 const deadJobs = (): readonly TopRow[] =>
   [
@@ -397,40 +340,30 @@ const deadJobs = (): readonly TopRow[] =>
   ].map((job) => ({
     id: job.id,
     title: `${job.kind} · ${job.id}`,
-    caption: tr(msg`попыток ${job.attempts} · Последняя ошибка: ${job.error}`),
-    action: { label: tr(msg`Повторить ${job.id}`), run: { onSelect: fn() } },
+    caption: t`попыток ${job.attempts} · Последняя ошибка: ${job.error}`,
+    action: { label: t`Повторить ${job.id}`, run: { onSelect: fn() } },
   }));
 
-const INTEGRITY_ROWS: readonly TopRow[] = [
-  {
-    id: "i1",
-    get title() {
-      return tr(msg`Последняя проверка`);
+function integrityRows(): readonly TopRow[] {
+  const runBy = PEOPLE[1];
+  return [
+    {
+      id: "i1",
+      title: t`Последняя проверка`,
+      caption: t`27 окт. 2026, 03:10 · 12 мин · запустил ${runBy}`,
     },
-    get caption() {
-      const runBy = PEOPLE[1];
-      return tr(msg`27 окт. 2026, 03:10 · 12 мин · запустил ${runBy}`);
+    {
+      id: "i2",
+      title: t`Проверено`,
+      caption: t`1 % объектов: 4 812 из 481 200`,
     },
-  },
-  {
-    id: "i2",
-    get title() {
-      return tr(msg`Проверено`);
+    {
+      id: "i3",
+      title: t`Следующая`,
+      caption: t`28 окт. 2026, 03:10 по расписанию`,
     },
-    get caption() {
-      return tr(msg`1 % объектов: 4 812 из 481 200`);
-    },
-  },
-  {
-    id: "i3",
-    get title() {
-      return tr(msg`Следующая`);
-    },
-    get caption() {
-      return tr(msg`28 окт. 2026, 03:10 по расписанию`);
-    },
-  },
-];
+  ];
+}
 
 // ---------------------------------------------------------------- экран
 
@@ -442,51 +375,51 @@ function Tiles({ mode }: { mode: Mode }) {
     <div className="grid grid-cols-1 gap-4 @xl/page:grid-cols-2 @3xl/page:grid-cols-5">
       {degraded ? (
         <MetricTile
-          label={tr(msg`Объём хранилищ`)}
+          label={t`Объём хранилищ`}
           value={18.4}
-          unit={tr(msg`ТБ`)}
+          unit={t`ТБ`}
           delta={{ pct: 1.2, polarity: "neutral" }}
           spark={SPARK_VOLUME}
           stale={{ updatedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString() }}
         />
       ) : (
         <MetricTile
-          label={tr(msg`Объём хранилищ`)}
+          label={t`Объём хранилищ`}
           value={18.4}
-          unit={tr(msg`ТБ`)}
+          unit={t`ТБ`}
           delta={{ pct: 1.2, polarity: "neutral" }}
           spark={SPARK_VOLUME}
         />
       )}
       <MetricTile
-        label={tr(msg`Попадание в кэш`)}
+        label={t`Попадание в кэш`}
         value={degraded ? null : 94.2}
         unit="%"
         spark={SPARK_HIT}
         reference={94}
       />
       <MetricTile
-        label={tr(msg`Upstream доступны`)}
+        label={t`Upstream доступны`}
         value="4/5"
         tone="warning"
-        toneLabel={tr(msg`npmjs недоступен`)}
-        caption={tr(msg`с 13:42`)}
+        toneLabel={t`npmjs недоступен`}
+        caption={t`с 13:42`}
         spark={[5, 5, 5, 5, 5, 5, 4]}
       />
       <MetricTile
-        label={tr(msg`Очередь задач`)}
+        label={t`Очередь задач`}
         value={42}
-        caption={tr(msg`старейшая 3 мин`)}
+        caption={t`старейшая 3 мин`}
         spark={[12, 18, 40, 35, 52, 44, 42]}
       />
-      <MetricTile label={tr(msg`Последний бэкап`)} value="02:14" caption={tr(msg`RPO < 5 мин`)} />
+      <MetricTile label={t`Последний бэкап`} value="02:14" caption={t`RPO < 5 мин`} />
     </div>
   );
 }
 
 function Usage() {
   const [dimension, setDimension] = useState<Dimension>("team");
-  const { rows, column } = DIMENSIONS[dimension];
+  const { rows, column } = dimensions()[dimension];
   const pick = useCallback((next: readonly string[]) => {
     const picked = next[0];
     if (picked === "team" || picked === "format") {
@@ -494,22 +427,20 @@ function Usage() {
     }
   }, []);
   return (
-    <Panel title={tr(msg`Объём по командам и форматам`)}>
+    <Panel title={t`Объём по командам и форматам`}>
       <ToggleGroup
-        aria-label={tr(msg`Разрез`)}
+        aria-label={t`Разрез`}
         size="sm"
         variant="outline"
         value={[dimension]}
         onValueChange={pick}
       >
-        <ToggleGroupItem value="team">{tr(msg`По командам`)}</ToggleGroupItem>
-        <ToggleGroupItem value="format">{tr(msg`По форматам`)}</ToggleGroupItem>
+        <ToggleGroupItem value="team">{t`По командам`}</ToggleGroupItem>
+        <ToggleGroupItem value="format">{t`По форматам`}</ToggleGroupItem>
       </ToggleGroup>
       <ShareBar
-        title={
-          dimension === "team" ? tr(msg`Доли объёма по командам`) : tr(msg`Доли объёма по форматам`)
-        }
-        columns={{ name: column, value: tr(msg`Объём`), share: tr(msg`Доля`) }}
+        title={dimension === "team" ? t`Доли объёма по командам` : t`Доли объёма по форматам`}
+        columns={{ name: column, value: t`Объём`, share: t`Доля` }}
         items={rows.map(([id, label, tb]) => ({
           id,
           label,
@@ -517,7 +448,7 @@ function Usage() {
           display: activeFormat().bytes(tb * TB),
         }))}
         formatOther={formatBytes}
-        caption={tr(msg`Дедупликация сэкономила 4,2 ТБ`)}
+        caption={t`Дедупликация сэкономила 4,2 ТБ`}
       />
     </Panel>
   );
@@ -532,29 +463,29 @@ function Header() {
   const [paused, setPaused] = useState(false);
   return (
     <PageHeader
-      title={tr(msg`Платформа`)}
-      status={<StatusBadge tone="success" label={tr(msg`Режим: норма`)} />}
-      caption={tr(msg`Хранилища, кэш, upstream и фоновые задачи`)}
+      title={t`Платформа`}
+      status={<StatusBadge tone="success" label={t`Режим: норма`} />}
+      caption={t`Хранилища, кэш, upstream и фоновые задачи`}
       stats={
         <>
-          <StatChip label={tr(msg`Версия`)} value="0.5.0" />
-          <StatChip label={tr(msg`Хранилищ`)} value="4" />
-          <StatChip label={tr(msg`Репозиториев`)} value="18" />
+          <StatChip label={t`Версия`} value="0.5.0" />
+          <StatChip label={t`Хранилищ`} value="4" />
+          <StatChip label={t`Репозиториев`} value="18" />
         </>
       }
       aside={
         <>
           <ToggleGroup
-            aria-label={tr(msg`Окно времени`)}
+            aria-label={t`Окно времени`}
             size="sm"
             variant="outline"
             value={[window]}
             onValueChange={pickWindow}
           >
-            <ToggleGroupItem value="1h">{tr(msg`1 ч`)}</ToggleGroupItem>
-            <ToggleGroupItem value="6h">{tr(msg`6 ч`)}</ToggleGroupItem>
-            <ToggleGroupItem value="24h">{tr(msg`24 ч`)}</ToggleGroupItem>
-            <ToggleGroupItem value="7d">{tr(msg`7 дн`)}</ToggleGroupItem>
+            <ToggleGroupItem value="1h">{t`1 ч`}</ToggleGroupItem>
+            <ToggleGroupItem value="6h">{t`6 ч`}</ToggleGroupItem>
+            <ToggleGroupItem value="24h">{t`24 ч`}</ToggleGroupItem>
+            <ToggleGroupItem value="7d">{t`7 дн`}</ToggleGroupItem>
           </ToggleGroup>
           <AutoRefreshToggle paused={paused} onPausedChange={setPaused} />
         </>
@@ -568,8 +499,8 @@ function S6Platform({ mode = "normal" }: { mode?: Mode }) {
     <ScreenFrame
       active="overview"
       breadcrumbs={{
-        trail: [{ label: tr(msg`Платформа`), href: "/platform" }],
-        current: tr(msg`Обзор`),
+        trail: [{ label: t`Платформа`, href: "/platform" }],
+        current: t`Обзор`,
       }}
     >
       <div className="flex flex-col gap-6">
@@ -580,17 +511,17 @@ function S6Platform({ mode = "normal" }: { mode?: Mode }) {
             <Usage />
           </div>
           <div className="@3xl/page:col-span-4">
-            <Panel title={tr(msg`Состояние компонентов`)} className="h-full">
+            <Panel title={t`Состояние компонентов`} className="h-full">
               <HealthList />
             </Panel>
           </div>
           <div className="@3xl/page:col-span-8">
-            <Panel title={tr(msg`Запросы и задержки`)} className="h-full">
+            <Panel title={t`Запросы и задержки`} className="h-full">
               <TimeSeriesChart
-                title={tr(msg`p50 / p95 / p99 за 24 ч`)}
+                title={t`p50 / p95 / p99 за 24 ч`}
                 summary={summary()}
-                unit={tr(msg`мс`)}
-                slo={{ value: SLO_MS, label: tr(msg`SLO ${SLO_MS} мс`) }}
+                unit={t`мс`}
+                slo={{ value: SLO_MS, label: t`SLO ${SLO_MS} мс` }}
                 series={[
                   { id: "p50", label: "p50", points: P50 },
                   { id: "p95", label: "p95", points: P95 },
@@ -600,36 +531,36 @@ function S6Platform({ mode = "normal" }: { mode?: Mode }) {
             </Panel>
           </div>
           <div className="@3xl/page:col-span-4">
-            <Panel title={tr(msg`Быстрые действия`)} className="h-full">
+            <Panel title={t`Быстрые действия`} className="h-full">
               <QuickActions />
             </Panel>
           </div>
           <div className="@3xl/page:col-span-4">
             <Panel
-              title={tr(msg`Ближайшие удаления: 1 284 версии · 212 ГБ`)}
-              count={tr(msg`3 правила`)}
+              title={t`Ближайшие удаления: 1 284 версии · 212 ГБ`}
+              count={t`3 правила`}
               className="h-full"
             >
               <TopThree
-                rows={RETENTION_ROWS}
-                link={{ href: "/platform/retention", label: tr(msg`Настроить retention`) }}
+                rows={retentionRows()}
+                link={{ href: "/platform/retention", label: t`Настроить retention` }}
               />
             </Panel>
           </div>
           <div className="@3xl/page:col-span-4">
-            <Panel title={tr(msg`Мёртвые задачи: 3`)} count="3" className="h-full">
+            <Panel title={t`Мёртвые задачи: 3`} count="3" className="h-full">
               <TopThree
                 rows={deadJobs()}
-                link={{ href: "/platform/queues", label: tr(msg`Открыть очередь`) }}
+                link={{ href: "/platform/queues", label: t`Открыть очередь` }}
               />
             </Panel>
           </div>
           <div className="@3xl/page:col-span-4">
-            <Panel title={tr(msg`Проверка целостности: 0 ошибок, выборка 1 %`)} className="h-full">
-              <StatusBadge tone="success" label={tr(msg`Расхождений нет`)} />
+            <Panel title={t`Проверка целостности: 0 ошибок, выборка 1 %`} className="h-full">
+              <StatusBadge tone="success" label={t`Расхождений нет`} />
               <TopThree
-                rows={INTEGRITY_ROWS}
-                link={{ href: "/platform/integrity", label: tr(msg`Открыть проверки`) }}
+                rows={integrityRows()}
+                link={{ href: "/platform/integrity", label: t`Открыть проверки` }}
               />
             </Panel>
           </div>

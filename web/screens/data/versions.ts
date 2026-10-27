@@ -8,6 +8,7 @@ export type VersionRow = {
   version: string;
   state: VersionState;
   flags: readonly string[];
+  /** ISO 8601 (UTC): одно событие — одно время в таблице, панели и ленте. */
   publishedAt: string;
   /** Человек — ФИО, робот — префикс credential и пайплайн. */
   by: { kind: "human"; name: string } | { kind: "robot"; prefix: string; pipeline: string };
@@ -15,13 +16,6 @@ export type VersionRow = {
   source: string;
   downloads: number;
 };
-
-export const STATE_LABEL = {
-  released: "Выпущена",
-  quarantined: "Карантин",
-  blocked: "Заблокирована",
-  deleted: "Удалена",
-} as const satisfies Record<VersionState, string>;
 
 const QUARANTINED = new Set(["1.4.2", "1.3.9"]);
 const BLOCKED = new Set(["1.4.0"]);
@@ -70,12 +64,6 @@ function flagsOf(version: string): readonly string[] {
   return flags;
 }
 
-function formatStamp(ms: number): string {
-  const date = new Date(ms);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${pad(date.getUTCDate())}.${pad(date.getUTCMonth() + 1)}.${date.getUTCFullYear()}, ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
-}
-
 export const VERSION_ROWS: readonly VersionRow[] = NAMES.map((version, index) => {
   const robot = ROBOTS[index % ROBOTS.length];
   return {
@@ -83,7 +71,7 @@ export const VERSION_ROWS: readonly VersionRow[] = NAMES.map((version, index) =>
     version,
     state: stateOf(version),
     flags: flagsOf(version),
-    publishedAt: formatStamp(FIRST - index * 6 * MS_PER_DAY - index * 1_137_000),
+    publishedAt: new Date(FIRST - index * 6 * MS_PER_DAY - index * 1_137_000).toISOString(),
     by:
       index % 3 === 1 || robot === undefined
         ? { kind: "human", name: PEOPLE[index % PEOPLE.length] ?? "Иванов И." }

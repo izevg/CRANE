@@ -1,4 +1,5 @@
-import { msg } from "@lingui/core/macro";
+// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
+import { t } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ComponentProps } from "react";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
@@ -10,25 +11,24 @@ import { CommandPaletteView } from "~/widgets/command-palette";
 import { type NotificationItem, NotificationsCenter } from "~/widgets/notifications-center";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
-import { tr } from "../frame/tr";
 import { PackagesBackdrop } from "./PackagesBackdrop";
 
 const BELL = /^Уведомления/;
 const MORE_BANNERS = /Ещё 2/;
 const BODY = () => within(document.body);
 const REQUEST_ID = "req_01JBX7Q4M2K9T5V8N3PZ6H1WRD";
-const HOME = {
-  get label() {
-    return tr(msg`На главную`);
-  },
-  run: { href: "/" },
-} as const;
+function home() {
+  return {
+    label: t`На главную`,
+    run: { href: "/" },
+  } as const;
+}
 
 /** Крошки строятся при рендере: текст зависит от активной локали, а `args` читаются при загрузке модуля. */
 function Frame(props: ComponentProps<typeof ScreenFrame>) {
   const breadcrumbs = {
-    trail: [{ label: tr(msg`Каталог`), href: "/search" }],
-    current: tr(msg`Мои пакеты`),
+    trail: [{ label: t`Каталог`, href: "/search" }],
+    current: t`Мои пакеты`,
   };
   return <ScreenFrame {...props} breadcrumbs={breadcrumbs} />;
 }
@@ -77,12 +77,10 @@ const empty: Story = {
       <PackagesBackdrop>
         <EmptyState
           variant="first-run"
-          title={tr(msg`Пакетов пока нет`)}
-          description={tr(
-            msg`Опубликуйте первый пакет в репозиторий вашего workspace или перенесите существующие из Nexus.`,
-          )}
-          primary={{ label: tr(msg`Как опубликовать`), run: { href: "/help/publish" } }}
-          secondary={{ label: tr(msg`Импорт из Nexus`), run: { href: "/import/nexus" } }}
+          title={t`Пакетов пока нет`}
+          description={t`Опубликуйте первый пакет в репозиторий вашего workspace или перенесите существующие из Nexus.`}
+          primary={{ label: t`Как опубликовать`, run: { href: "/help/publish" } }}
+          secondary={{ label: t`Импорт из Nexus`, run: { href: "/import/nexus" } }}
         />
       </PackagesBackdrop>
     </Frame>
@@ -106,21 +104,19 @@ const error: Story = {
           headingLevel={1}
           problem={{
             kind: "error",
-            title: tr(msg`Не удалось опубликовать`),
-            detail: tr(msg`Превышен размер публикации: 14 МБ при лимите 10 МБ`),
+            title: t`Не удалось опубликовать`,
+            detail: t`Превышен размер публикации: 14 МБ при лимите 10 МБ`,
             ruleId: "max-publish-size",
             requestId: REQUEST_ID,
             remediation: [
-              tr(
-                msg`Уменьшите пакет: уберите артефакты сборки и тестовые данные из файлов публикации`,
-              ),
-              tr(msg`Попросите владельца репозитория npm-hosted поднять лимит размера`),
+              t`Уменьшите пакет: уберите артефакты сборки и тестовые данные из файлов публикации`,
+              t`Попросите владельца репозитория npm-hosted поднять лимит размера`,
             ],
             diagnostics: {
-              label: tr(msg`Открыть диагностику`),
+              label: t`Открыть диагностику`,
               run: { href: `/diagnostics/${REQUEST_ID}` },
             },
-            retry: { label: tr(msg`Повторить`), run: { onSelect: fn() } },
+            retry: { label: t`Повторить`, run: { onSelect: fn() } },
           }}
         />
       </div>
@@ -149,13 +145,13 @@ const forbidden: Story = {
             kind: "forbidden",
             ruleId: "ws-billing-readers",
             requestId: REQUEST_ID,
-            contact: tr(msg`Петрова А. (владелец workspace billing)`),
+            contact: t`Петрова А. (владелец workspace billing)`,
             remediation: [
-              tr(msg`Запросите роль maintainer у владельца workspace`),
-              tr(msg`Повторите действие после подтверждения доступа`),
+              t`Запросите роль maintainer у владельца workspace`,
+              t`Повторите действие после подтверждения доступа`,
             ],
-            requestAccess: { label: tr(msg`Запросить доступ`), run: { onSelect: fn() } },
-            home: HOME,
+            requestAccess: { label: t`Запросить доступ`, run: { onSelect: fn() } },
+            home: home(),
           }}
         />
       </div>
@@ -184,12 +180,12 @@ const notFound: Story = {
             search: (
               <input
                 type="search"
-                aria-label={tr(msg`Поиск пакета`)}
-                placeholder={tr(msg`Имя пакета`)}
+                aria-label={t`Поиск пакета`}
+                placeholder={t`Имя пакета`}
                 className="h-9 w-full rounded-md border border-input bg-card px-3 text-body"
               />
             ),
-            home: HOME,
+            home: home(),
           }}
         />
       </div>
@@ -207,35 +203,27 @@ export const NotFoundMobile = phone(notFound);
 
 // ── 6. Палитра ──────────────────────────────────────────────────────────────
 
-const PALETTE_NAV = [
-  {
-    id: "acme-pkgs",
-    get label() {
-      return tr(msg`Пакеты workspace acme-platform`);
+function paletteNav() {
+  return [
+    {
+      id: "acme-pkgs",
+      label: t`Пакеты workspace acme-platform`,
+      href: "/packages?ws=acme-platform",
+      hint: t`Раздел`,
     },
-    href: "/packages?ws=acme-platform",
-    get hint() {
-      return tr(msg`Раздел`);
+    {
+      id: "acme-tokens",
+      label: t`Токены acme-platform`,
+      href: "/me/tokens?ws=acme-platform",
+      hint: t`Доступ`,
     },
-  },
-  {
-    id: "acme-tokens",
-    get label() {
-      return tr(msg`Токены acme-platform`);
+    {
+      id: "audit",
+      label: t`Журнал`,
+      href: "/audit",
     },
-    href: "/me/tokens?ws=acme-platform",
-    get hint() {
-      return tr(msg`Доступ`);
-    },
-  },
-  {
-    id: "audit",
-    get label() {
-      return tr(msg`Журнал`);
-    },
-    href: "/audit",
-  },
-] as const;
+  ] as const;
+}
 
 const PALETTE_PACKAGES = [
   { id: "acme-ui", name: "@acme/ui", format: "npm", latest: "1.4.2", href: "/packages/acme-ui" },
@@ -262,28 +250,24 @@ const PALETTE_PACKAGES = [
   },
 ] as const;
 
-const PALETTE_ACTIONS = [
-  {
-    get label() {
-      return tr(msg`Выпустить токен для acme-ci`);
+function paletteActions() {
+  return [
+    {
+      label: t`Выпустить токен для acme-ci`,
+      run: { onSelect: fn() },
     },
-    run: { onSelect: fn() },
-  },
-  {
-    get label() {
-      return tr(msg`Открыть диагностику по request_id`);
+    {
+      label: t`Открыть диагностику по request_id`,
+      run: { href: "/diagnostics" },
     },
-    run: { href: "/diagnostics" },
-  },
-  {
-    get label() {
-      return tr(msg`Отозвать токены acme-platform`);
+    {
+      label: t`Отозвать токены acme-platform`,
+      run: { onSelect: fn() },
+      stepUp: true,
+      destructive: true,
     },
-    run: { onSelect: fn() },
-    stepUp: true,
-    destructive: true,
-  },
-] as const;
+  ] as const;
+}
 
 const palette: Story = {
   name: "6 Командная палитра",
@@ -297,9 +281,9 @@ const palette: Story = {
         onOpenChange={fn()}
         onQueryChange={fn()}
         onNavigate={fn()}
-        navigation={PALETTE_NAV}
+        navigation={paletteNav()}
         packages={PALETTE_PACKAGES}
-        actions={PALETTE_ACTIONS}
+        actions={paletteActions()}
       />
     </>
   ),
@@ -320,85 +304,69 @@ export const PaletteMobile = phone(palette);
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
-const NOTIFICATIONS: readonly NotificationItem[] = [
-  {
-    id: "n1",
-    category: "security",
-    tone: "error",
-    get title() {
-      return tr(msg`P0 без действия: CVE-2026-31337 в @acme/ui 1.4.2`);
+function notificationItems(): readonly NotificationItem[] {
+  return [
+    {
+      id: "n1",
+      category: "security",
+      tone: "error",
+      title: t`P0 без действия: CVE-2026-31337 в @acme/ui 1.4.2`,
+      time: ago(12),
+      caption: t`@acme/ui · npm · SLA истёк`,
+      href: "/findings/CVE-2026-31337",
+      unread: true,
     },
-    time: ago(12),
-    get caption() {
-      return tr(msg`@acme/ui · npm · SLA истёк`);
+    {
+      id: "n2",
+      category: "access",
+      tone: "warning",
+      title: t`Токен crp_9f8e7d6c истекает через 3 дня`,
+      time: ago(95),
+      caption: "ci-deploy · acme-platform",
+      href: "/me/tokens/crp_9f8e7d6c",
+      unread: true,
     },
-    href: "/findings/CVE-2026-31337",
-    unread: true,
-  },
-  {
-    id: "n2",
-    category: "access",
-    tone: "warning",
-    get title() {
-      return tr(msg`Токен crp_9f8e7d6c истекает через 3 дня`);
+    {
+      id: "n3",
+      category: "platform",
+      tone: "warning",
+      title: t`Квота billing: 85% хранилища`,
+      time: ago(180),
+      caption: t`workspace billing · 34 из 40 ГБ`,
+      href: "/platform/storages",
+      unread: true,
     },
-    time: ago(95),
-    caption: "ci-deploy · acme-platform",
-    href: "/me/tokens/crp_9f8e7d6c",
-    unread: true,
-  },
-  {
-    id: "n3",
-    category: "platform",
-    tone: "warning",
-    get title() {
-      return tr(msg`Квота billing: 85% хранилища`);
+    {
+      id: "n4",
+      category: "platform",
+      tone: "warning",
+      title: t`Upstream npmjs недоступен`,
+      time: ago(240),
+      caption: t`Данные от 25 окт, stale-if-error`,
+      href: "/platform",
+      unread: false,
     },
-    time: ago(180),
-    get caption() {
-      return tr(msg`workspace billing · 34 из 40 ГБ`);
+    {
+      id: "n5",
+      category: "security",
+      tone: "success",
+      title: t`lodash 4.17.21 выпущена из карантина`,
+      time: ago(60 * 26),
+      caption: "lodash · npm",
+      href: "/packages/lodash",
+      unread: false,
     },
-    href: "/platform/storages",
-    unread: true,
-  },
-  {
-    id: "n4",
-    category: "platform",
-    tone: "warning",
-    get title() {
-      return tr(msg`Upstream npmjs недоступен`);
+    {
+      id: "n6",
+      category: "access",
+      tone: "info",
+      title: t`Петрова А. одобрила запрос доступа к acme-billing-client`,
+      time: ago(60 * 30),
+      href: "/me/actions",
+      unread: false,
     },
-    time: ago(240),
-    get caption() {
-      return tr(msg`Данные от 25 окт, stale-if-error`);
-    },
-    href: "/platform",
-    unread: false,
-  },
-  {
-    id: "n5",
-    category: "security",
-    tone: "success",
-    get title() {
-      return tr(msg`lodash 4.17.21 выпущена из карантина`);
-    },
-    time: ago(60 * 26),
-    caption: "lodash · npm",
-    href: "/packages/lodash",
-    unread: false,
-  },
-  {
-    id: "n6",
-    category: "access",
-    tone: "info",
-    get title() {
-      return tr(msg`Петрова А. одобрила запрос доступа к acme-billing-client`);
-    },
-    time: ago(60 * 30),
-    href: "/me/actions",
-    unread: false,
-  },
-];
+  ];
+}
 
 const BELL_POSITION = "fixed top-3 right-14 z-30 lg:right-[68px]";
 
@@ -412,13 +380,13 @@ const notifications: Story = {
       {/* Центр сам владеет колокольчиком-триггером: ставим его поверх колокольчика рамки. */}
       <div className={BELL_POSITION}>
         <NotificationsCenter
-          items={NOTIFICATIONS}
+          items={notificationItems()}
           unread={3}
           unreadByCategory={{ security: 1, access: 1, platform: 1 }}
           onCategoryChange={fn()}
           onMarkRead={fn()}
           onReadAll={fn()}
-          loadMore={{ label: tr(msg`Загрузить ещё`), run: { onSelect: fn() } }}
+          loadMore={{ label: t`Загрузить ещё`, run: { onSelect: fn() } }}
         />
       </div>
     </>
@@ -451,14 +419,12 @@ const stepUp: Story = {
       <ConfirmDialog
         open
         onOpenChange={fn()}
-        title={tr(msg`Подтвердите вход`)}
-        description={tr(
-          msg`Действие «Раскрыть данные события» требует подтверждения вторым фактором`,
-        )}
-        confirm={{ label: tr(msg`Продолжить в Keycloak`), run: { onSelect: fn() } }}
+        title={t`Подтвердите вход`}
+        description={t`Действие «Раскрыть данные события» требует подтверждения вторым фактором`}
+        confirm={{ label: t`Продолжить в Keycloak`, run: { onSelect: fn() } }}
       >
         <p className="text-caption text-muted-foreground">
-          {tr(msg`После подтверждения вы вернётесь к действию, данные формы сохранятся`)}
+          {t`После подтверждения вы вернётесь к действию, данные формы сохранятся`}
         </p>
       </ConfirmDialog>
     </>
@@ -475,59 +441,44 @@ export const StepUpMobile = phone(stepUp);
 
 // ── 9. Стек баннеров ────────────────────────────────────────────────────────
 
-const BANNERS: readonly Banner[] = [
-  {
-    id: "p0",
-    tone: "error",
-    urgent: true,
-    get text() {
-      return tr(msg`P0 без действия более 1 часа: CVE-2026-31337 в @acme/ui 1.4.2`);
-    },
-    action: {
-      get label() {
-        return tr(msg`Открыть находку`);
+function bannerItems(): readonly Banner[] {
+  return [
+    {
+      id: "p0",
+      tone: "error",
+      urgent: true,
+      text: t`P0 без действия более 1 часа: CVE-2026-31337 в @acme/ui 1.4.2`,
+      action: {
+        label: t`Открыть находку`,
+        run: { href: "/findings/CVE-2026-31337" },
       },
-      run: { href: "/findings/CVE-2026-31337" },
     },
-  },
-  {
-    id: "read-only",
-    tone: "warning",
-    get text() {
-      return tr(
-        msg`Только чтение: основная БД недоступна, публикация отключена. Повторите через 2 мин`,
-      );
-    },
-    action: {
-      get label() {
-        return tr(msg`Статус платформы`);
+    {
+      id: "read-only",
+      tone: "warning",
+      text: t`Только чтение: основная БД недоступна, публикация отключена. Повторите через 2 мин`,
+      action: {
+        label: t`Статус платформы`,
+        run: { href: "/platform" },
       },
-      run: { href: "/platform" },
     },
-  },
-  {
-    id: "sod",
-    tone: "warning",
-    get text() {
-      return tr(msg`Включён режим разделения обязанностей: действия требуют второго подтверждения`);
+    {
+      id: "sod",
+      tone: "warning",
+      text: t`Включён режим разделения обязанностей: действия требуют второго подтверждения`,
     },
-  },
-  {
-    id: "upstream",
-    tone: "warning",
-    get text() {
-      return tr(
-        msg`Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)`,
-      );
+    {
+      id: "upstream",
+      tone: "warning",
+      text: t`Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)`,
     },
-  },
-];
+  ];
+}
 
 const banners: Story = {
   name: "9 Стек баннеров (2 + «Ещё 2»)",
-  args: { banners: BANNERS },
   render: (args) => (
-    <Frame {...args}>
+    <Frame {...args} banners={bannerItems()}>
       <PackagesBackdrop />
     </Frame>
   ),

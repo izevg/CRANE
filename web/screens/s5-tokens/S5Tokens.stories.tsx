@@ -1,4 +1,5 @@
-import { msg, plural } from "@lingui/core/macro";
+// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
+import { plural, t } from "@lingui/core/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useCallback, useId, useMemo, useState } from "react";
 import { expect, within } from "storybook/test";
@@ -34,7 +35,6 @@ import { EmptyState, StatusBadge } from "~/shared/ui/status";
 import { ACTIVE_TOKENS, REVOKED_TOKENS, TOKEN_LIMIT, TOKENS, type TokenRow } from "../data/tokens";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
-import { tr } from "../frame/tr";
 
 const SECRET = "crp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4";
 const EXPIRY_WARNING_DAYS = 14;
@@ -42,50 +42,42 @@ const UNUSED_WARNING_DAYS = 30;
 
 type Scope = "active" | "revoked" | "all";
 
-const SEGMENTS = [
-  {
-    value: "active",
-    get label() {
-      return tr(msg`Активные`);
+function segments() {
+  return [
+    {
+      value: "active",
+      label: t`Активные`,
+      count: ACTIVE_TOKENS,
     },
-    count: ACTIVE_TOKENS,
-  },
-  {
-    value: "revoked",
-    get label() {
-      return tr(msg`Отозванные`);
+    {
+      value: "revoked",
+      label: t`Отозванные`,
+      count: REVOKED_TOKENS,
     },
-    count: REVOKED_TOKENS,
-  },
-  {
-    value: "all",
-    get label() {
-      return tr(msg`Все`);
+    {
+      value: "all",
+      label: t`Все`,
+      count: TOKENS.length,
     },
-    count: TOKENS.length,
-  },
-] as const;
+  ] as const;
+}
 
-const TTL_SEGMENTS = [
-  {
-    value: "7",
-    get label() {
-      return tr(msg`7 дней`);
+function ttlSegments() {
+  return [
+    {
+      value: "7",
+      label: t`7 дней`,
     },
-  },
-  {
-    value: "30",
-    get label() {
-      return tr(msg`30 дней`);
+    {
+      value: "30",
+      label: t`30 дней`,
     },
-  },
-  {
-    value: "90",
-    get label() {
-      return tr(msg`90 дней`);
+    {
+      value: "90",
+      label: t`90 дней`,
     },
-  },
-] as const;
+  ] as const;
+}
 
 const REPOS = ["npm-hosted", "pypi-hosted", "maven-central-proxy", "nuget-hosted"] as const;
 
@@ -93,26 +85,22 @@ const MUTED = "text-muted-foreground";
 
 function expiryCell(row: TokenRow) {
   if (row.revoked !== undefined) {
-    return <span className={MUTED}>{tr(msg`Отозван ${row.revoked}`)}</span>;
+    return <span className={MUTED}>{t`Отозван ${row.revoked}`}</span>;
   }
   if (row.expiresInDays === null) {
-    return <span>{tr(msg`Не истекает`)}</span>;
+    return <span>{t`Не истекает`}</span>;
   }
   if (row.expiresInDays <= EXPIRY_WARNING_DAYS) {
     return (
       <StatusBadge
         tone="warning"
-        label={tr(
-          msg`${plural(row.expiresInDays, { one: "через # день", few: "через # дня", many: "через # дней", other: "через # дня" })}`,
-        )}
+        label={t`${plural(row.expiresInDays, { one: "через # день", few: "через # дня", many: "через # дней", other: "через # дня" })}`}
       />
     );
   }
   return (
     <span>
-      {tr(
-        msg`${plural(row.expiresInDays, { one: "через # день", few: "через # дня", many: "через # дней", other: "через # дня" })}`,
-      )}
+      {t`${plural(row.expiresInDays, { one: "через # день", few: "через # дня", many: "через # дней", other: "через # дня" })}`}
     </span>
   );
 }
@@ -121,25 +109,21 @@ function lastUsedCell(row: TokenRow) {
   const days = row.lastUsedDaysAgo;
   const muted = row.revoked === undefined ? "" : MUTED;
   if (days === null) {
-    return <span className={muted || MUTED}>{tr(msg`Не использовался`)}</span>;
+    return <span className={muted || MUTED}>{t`Не использовался`}</span>;
   }
   if (days >= UNUSED_WARNING_DAYS && row.revoked === undefined) {
     return (
       <StatusBadge
         tone="warning"
-        label={tr(
-          msg`${plural(days, { one: "не использовался # день", few: "не использовался # дня", many: "не использовался # дней", other: "не использовался # дня" })}`,
-        )}
+        label={t`${plural(days, { one: "не использовался # день", few: "не использовался # дня", many: "не использовался # дней", other: "не использовался # дня" })}`}
       />
     );
   }
   return (
     <span className={muted}>
       {days === 0
-        ? tr(msg`Сегодня`)
-        : tr(
-            msg`${plural(days, { one: "# день назад", few: "# дня назад", many: "# дней назад", other: "# дня назад" })}`,
-          )}
+        ? t`Сегодня`
+        : t`${plural(days, { one: "# день назад", few: "# дня назад", many: "# дней назад", other: "# дня назад" })}`}
     </span>
   );
 }
@@ -156,7 +140,7 @@ function scopesCell(row: TokenRow) {
         {row.scopes}
       </PopoverTrigger>
       <PopoverContent>
-        <PopoverTitle>{tr(msg`Права токена ${row.name}`)}</PopoverTitle>
+        <PopoverTitle>{t`Права токена ${row.name}`}</PopoverTitle>
         <ul className="list-disc space-y-0.5 pl-4 text-body">
           {row.scopeList.map((scope) => (
             <li key={scope}>{scope}</li>
@@ -171,7 +155,7 @@ const helper = columnHelper<TokenRow>();
 
 const columns = helper.columns([
   helper.accessor("name", {
-    header: () => tr(msg`Название`),
+    header: () => t`Название`,
     meta: { priority: 1 },
     cell: (info) => (
       <span className={info.row.original.revoked === undefined ? "font-semibold" : MUTED}>
@@ -180,28 +164,28 @@ const columns = helper.columns([
     ),
   }),
   helper.accessor("kind", {
-    header: () => tr(msg`Тип`),
+    header: () => t`Тип`,
     meta: { priority: 2 },
     cell: (info) => (
       <span className={info.row.original.revoked === undefined ? "" : MUTED}>
-        {info.getValue() === "session" ? tr(msg`Сессионный · 12 ч`) : tr(msg`Долгоживущий`)}
+        {info.getValue() === "session" ? t`Сессионный · 12 ч` : t`Долгоживущий`}
       </span>
     ),
   }),
   helper.accessor("prefix", {
-    header: () => tr(msg`Префикс`),
+    header: () => t`Префикс`,
     meta: { priority: 1 },
     cell: (info) => (
-      <CopyableId value={info.getValue()} full label={tr(msg`Скопировать префикс токена`)} />
+      <CopyableId value={info.getValue()} full label={t`Скопировать префикс токена`} />
     ),
   }),
   helper.accessor("scopes", {
-    header: () => tr(msg`Права`),
+    header: () => t`Права`,
     meta: { priority: 2 },
     cell: (info) => scopesCell(info.row.original),
   }),
   helper.accessor("created", {
-    header: () => tr(msg`Создан`),
+    header: () => t`Создан`,
     meta: { priority: 2 },
     cell: (info) => (
       <span className={info.row.original.revoked === undefined ? "" : MUTED}>
@@ -211,13 +195,13 @@ const columns = helper.columns([
   }),
   helper.display({
     id: "expires",
-    header: () => tr(msg`Истекает`),
+    header: () => t`Истекает`,
     meta: { priority: 2 },
     cell: (info) => expiryCell(info.row.original),
   }),
   helper.display({
     id: "lastUsed",
-    header: () => tr(msg`Последнее использование`),
+    header: () => t`Последнее использование`,
     meta: { priority: 2 },
     cell: (info) => lastUsedCell(info.row.original),
   }),
@@ -253,20 +237,18 @@ function NewTokenSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
         <SheetHeader>
-          <SheetTitle>{tr(msg`Новый токен`)}</SheetTitle>
-          <SheetDescription>
-            {tr(msg`Секрет будет показан один раз после выпуска`)}
-          </SheetDescription>
+          <SheetTitle>{t`Новый токен`}</SheetTitle>
+          <SheetDescription>{t`Секрет будет показан один раз после выпуска`}</SheetDescription>
         </SheetHeader>
         <SheetBody className="flex flex-col gap-4">
           <Field name="name">
-            <FieldLabel>{tr(msg`Название`)}</FieldLabel>
+            <FieldLabel>{t`Название`}</FieldLabel>
             <Input defaultValue="ci-platform · npm" />
-            <FieldDescription>{tr(msg`До 64 символов, видно только вам`)}</FieldDescription>
+            <FieldDescription>{t`До 64 символов, видно только вам`}</FieldDescription>
           </Field>
           <fieldset aria-labelledby={rightsId} className="flex flex-col gap-2">
             <legend id={rightsId} className="text-body font-semibold">
-              {tr(msg`Права по репозиториям`)}
+              {t`Права по репозиториям`}
             </legend>
             {REPOS.map((repo) => (
               <div
@@ -276,11 +258,11 @@ function NewTokenSheet({
                 <span className="text-body">{repo}</span>
                 <span className="flex items-center gap-3 text-caption">
                   <span className="flex items-center gap-1.5">
-                    <Checkbox aria-label={tr(msg`${repo}: чтение`)} defaultChecked />
+                    <Checkbox aria-label={t`${repo}: чтение`} defaultChecked />
                     read
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <Checkbox aria-label={tr(msg`${repo}: публикация`)} />
+                    <Checkbox aria-label={t`${repo}: публикация`} />
                     publish
                   </span>
                 </span>
@@ -288,28 +270,26 @@ function NewTokenSheet({
             ))}
           </fieldset>
           <div className="flex flex-col gap-1.5">
-            <p className="text-body font-semibold">{tr(msg`Срок действия`)}</p>
+            <p className="text-body font-semibold">{t`Срок действия`}</p>
             <SegmentedControl
-              label={tr(msg`Срок действия`)}
-              items={TTL_SEGMENTS}
+              label={t`Срок действия`}
+              items={ttlSegments()}
               value={ttl}
               onValueChange={setTtl}
             />
             <p className="text-caption text-muted-foreground">
-              {tr(msg`Максимум 90 дней — ограничено политикой`)}
+              {t`Максимум 90 дней — ограничено политикой`}
             </p>
           </div>
           <Field name="description">
-            <FieldLabel>{tr(msg`Описание`)}</FieldLabel>
-            <Textarea
-              defaultValue={tr(msg`Публикация npm-пакетов из GitLab CI проекта platform/ui`)}
-            />
+            <FieldLabel>{t`Описание`}</FieldLabel>
+            <Textarea defaultValue={t`Публикация npm-пакетов из GitLab CI проекта platform/ui`} />
           </Field>
         </SheetBody>
         <SheetFooter>
-          <Button>{tr(msg`Выпустить`)}</Button>
+          <Button>{t`Выпустить`}</Button>
           <Button variant="secondary" onClick={close}>
-            {tr(msg`Отмена`)}
+            {t`Отмена`}
           </Button>
         </SheetFooter>
       </SheetContent>
@@ -323,7 +303,7 @@ function TokensTable({ scope, query }: { scope: Scope; query: string }) {
   const actions = useCallback(
     (row: TokenRow): readonly Action[] =>
       row.revoked === undefined
-        ? [{ label: tr(msg`Отозвать`), run: { onSelect: () => undefined }, destructive: true }]
+        ? [{ label: t`Отозвать`, run: { onSelect: () => undefined }, destructive: true }]
         : [],
     [],
   );
@@ -332,9 +312,9 @@ function TokensTable({ scope, query }: { scope: Scope; query: string }) {
       columns={columns}
       data={data}
       getRowId={getRowId}
-      caption={tr(msg`Токены доступа`)}
+      caption={t`Токены доступа`}
       actions={actions}
-      empty={<p className="p-6 text-center text-muted-foreground">{tr(msg`Токены не найдены`)}</p>}
+      empty={<p className="p-6 text-center text-muted-foreground">{t`Токены не найдены`}</p>}
     />
   );
 }
@@ -344,17 +324,15 @@ function EmptyTokens({ onIssue }: { onIssue: () => void }) {
     <div className="flex flex-col items-center gap-4 rounded-xl bg-card py-6 shadow-card">
       <EmptyState
         variant="first-run"
-        title={tr(msg`Токенов пока нет`)}
-        description={tr(
-          msg`Токен нужен пакетным менеджерам и CLI. Для входа из терминала хватит cctl login.`,
-        )}
-        primary={{ label: tr(msg`Выпустить токен`), run: { onSelect: onIssue } }}
+        title={t`Токенов пока нет`}
+        description={t`Токен нужен пакетным менеджерам и CLI. Для входа из терминала хватит cctl login.`}
+        primary={{ label: t`Выпустить токен`, run: { onSelect: onIssue } }}
       />
       <div className="w-full max-w-md px-4">
         <CodeBlock
           code="cctl login"
-          copyLabel={tr(msg`Копировать команду входа`)}
-          label={tr(msg`Вход из терминала`)}
+          copyLabel={t`Копировать команду входа`}
+          label={t`Вход из терминала`}
         />
       </div>
     </div>
@@ -378,16 +356,16 @@ function S5Page({ empty = false, sheet = false, secret = false }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title={tr(msg`Мои токены`)}
-        caption={tr(msg`Токены для пакетных менеджеров и CLI. Секрет показывается один раз`)}
-        primary={{ label: tr(msg`Выпустить токен`), run: { onSelect: issue } }}
-        secondary={[{ label: tr(msg`Мои действия`), run: { href: "/me/actions" } }]}
+        title={t`Мои токены`}
+        caption={t`Токены для пакетных менеджеров и CLI. Секрет показывается один раз`}
+        primary={{ label: t`Выпустить токен`, run: { onSelect: issue } }}
+        secondary={[{ label: t`Мои действия`, run: { href: "/me/actions" } }]}
       />
       <Callout tone="info">
         <CalloutDescription>
-          {tr(msg`Отзыв применяется за 5 секунд. Для CI используйте `)}
-          <Link href="/workspaces/platform/trust-policies">{tr(msg`политики доверия`)}</Link>
-          {tr(msg` — без секретов.`)}
+          {t`Отзыв применяется за 5 секунд. Для CI используйте `}
+          <Link href="/workspaces/platform/trust-policies">{t`политики доверия`}</Link>
+          {t` — без секретов.`}
         </CalloutDescription>
       </Callout>
       {empty ? (
@@ -396,28 +374,28 @@ function S5Page({ empty = false, sheet = false, secret = false }: Props) {
         <>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             <SegmentedControl
-              label={tr(msg`Состояние токенов`)}
-              items={SEGMENTS}
+              label={t`Состояние токенов`}
+              items={segments()}
               value={scope}
               onValueChange={changeScope}
             />
             <Input
               type="search"
-              aria-label={tr(msg`Поиск по названию или префиксу`)}
-              placeholder={tr(msg`Название или префикс`)}
+              aria-label={t`Поиск по названию или префиксу`}
+              placeholder={t`Название или префикс`}
               value={query}
               onChange={changeQuery}
               className="w-full @lg/page:w-auto @lg/page:max-w-xs @lg/page:flex-1"
             />
             <p className="ml-auto text-caption text-muted-foreground tabular-nums">
-              {tr(msg`Лимит: ${ACTIVE_TOKENS} из ${TOKEN_LIMIT}`)}
+              {t`Лимит: ${ACTIVE_TOKENS} из ${TOKEN_LIMIT}`}
             </p>
           </div>
           <TokensTable scope={scope} query={query} />
         </>
       )}
       <NewTokenSheet open={sheetOpen} onOpenChange={setSheetOpen} />
-      <SecretOnceDialog secret={secretShown} title={tr(msg`Токен создан`)} onDone={finish} />
+      <SecretOnceDialog secret={secretShown} title={t`Токен создан`} onDone={finish} />
     </div>
   );
 }
@@ -427,8 +405,8 @@ function Screen(props: Props) {
     <ScreenFrame
       active="tokens"
       breadcrumbs={{
-        trail: [{ label: tr(msg`Настройки`), href: "/settings" }],
-        current: tr(msg`Мои токены`),
+        trail: [{ label: t`Настройки`, href: "/settings" }],
+        current: t`Мои токены`,
       }}
     >
       <S5Page {...props} />

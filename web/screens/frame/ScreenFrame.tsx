@@ -1,4 +1,5 @@
-import { msg } from "@lingui/core/macro";
+// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
+import { t } from "@lingui/core/macro";
 import {
   DatabaseIcon,
   FileCheckIcon,
@@ -19,55 +20,65 @@ import { Button } from "~/shared/ui/primitives";
 import { AppShell, type Banner, type SidebarProps, type TopbarProps } from "~/widgets/app-shell";
 import { NotificationsBell } from "~/widgets/notifications-center";
 import { CURRENT_USER, WORKSPACES } from "../data/common";
-import { tr } from "./tr";
 
 const UNREAD = 3;
 
-/** Группы строятся снаружи из `_links` ответа `GET /me`, а не из названий ролей. */
-const GROUPS = [
-  {
-    id: "catalog",
-    label: msg`Каталог`,
-    items: [
-      { id: "search", label: msg`Поиск`, href: "/search", icon: SearchIcon },
-      { id: "favorites", label: msg`Избранное`, href: "/favorites", icon: StarIcon },
-    ],
-  },
-  {
-    id: "mine",
-    label: msg`Мои пакеты`,
-    items: [{ id: "packages", label: msg`Мои пакеты`, href: "/packages", icon: PackageIcon }],
-  },
-  {
-    id: "security",
-    label: msg`Безопасность`,
-    items: [
-      { id: "findings", label: msg`Находки`, href: "/findings", icon: ShieldAlertIcon },
-      { id: "exceptions", label: msg`Исключения`, href: "/exceptions", icon: ShieldOffIcon },
-      { id: "vex", label: msg`VEX`, href: "/vex", icon: FileCheckIcon },
-    ],
-  },
-  {
-    id: "platform",
-    label: msg`Платформа`,
-    items: [
-      { id: "overview", label: msg`Обзор`, href: "/platform", icon: LayoutDashboardIcon },
-      { id: "storages", label: msg`Хранилища`, href: "/platform/storages", icon: DatabaseIcon },
-      { id: "queues", label: msg`Очереди`, href: "/platform/queues", icon: ListChecksIcon },
-    ],
-  },
-  {
-    id: "journal",
-    label: msg`Журнал`,
-    items: [{ id: "audit", label: msg`Журнал`, href: "/audit", icon: ScrollTextIcon }],
-  },
-] as const;
+/** Группы строятся снаружи из `_links` ответа `GET /me`, а не из названий ролей. Тексты берутся при рендере. */
+function navGroups(active: string): SidebarProps["groups"] {
+  const mark = <T extends { id: string }>(item: T) => ({ ...item, active: item.id === active });
+  return [
+    {
+      id: "catalog",
+      label: t`Каталог`,
+      items: [
+        mark({ id: "search", label: t`Поиск`, href: "/search", icon: SearchIcon }),
+        mark({ id: "favorites", label: t`Избранное`, href: "/favorites", icon: StarIcon }),
+      ],
+    },
+    {
+      id: "mine",
+      label: t`Мои пакеты`,
+      items: [mark({ id: "packages", label: t`Мои пакеты`, href: "/packages", icon: PackageIcon })],
+    },
+    {
+      id: "security",
+      label: t`Безопасность`,
+      items: [
+        mark({ id: "findings", label: t`Находки`, href: "/findings", icon: ShieldAlertIcon }),
+        mark({ id: "exceptions", label: t`Исключения`, href: "/exceptions", icon: ShieldOffIcon }),
+        mark({ id: "vex", label: t`VEX`, href: "/vex", icon: FileCheckIcon }),
+      ],
+    },
+    {
+      id: "platform",
+      label: t`Платформа`,
+      items: [
+        mark({ id: "overview", label: t`Обзор`, href: "/platform", icon: LayoutDashboardIcon }),
+        mark({
+          id: "storages",
+          label: t`Хранилища`,
+          href: "/platform/storages",
+          icon: DatabaseIcon,
+        }),
+        mark({ id: "queues", label: t`Очереди`, href: "/platform/queues", icon: ListChecksIcon }),
+      ],
+    },
+    {
+      id: "journal",
+      label: t`Журнал`,
+      items: [mark({ id: "audit", label: t`Журнал`, href: "/audit", icon: ScrollTextIcon })],
+    },
+  ];
+}
 
-const FOOTER = [
-  { id: "tokens", label: msg`Мои токены`, href: "/me/tokens", icon: KeyRoundIcon },
-  { id: "actions", label: msg`Мои действия`, href: "/me/actions", icon: HistoryIcon },
-  { id: "settings", label: msg`Настройки`, href: "/settings", icon: SettingsIcon },
-] as const;
+function footerItems(active: string): SidebarProps["footerItems"] {
+  const mark = <T extends { id: string }>(item: T) => ({ ...item, active: item.id === active });
+  return [
+    mark({ id: "tokens", label: t`Мои токены`, href: "/me/tokens", icon: KeyRoundIcon }),
+    mark({ id: "actions", label: t`Мои действия`, href: "/me/actions", icon: HistoryIcon }),
+    mark({ id: "settings", label: t`Настройки`, href: "/settings", icon: SettingsIcon }),
+  ];
+}
 
 type Props = {
   /** id активного пункта сайдбара (`search`, `packages`, `findings`, `overview`…). */
@@ -79,20 +90,8 @@ type Props = {
 
 function sidebarFor(active: string): SidebarProps {
   return {
-    groups: GROUPS.map((group) => ({
-      id: group.id,
-      label: tr(group.label),
-      items: group.items.map((item) => ({
-        ...item,
-        label: tr(item.label),
-        active: item.id === active,
-      })),
-    })),
-    footerItems: FOOTER.map((item) => ({
-      ...item,
-      label: tr(item.label),
-      active: item.id === active,
-    })),
+    groups: navGroups(active),
+    footerItems: footerItems(active),
     helpHref: "/help",
     account: { name: CURRENT_USER.name, role: CURRENT_USER.role },
   };
@@ -108,12 +107,12 @@ export function ScreenFrame({ active, breadcrumbs, banners, children }: Props) {
     onOpenPalette: () => undefined,
     workspace: (
       <Button variant="secondary" size="sm">
-        {tr(msg`Workspace: ${workspace}`)}
+        {t`Workspace: ${workspace}`}
       </Button>
     ),
     notifications: <NotificationsBell unread={UNREAD} />,
     account: (
-      <Button variant="ghost" size="icon" aria-label={tr(msg`${initials}, аккаунт: ${name}`)}>
+      <Button variant="ghost" size="icon" aria-label={t`${initials}, аккаунт: ${name}`}>
         {CURRENT_USER.initials}
       </Button>
     ),
