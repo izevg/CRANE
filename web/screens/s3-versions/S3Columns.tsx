@@ -1,14 +1,16 @@
 import { msg } from "@lingui/core/macro";
 import { VersionFlags, VersionNumber, VersionStatus } from "~/entities/version";
+import { halHref } from "~/shared/api";
 import { i18n } from "~/shared/lib/i18n";
 import type { Action } from "~/shared/ui/actions";
 import { columnHelper } from "~/shared/ui/data-display";
 import { STATE_COUNTS, type VersionRow } from "../data/versions";
 import { Moment } from "../frame/Moment";
 
-/** Маршрут SPA страницы экстренной блокировки: страница строит его из `block_id`, а не берёт `href` API. */
-function blockLink({ block_reason: reason }: VersionRow): { blockHref?: string } {
-  return reason?.kind === "emergency" ? { blockHref: `/emergency-blocks/${reason.block_id}` } : {};
+/** Маршрут страницы блокировки берётся из HAL элемента (`crane:block`), а не строится из `block_id`; ссылки нет — нет и пропа. */
+function blockLink(row: VersionRow): { blockHref?: string } {
+  const href = halHref(row._links, "crane:block");
+  return href === undefined ? {} : { blockHref: href };
 }
 
 /** Момент публикации выбранной версии: тот же, что первое событие ленты, таблицы и сведений. */
