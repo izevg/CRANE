@@ -1,5 +1,6 @@
 import { Field as FieldPrimitive } from "@base-ui/react/field";
 import { cx, type WithClassName } from "~/shared/lib/core";
+import { TONE_ICON } from "../../display/tone/tone";
 
 /** Поле формы: подпись, контрол, подсказка и ошибка связаны ARIA без ручных id. */
 export function Field({ className, ...props }: WithClassName<FieldPrimitive.Root.Props>) {
@@ -38,13 +39,24 @@ export function FieldDescription({
   );
 }
 
-/** Показывается при невалидном значении; `match` задаёт условие (по умолчанию — по `ValidityState`). */
-export function FieldError({ className, ...props }: WithClassName<FieldPrimitive.Error.Props>) {
+/**
+ * Показывается при невалидном значении; `match` задаёт условие (по умолчанию — по `ValidityState`).
+ * Иконка ошибки из общего модуля тона: ошибка не передаётся одним цветом (WCAG 1.4.1).
+ */
+export function FieldError({
+  className,
+  children,
+  ...props
+}: WithClassName<FieldPrimitive.Error.Props>) {
+  const Icon = TONE_ICON.error;
   return (
     <FieldPrimitive.Error
       data-slot="field-error"
-      className={cx("text-caption text-error", className)}
+      className={cx("flex items-start gap-1 text-caption text-error", className)}
       {...props}
-    />
+    >
+      <Icon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+      <span>{children}</span>
+    </FieldPrimitive.Error>
   );
 }

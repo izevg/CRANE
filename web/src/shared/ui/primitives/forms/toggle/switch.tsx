@@ -21,7 +21,7 @@ export function Switch({ className, size = "default", ...props }: SwitchProps) {
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cx(
-        "peer relative inline-flex shrink-0 items-center rounded-full border border-transparent transition-colors duration-(--dur-fast) after:absolute after:-inset-x-3 after:-inset-y-2 data-checked:bg-primary data-unchecked:bg-input data-disabled:cursor-not-allowed data-disabled:bg-surface-high",
+        "peer relative inline-flex shrink-0 items-center rounded-full border border-transparent transition-colors duration-(--dur-fast) after:absolute after:-inset-x-3 after:-inset-y-2 data-checked:bg-primary data-unchecked:bg-input data-disabled:cursor-not-allowed data-disabled:bg-surface-high forced-colors:border-[ButtonText] forced-colors:data-checked:bg-[Highlight] forced-colors:data-unchecked:bg-[Canvas]",
         SIZE[size],
         className,
       )}
@@ -30,7 +30,7 @@ export function Switch({ className, size = "default", ...props }: SwitchProps) {
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
         className={cx(
-          "pointer-events-none block rounded-full bg-card transition-transform duration-(--dur-fast) data-checked:translate-x-[calc(100%-2px)] data-checked:bg-primary-foreground data-unchecked:translate-x-0.5",
+          "pointer-events-none block rounded-full bg-card transition-transform duration-(--dur-fast) data-checked:translate-x-[calc(100%-2px)] data-checked:bg-primary-foreground data-unchecked:translate-x-0.5 forced-colors:bg-[ButtonText] forced-colors:data-checked:bg-[HighlightText]",
           THUMB[size],
         )}
       />

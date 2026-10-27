@@ -46,7 +46,7 @@ export function ToggleGroupItem({ className, ...props }: WithClassName<TogglePri
     <TogglePrimitive
       data-slot="toggle-group-item"
       className={cx(
-        "inline-flex shrink-0 items-center justify-center gap-1 rounded-md text-body font-semibold whitespace-nowrap transition-colors duration-(--dur-fast) ease-(--ease-out) hover:bg-accent hover:text-foreground focus-visible:z-10 data-disabled:cursor-not-allowed data-disabled:text-muted-foreground data-pressed:relative data-pressed:z-10 data-pressed:bg-brand-container data-pressed:text-brand data-pressed:inset-ring data-pressed:inset-ring-brand data-pressed:hover:bg-brand-container [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "inline-flex shrink-0 items-center justify-center gap-1 rounded-md text-body font-semibold whitespace-nowrap transition-colors duration-(--dur-fast) ease-(--ease-out) hover:bg-accent hover:text-foreground focus-visible:z-10 data-disabled:cursor-not-allowed data-disabled:text-muted-foreground data-pressed:relative data-pressed:z-10 data-pressed:bg-brand-container data-pressed:text-brand data-pressed:inset-ring data-pressed:inset-ring-brand data-pressed:hover:bg-brand-container forced-colors:data-pressed:border forced-colors:data-pressed:border-[Highlight] forced-colors:data-pressed:bg-[Highlight] forced-colors:data-pressed:text-[HighlightText] forced-colors:data-pressed:hover:bg-[Highlight] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         VARIANT[variant],
         SIZE[size],
         className,

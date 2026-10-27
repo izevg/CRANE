@@ -62,4 +62,23 @@ describe("Field", () => {
     // Assert
     expect(screen.getByRole("textbox", { name: "Причина" })).toHaveValue("Ложное срабатывание");
   });
+
+  it("у сообщения об ошибке есть иконка: ошибка не передаётся одним цветом", () => {
+    // Arrange
+    const message = "Имя уже занято";
+
+    // Act
+    render(
+      <Field invalid name="name">
+        <FieldLabel>{"Имя"}</FieldLabel>
+        <Input />
+        <FieldError match>{message}</FieldError>
+      </Field>,
+    );
+
+    // Assert
+    expect(
+      screen.getByText(message).closest('[data-slot="field-error"]')?.querySelector("svg"),
+    ).not.toBeNull();
+  });
 });
