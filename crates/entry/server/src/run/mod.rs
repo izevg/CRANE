@@ -3,14 +3,16 @@
 mod health;
 
 use std::future::IntoFuture;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_http::{CargoSettings, StaticToken, admin_router, api_router};
-use crane_memory::{MemoryAudit, MemoryBlobStore, MemoryCatalog};
+use crane_memory::{MemoryBlobStore, MemoryCatalog};
 use crane_ports::registry::Catalog;
 use crane_ports::system::IdGen;
+use crane_siem::OcsfLogSink;
 use futures_util::future::{self, Either};
 use tokio::net::TcpListener;
 use tokio::runtime::Builder;
@@ -41,17 +43,17 @@ async fn serve_async(settings: Settings) -> Result<(), RunError> {
             })
             .await?;
     }
-    // TODO(PR4-entry): in-memory приёмник вместо настоящего журнала аудита.
-    let audit = Arc::new(MemoryAudit::default());
+    // Один приёмник на use cases и на слой auth; в v0.4.0 действия записи уйдут в журнал PG.
+    let audit = Arc::new(OcsfLogSink::new(Arc::new(SystemClock), ids.clone()));
     let registry = Arc::new(Registry::new(
         catalog,
         blobs,
         Arc::new(SystemClock),
         ids,
-        audit,
+        audit.clone(),
     ));
     // Сырой токен живёт только до этой строки: дальше остаётся его хэш.
-    let token = StaticToken::from_secret(settings.token.expose());
+    let token = StaticToken::new(settings.token.expose(), settings.principal);
     drop(settings.token);
     let api = api_router(
         registry,
@@ -60,6 +62,8 @@ async fn serve_async(settings: Settings) -> Result<(), RunError> {
             max_publish_bytes: settings.max_publish_bytes,
         },
         token,
+        settings.trusted_proxies,
+        audit,
     );
 
     let api_listener = bind(settings.http_port).await?;
@@ -72,9 +76,13 @@ async fn serve_async(settings: Settings) -> Result<(), RunError> {
     );
 
     // Каждый сервер ждёт свою копию сигнала: tokio::signal раздаёт его всем подписчикам.
-    let api_server = axum::serve(api_listener, api)
-        .with_graceful_shutdown(shutdown_signal())
-        .into_future();
+    let api_server = axum::serve(
+        api_listener,
+        // Адрес пира нужен слою контекста запроса (доверие к X-Forwarded-For).
+        api.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .into_future();
     let admin_server = axum::serve(admin_listener, admin_router())
         .with_graceful_shutdown(shutdown_signal())
         .into_future();

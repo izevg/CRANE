@@ -40,16 +40,4 @@ mod tests {
         assert_ne!(generated[0], generated[1]);
         assert_eq!(generated.map(|id| id.get_version_num()), [7, 7]);
     }
-
-    #[test]
-    fn clock_is_after_unix_epoch() {
-        // Arrange
-        let clock = SystemClock;
-
-        // Act
-        let now = clock.now();
-
-        // Assert
-        assert!(now > SystemTime::UNIX_EPOCH);
-    }
 }

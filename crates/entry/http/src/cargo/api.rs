@@ -6,11 +6,12 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::rejection::BytesRejection;
-use axum::extract::{Path, State};
+use axum::extract::{Extension, Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use crane_app::registry::{Coordinate, Publish, Upload};
+use crane_domain::access::Caller;
 use crane_domain::registry::{Format, PackageName, Version};
 use crane_format_cargo::{asset_path, parse_publish, render_ok, render_owners, render_publish_ok};
 use crane_ports::registry::{BlobStore, Catalog};
@@ -20,8 +21,6 @@ use super::Shared;
 use crate::error::{CargoError, chain};
 
 const JSON: &str = "application/json";
-/// Единственная статическая личность до v0.4.0.
-const OWNER_LOGIN: &str = "crane";
 
 fn coordinate(repo: String, name: &str, version: &str) -> Result<Coordinate, CargoError> {
     let package =
@@ -42,6 +41,7 @@ fn json_ok(body: String) -> Response {
 
 pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
+    Extension(caller): Extension<Caller>,
     Path(repo): Path<String>,
     body: Result<Bytes, BytesRejection>,
 ) -> Result<Response, CargoError> {
@@ -53,12 +53,7 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
     // одного файла несли бы разные имена.
     let existing = shared
         .registry
-        .versions(
-            &super::placeholder_caller(),
-            Format::Cargo,
-            &repo,
-            &request.name,
-        )
+        .versions(&caller, Format::Cargo, &repo, &request.name)
         .await?;
     if let Some(first) = existing.first()
         && first.package.as_written() != request.name.as_written()
@@ -74,7 +69,7 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
     shared
         .registry
         .publish(
-            &super::placeholder_caller(),
+            &caller,
             Publish {
                 coordinate: Coordinate {
                     format: Format::Cargo,
@@ -97,14 +92,12 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
 
 pub(super) async fn download<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
+    Extension(caller): Extension<Caller>,
     Path((repo, name, version)): Path<(String, String, String)>,
 ) -> Result<Response, CargoError> {
     let coordinate = coordinate(repo, &name, &version)?;
     let path = asset_path(&coordinate.package, &coordinate.version);
-    let download = shared
-        .registry
-        .fetch(&super::placeholder_caller(), &coordinate, &path)
-        .await?;
+    let download = shared.registry.fetch(&caller, &coordinate, &path).await?;
     Ok((
         StatusCode::OK,
         [
@@ -118,20 +111,23 @@ pub(super) async fn download<C: Catalog + 'static, B: BlobStore + 'static>(
 
 pub(super) async fn yank<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
+    Extension(caller): Extension<Caller>,
     Path((repo, name, version)): Path<(String, String, String)>,
 ) -> Result<Response, CargoError> {
-    set_yanked(&shared, repo, &name, &version, true).await
+    set_yanked(&shared, &caller, repo, &name, &version, true).await
 }
 
 pub(super) async fn unyank<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
+    Extension(caller): Extension<Caller>,
     Path((repo, name, version)): Path<(String, String, String)>,
 ) -> Result<Response, CargoError> {
-    set_yanked(&shared, repo, &name, &version, false).await
+    set_yanked(&shared, &caller, repo, &name, &version, false).await
 }
 
 async fn set_yanked<C: Catalog + 'static, B: BlobStore + 'static>(
     shared: &Shared<C, B>,
+    caller: &Caller,
     repo: String,
     name: &str,
     version: &str,
@@ -140,25 +136,26 @@ async fn set_yanked<C: Catalog + 'static, B: BlobStore + 'static>(
     let coordinate = coordinate(repo, name, version)?;
     shared
         .registry
-        .set_yanked(&super::placeholder_caller(), &coordinate, yanked)
+        .set_yanked(caller, &coordinate, yanked)
         .await?;
     Ok(json_ok(render_ok()))
 }
 
 pub(super) async fn owners<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
+    Extension(caller): Extension<Caller>,
     Path((repo, name)): Path<(String, String)>,
 ) -> Result<Response, CargoError> {
     let package =
         PackageName::parse(Format::Cargo, &name).map_err(|e| CargoError::bad_request(chain(&e)))?;
     let versions = shared
         .registry
-        .versions(&super::placeholder_caller(), Format::Cargo, &repo, &package)
+        .versions(&caller, Format::Cargo, &repo, &package)
         .await?;
     if versions.is_empty() {
         return Err(CargoError::not_found());
     }
-    Ok(json_ok(render_owners(OWNER_LOGIN)))
+    Ok(json_ok(render_owners(&caller.principal.id)))
 }
 
 pub(super) async fn owners_unsupported() -> CargoError {

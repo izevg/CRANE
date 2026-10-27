@@ -1,8 +1,10 @@
 //! Необязательный файл TOML под слоем окружения: приоритет env > файл > умолчание.
 //!
-//! Ключи файла — имена переменных без префикса `CRANE_` в нижнем регистре. Значения
-//! приводятся к строкам и ложатся в тот же поиск по имени переменной, поэтому разбор
-//! отдельных параметров о файле ничего не знает.
+//! Ключи файла выводятся из списка переменных (`VARS`): имя без префикса `CRANE_` в нижнем
+//! регистре. Значения приводятся к строкам (массив склеивается запятыми) и ложатся в тот же
+//! поиск по имени переменной, поэтому разбор отдельных параметров о файле ничего не знает.
+//! `CRANE_CONFIG` в `VARS` нет, так что ключа `config` в файле быть не может: путь к файлу
+//! задаёт только окружение, иначе файл мог бы подменить сам себя.
 
 use std::collections::HashMap;
 use std::io;
@@ -10,25 +12,10 @@ use std::path::Path;
 
 use toml::{Table, Value};
 
-use super::ConfigError;
+use super::{ConfigError, VARS};
 
 const CONFIG_PATH: &str = "CRANE_CONFIG";
 const PREFIX: &str = "CRANE_";
-/// Допустимые ключи. Ключ `config` намеренно отсутствует: путь к файлу задаёт только окружение,
-/// иначе файл мог бы подменить сам себя.
-const KEYS: [&str; 9] = [
-    "http_port",
-    "admin_port",
-    "public_url",
-    "token",
-    "token_file",
-    "cargo_repos",
-    "max_publish_bytes",
-    "database_url",
-    "blobs",
-];
-const LIST_KEY: &str = "cargo_repos";
-
 /// Поиск значения по имени переменной: сначала окружение, потом файл.
 pub(crate) fn layered<E: Fn(&str) -> Option<String>, R: Fn(&Path) -> io::Result<String>>(
     env: E,
@@ -79,32 +66,36 @@ fn position(content: &str, offset: usize) -> (usize, usize) {
     (line, column)
 }
 
+/// Имя переменной по ключу файла.
+fn variable(key: &str) -> Option<&'static str> {
+    VARS.iter().copied().find(|var| {
+        var.strip_prefix(PREFIX)
+            .is_some_and(|name| name.to_ascii_lowercase() == key)
+    })
+}
+
 fn entry(key: &str, value: &Value) -> Result<(String, String), ConfigError> {
-    let known =
-        KEYS.iter()
-            .find(|known| **known == key)
-            .ok_or_else(|| ConfigError::UnknownKey {
-                key: key.to_owned(),
-            })?;
-    let invalid = || ConfigError::FileValue {
-        key: known,
-        reason: "ожидалась строка или целое число",
+    let var = variable(key).ok_or_else(|| ConfigError::UnknownKey {
+        key: key.to_owned(),
+    })?;
+    let invalid = |reason| ConfigError::FileValue {
+        key: key.to_owned(),
+        reason,
     };
     let text = match value {
         Value::String(text) => text.clone(),
         Value::Integer(number) => number.to_string(),
-        Value::Array(items) if *known == LIST_KEY => items
+        Value::Array(items) => items
             .iter()
             .map(|item| item.as_str().map(str::to_owned))
             .collect::<Option<Vec<_>>>()
-            .ok_or(ConfigError::FileValue {
-                key: known,
-                reason: "ожидался массив строк",
-            })?
+            .ok_or_else(|| invalid("ожидался массив строк"))?
             .join(","),
-        _ => return Err(invalid()),
+        _ => {
+            return Err(invalid("ожидалась строка, целое число или массив строк"));
+        }
     };
-    Ok((format!("{PREFIX}{}", known.to_uppercase()), text))
+    Ok((var.to_owned(), text))
 }
 
 #[cfg(test)]
@@ -192,41 +183,49 @@ mod tests {
     }
 
     #[test]
-    fn every_known_key_maps_to_its_prefixed_upper_case_variable() {
+    fn key_is_the_variable_name_without_prefix_in_lower_case() {
         // Arrange
-        let content = "http_port = 1\nadmin_port = 2\npublic_url = \"u\"\ntoken = \"t\"\n\
-                       token_file = \"f\"\ncargo_repos = \"r\"\nmax_publish_bytes = 3\n\
-                       database_url = \"d\"\nblobs = \"b\"\n";
-        let get = lookup(&[], content).ok().unwrap();
+        let get = lookup(
+            &[],
+            "token_principal = \"ci\"\nmax_publish_bytes = 3\ntrusted_proxies = \"10.0.0.0/8\"\n",
+        )
+        .ok()
+        .unwrap();
 
         // Act
         let values = [
-            "CRANE_HTTP_PORT",
-            "CRANE_ADMIN_PORT",
-            "CRANE_PUBLIC_URL",
-            "CRANE_TOKEN",
-            "CRANE_TOKEN_FILE",
-            "CRANE_CARGO_REPOS",
+            "CRANE_TOKEN_PRINCIPAL",
             "CRANE_MAX_PUBLISH_BYTES",
-            "CRANE_DATABASE_URL",
-            "CRANE_BLOBS",
+            "CRANE_TRUSTED_PROXIES",
+            "token_principal",
         ]
-        .map(|name| get(name).unwrap());
+        .map(get);
 
         // Assert
-        assert_eq!(values, ["1", "2", "u", "t", "f", "r", "3", "d", "b"]);
+        assert_eq!(
+            values,
+            [Some("ci"), Some("3"), Some("10.0.0.0/8"), None].map(|v| v.map(str::to_owned))
+        );
     }
 
     #[test]
-    fn array_of_strings_becomes_comma_list() {
+    fn array_of_strings_becomes_comma_list_for_any_key() {
         // Arrange
-        let get = lookup(&[], "cargo_repos = [\"a\", \"b\"]").ok().unwrap();
+        let get = lookup(
+            &[],
+            "cargo_repos = [\"a\", \"b\"]\ntrusted_proxies = [\"10.0.0.0/8\", \"::1\"]",
+        )
+        .ok()
+        .unwrap();
 
         // Act
-        let value = get("CRANE_CARGO_REPOS");
+        let values = ["CRANE_CARGO_REPOS", "CRANE_TRUSTED_PROXIES"].map(get);
 
         // Assert
-        assert_eq!(value.as_deref(), Some("a,b"));
+        assert_eq!(
+            values,
+            [Some("a,b".to_owned()), Some("10.0.0.0/8,::1".to_owned())]
+        );
     }
 
     #[test]
@@ -266,20 +265,28 @@ mod tests {
     #[test]
     fn wrong_value_types_are_rejected_without_echoing_values() {
         // Arrange
-        let boolean = "token = true";
-        let float = "http_port = 1.5";
-        let array_for_scalar = "public_url = [\"x\"]";
-        let mixed_array = "cargo_repos = [\"a\", 1]";
+        let cases = [
+            "token = true",
+            "http_port = 1.5",
+            "cargo_repos = [\"a\", 1]",
+            "token = \"SECRETVAL\"\nblobs = { a = \"SECRETVAL\" }",
+        ];
 
         // Act
-        let errors = [boolean, float, array_for_scalar, mixed_array].map(|c| error_of(&[], c));
+        let messages = cases.map(|content| error_of(&[], content).to_string());
 
         // Assert
-        let keys = errors.map(|e| match e {
-            ConfigError::FileValue { key, .. } => key,
-            other => panic!("ожидалась FileValue: {other:?}"),
-        });
-        assert_eq!(keys, ["token", "http_port", "public_url", "cargo_repos"]);
+        let scalar = "ожидалась строка, целое число или массив строк";
+        assert_eq!(
+            messages,
+            [
+                format!("некорректное значение ключа `token` в файле конфигурации: {scalar}"),
+                format!("некорректное значение ключа `http_port` в файле конфигурации: {scalar}"),
+                "некорректное значение ключа `cargo_repos` в файле конфигурации: ожидался массив строк"
+                    .to_owned(),
+                format!("некорректное значение ключа `blobs` в файле конфигурации: {scalar}"),
+            ]
+        );
     }
 
     #[test]
@@ -288,20 +295,13 @@ mod tests {
         let content = "http_port = 1\ntoken = \"SECRETVAL\" bad\n";
 
         // Act
-        let error = error_of(&[], content);
-        let message = error.to_string();
+        let message = error_of(&[], content).to_string();
 
         // Assert
         assert_eq!(
-            error,
-            ConfigError::FileParse {
-                path: "/etc/crane.toml".to_owned(),
-                line: 2,
-                column: 21
-            }
+            message,
+            "ошибка разбора TOML в /etc/crane.toml: строка 2, столбец 21"
         );
-        assert!(message.contains("/etc/crane.toml"), "{message}");
-        assert!(!message.contains("SECRETVAL"), "{message}");
     }
 
     #[test]

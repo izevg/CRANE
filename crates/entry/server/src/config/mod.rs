@@ -11,11 +11,15 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 
+use crane_domain::access::{Principal, PrincipalKind};
+use crane_http::TrustedProxies;
 pub(crate) use file::layered;
 
 const DEFAULT_HTTP_PORT: u16 = 8080;
 const DEFAULT_ADMIN_PORT: u16 = 9464;
 const DEFAULT_REPOS: &str = "internal";
+/// Совпадает с прежним логином владельца в ответе cargo `owners`.
+const DEFAULT_PRINCIPAL: &str = "crane";
 const DEFAULT_MAX_PUBLISH_BYTES: usize = 10 * 1024 * 1024;
 const MEMORY: &str = "memory";
 /// Подстановка, когда у значения нет читаемой схемы: само значение может быть секретом.
@@ -30,6 +34,24 @@ const TOKEN: &str = "CRANE_TOKEN";
 const TOKEN_FILE: &str = "CRANE_TOKEN_FILE";
 const CARGO_REPOS: &str = "CRANE_CARGO_REPOS";
 const MAX_PUBLISH_BYTES: &str = "CRANE_MAX_PUBLISH_BYTES";
+const TOKEN_PRINCIPAL: &str = "CRANE_TOKEN_PRINCIPAL";
+const TRUSTED_PROXIES: &str = "CRANE_TRUSTED_PROXIES";
+
+/// Единственный список имён переменных. Ключи файла выводятся из него (`file::variable`),
+/// отдельного перечня в файле нет. `CRANE_CONFIG` сюда не входит намеренно.
+pub(super) const VARS: [&str; 11] = [
+    HTTP_PORT,
+    ADMIN_PORT,
+    PUBLIC_URL,
+    TOKEN,
+    TOKEN_FILE,
+    TOKEN_PRINCIPAL,
+    TRUSTED_PROXIES,
+    CARGO_REPOS,
+    MAX_PUBLISH_BYTES,
+    DATABASE_URL,
+    BLOBS,
+];
 
 /// Ошибка конфигурации. Значения секретных переменных в тексте не появляются никогда.
 #[derive(Debug, PartialEq, Eq)]
@@ -57,7 +79,7 @@ pub(crate) enum ConfigError {
         key: String,
     },
     FileValue {
-        key: &'static str,
+        key: String,
         reason: &'static str,
     },
     FileRead {
@@ -152,6 +174,9 @@ impl Secret {
 }
 
 pub(crate) struct Settings {
+    /// Кому принадлежит статический токен: попадает в аудит и в ответ `owners`.
+    pub(crate) principal: Principal,
+    pub(crate) trusted_proxies: TrustedProxies,
     pub(crate) http_port: u16,
     pub(crate) admin_port: u16,
     pub(crate) public_url: String,
@@ -167,6 +192,8 @@ impl Settings {
         read_file: &impl Fn(&Path) -> io::Result<String>,
     ) -> Result<Self, ConfigError> {
         Ok(Self {
+            principal: principal(var)?,
+            trusted_proxies: trusted_proxies(var)?,
             http_port: number(var, HTTP_PORT, DEFAULT_HTTP_PORT)?,
             admin_port: admin_port(var)?,
             public_url: public_url(var)?,
@@ -266,6 +293,31 @@ fn token(
     Ok(Secret(value))
 }
 
+fn principal(var: &impl Fn(&str) -> Option<String>) -> Result<Principal, ConfigError> {
+    let id = var(TOKEN_PRINCIPAL).unwrap_or_else(|| DEFAULT_PRINCIPAL.to_owned());
+    let id = id.trim();
+    // Идентификатор попадает в журналы: пустой бессмыслен, управляющие символы портят строку.
+    if id.is_empty() || id.chars().any(char::is_control) {
+        return Err(ConfigError::Invalid {
+            var: TOKEN_PRINCIPAL,
+            reason: "ожидалось непустое имя без управляющих символов",
+        });
+    }
+    Ok(Principal {
+        id: id.to_owned(),
+        kind: PrincipalKind::Robot,
+    })
+}
+
+fn trusted_proxies(var: &impl Fn(&str) -> Option<String>) -> Result<TrustedProxies, ConfigError> {
+    TrustedProxies::parse(&var(TRUSTED_PROXIES).unwrap_or_default()).map_err(|_| {
+        ConfigError::Invalid {
+            var: TRUSTED_PROXIES,
+            reason: "ожидался список IP-адресов или CIDR через запятую",
+        }
+    })
+}
+
 fn repos(var: &impl Fn(&str) -> Option<String>) -> Result<Vec<String>, ConfigError> {
     let raw = var(CARGO_REPOS).unwrap_or_else(|| DEFAULT_REPOS.to_owned());
     raw.split(',')
@@ -314,6 +366,7 @@ fn scheme_of(value: &str) -> String {
 )]
 mod tests {
     use std::collections::HashMap;
+    use std::net::IpAddr;
 
     use super::*;
 
@@ -408,18 +461,23 @@ mod tests {
         let text = with(&[(ADMIN_PORT, "abc")]);
 
         // Act
-        let first = error_of(&too_big);
-        let second = error_of(&text);
+        let errors = [too_big, text].map(|pairs| error_of(&pairs));
 
         // Assert
-        assert!(matches!(first, ConfigError::Invalid { var: HTTP_PORT, .. }));
-        assert!(matches!(
-            second,
-            ConfigError::Invalid {
-                var: ADMIN_PORT,
-                ..
-            }
-        ));
+        let reason = "ожидалось целое число в допустимом диапазоне";
+        assert_eq!(
+            errors,
+            [
+                ConfigError::Invalid {
+                    var: HTTP_PORT,
+                    reason
+                },
+                ConfigError::Invalid {
+                    var: ADMIN_PORT,
+                    reason
+                }
+            ]
+        );
     }
 
     #[test]
@@ -466,16 +524,22 @@ mod tests {
         let no_host = with(&[(PUBLIC_URL, "https:///")]);
 
         // Act
-        let errors = [error_of(&no_scheme), error_of(&ftp), error_of(&no_host)];
+        let errors = [no_scheme, ftp, no_host].map(|pairs| error_of(&pairs));
 
         // Assert
-        assert!(errors.iter().all(|e| matches!(
-            e,
-            ConfigError::Invalid {
-                var: PUBLIC_URL,
-                ..
-            }
-        )));
+        let invalid = |reason| ConfigError::Invalid {
+            var: PUBLIC_URL,
+            reason,
+        };
+        let scheme = "адрес должен начинаться с http:// или https://";
+        assert_eq!(
+            errors,
+            [
+                invalid(scheme),
+                invalid(scheme),
+                invalid("в адресе нет хоста")
+            ]
+        );
     }
 
     #[test]
@@ -498,8 +562,9 @@ mod tests {
             .filter(|(k, _)| *k != TOKEN)
             .collect();
         let read = |path: &Path| {
-            assert_eq!(path, Path::new("/run/secrets/token"));
-            Ok("file-token\r\n".to_owned())
+            (path == Path::new("/run/secrets/token"))
+                .then(|| "file-token\r\n".to_owned())
+                .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))
         };
 
         // Act
@@ -566,15 +631,15 @@ mod tests {
         let read = |_: &Path| Ok("\n".to_owned());
 
         // Act
-        let env_error = Settings::from_env(&env(&from_env), &read).err().unwrap();
-        let file_error = Settings::from_env(&env(&from_file), &read).err().unwrap();
+        let errors = [from_env, from_file]
+            .map(|pairs| Settings::from_env(&env(&pairs), &read).err().unwrap());
 
         // Assert
-        assert!(matches!(env_error, ConfigError::Invalid { var: TOKEN, .. }));
-        assert!(matches!(
-            file_error,
-            ConfigError::Invalid { var: TOKEN, .. }
-        ));
+        let empty = || ConfigError::Invalid {
+            var: TOKEN,
+            reason: "токен пуст",
+        };
+        assert_eq!(errors, [empty(), empty()]);
     }
 
     #[test]
@@ -611,16 +676,14 @@ mod tests {
         let blank = with(&[(CARGO_REPOS, "alpha, ,beta")]);
 
         // Act
-        let errors = [error_of(&trailing), error_of(&blank)];
+        let errors = [trailing, blank].map(|pairs| error_of(&pairs));
 
         // Assert
-        assert!(errors.iter().all(|e| matches!(
-            e,
-            ConfigError::Invalid {
-                var: CARGO_REPOS,
-                ..
-            }
-        )));
+        let empty = || ConfigError::Invalid {
+            var: CARGO_REPOS,
+            reason: "пустое имя репозитория в списке",
+        };
+        assert_eq!(errors, [empty(), empty()]);
     }
 
     #[test]
@@ -630,9 +693,9 @@ mod tests {
 
         // Act
         let error = error_of(&pairs);
-        let message = error.to_string();
 
         // Assert
+        let message = error.to_string();
         assert_eq!(
             error,
             ConfigError::Unsupported {
@@ -688,64 +751,9 @@ mod tests {
     ) -> impl Fn(&str) -> Option<String> + use<> {
         let mut all = vec![("CRANE_CONFIG", "/etc/crane.toml")];
         all.extend_from_slice(env);
-        layered(env_fn(&all), &move |_: &Path| Ok(content.to_owned()))
+        layered(self::env(&all), &move |_: &Path| Ok(content.to_owned()))
             .ok()
             .unwrap()
-    }
-
-    fn env_fn(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> + use<> {
-        env(pairs)
-    }
-
-    #[test]
-    fn public_url_and_token_come_from_the_file_and_storage_from_env() {
-        // Arrange
-        let get = file_lookup(
-            &[(DATABASE_URL, "memory"), (BLOBS, "memory")],
-            "public_url = \"https://file.example/\"\ntoken = \"file-token\"\nhttp_port = 9000\n",
-        );
-
-        // Act
-        let settings = Settings::from_env(&get, &no_files).ok().unwrap();
-
-        // Assert
-        assert_eq!(settings.public_url, "https://file.example");
-        assert_eq!(settings.token.expose(), b"file-token");
-        assert_eq!(settings.http_port, 9000);
-    }
-
-    #[test]
-    fn env_beats_file_for_settings() {
-        // Arrange
-        let get = file_lookup(
-            &[
-                (DATABASE_URL, "memory"),
-                (BLOBS, "memory"),
-                (TOKEN, "env-token"),
-            ],
-            "public_url = \"https://file.example\"\ntoken = \"file-token\"\n",
-        );
-
-        // Act
-        let settings = Settings::from_env(&get, &no_files).ok().unwrap();
-
-        // Assert
-        assert_eq!(settings.token.expose(), b"env-token");
-    }
-
-    #[test]
-    fn storage_for_migrate_can_come_from_the_file() {
-        // Arrange
-        let get = file_lookup(&[], "database_url = \"memory\"\nblobs = \"memory\"\n");
-
-        // Act
-        let storage = Storage::from_env(&get).unwrap();
-
-        // Assert
-        assert_eq!(
-            (storage.catalog, storage.blobs),
-            (Catalogs::Memory, Blobs::Memory)
-        );
     }
 
     #[test]
@@ -775,6 +783,75 @@ mod tests {
     }
 
     #[test]
+    fn token_principal_defaults_to_crane_robot_and_can_be_overridden() {
+        // Arrange
+        let cases = [with(&[]), with(&[(TOKEN_PRINCIPAL, " ci-bot ")])];
+
+        // Act
+        let principals = cases.map(|pairs| parse(&pairs).unwrap().principal);
+
+        // Assert
+        let robot = |id: &str| Principal {
+            id: id.to_owned(),
+            kind: PrincipalKind::Robot,
+        };
+        assert_eq!(principals, [robot("crane"), robot("ci-bot")]);
+    }
+
+    #[test]
+    fn blank_or_control_character_principal_is_rejected() {
+        // Arrange
+        let cases = [
+            with(&[(TOKEN_PRINCIPAL, "  ")]),
+            with(&[(TOKEN_PRINCIPAL, "a\nb")]),
+        ];
+
+        // Act
+        let errors = cases.map(|pairs| error_of(&pairs));
+
+        // Assert
+        let invalid = || ConfigError::Invalid {
+            var: TOKEN_PRINCIPAL,
+            reason: "ожидалось непустое имя без управляющих символов",
+        };
+        assert_eq!(errors, [invalid(), invalid()]);
+    }
+
+    #[test]
+    fn trusted_proxies_default_to_none_and_follow_the_list() {
+        // Arrange
+        let cases = [with(&[]), with(&[(TRUSTED_PROXIES, "10.0.0.0/8, ::1")])];
+        let peers: [IpAddr; 3] = ["10.1.2.3", "::1", "203.0.113.1"].map(|p| p.parse().unwrap());
+
+        // Act
+        let trusted = cases.map(|pairs| {
+            let settings = parse(&pairs).unwrap();
+            peers.map(|peer| settings.trusted_proxies.contains(peer))
+        });
+
+        // Assert
+        assert_eq!(trusted, [[false; 3], [true, true, false]]);
+    }
+
+    #[test]
+    fn malformed_trusted_proxies_are_rejected() {
+        // Arrange
+        let pairs = with(&[(TRUSTED_PROXIES, "10.0.0.0/33")]);
+
+        // Act
+        let error = error_of(&pairs);
+
+        // Assert
+        assert_eq!(
+            error,
+            ConfigError::Invalid {
+                var: TRUSTED_PROXIES,
+                reason: "ожидался список IP-адресов или CIDR через запятую"
+            }
+        );
+    }
+
+    #[test]
     fn admin_port_needs_nothing_else_and_defaults() {
         // Arrange
         let empty = env(&[]);
@@ -782,7 +859,7 @@ mod tests {
         let broken = env(&[(ADMIN_PORT, "x")]);
 
         // Act
-        let results = [admin_port(&empty), admin_port(&custom), admin_port(&broken)];
+        let results = [empty, custom, broken].map(|source| admin_port(&source));
 
         // Assert
         assert_eq!(

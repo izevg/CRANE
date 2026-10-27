@@ -31,10 +31,7 @@ fn config_without_authorization_is_unauthorized_and_asks_for_cargo_token() {
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
     assert_eq!(reply.header("www-authenticate"), "Cargo");
     assert_eq!(reply.header("content-type"), "application/json");
-    assert_eq!(
-        reply.json(),
-        json!({ "errors": [{ "detail": "требуется токен" }] })
-    );
+    assert_eq!(reply.detail(), "требуется токен");
 }
 
 #[test]
@@ -47,10 +44,7 @@ fn config_with_wrong_token_is_forbidden() {
 
     // Assert
     assert_eq!(reply.status, StatusCode::FORBIDDEN);
-    assert_eq!(
-        reply.json(),
-        json!({ "errors": [{ "detail": "токен отвергнут" }] })
-    );
+    assert_eq!(reply.detail(), "токен отвергнут");
 }
 
 #[test]
@@ -115,20 +109,17 @@ fn publish_without_token_is_unauthorized() {
 fn admin_probes_need_no_token() {
     // Arrange
     let api = Api::new();
+    let paths = ["/healthz/live", "/healthz/ready"];
 
     // Act
-    let live = api.admin_get("/healthz/live");
-    let ready = api.admin_get("/healthz/ready");
+    let replies = paths.map(|path| {
+        let reply = api.admin_get(path);
+        (reply.status, reply.text())
+    });
 
     // Assert
-    assert_eq!(
-        (live.status, live.text()),
-        (StatusCode::OK, "ok".to_owned())
-    );
-    assert_eq!(
-        (ready.status, ready.text()),
-        (StatusCode::OK, "ok".to_owned())
-    );
+    let ok = (StatusCode::OK, "ok".to_owned());
+    assert_eq!(replies, [ok.clone(), ok]);
 }
 
 #[test]
@@ -144,28 +135,30 @@ fn admin_unknown_path_is_problem_json() {
     assert_eq!(reply.header("content-type"), "application/problem+json");
 }
 
-fn index_with_condition(condition: &str) -> (String, common::Reply) {
+/// Опубликованный крейт и `ETag` его индекса.
+fn published_with_etag() -> (Api, String) {
     let api = Api::new();
     api.publish(REPO, "demo-crate", "1.0.0", CRATE);
-    let first = api.index_text("demo-crate");
-    let etag = first.header("etag").to_owned();
-    let value = condition.replace("{etag}", &etag);
-    let reply = api.with_headers(
+    let etag = api.index_text("demo-crate").header("etag").to_owned();
+    (api, etag)
+}
+
+fn index_if_none_match(api: &Api, condition: &str) -> common::Reply {
+    api.with_headers(
         Method::GET,
         &format!("/cargo/{REPO}/index/{}", common::index_path("demo-crate")),
-        &[("authorization", TOKEN), ("if-none-match", &value)],
+        &[("authorization", TOKEN), ("if-none-match", condition)],
         Vec::new(),
-    );
-    (etag, reply)
+    )
 }
 
 #[test]
 fn matching_if_none_match_gives_not_modified_with_etag_and_no_body() {
     // Arrange
-    let condition = "{etag}";
+    let (api, etag) = published_with_etag();
 
     // Act
-    let (etag, reply) = index_with_condition(condition);
+    let reply = index_if_none_match(&api, &etag);
 
     // Assert
     assert_eq!(reply.status, StatusCode::NOT_MODIFIED);
@@ -176,10 +169,10 @@ fn matching_if_none_match_gives_not_modified_with_etag_and_no_body() {
 #[test]
 fn different_if_none_match_gives_full_response() {
     // Arrange
-    let condition = "\"other\"";
+    let (api, etag) = published_with_etag();
 
     // Act
-    let (etag, reply) = index_with_condition(condition);
+    let reply = index_if_none_match(&api, "\"other\"");
 
     // Assert
     assert_eq!(reply.status, StatusCode::OK);
@@ -190,10 +183,11 @@ fn different_if_none_match_gives_full_response() {
 #[test]
 fn weak_form_of_same_etag_gives_not_modified() {
     // Arrange
-    let condition = "W/{etag}";
+    let (api, etag) = published_with_etag();
+    let weak = format!("W/{etag}");
 
     // Act
-    let (_, reply) = index_with_condition(condition);
+    let reply = index_if_none_match(&api, &weak);
 
     // Assert
     assert_eq!(reply.status, StatusCode::NOT_MODIFIED);
@@ -202,10 +196,10 @@ fn weak_form_of_same_etag_gives_not_modified() {
 #[test]
 fn wildcard_if_none_match_gives_not_modified() {
     // Arrange
-    let condition = "*";
+    let (api, _) = published_with_etag();
 
     // Act
-    let (_, reply) = index_with_condition(condition);
+    let reply = index_if_none_match(&api, "*");
 
     // Assert
     assert_eq!(reply.status, StatusCode::NOT_MODIFIED);
@@ -214,9 +208,7 @@ fn wildcard_if_none_match_gives_not_modified() {
 #[test]
 fn etag_changes_when_the_index_changes() {
     // Arrange
-    let api = Api::new();
-    api.publish(REPO, "demo-crate", "1.0.0", CRATE);
-    let before = api.index_text("demo-crate").header("etag").to_owned();
+    let (api, before) = published_with_etag();
     api.publish(REPO, "demo-crate", "1.1.0", CRATE);
 
     // Act

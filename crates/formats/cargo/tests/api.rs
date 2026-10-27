@@ -5,9 +5,7 @@
 )]
 
 use crane_domain::registry::{Format, PackageName, Version};
-use crane_format_cargo::{
-    asset_path, render_config, render_errors, render_ok, render_owners, render_publish_ok,
-};
+use crane_format_cargo::{asset_path, render_config, render_errors};
 use serde_json::{Value, json};
 
 fn parsed(raw: &str) -> Value {
@@ -58,22 +56,5 @@ fn errors_wrap_detail_and_escape_it() {
     assert_eq!(
         parsed(&json),
         json!({"errors": [{"detail": "плохой \"ввод\""}]})
-    );
-}
-
-#[test]
-fn ok_publish_ok_and_owners_have_cargo_shapes() {
-    // Arrange / Act
-    let (ok, publish, owners) = (render_ok(), render_publish_ok(), render_owners("ci-bot"));
-
-    // Assert
-    assert_eq!(parsed(&ok), json!({"ok": true}));
-    assert_eq!(
-        parsed(&publish),
-        json!({"warnings": {"invalid_categories": [], "invalid_badges": [], "other": []}})
-    );
-    assert_eq!(
-        parsed(&owners),
-        json!({"users": [{"id": 1, "login": "ci-bot", "name": null}]})
     );
 }

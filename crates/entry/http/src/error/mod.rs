@@ -2,13 +2,25 @@
 
 use std::error::Error;
 
-use axum::http::{StatusCode, header};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use crane_app::registry::RegistryError;
 use crane_domain::registry::VersionState;
-use crane_format_cargo::render_errors;
 
 const INTERNAL_DETAIL: &str = "внутренняя ошибка сервера";
+
+/// Что именно писать в тело ошибки. Ответ несёт его в расширениях с пустым телом:
+/// id запроса известен только внешнему слою, он и рендерит тело (`context::render`).
+#[derive(Debug, Clone)]
+pub(crate) enum ErrorBody {
+    /// `{"errors":[{"detail":"…"}]}`.
+    Cargo(String),
+    /// RFC 9457.
+    Problem {
+        title: &'static str,
+        detail: &'static str,
+    },
+}
 
 /// Ошибка в форме cargo: `{"errors":[{"detail":"…"}]}`.
 #[derive(Debug)]
@@ -49,12 +61,11 @@ impl From<RegistryError> for CargoError {
 
 impl IntoResponse for CargoError {
     fn into_response(self) -> Response {
-        (
-            self.status,
-            [(header::CONTENT_TYPE, "application/json")],
-            render_errors(&self.detail),
-        )
-            .into_response()
+        let mut response = self.status.into_response();
+        response
+            .extensions_mut()
+            .insert(ErrorBody::Cargo(self.detail));
+        response
     }
 }
 
@@ -76,19 +87,12 @@ impl Problem {
 
 impl IntoResponse for Problem {
     fn into_response(self) -> Response {
-        // `detail` и `title` — статические строки без символов, требующих экранирования.
-        let body = format!(
-            r#"{{"type":"about:blank","title":"{}","status":{},"detail":"{}"}}"#,
-            self.status.canonical_reason().unwrap_or("Error"),
-            self.status.as_u16(),
-            self.detail,
-        );
-        (
-            self.status,
-            [(header::CONTENT_TYPE, "application/problem+json")],
-            body,
-        )
-            .into_response()
+        let mut response = self.status.into_response();
+        response.extensions_mut().insert(ErrorBody::Problem {
+            title: self.status.canonical_reason().unwrap_or("Error"),
+            detail: self.detail,
+        });
+        response
     }
 }
 
@@ -150,7 +154,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_errors_map_to_distinct_statuses() {
+    fn registry_errors_map_to_http_statuses() {
         // Arrange
         let digest = Sha256::from([1; 32]);
         let cases = [
@@ -195,12 +199,10 @@ mod tests {
         ];
 
         // Act
-        let actual = cases.map(|(error, expected)| (describe(&error).0, expected));
+        let actual = cases.each_ref().map(|(error, _)| describe(error).0);
 
         // Assert
-        for (got, expected) in actual {
-            assert_eq!(got, expected);
-        }
+        assert_eq!(actual, cases.map(|(_, expected)| expected));
     }
 
     #[test]

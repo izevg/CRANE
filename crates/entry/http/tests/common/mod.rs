@@ -7,17 +7,23 @@
     reason = "dead_code: фикстуры общие для тестовых бинарей; unwrap в тестах = падение теста"
 )]
 
-use std::sync::Arc;
+use std::io;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::SystemTime;
 
 use axum::Router;
 use axum::body::Body;
+use axum::extract::ConnectInfo;
 use axum::http::{HeaderMap, Method, Request, StatusCode, header};
 use bytes::Bytes;
 use crane_app::registry::Registry;
+use crane_domain::access::{Principal, PrincipalKind};
+use crane_domain::audit::AuditEvent;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
-use crane_http::{CargoSettings, StaticToken, admin_router, api_router};
+use crane_http::{CargoSettings, StaticToken, TrustedProxies, admin_router, api_router};
 use crane_memory::{FixedClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_ports::audit::AuditSink;
 use crane_ports::registry::Catalog;
 use crane_ports::system::IdGen;
 use http_body_util::BodyExt;
@@ -30,6 +36,8 @@ pub(crate) const TOKEN: &str = "s3cret-token";
 pub(crate) const PUBLIC_URL: &str = "https://crane.example";
 pub(crate) const MAX_PUBLISH_BYTES: usize = 4096;
 pub(crate) const REPO: &str = "internal";
+/// Личность, которой принадлежит `TOKEN`.
+pub(crate) const PRINCIPAL: &str = "crane";
 const PROXY_REPO: &str = "mirror";
 
 pub(crate) struct Reply {
@@ -50,16 +58,36 @@ impl Reply {
     pub(crate) fn header(&self, name: &str) -> &str {
         self.headers.get(name).unwrap().to_str().unwrap()
     }
+
+    /// `detail` cargo-ошибки без суффикса `(request_id …)`; суффикс обязателен и равен заголовку.
+    pub(crate) fn detail(&self) -> String {
+        let json = self.json();
+        let detail = json["errors"][0]["detail"].as_str().unwrap();
+        let suffix = format!(" (request_id {})", self.header("x-request-id"));
+        detail.strip_suffix(&suffix).unwrap().to_owned()
+    }
 }
 
 pub(crate) struct Api {
     runtime: Runtime,
     router: Router,
     admin: Router,
+    audit: Arc<MemoryAudit>,
 }
 
 impl Api {
     pub(crate) fn new() -> Self {
+        Self::with_proxies("")
+    }
+
+    /// Доверенные прокси в формате `CRANE_TRUSTED_PROXIES`; события аудита копятся в памяти.
+    pub(crate) fn with_proxies(proxies: &str) -> Self {
+        let audit = Arc::new(MemoryAudit::default());
+        Self::build(proxies, audit.clone(), audit)
+    }
+
+    /// `sink` получает события и use cases, и слоя auth; `audit` — то, что отдаёт `audit_events`.
+    pub(crate) fn build(proxies: &str, sink: Arc<dyn AuditSink>, audit: Arc<MemoryAudit>) -> Self {
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let ids = Arc::new(SequentialIdGen::default());
         let catalog = MemoryCatalog::default();
@@ -81,7 +109,7 @@ impl Api {
             MemoryBlobStore::default(),
             Arc::new(FixedClock::new(SystemTime::UNIX_EPOCH)),
             ids,
-            Arc::new(MemoryAudit::default()),
+            sink.clone(),
         );
         let router = api_router(
             Arc::new(registry),
@@ -89,13 +117,31 @@ impl Api {
                 public_url: PUBLIC_URL.to_owned(),
                 max_publish_bytes: MAX_PUBLISH_BYTES,
             },
-            StaticToken::from_secret(TOKEN.as_bytes()),
+            StaticToken::new(
+                TOKEN.as_bytes(),
+                Principal {
+                    id: PRINCIPAL.to_owned(),
+                    kind: PrincipalKind::Robot,
+                },
+            ),
+            TrustedProxies::parse(proxies).unwrap(),
+            sink,
         );
         Self {
             runtime,
             router,
             admin: admin_router(),
+            audit,
         }
+    }
+
+    pub(crate) fn audit_events(&self) -> Vec<AuditEvent> {
+        self.audit.events()
+    }
+
+    /// Отправляет готовый запрос в `api_router`.
+    pub(crate) fn send(&self, request: Request<Body>) -> Reply {
+        self.call(&self.router, request)
     }
 
     fn call(&self, router: &Router, request: Request<Body>) -> Reply {
@@ -131,11 +177,13 @@ impl Api {
         headers: &[(&str, &str)],
         body: Vec<u8>,
     ) -> Reply {
-        let mut builder = Request::builder().method(method).uri(uri);
-        for (name, value) in headers {
-            builder = builder.header(*name, *value);
-        }
-        self.call(&self.router, builder.body(Body::from(body)).unwrap())
+        self.send(request(method, uri, headers, body, None))
+    }
+
+    /// Запрос с адресом пира, как его видит сервер через `ConnectInfo`.
+    pub(crate) fn get_from(&self, peer: &str, uri: &str, headers: &[(&str, &str)]) -> Reply {
+        let peer = peer.parse().unwrap();
+        self.send(request(Method::GET, uri, headers, Vec::new(), Some(peer)))
     }
 
     pub(crate) fn admin_get(&self, uri: &str) -> Reply {
@@ -153,6 +201,58 @@ impl Api {
 
     pub(crate) fn index_text(&self, name: &str) -> Reply {
         self.get(&format!("/cargo/{REPO}/index/{}", index_path(name)))
+    }
+}
+
+/// Собирает запрос; `peer` кладётся в расширения так же, как это делает `axum::serve`.
+pub(crate) fn request(
+    method: Method,
+    uri: &str,
+    headers: &[(&str, &str)],
+    body: Vec<u8>,
+    peer: Option<SocketAddr>,
+) -> Request<Body> {
+    let mut builder = Request::builder().method(method).uri(uri);
+    for (name, value) in headers {
+        builder = builder.header(*name, *value);
+    }
+    let mut request = builder.body(Body::from(body)).unwrap();
+    if let Some(peer) = peer {
+        request.extensions_mut().insert(ConnectInfo(peer));
+    }
+    request
+}
+
+/// Общий буфер для перехвата вывода `tracing-subscriber`.
+#[derive(Clone, Default)]
+pub(crate) struct SharedBuf(Arc<Mutex<Vec<u8>>>);
+
+impl SharedBuf {
+    pub(crate) fn text(&self) -> String {
+        let bytes = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        String::from_utf8(bytes.clone()).unwrap()
+    }
+}
+
+impl io::Write for SharedBuf {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for SharedBuf {
+    type Writer = Self;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        self.clone()
     }
 }
 

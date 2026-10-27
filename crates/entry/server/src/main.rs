@@ -72,6 +72,9 @@ fn init_logging() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::fmt()
         .json()
+        // Поля событий (в том числе плоские пути OCSF `class_uid`, `actor.user.uid`) лежат
+        // на верхнем уровне строки, а не под `fields`: коллектору не нужен второй путь.
+        .flatten_event(true)
         .with_env_filter(filter)
         .init();
 }

@@ -388,6 +388,7 @@ dependencies = [
  "crane-format-cargo",
  "crane-memory",
  "crane-ports",
+ "crane-siem",
  "futures-util",
  "http-body-util",
  "serde_json",
@@ -396,6 +397,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -469,6 +471,7 @@ dependencies = [
  "crane-http",
  "crane-memory",
  "crane-ports",
+ "crane-siem",
  "futures-util",
  "tokio",
  "toml",
@@ -480,6 +483,12 @@ dependencies = [
 [[package]]
 name = "crane-siem"
 version = "0.0.0"
+dependencies = [
+ "crane-domain",
+ "crane-ports",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "crane-systemone"

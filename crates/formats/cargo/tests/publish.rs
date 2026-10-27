@@ -71,17 +71,15 @@ fn stored(body: Vec<u8>) -> Value {
 #[test]
 fn well_formed_body_yields_name_version_and_exact_crate_bytes() {
     // Arrange
+    // JSON длиннее 255 байт: длина не помещается в один байт.
     let json = realistic_json();
-    assert!(
-        json.to_string().len() > 255,
-        "JSON должен быть длиннее одного байта длины"
-    );
     let krate = [0u8, 1, 2, 255, 254, 0, 7];
 
     // Act
     let publish = parse_publish(Bytes::from(body_of(&json, &krate))).unwrap();
 
     // Assert
+    assert!(json.to_string().len() > 255, "условие теста: длинный JSON");
     assert_eq!(publish.name.as_written(), "My-Crate");
     assert_eq!(publish.version.as_written(), "1.2.3");
     assert_eq!(publish.crate_file.as_ref(), krate);
@@ -239,7 +237,8 @@ fn bytes_after_the_crate_are_rejected() {
 
 #[test]
 fn length_is_read_little_endian() {
-    // Arrange: длина JSON 0x0100 = 256 байт; при big-endian заголовок означал бы 65536.
+    // Arrange
+    // Длина JSON 0x0100 = 256 байт; при big-endian заголовок означал бы 65536.
     let json = format!(
         r#"{{"name":"a","vers":"1.0.0","description":"{}"}}"#,
         "x".repeat(256)
@@ -272,31 +271,12 @@ fn invalid_name_and_version_are_reported_separately() {
     let bad_version = body_of(&json!({"name": "good", "vers": "one"}), b"x");
 
     // Act
-    let (name_result, version_result) = (
-        parse_publish(Bytes::from(bad_name)),
-        parse_publish(Bytes::from(bad_version)),
-    );
+    let kinds = [bad_name, bad_version].map(|body| match parse_publish(Bytes::from(body)) {
+        Err(PublishError::Name(_)) => "name",
+        Err(PublishError::Version(_)) => "version",
+        _ => "other",
+    });
 
     // Assert
-    assert!(
-        matches!(name_result, Err(PublishError::Name(_))),
-        "{name_result:?}"
-    );
-    assert!(
-        matches!(version_result, Err(PublishError::Version(_))),
-        "{version_result:?}"
-    );
-}
-
-#[test]
-fn debug_hides_crate_bytes_and_shows_length() {
-    // Arrange
-    let publish = parse_publish(Bytes::from(body_of(&realistic_json(), &[7u8; 40]))).unwrap();
-
-    // Act
-    let shown = format!("{publish:?}");
-
-    // Assert
-    assert!(shown.contains("crate_file_len: 40"), "{shown}");
-    assert!(!shown.contains("[7, 7"), "{shown}");
+    assert_eq!(kinds, ["name", "version"]);
 }

@@ -78,12 +78,10 @@ mod tests {
         ];
 
         // Act
-        let verdicts = cases.map(|(line, expected)| (is_healthy(line), expected));
+        let verdicts = cases.map(|(line, _)| is_healthy(line));
 
         // Assert
-        for (got, expected) in verdicts {
-            assert_eq!(got, expected);
-        }
+        assert_eq!(verdicts, cases.map(|(_, expected)| expected));
     }
 
     fn runtime() -> tokio::runtime::Runtime {

@@ -2,17 +2,18 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{Extension, Path, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum_extra::TypedHeader;
 use axum_extra::headers::{ETag, IfNoneMatch};
+use crane_domain::access::Caller;
 use crane_domain::registry::{Format, Sha256 as Digest};
 use crane_format_cargo::{parse_index_path, render_config, render_index};
 use crane_ports::registry::{BlobStore, Catalog};
 use sha2::{Digest as _, Sha256};
 
-use super::Shared;
+use super::{CARGO_PREFIX, Shared};
 use crate::error::CargoError;
 
 const JSON: &str = "application/json";
@@ -24,19 +25,20 @@ pub(super) async fn config<C: Catalog + 'static, B: BlobStore + 'static>(
 ) -> Response {
     // Существование репозитория здесь не проверяется: use case «репозиторий есть?» нет,
     // неизвестный репозиторий проявится 404 на остальных маршрутах.
-    let base = format!("{}/cargo/{repo}", shared.settings.public_url);
+    let base = format!("{}{CARGO_PREFIX}/{repo}", shared.settings.public_url);
     ([(header::CONTENT_TYPE, JSON)], render_config(&base)).into_response()
 }
 
 pub(super) async fn sparse<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
+    Extension(caller): Extension<Caller>,
     Path((repo, path)): Path<(String, String)>,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
 ) -> Result<Response, CargoError> {
     let name = parse_index_path(&path).ok_or_else(CargoError::not_found)?;
     let versions = shared
         .registry
-        .versions(&super::placeholder_caller(), Format::Cargo, &repo, &name)
+        .versions(&caller, Format::Cargo, &repo, &name)
         .await?;
     // Пустой индекс — это «крейта нет», а не крейт без версий.
     if versions.is_empty() {

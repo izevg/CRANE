@@ -148,7 +148,9 @@ fn checksum_comes_from_the_asset_of_that_very_version() {
 
 #[test]
 fn empty_input_gives_empty_index() {
-    // Arrange / Act
+    // Arrange
+
+    // Act
     let index = render_index(&[]).unwrap();
 
     // Assert

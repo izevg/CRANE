@@ -11,12 +11,17 @@ use axum::extract::DefaultBodyLimit;
 use axum::middleware::from_fn_with_state;
 use axum::routing::{delete, get, put};
 use crane_app::registry::Registry;
-use crane_domain::access::{Caller, Principal, PrincipalKind, RequestContext, RequestId};
+use crane_ports::audit::AuditSink;
 use crane_ports::registry::{BlobStore, Catalog};
 
+use auth::Auth;
 pub use auth::StaticToken;
 
+use crate::context::{TrustedProxies, request_context};
 use crate::error::{CargoError, not_found};
+
+/// Точка монтирования cargo-маршрутов; от неё же строится база в `config.json`.
+const CARGO_PREFIX: &str = "/cargo";
 
 /// Настройки cargo-маршрутов.
 #[derive(Debug, Clone)]
@@ -25,22 +30,6 @@ pub struct CargoSettings {
     pub public_url: String,
     /// Предел тела публикации: оно буферизуется в памяти целиком.
     pub max_publish_bytes: usize,
-}
-
-// TODO(PR4-entry): заглушка до middleware, которая строит `Caller` из аутентификации и запроса.
-fn placeholder_caller() -> Caller {
-    Caller {
-        principal: Principal {
-            id: "static-token".to_owned(),
-            kind: PrincipalKind::Robot,
-        },
-        request: RequestContext {
-            request_id: RequestId::from(uuid::Uuid::nil()),
-            trace_id: None,
-            client_ip: None,
-            user_agent: None,
-        },
-    }
 }
 
 /// Общее состояние обработчиков.
@@ -54,6 +43,8 @@ pub fn api_router<C: Catalog + 'static, B: BlobStore + 'static>(
     registry: Arc<Registry<C, B>>,
     cargo: CargoSettings,
     token: StaticToken,
+    proxies: TrustedProxies,
+    audit: Arc<dyn AuditSink>,
 ) -> Router {
     let max_publish_bytes = cargo.max_publish_bytes;
     let shared = Arc::new(Shared {
@@ -83,10 +74,15 @@ pub fn api_router<C: Catalog + 'static, B: BlobStore + 'static>(
         )
         .fallback(cargo_not_found)
         .with_state(shared)
-        .layer(from_fn_with_state(Arc::new(token), auth::require_token));
+        .layer(from_fn_with_state(
+            Arc::new(Auth { token, audit }),
+            auth::require_token,
+        ));
+    // Самый внешний слой: контекст запроса нужен и auth, и fallback, и рендеру ошибок.
     Router::new()
-        .nest("/cargo/{repo}", cargo_router)
+        .nest(&format!("{CARGO_PREFIX}/{{repo}}"), cargo_router)
         .fallback(not_found)
+        .layer(from_fn_with_state(Arc::new(proxies), request_context))
 }
 
 async fn cargo_not_found() -> CargoError {

@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::api::asset_path;
 
 /// Что лежит в `FormatMetadata` версии: часть для индекса и описательная часть.
-#[derive(Debug, Serialize, Deserialize)]
+/// Только запись: путь индекса читает `IndexView`, описательная часть ему не нужна.
+#[derive(Debug, Serialize)]
 pub(crate) struct StoredMeta {
     pub(crate) index: IndexMeta,
     pub(crate) about: About,
@@ -36,8 +37,7 @@ pub(crate) struct IndexDep {
 }
 
 /// Описательные поля для веб-интерфейса; `readme` не храним из-за размера.
-#[derive(Debug, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Serialize)]
 pub(crate) struct About {
     pub(crate) description: Option<String>,
     pub(crate) license: Option<String>,
@@ -47,6 +47,13 @@ pub(crate) struct About {
     pub(crate) documentation: Option<String>,
     pub(crate) keywords: Vec<String>,
     pub(crate) categories: Vec<String>,
+}
+
+/// Читаемая часть сохранённых метаданных: serde пропускает `about`, и он не
+/// разбирается на каждый запрос индекса.
+#[derive(Deserialize)]
+struct IndexView {
+    index: IndexMeta,
 }
 
 /// Ошибка сборки индекса.
@@ -78,7 +85,7 @@ struct IndexLine<'a> {
 pub fn render_index(versions: &[PackageVersion]) -> Result<String, IndexError> {
     let mut out = String::new();
     for v in versions {
-        let meta: StoredMeta =
+        let meta: IndexView =
             serde_json::from_str(v.metadata.as_str()).map_err(IndexError::Metadata)?;
         let path = asset_path(&v.package, &v.version);
         let asset = v.assets.iter().find(|a| a.path == path).ok_or_else(|| {
