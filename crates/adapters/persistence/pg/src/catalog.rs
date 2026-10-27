@@ -2,11 +2,10 @@ use crane_domain::registry::{
     Format, PackageName, PackageVersion, Repository, RepositoryId, Version, VersionId, VersionState,
 };
 use crane_ports::registry::{Catalog, CatalogError, NewVersion};
-use sqlx::postgres::PgRow;
-use sqlx::{Executor, PgConnection, PgPool, Postgres};
+use sqlx::{PgConnection, PgPool};
 
 use crate::rows::{
-    backend, corrupt, kind_as_str, repository_from_row, state_as_str, state_parse, to_db_time,
+    corrupt, kind_as_str, rejected, repository_from_row, state_as_str, state_parse, to_db_time,
     version_from_row,
 };
 
@@ -62,26 +61,25 @@ impl PgCatalog {
     }
 }
 
-/// Читает одну версию по id на переданном соединении или внутри транзакции.
-async fn load_version<'e, E>(
-    executor: E,
+/// Сбой драйвера или БД.
+fn backend(error: sqlx::Error) -> CatalogError {
+    CatalogError::Backend(Box::new(error))
+}
+
+/// Читает одну версию по id на соединении транзакции: так публикация возвращает ровно то,
+/// что увидит `find_version`.
+async fn load_version(
+    conn: &mut PgConnection,
     id: VersionId,
-) -> Result<Option<PackageVersion>, CatalogError>
-where
-    E: Executor<'e, Database = Postgres>,
-{
+) -> Result<Option<PackageVersion>, CatalogError> {
     sqlx::query(select_version!("WHERE v.id = $1"))
         .bind(id.as_uuid())
-        .fetch_optional(executor)
+        .fetch_optional(conn)
         .await
         .map_err(backend)?
         .as_ref()
         .map(version_from_row)
         .transpose()
-}
-
-fn versions_from_rows(rows: &[PgRow]) -> Result<Vec<PackageVersion>, CatalogError> {
-    rows.iter().map(version_from_row).collect()
 }
 
 /// Ошибки `publish_version`: нарушения известных ограничений - доменные, остальное - сбой.
@@ -97,128 +95,6 @@ fn publish_error(error: sqlx::Error) -> CatalogError {
         }
     }
     backend(error)
-}
-
-async fn publish(pool: &PgPool, new: &NewVersion) -> Result<PackageVersion, CatalogError> {
-    let published_at = to_db_time(new.published_at)?;
-    let sizes = new
-        .assets
-        .iter()
-        .map(|a| i64::try_from(a.size).map_err(|_| corrupt("размер файла не помещается в bigint")))
-        .collect::<Result<Vec<_>, _>>()?;
-    let paths: Vec<&str> = new.assets.iter().map(|a| a.path.as_str()).collect();
-    let digests: Vec<&[u8]> = new
-        .assets
-        .iter()
-        .map(|a| a.sha256.as_bytes().as_slice())
-        .collect();
-
-    let mut tx = pool.begin().await.map_err(backend)?;
-
-    // Пакет создаётся первой версией. DO NOTHING ждёт конкурента, вставившего ту же строку,
-    // и после его коммита следующий SELECT видит запись: пакет один, написание - первое.
-    sqlx::query(
-        "INSERT INTO package (repository_id, name_norm, name_display) VALUES ($1, $2, $3)
-         ON CONFLICT ON CONSTRAINT package_repository_id_name_norm_key DO NOTHING",
-    )
-    .bind(new.repository.as_uuid())
-    .bind(new.package.normalized())
-    .bind(new.package.as_written())
-    .execute(&mut *tx)
-    .await
-    .map_err(publish_error)?;
-    let package_id: i64 =
-        sqlx::query_scalar("SELECT id FROM package WHERE repository_id = $1 AND name_norm = $2")
-            .bind(new.repository.as_uuid())
-            .bind(new.package.normalized())
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(backend)?;
-
-    // Содержимое общее для версий и репозиториев: уже известный blob не трогаем.
-    sqlx::query(
-        "INSERT INTO blob (store_id, sha256, size)
-         SELECT $1, t.digest, t.size FROM UNNEST($2::bytea[], $3::int8[]) AS t(digest, size)
-         ON CONFLICT (store_id, sha256) DO NOTHING",
-    )
-    .bind(STORE_ID)
-    .bind(&digests)
-    .bind(&sizes)
-    .execute(&mut *tx)
-    .await
-    .map_err(publish_error)?;
-
-    sqlx::query(
-        "INSERT INTO package_version
-             (id, package_id, version, version_display, state, published_at, metadata)
-         VALUES ($1, $2, $3, $4, $5::ver_state, $6, $7::json)",
-    )
-    .bind(new.id.as_uuid())
-    .bind(package_id)
-    .bind(new.version.canonical())
-    .bind(new.version.as_written())
-    .bind(state_as_str(new.state))
-    .bind(published_at)
-    .bind(new.metadata.as_str())
-    .execute(&mut *tx)
-    .await
-    .map_err(publish_error)?;
-
-    // Один запрос на все файлы вместо N обращений к БД.
-    sqlx::query(
-        "INSERT INTO asset (version_id, path, store_id, blob_sha256)
-         SELECT $1, t.path, $2, t.digest FROM UNNEST($3::text[], $4::bytea[]) AS t(path, digest)",
-    )
-    .bind(new.id.as_uuid())
-    .bind(STORE_ID)
-    .bind(&paths)
-    .bind(&digests)
-    .execute(&mut *tx)
-    .await
-    .map_err(publish_error)?;
-
-    // Результат читается из БД, а не собирается из входа: так publish и find совпадают
-    // по построению (микросекунды времени, написание пакета, размер из blob, порядок путей).
-    let stored = load_version_in(&mut tx, new.id).await?;
-    tx.commit().await.map_err(backend)?;
-    Ok(stored)
-}
-
-async fn load_version_in(
-    conn: &mut PgConnection,
-    id: VersionId,
-) -> Result<PackageVersion, CatalogError> {
-    load_version(conn, id)
-        .await?
-        .ok_or_else(|| corrupt("только что вставленная версия не читается"))
-}
-
-async fn transition(
-    pool: &PgPool,
-    id: VersionId,
-    from: VersionState,
-    to: VersionState,
-) -> Result<(), CatalogError> {
-    let mut tx = pool.begin().await.map_err(backend)?;
-    // FOR UPDATE превращает сравнение с `from` и запись в одно атомарное действие:
-    // из двух конкурентных переходов второй увидит уже новое состояние.
-    let current: Option<String> =
-        sqlx::query_scalar("SELECT state::text FROM package_version WHERE id = $1 FOR UPDATE")
-            .bind(id.as_uuid())
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(backend)?;
-    let actual = state_parse(&current.ok_or(CatalogError::NotFound)?)?;
-    if actual != from {
-        return Err(CatalogError::StateConflict { actual });
-    }
-    sqlx::query("UPDATE package_version SET state = $2::ver_state WHERE id = $1")
-        .bind(id.as_uuid())
-        .bind(state_as_str(to))
-        .execute(&mut *tx)
-        .await
-        .map_err(backend)?;
-    tx.commit().await.map_err(backend)
 }
 
 impl Catalog for PgCatalog {
@@ -259,8 +135,94 @@ impl Catalog for PgCatalog {
         .transpose()
     }
 
-    async fn publish_version(&self, version: NewVersion) -> Result<PackageVersion, CatalogError> {
-        publish(&self.pool, &version).await
+    async fn publish_version(&self, new: NewVersion) -> Result<PackageVersion, CatalogError> {
+        let published_at = to_db_time(new.published_at)?;
+        let sizes = new
+            .assets
+            .iter()
+            .map(|a| {
+                i64::try_from(a.size).map_err(|_| rejected("размер файла не помещается в bigint"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let paths: Vec<&str> = new.assets.iter().map(|a| a.path.as_str()).collect();
+        let digests: Vec<&[u8]> = new
+            .assets
+            .iter()
+            .map(|a| a.sha256.as_bytes().as_slice())
+            .collect();
+
+        let mut tx = self.pool.begin().await.map_err(backend)?;
+
+        // Пакет создаётся первой версией. DO NOTHING ждёт конкурента, вставившего ту же строку,
+        // и после его коммита следующий SELECT видит запись: пакет один, написание - первое.
+        sqlx::query(
+            "INSERT INTO package (repository_id, name_norm, name_display) VALUES ($1, $2, $3)
+         ON CONFLICT ON CONSTRAINT package_repository_id_name_norm_key DO NOTHING",
+        )
+        .bind(new.repository.as_uuid())
+        .bind(new.package.normalized())
+        .bind(new.package.as_written())
+        .execute(&mut *tx)
+        .await
+        .map_err(publish_error)?;
+        let package_id: i64 = sqlx::query_scalar(
+            "SELECT id FROM package WHERE repository_id = $1 AND name_norm = $2",
+        )
+        .bind(new.repository.as_uuid())
+        .bind(new.package.normalized())
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(backend)?;
+
+        // Содержимое общее для версий и репозиториев: уже известный blob не трогаем.
+        sqlx::query(
+            "INSERT INTO blob (store_id, sha256, size)
+         SELECT $1, t.digest, t.size FROM UNNEST($2::bytea[], $3::int8[]) AS t(digest, size)
+         ON CONFLICT (store_id, sha256) DO NOTHING",
+        )
+        .bind(STORE_ID)
+        .bind(&digests)
+        .bind(&sizes)
+        .execute(&mut *tx)
+        .await
+        .map_err(publish_error)?;
+
+        sqlx::query(
+            "INSERT INTO package_version
+             (id, package_id, version, version_display, state, published_at, metadata)
+         VALUES ($1, $2, $3, $4, $5::ver_state, $6, $7::json)",
+        )
+        .bind(new.id.as_uuid())
+        .bind(package_id)
+        .bind(new.version.canonical())
+        .bind(new.version.as_written())
+        .bind(state_as_str(new.state))
+        .bind(published_at)
+        .bind(new.metadata.as_str())
+        .execute(&mut *tx)
+        .await
+        .map_err(publish_error)?;
+
+        // Один запрос на все файлы вместо N обращений к БД.
+        sqlx::query(
+            "INSERT INTO asset (version_id, path, store_id, blob_sha256)
+         SELECT $1, t.path, $2, t.digest FROM UNNEST($3::text[], $4::bytea[]) AS t(path, digest)",
+        )
+        .bind(new.id.as_uuid())
+        .bind(STORE_ID)
+        .bind(&paths)
+        .bind(&digests)
+        .execute(&mut *tx)
+        .await
+        .map_err(publish_error)?;
+
+        // Результат читается из БД, а не собирается из входа: так publish и find совпадают
+        // по построению (микросекунды времени, написание пакета, размер из blob, порядок путей).
+        let stored = load_version(&mut tx, new.id)
+            .await?
+            .ok_or_else(|| corrupt("только что вставленная версия не читается"))?;
+        tx.commit().await.map_err(backend)?;
+        Ok(stored)
     }
 
     async fn versions(
@@ -276,7 +238,7 @@ impl Catalog for PgCatalog {
         .fetch_all(&self.pool)
         .await
         .map_err(backend)?;
-        versions_from_rows(&rows)
+        rows.iter().map(version_from_row).collect()
     }
 
     async fn find_version(
@@ -318,6 +280,25 @@ impl Catalog for PgCatalog {
         from: VersionState,
         to: VersionState,
     ) -> Result<(), CatalogError> {
-        transition(&self.pool, id, from, to).await
+        let mut tx = self.pool.begin().await.map_err(backend)?;
+        // FOR UPDATE превращает сравнение с `from` и запись в одно атомарное действие:
+        // из двух конкурентных переходов второй увидит уже новое состояние.
+        let current: Option<String> =
+            sqlx::query_scalar("SELECT state::text FROM package_version WHERE id = $1 FOR UPDATE")
+                .bind(id.as_uuid())
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(backend)?;
+        let actual = state_parse(&current.ok_or(CatalogError::NotFound)?)?;
+        if actual != from {
+            return Err(CatalogError::StateConflict { actual });
+        }
+        sqlx::query("UPDATE package_version SET state = $2::ver_state WHERE id = $1")
+            .bind(id.as_uuid())
+            .bind(state_as_str(to))
+            .execute(&mut *tx)
+            .await
+            .map_err(backend)?;
+        tx.commit().await.map_err(backend)
     }
 }

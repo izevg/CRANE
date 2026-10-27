@@ -17,9 +17,10 @@ use sqlx::{Decode, Row, Type};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-/// Сбой драйвера или БД.
-pub(crate) fn backend(error: sqlx::Error) -> CatalogError {
-    CatalogError::Backend(Box::new(error))
+/// Входное значение нельзя сохранить в БД (не помещается в тип колонки): ошибка вызывающего,
+/// но порт не различает её среди сбоев адаптера.
+pub(crate) fn rejected(what: impl Display) -> CatalogError {
+    CatalogError::Backend(format!("значение не сохраняется в каталоге: {what}").into())
 }
 
 /// Строка в БД не разбирается доменом: данные повреждены или схема разошлась с кодом.
@@ -71,7 +72,7 @@ pub(crate) fn to_db_time(time: SystemTime) -> Result<OffsetDateTime, CatalogErro
             .ok()
             .and_then(|d| OffsetDateTime::UNIX_EPOCH.checked_sub(d)),
     };
-    shifted.ok_or_else(|| corrupt("момент времени вне диапазона timestamptz"))
+    shifted.ok_or_else(|| rejected("момент времени вне диапазона timestamptz"))
 }
 
 fn from_db_time(time: OffsetDateTime) -> Result<SystemTime, CatalogError> {
@@ -89,7 +90,7 @@ fn column<'r, T>(row: &'r PgRow, name: &str) -> Result<T, CatalogError>
 where
     T: Decode<'r, sqlx::Postgres> + Type<sqlx::Postgres>,
 {
-    row.try_get(name).map_err(backend)
+    row.try_get(name).map_err(corrupt)
 }
 
 /// Колонки: `id`, `format`, `kind`, `name`.

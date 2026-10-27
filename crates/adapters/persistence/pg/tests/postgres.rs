@@ -340,3 +340,28 @@ fn two_assets_with_identical_content_are_both_stored() {
         assert_eq!(found.assets, expected);
     });
 }
+
+#[test]
+fn asset_size_beyond_bigint_is_rejected_without_side_effects() {
+    support::run(async |server| {
+        // Arrange
+        let catalog = server.fresh_catalog().await;
+        let repo = hosted_repository(&catalog).await;
+        let mut input = new_version(1, repo, "huge", "1.0.0");
+        input.assets = vec![asset("huge.crate", 1, u64::MAX)];
+
+        // Act
+        let result = catalog.publish_version(input).await;
+        let stored = catalog
+            .find_version(repo, &name("huge"), &version("1.0.0"))
+            .await
+            .expect("find");
+
+        // Assert
+        assert!(
+            matches!(result, Err(CatalogError::Backend(_))),
+            "{result:?}"
+        );
+        assert_eq!(stored, None);
+    });
+}
