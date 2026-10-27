@@ -134,6 +134,8 @@ RELEASES = [
       ("Подключение SIEM", 1), ("Выгрузка пакета", 1), ("Матрица ответственности", 1)]),
     ("v1.2.0", "P3", "Развитие: граф, поиск и LLM, A2A",
      [("Граф", 1), ("Поиск", 1), ("A2A", 1), ("SPA: AI", 1)]),
+    (POST_V1, POST_V1, "Проверка сообществом и на реальной нагрузке",
+     [("Нагрузочный стенд профиля L", 1), ("Исправление замечаний пентеста", 1)]),
 ]
 # выпущенные версии ставятся фактической датой, календарь от --start начинается со следующей
 DONE = {"v0.1.0": dt.date(2026, 10, 27)}
@@ -184,7 +186,6 @@ def work_hours(scn):
 
 def release_hours(scn):
     hours = work_hours(scn)
-    post_v1 = {n for n, stage, *_ in MODULES + EXTRA if stage == POST_V1}
     used = {name: 0.0 for name in hours}
     result = []
     for version, stage, title, parts in RELEASES:
@@ -195,10 +196,8 @@ def release_hours(scn):
             total += hours[matches[0]] * share
             used[matches[0]] += share
         result.append((version, stage, title, total))
-    unassigned = [n for n, u in used.items() if n not in post_v1 and abs(u - 1) > 1e-9]
+    unassigned = [n for n, u in used.items() if abs(u - 1) > 1e-9]
     assert not unassigned, f"модули не распределены по релизам ровно один раз: {unassigned}"
-    in_release = [n for n in post_v1 if used[n]]
-    assert not in_release, f"работы «{POST_V1}» не должны входить в релизы: {in_release}"
     return result
 
 
@@ -230,14 +229,12 @@ def schedule(scn, start):
         rows.append((version, title, h, workday(start, math.floor(begin)),
                      workday(start, max(math.ceil(end) - 1, 0)), note))
 
-    for v in ("v0.1.0", "v0.2.0", "v0.3.0", "v0.4.0"):
+    for v in ("v0.1.0", "v0.2.0", "v0.3.0", "v0.4.0", "v0.5.0"):
         if v in DONE:
             rows.append((v, rel[v][1], rel[v][2], DONE[v], DONE[v], "готово"))
             continue
         title, h, b, t = dev(v, t)
         row(v, title, h, b, t)
-    title, h, b, t = dev("v0.5.0", t)
-    row("v0.5.0", title, h, b, t)
     title, h, b, p1 = dev("v0.6.0", t)
     row("v0.6.0", title, h, b, p1)
     ga = math.ceil(p1) + cal["Release candidate: стабилизация и обратная связь"]
