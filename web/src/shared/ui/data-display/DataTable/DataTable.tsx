@@ -1,5 +1,11 @@
-import { type RowData, type SortingState, useTable } from "@tanstack/react-table";
-import { type ReactNode, useCallback, useMemo, useRef } from "react";
+import {
+  type Column,
+  type Row,
+  type RowData,
+  type SortingState,
+  useTable,
+} from "@tanstack/react-table";
+import { type ReactNode, type RefObject, useCallback, useMemo, useRef } from "react";
 import { cx } from "~/shared/lib/core";
 import { type Action, ActionButton } from "../../actions";
 import {
@@ -9,15 +15,7 @@ import {
   features,
   nextSelection,
 } from "./columns";
-import {
-  DataRow,
-  HeadRow,
-  type HeadSelection,
-  MessageRow,
-  type RowCheckbox,
-  SkeletonRows,
-  Spacer,
-} from "./DataTableRows";
+import { HeadRow, type HeadSelection, type RowCheckbox, TableBody } from "./DataTableRows";
 import { useLoadMoreFocus, useRowFocus, useRowWindow, useScrollerLayout } from "./useRowFocus";
 
 const SCROLL_MAX_HEIGHT = "max-h-[640px]";
@@ -83,6 +81,108 @@ function skeletonCellsOf(
   ];
 }
 
+type SortedTableOptions<TData extends RowData> = Pick<
+  DataTableProps<TData>,
+  "columns" | "data" | "getRowId"
+> & {
+  sorting: SortingState;
+  onSortingChange: ((sorting: SortingState) => void) | undefined;
+};
+
+/** Таблица с сортировкой на сервере: TanStack только хранит выбранную сортировку и сообщает о её смене. */
+function useServerSortedTable<TData extends RowData>({
+  columns,
+  data,
+  getRowId,
+  sorting,
+  onSortingChange,
+}: SortedTableOptions<TData>) {
+  return useTable<typeof features, TData>({
+    features,
+    columns,
+    data: data as TData[],
+    getRowId,
+    manualSorting: true,
+    enableMultiSort: false,
+    state: { sorting },
+    onSortingChange: (updater) => {
+      onSortingChange?.(typeof updater === "function" ? updater(sorting) : updater);
+    },
+  });
+}
+
+type NavigationOptions<TData extends RowData> = {
+  scrollRef: RefObject<HTMLDivElement | null>;
+  rows: readonly Row<typeof features, TData>[];
+  onRowSelect: ((id: string) => void) | undefined;
+  hasLoadMore: boolean;
+};
+
+/** Окно строк, роуминг фокуса стрелками и возврат фокуса после «Загрузить ещё». */
+function useRowsNavigation<TData extends RowData>({
+  scrollRef,
+  rows,
+  onRowSelect,
+  hasLoadMore,
+}: NavigationOptions<TData>) {
+  const ids = useMemo(() => rows.map((row) => row.id), [rows]);
+  useScrollerLayout(scrollRef, onRowSelect !== undefined);
+  const view = useRowWindow(rows.length, scrollRef);
+  const { activeId, setActiveId, focusAt } = useRowFocus({
+    scrollRef,
+    ids,
+    scrollToIndex: view.virtual ? view.scrollToIndex : undefined,
+  });
+  const markLoad = useLoadMoreFocus({
+    rowCount: rows.length,
+    hasLoadMore,
+    focusAt,
+    inner: onRowSelect === undefined,
+  });
+  const move = useCallback(
+    (index: number) => {
+      const target = ids[index];
+      if (target !== undefined) {
+        onRowSelect?.(target);
+        focusAt(index);
+      }
+    },
+    [ids, onRowSelect, focusAt],
+  );
+  return { ids, view, activeId, setActiveId, move, markLoad };
+}
+
+type Layout = { compact: boolean; checkbox: boolean; actions: boolean };
+
+/** Число колонок для сообщений и ячейки скелетона: данные плюс служебные колонки выбора и действий. */
+function layoutOf<TData extends RowData>(
+  leaf: readonly Column<typeof features, TData>[],
+  { compact, checkbox, actions }: Layout,
+) {
+  return {
+    span: Math.max(leaf.length + Number(checkbox) + Number(actions), 1),
+    skeletonCells: skeletonCellsOf(
+      leaf.map((column) => ({
+        key: column.id,
+        className: columnClass(column.columnDef.meta, compact),
+      })),
+      checkbox,
+      actions,
+    ),
+  };
+}
+
+/** Единственная строка в Tab-порядке: выбранная или активная из отрисованных, иначе первая в окне. */
+function tabbableOf(
+  rows: readonly { id: string }[],
+  items: readonly { index: number }[],
+  preferredIds: readonly (string | null)[],
+): string | undefined {
+  const rendered = new Set(items.map((item) => rows[item.index]?.id));
+  const preferred = preferredIds.find((id) => id !== null && rendered.has(id));
+  return preferred ?? rows[items[0]?.index ?? 0]?.id;
+}
+
 /** Состояние чекбоксов: «выбрать все загруженные» в шапке и чекбокс каждой строки. */
 function useSelectionModel<TData>(
   selection: SelectionProps<TData> | undefined,
@@ -133,64 +233,22 @@ export function DataTable<TData extends RowData>({
   className,
 }: DataTableProps<TData>) {
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const table = useTable<typeof features, TData>({
-    features,
-    columns,
-    data: data as TData[],
-    getRowId,
-    manualSorting: true,
-    enableMultiSort: false,
-    state: { sorting },
-    onSortingChange: (updater) => {
-      onSortingChange?.(typeof updater === "function" ? updater(sorting) : updater);
-    },
-  });
-
+  const table = useServerSortedTable({ columns, data, getRowId, sorting, onSortingChange });
   const rows = table.getRowModel().rows;
-  const ids = useMemo(() => rows.map((row) => row.id), [rows]);
-  useScrollerLayout(scrollRef, onRowSelect !== undefined);
-  const view = useRowWindow(rows.length, scrollRef);
-  const { activeId, setActiveId, focusAt } = useRowFocus({
+  const { ids, view, activeId, setActiveId, move, markLoad } = useRowsNavigation({
     scrollRef,
-    ids,
-    scrollToIndex: view.virtual ? view.scrollToIndex : undefined,
-  });
-  const markLoad = useLoadMoreFocus({
-    rowCount: rows.length,
+    rows,
+    onRowSelect,
     hasLoadMore: loadMore !== undefined,
-    focusAt,
-    inner: onRowSelect === undefined,
   });
-
-  const move = useCallback(
-    (index: number) => {
-      const target = ids[index];
-      if (target !== undefined) {
-        onRowSelect?.(target);
-        focusAt(index);
-      }
-    },
-    [ids, onRowSelect, focusAt],
-  );
   const { head: headSelection, checkboxOf } = useSelectionModel(selection, ids);
 
-  const leaf = table.getAllLeafColumns();
-  const span = Math.max(
-    leaf.length + Number(selection !== undefined) + Number(actions !== undefined),
-    1,
-  );
-  const rendered = new Set(view.items.map((item) => rows[item.index]?.id));
-  const preferred = [selectedId, activeId].find((id) => id !== null && rendered.has(id));
-  const tabbableId = preferred ?? rows[view.items[0]?.index ?? 0]?.id;
-  const skeletonCells = skeletonCellsOf(
-    leaf.map((column) => ({
-      key: column.id,
-      className: columnClass(column.columnDef.meta, compact),
-    })),
-    selection !== undefined,
-    actions !== undefined,
-  );
+  const { span, skeletonCells } = layoutOf(table.getAllLeafColumns(), {
+    compact,
+    checkbox: selection !== undefined,
+    actions: actions !== undefined,
+  });
+  const tabbableId = tabbableOf(rows, view.items, [selectedId, activeId]);
   const state = bodyState(Boolean(error), loading, rows.length);
 
   return (
@@ -221,32 +279,25 @@ export function DataTable<TData extends RowData>({
             ))}
           </thead>
           <tbody>
-            {state === "loading" ? <SkeletonRows cells={skeletonCells} /> : null}
-            {state === "error" ? <MessageRow span={span}>{error}</MessageRow> : null}
-            {state === "empty" ? <MessageRow span={span}>{empty}</MessageRow> : null}
-            {state === "rows" ? <Spacer height={view.padTop} span={span} /> : null}
-            {state === "rows"
-              ? view.items.map((item) => {
-                  const row = rows[item.index];
-                  return row ? (
-                    <DataRow
-                      key={row.id}
-                      row={row}
-                      index={item.index}
-                      selected={selectedId === row.id}
-                      focusable={onRowSelect !== undefined}
-                      tabbable={row.id === tabbableId}
-                      compact={compact}
-                      checkbox={checkboxOf(row.id, row.original)}
-                      actions={actions ? actions(row.original) : null}
-                      onSelect={onRowSelect}
-                      onFocusRow={setActiveId}
-                      onMove={move}
-                    />
-                  ) : null;
-                })
-              : null}
-            {state === "rows" ? <Spacer height={view.padBottom} span={span} /> : null}
+            <TableBody
+              state={state}
+              rows={rows}
+              view={view}
+              span={span}
+              skeletonCells={skeletonCells}
+              error={error}
+              empty={empty}
+              rowProps={{
+                selectedId,
+                tabbableId,
+                compact,
+                checkboxOf,
+                actions,
+                onSelect: onRowSelect,
+                onFocusRow: setActiveId,
+                onMove: move,
+              }}
+            />
           </tbody>
         </table>
       </div>

@@ -1,10 +1,10 @@
 import { act, screen } from "@testing-library/react";
-import { columnHelper, type DataTableColumn } from "~/shared/ui/data-display";
+import { columnHelper } from "~/shared/ui/data-display";
 
 export type Version = { id: string; name: string; downloads: number; team: string };
 
 const helper = columnHelper<Version>();
-export const columns: DataTableColumn<Version>[] = helper.columns([
+export const columns = helper.columns([
   helper.accessor("name", { header: "Версия", meta: { priority: 1 } }),
   helper.accessor("downloads", { header: "Загрузки", meta: { priority: 2, numeric: true } }),
   helper.accessor("team", { header: "Команда", meta: { priority: 3 } }),

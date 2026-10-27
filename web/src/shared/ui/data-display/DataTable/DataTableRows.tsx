@@ -155,7 +155,7 @@ function tabIndexOf(focusable: boolean, tabbable: boolean): 0 | -1 | undefined {
  * Строка данных. Фокусируема только при `onSelect`: ↑/↓ меняют выбранную строку, Enter и клик выбирают текущую.
  * Нажатия во вложенных чекбоксе, ссылке и меню строке не принадлежат.
  */
-export function DataRow<TData extends RowData>({
+function DataRow<TData extends RowData>({
   row,
   index,
   selected,
@@ -236,7 +236,7 @@ export function DataRow<TData extends RowData>({
 }
 
 /** Скелетон повторяет сетку колонок, чтобы раскладка не прыгала при появлении данных. */
-export function SkeletonRows({ cells }: { cells: readonly { key: string; className: string }[] }) {
+function SkeletonRows({ cells }: { cells: readonly { key: string; className: string }[] }) {
   const { t } = useLingui();
   return (
     <>
@@ -256,7 +256,7 @@ export function SkeletonRows({ cells }: { cells: readonly { key: string; classNa
   );
 }
 
-export function MessageRow({ span, children }: { span: number; children: ReactNode }) {
+function MessageRow({ span, children }: { span: number; children: ReactNode }) {
   return (
     <tr>
       <td colSpan={span} className="p-0">
@@ -267,7 +267,7 @@ export function MessageRow({ span, children }: { span: number; children: ReactNo
 }
 
 /** Пустая строка высотой в пропущенные виртуализацией строки. */
-export function Spacer({ height, span }: { height: number; span: number }) {
+function Spacer({ height, span }: { height: number; span: number }) {
   if (height <= 0) {
     return null;
   }
@@ -275,5 +275,76 @@ export function Spacer({ height, span }: { height: number; span: number }) {
     <tr>
       <td colSpan={span} className="p-0" style={{ height }} />
     </tr>
+  );
+}
+
+type BodyState = "error" | "loading" | "empty" | "rows";
+
+type RowShared<TData extends RowData> = {
+  selectedId: string | null;
+  tabbableId: string | undefined;
+  compact: boolean;
+  checkboxOf: (id: string, row: TData) => RowCheckbox | null;
+  actions: ((row: TData) => readonly Action[]) | undefined;
+  onSelect: ((id: string) => void) | undefined;
+  onFocusRow: (id: string) => void;
+  onMove: (index: number) => void;
+};
+
+type TableBodyProps<TData extends RowData> = {
+  state: BodyState;
+  rows: readonly Row<typeof features, TData>[];
+  view: { items: readonly { index: number }[]; padTop: number; padBottom: number };
+  span: number;
+  skeletonCells: readonly { key: string; className: string }[];
+  error: ReactNode;
+  empty: ReactNode;
+  rowProps: RowShared<TData>;
+};
+
+/** Содержимое `<tbody>` по состоянию: скелетон, ошибка, пусто или окно строк между распорками. */
+export function TableBody<TData extends RowData>({
+  state,
+  rows,
+  view,
+  span,
+  skeletonCells,
+  error,
+  empty,
+  rowProps,
+}: TableBodyProps<TData>) {
+  if (state === "loading") {
+    return <SkeletonRows cells={skeletonCells} />;
+  }
+  if (state === "error") {
+    return <MessageRow span={span}>{error}</MessageRow>;
+  }
+  if (state === "empty") {
+    return <MessageRow span={span}>{empty}</MessageRow>;
+  }
+  return (
+    <>
+      <Spacer height={view.padTop} span={span} />
+      {view.items.map((item) => {
+        const row = rows[item.index];
+        return row ? (
+          <DataRow
+            key={row.id}
+            row={row}
+            index={item.index}
+            selected={rowProps.selectedId === row.id}
+            focusable={rowProps.onSelect !== undefined}
+            tabbable={row.id === rowProps.tabbableId}
+            compact={rowProps.compact}
+            checkbox={rowProps.checkboxOf(row.id, row.original)}
+            actions={rowProps.actions ? rowProps.actions(row.original) : null}
+            onSelect={rowProps.onSelect}
+            onFocusRow={rowProps.onFocusRow}
+            onMove={rowProps.onMove}
+          />
+        ) : null;
+      })}
+      <Spacer height={view.padBottom} span={span} />
+    </>
   );
 }
