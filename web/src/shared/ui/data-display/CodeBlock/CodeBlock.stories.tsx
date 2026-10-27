@@ -65,3 +65,19 @@ export const Wrapped: Story = {
 };
 
 export const Dark: Story = { globals: { theme: "dark" } };
+
+export const MonoWithoutLigatures: Story = {
+  name: "Моно: JetBrains Mono, лигатуры выключены (>=, ==>, !=)",
+  args: {
+    code: 'npm i @acme/ui@">=1.4.0 <2.0.0"  # a != b ==> c',
+    copyLabel: "Копировать команду",
+  },
+  play: async ({ canvasElement }) => {
+    await document.fonts.load('400 14px "JetBrains Mono Variable"', ">=");
+    const style = getComputedStyle(within(canvasElement).getByRole("region", { name: "Код" }));
+    await expect(style.fontFamily).toContain("JetBrains Mono Variable");
+    await expect(style.fontVariantLigatures).toBe("none");
+    await expect(style.fontFeatureSettings).toContain('"calt" 0');
+    await expect(style.fontFeatureSettings).toContain('"liga" 0');
+  },
+};

@@ -1,9 +1,7 @@
 import type { Decorator, Preview } from "@storybook/react-vite";
 import "~/shared/styles";
 import "../src/app/index.css";
-import "./fonts";
 import { activateLocale, type Locale } from "~/shared/lib/i18n";
-import { applyFonts, fontGlobalTypes, fontInitialGlobals } from "./fonts/toolbars";
 import { StoryShell } from "./StoryShell";
 
 type ThemeMode = "light" | "dark";
@@ -18,7 +16,6 @@ const withGlobals: Decorator = (Story, context) => {
   const root = document.documentElement;
   root.setAttribute("data-theme", theme);
   root.style.colorScheme = theme;
-  applyFonts(context.globals);
   if (motion === "reduce") {
     root.setAttribute("data-motion", "reduce");
   } else {
@@ -52,7 +49,6 @@ const preview: Preview = {
         ],
       },
     },
-    ...fontGlobalTypes,
     theme: {
       description: "Тема",
       toolbar: {
@@ -78,7 +74,7 @@ const preview: Preview = {
       },
     },
   },
-  initialGlobals: { theme: "light", motion: "system", locale: "ru", ...fontInitialGlobals },
+  initialGlobals: { theme: "light", motion: "system", locale: "ru" },
   parameters: {
     layout: "padded",
     // Нарушения axe валят прогон story-тестов. Отключать правило можно только в конкретной story и с причиной.
