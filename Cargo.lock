@@ -512,6 +512,14 @@ version = "0.1.0"
 [[package]]
 name = "crane-upstream"
 version = "0.1.0"
+dependencies = [
+ "crane-domain",
+ "crane-ports",
+ "futures-util",
+ "reqwest",
+ "thiserror",
+ "tokio",
+]
 
 [[package]]
 name = "crane-valkey"
