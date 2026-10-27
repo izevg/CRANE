@@ -76,10 +76,10 @@ gantt
 8. `feat(entry)`: axum, problem+json, health; бинарник с ролями `serve` и `migrate`; конфигурация.
 9. Временная аутентификация статическим токеном из конфигурации (до v0.4.0); фиксируется в `DEBT.md`.
 10. `build(deploy)`: Compose single node: CRANE + PostgreSQL + локальный диск.
-11. **Dogfood**: CRANE поднят на стенде, `cargo publish --registry crane` публикует внутренние крейты, сборка CRANE берёт их из CRANE через `registry = "crane"`.
+11. **Dogfood (hosted)**: `task dogfood` поднимает временный стенд и прогоняет полный цикл настоящего `cargo` на временных пакетах (`cargo new` во временном каталоге, зависимости между ними); стенд удаляется вместе с данными.
 12. `test`: e2e с настоящим `cargo` (две последние стабильные версии) в `task gate`.
 
-**Готово, когда:** реальный `cargo` публикует, находит, скачивает и yank-ает крейт; сборка CRANE проходит на собственном реестре; мутационный порог держится на `domain`, `app`, `formats/cargo`; норма скорости пересчитана.
+**Готово, когда:** реальный `cargo` публикует, находит, скачивает и yank-ает крейт; мутационный порог держится на `domain`, `app`, `formats/cargo`; норма скорости пересчитана.
 
 ## v0.2.0 · Proxy-движок, proxy crates.io, npm
 
@@ -88,11 +88,11 @@ gantt
 1. `feat(app)`: proxy-движок: TTL и negative TTL (11.1), stale-while-revalidate, refresh-ahead, singleflight, SSRF guard для upstream.
 2. `feat(adapters)`: Valkey как L2-кэш metadata и координатор singleflight; кэш в процессе (moka).
 3. `feat(formats)`: proxy crates.io: `index.crates.io` и `static.crates.io`, собственный `dl` в `config.json`.
-4. **Dogfood**: внешние зависимости CRANE идут через собственный proxy crates.io.
+4. **Dogfood (полный)**: сборка CRANE целиком идёт через собственный реестр: внутренние крейты из hosted (`registry = "crane"`), внешние зависимости через proxy crates.io. Проверка перенесена из v0.1.0: без proxy сборка CRANE на собственном реестре невозможна.
 5. `feat(formats)`: npm hosted и proxy: packument, tarball, dist-tags, deprecate, unpublish по политике.
 6. `feat(app)`: namespaces и защита от dependency confusion: hosted всегда приоритетнее proxy.
 
-**Готово, когда:** `npm install` и `cargo build` проходят через proxy при недоступном upstream (stale-if-error); повторные запросы к upstream схлопываются.
+**Готово, когда:** сборка CRANE проходит на собственном реестре (hosted + proxy crates.io); `npm install` и `cargo build` проходят через proxy при недоступном upstream (stale-if-error); повторные запросы к upstream схлопываются.
 
 ## v0.3.0 · PyPI, Maven, NuGet
 
