@@ -45,3 +45,6 @@ __pycache__/
 
 # Граф graphify строится локально (`graphify update .`), в git не хранится.
 /graphify-out/
+
+# Сгенерированные макеты Stitch — рабочий материал, в git не хранится.
+/docs/ui/mocks/
