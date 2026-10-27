@@ -61,7 +61,7 @@ describe("JustificationField", () => {
   it("счётчик показывает набранное из минимума", () => {
     // Arrange
     // Act
-    render(<Harness initial="двенадцать!!" />);
+    render(<Harness label="Обоснование" initial="двенадцать!!" />);
 
     // Assert
     expect(screen.getByRole("textbox", { name: "Обоснование" })).toHaveAccessibleDescription(
@@ -72,7 +72,7 @@ describe("JustificationField", () => {
   it("после минимума счётчик показывает остаток до предела", () => {
     // Arrange
     // Act
-    render(<Harness initial={"а".repeat(25)} />);
+    render(<Harness label="Обоснование" initial={"а".repeat(25)} />);
 
     // Assert
     expect(screen.getByRole("textbox", { name: "Обоснование" })).toHaveAccessibleDescription(
@@ -83,7 +83,7 @@ describe("JustificationField", () => {
   it("ошибка недобора появляется после ухода из поля и связана с ним", async () => {
     // Arrange
     const user = userEvent.setup();
-    render(<Harness initial="коротко" />);
+    render(<Harness label="Обоснование" initial="коротко" />);
     await user.click(screen.getByRole("textbox", { name: "Обоснование" }));
 
     // Act
@@ -99,7 +99,7 @@ describe("JustificationField", () => {
   it("до ухода из поля ошибки нет", () => {
     // Arrange
     // Act
-    render(<Harness initial="коротко" />);
+    render(<Harness label="Обоснование" initial="коротко" />);
 
     // Assert
     expect(screen.queryByText(MIN_ERROR)).not.toBeInTheDocument();
@@ -108,7 +108,7 @@ describe("JustificationField", () => {
   it("showError показывает ошибку сразу", () => {
     // Arrange
     // Act
-    render(<Harness initial="коротко" showError />);
+    render(<Harness label="Обоснование" initial="коротко" showError />);
 
     // Assert
     expect(screen.getByRole("textbox", { name: "Обоснование" })).toHaveAccessibleDescription(
@@ -119,7 +119,7 @@ describe("JustificationField", () => {
   it("при достаточной длине ошибки нет даже с showError", () => {
     // Arrange
     // Act
-    render(<Harness initial={"а".repeat(20)} showError />);
+    render(<Harness label="Обоснование" initial={"а".repeat(20)} showError />);
 
     // Assert
     expect(screen.queryByText(MIN_ERROR)).not.toBeInTheDocument();
@@ -128,7 +128,7 @@ describe("JustificationField", () => {
   it("textarea ограничена максимумом", () => {
     // Arrange
     // Act
-    render(<Harness />);
+    render(<Harness label="Обоснование" />);
 
     // Assert
     expect(screen.getByRole("textbox", { name: "Обоснование" })).toHaveAttribute(

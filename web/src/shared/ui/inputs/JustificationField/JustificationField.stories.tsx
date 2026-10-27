@@ -9,6 +9,7 @@ const LEFT = /Остал(ось|ся)/;
 const meta = {
   title: "Фильтры/JustificationField",
   component: Harness,
+  args: { label: "Обоснование" },
   decorators: [
     (Story) => (
       <div className="w-96">
