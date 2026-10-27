@@ -68,8 +68,19 @@ fn execute(role: &Role) -> Result<(), run::RunError> {
     }
 }
 
+/// Журнал ИБ не глушится уровнем логов: оператор, снизивший шум через `RUST_LOG`, не должен
+/// молча потерять события аудита. Директива идёт последней и перекрывает ту же цель из `RUST_LOG`.
+const AUDIT_ALWAYS_ON: &str = "crane::audit=info";
+
+fn log_filter(env: Option<&str>) -> EnvFilter {
+    let base = env
+        .filter(|value| EnvFilter::try_new(value).is_ok())
+        .unwrap_or("info");
+    EnvFilter::new(format!("{base},{AUDIT_ALWAYS_ON}"))
+}
+
 fn init_logging() {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = log_filter(std::env::var("RUST_LOG").ok().as_deref());
     tracing_subscriber::fmt()
         .json()
         // Поля событий (в том числе плоские пути OCSF `class_uid`, `actor.user.uid`) лежат
@@ -151,6 +162,70 @@ mod tests {
 
         // Assert
         assert_eq!(roles, [None, None, None, None, None]);
+    }
+
+    /// Пишет события в буфер под заданным фильтром и возвращает вывод.
+    fn logged_under(filter: EnvFilter) -> String {
+        let buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = std::sync::Arc::clone(&buffer);
+        let subscriber = tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_writer(move || Writer(std::sync::Arc::clone(&sink)))
+            .finish();
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(target: "crane::audit", "событие аудита");
+            tracing::info!(target: "crane::access", "строка доступа");
+        });
+        let bytes = buffer.lock().map(|b| b.clone()).unwrap_or_default();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    struct Writer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for Writer {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+            if let Ok(mut buffer) = self.0.lock() {
+                buffer.extend_from_slice(data);
+            }
+            Ok(data.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn audit_survives_rust_log_that_silences_info_and_audit_itself() {
+        // Arrange
+        let cases = [
+            Some("warn"),
+            Some("crane::audit=off"),
+            Some("off"),
+            Some("неразборчиво=="),
+            None,
+        ];
+
+        // Act
+        let outputs = cases.map(|env| logged_under(log_filter(env)));
+
+        // Assert
+        assert!(
+            outputs.iter().all(|out| out.contains("событие аудита")),
+            "{outputs:?}"
+        );
+    }
+
+    #[test]
+    fn rust_log_still_controls_everything_except_audit() {
+        // Arrange
+        let env = Some("warn");
+
+        // Act
+        let output = logged_under(log_filter(env));
+
+        // Assert
+        assert!(!output.contains("строка доступа"), "{output}");
     }
 
     #[test]
