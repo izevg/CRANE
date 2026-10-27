@@ -32,7 +32,7 @@
 | criterion | MIT / Apache-2.0 | Микробенчмарки горячего пути |
 | Strix | Apache-2.0 | Пентест после v1 (AI-агент, не входит в поставку) |
 | React, Vite, TanStack, Base UI, Tailwind | MIT | Frontend |
-| Keycloak | Apache-2.0 | IdP по умолчанию; любой OIDC-провайдер подключается так же |
+| Keycloak | Apache-2.0 | Профиль IdP по умолчанию (каталог и push); другие провайдеры подключаются через generic OIDC, матрица провайдеров в разделе 13 |
 
 ## Инструменты разработки
 

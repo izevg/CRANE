@@ -213,10 +213,11 @@ components:
     Workspace:
       name: workspace
       in: path
-      description: Идентификатор ресурса (workspace).
+      description: 'Slug команды (workspace), не переиспользуется.'
       required: true
       schema:
         type: string
+        pattern: ^[a-z0-9][a-z0-9-]{1,62}$
     CheckId:
       name: check_id
       in: path
@@ -294,6 +295,36 @@ components:
       required: true
       schema:
         type: string
+    PrincipalId:
+      name: principal_id
+      in: path
+      description: Идентификатор участника (principal_id).
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Role:
+      name: role
+      in: path
+      description: Роль в команде.
+      required: true
+      schema:
+        $ref: '#/components/schemas/WorkspaceRoleName'
+    MappingId:
+      name: mapping_id
+      in: path
+      description: Идентификатор маппинга группы (mapping_id).
+      required: true
+      schema:
+        type: string
+    AccessGrantId:
+      name: grant_id
+      in: path
+      description: Идентификатор межкомандного гранта (grant_id).
+      required: true
+      schema:
+        type: string
+        format: uuid
     GrantId:
       name: grant_id
       in: path
@@ -1197,6 +1228,8 @@ components:
           type:
           - string
           - 'null'
+          deprecated: true
+          description: 'Отображаемое имя команды-владельца (`workspace.display_name`). Устаревшее имя поля: переименование в `owner_workspace` - вместе с реализацией v0.4.0 и web (решение be-lead).'
         last_release_at:
           type:
           - string
@@ -1921,14 +1954,15 @@ components:
       title: Owners
       type: object
       properties:
-        team:
+        workspace:
           type:
           - string
           - 'null'
+          description: Команда-владелец (workspace)
         members_count:
           type: integer
       required:
-      - team
+      - workspace
       - members_count
     VersionsByState:
       title: VersionsByState
@@ -2126,7 +2160,8 @@ components:
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, crane:versions, crane:latest, crane:install, crane:readme, crane:downloads,
-            crane:favorite, crane:unfavorite, crane:deprecate, crane:undeprecate'
+            crane:favorite, crane:unfavorite, crane:deprecate, crane:undeprecate, crane:transfer-ownership (только пакет
+            без namespace)'
       required:
       - name
       - format
@@ -2562,6 +2597,12 @@ components:
           format: date-time
         owner:
           $ref: '#/components/schemas/Owner'
+        workspace:
+          type:
+          - string
+          - 'null'
+          description: Команда, на которую списываются скачивания этим токеном (slug). Фиксируется при выпуске и не
+            меняется; `null` - не распределено.
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, crane:revoke'
@@ -2574,6 +2615,7 @@ components:
       - created_at
       - expires_at
       - owner
+      - workspace
       - _links
     TokenPage:
       title: TokenPage
@@ -2672,6 +2714,12 @@ components:
           type: integer
         description:
           type: string
+        workspace:
+          type: string
+          description: 'Команда для атрибуции скачиваний (slug). Для человека: должна быть среди его команд, иначе 422;
+            без поля при одной команде берётся она, при нескольких токен «не распределён» (`workspace: null`). Для
+            robot и workload поле игнорируется: берётся команда принципала. Фиксируется при выпуске и не меняется
+            до перевыпуска.'
       required:
       - kind
       - name
@@ -2777,14 +2825,19 @@ components:
     WorkspaceRole:
       title: WorkspaceRole
       type: object
+      description: Команда принципала и его эффективные роли в ней (для переключателя активной команды).
       properties:
-        name:
+        workspace:
           type: string
-        role:
-          $ref: '#/components/schemas/WorkspaceRoleName'
+          description: Slug команды.
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceRoleName'
+          minItems: 1
       required:
-      - name
-      - role
+      - workspace
+      - roles
     SodMode:
       title: SodMode
       type: string
@@ -3373,10 +3426,62 @@ components:
       - chain
       - sod_violations_24h
       - _links
+    DownloadSource:
+      title: DownloadSource
+      type: string
+      enum:
+      - hosted
+      - hit
+      - stale
+      - miss
+      - coalesced
+      description: 'Откуда отдано скачивание: `hosted` - hosted-репозиторий; `hit` - свежий кэш proxy; `stale` -
+        устаревший кэш (SWR или stale-if-error); `miss` - запрос повёл выборку из upstream (инициатор холодной
+        загрузки); `coalesced` - присоединился к чужой выборке.'
+    DownloadFilter:
+      title: DownloadFilter
+      type: object
+      description: Фильтр следа скачиваний (потоки `downloads` и `usage` выгрузки). Поток `downloads` принимает все поля. Поток `usage`
+        принимает только `workspace`, `repository`, `purl`, `source`, `principal_kind`; `principal` и `credential` для него дают 422
+        (в агрегате личностей и токенов нет).
+      properties:
+        purl:
+          type: string
+          description: Префикс Package URL (уровень пакета или версии).
+        workspace:
+          type: string
+          description: Slug команды.
+        principal:
+          type: string
+          format: uuid
+        credential:
+          type: string
+          description: Префикс токена.
+        repository:
+          type: string
+        source:
+          type: array
+          items:
+            $ref: '#/components/schemas/DownloadSource'
+        principal_kind:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrincipalKind'
     AuditExportCreate:
       title: AuditExportCreate
       type: object
+      description: 'Выгрузка. `stream` выбирает поток: `events` (журнал, по умолчанию), `downloads` (сырые скачивания),
+        `usage` (суточный агрегат). Формат `ocsf` допустим только для `events`; `ndjson` - для `downloads` и `usage`
+        (и `events`); `csv` и `json` - для любого потока. `filter` учитывается только для `downloads` и `usage`; для
+        `usage` от owner команды фильтр `workspace` на свою команду обязателен.'
       properties:
+        stream:
+          type: string
+          enum:
+          - events
+          - downloads
+          - usage
+          default: events
         from:
           type: string
           format: date-time
@@ -3388,7 +3493,10 @@ components:
           enum:
           - csv
           - json
+          - ndjson
           - ocsf
+        filter:
+          $ref: '#/components/schemas/DownloadFilter'
         justification:
           $ref: '#/components/schemas/Justification'
       required:
@@ -3753,10 +3861,11 @@ components:
           $ref: '#/components/schemas/DepScope'
         deployed:
           type: boolean
-        team:
+        workspace:
           type:
           - string
           - 'null'
+          description: Команда-владелец (workspace)
         issue:
           oneOf:
           - $ref: '#/components/schemas/IssueRef'
@@ -3785,7 +3894,7 @@ components:
       - malware
       - dep_scope
       - deployed
-      - team
+      - workspace
       - scores
       - _links
     FindingRowPage:
@@ -4390,10 +4499,11 @@ components:
           $ref: '#/components/schemas/DepScope'
         deployed:
           type: boolean
-        team:
+        workspace:
           type:
           - string
           - 'null'
+          description: Команда-владелец (workspace)
         issue:
           oneOf:
           - $ref: '#/components/schemas/IssueRef'
@@ -4442,7 +4552,7 @@ components:
       - malware
       - dep_scope
       - deployed
-      - team
+      - workspace
       - cwe
       - cvss_vector
       - affected_ranges
@@ -4493,10 +4603,11 @@ components:
           type: string
         version:
           type: string
-        team:
+        workspace:
           type:
           - string
           - 'null'
+          description: Команда-владелец (workspace)
         levels:
           $ref: '#/components/schemas/ImpactLevels'
         _links:
@@ -4505,7 +4616,7 @@ components:
       required:
       - project
       - version
-      - team
+      - workspace
       - levels
       - _links
     ImpactPage:
@@ -5033,20 +5144,18 @@ components:
           type: string
         pattern:
           type: string
-        owner_team:
-          type: string
         workspace:
           type: string
+          description: Команда-владелец (workspace)
         created_at:
           type: string
           format: date-time
         _links:
           $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, crane:delete-namespace'
+          description: 'Ссылки HAL: self, crane:delete-namespace, crane:transfer-ownership'
       required:
       - id
       - pattern
-      - owner_team
       - workspace
       - created_at
       - _links
@@ -5076,13 +5185,11 @@ components:
       properties:
         pattern:
           type: string
-        owner_team:
-          type: string
         workspace:
           type: string
+          description: Команда-владелец (workspace)
       required:
       - pattern
-      - owner_team
       - workspace
     RobotRotation:
       title: RobotRotation
@@ -5111,10 +5218,9 @@ components:
           type: string
         name:
           type: string
-        owner_team:
-          type: string
         workspace:
           type: string
+          description: Команда-владелец (workspace)
         scopes:
           type: array
           items:
@@ -5142,7 +5248,6 @@ components:
       required:
       - id
       - name
-      - owner_team
       - workspace
       - scopes
       - state
@@ -5176,10 +5281,9 @@ components:
       properties:
         name:
           type: string
-        owner_team:
-          type: string
         workspace:
           type: string
+          description: Команда-владелец (workspace)
         scopes:
           type: array
           items:
@@ -5188,7 +5292,6 @@ components:
           type: integer
       required:
       - name
-      - owner_team
       - workspace
       - scopes
       - ttl_days
@@ -5265,7 +5368,7 @@ components:
           $ref: '#/components/schemas/RepositoryProtection'
         _links:
           $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, crane:update-repository, crane:update-repository-protection, crane:purge-cache'
+          description: 'Ссылки HAL: self, crane:update-repository, crane:update-repository-protection, crane:purge-cache, crane:transfer-ownership'
       required:
       - name
       - format
@@ -5539,41 +5642,14 @@ components:
       required:
       - _links
       - _embedded
-    Member:
-      title: Member
-      type: object
-      properties:
-        display:
-          type: string
-        role:
-          $ref: '#/components/schemas/WorkspaceRoleName'
-        _links:
-          $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self'
-      required:
-      - display
-      - role
-      - _links
-    MemberPage:
-      title: MemberPage
-      type: object
-      description: Страница ресурса Member.
-      properties:
-        _links:
-          $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self'
-        _embedded:
-          type: object
-          properties:
-            crane:members:
-              type: array
-              items:
-                $ref: '#/components/schemas/Member'
-          required:
-          - crane:members
-      required:
-      - _links
-      - _embedded
+    BindingSource:
+      title: BindingSource
+      type: string
+      enum:
+      - idp
+      - local
+      description: 'Кто утверждает факт: `idp` - наблюдение claims и каталога IdP; `local` - добавил owner команды через
+        API. Канал наблюдения в API не отдаётся (он пишется в `reason` события журнала).'
     StorageStore:
       title: StorageStore
       type: object
@@ -6083,21 +6159,43 @@ components:
     Workspace:
       title: Workspace
       type: object
+      description: Команда (workspace) - единица владения (namespaces, пакеты без namespace, репозитории, роботы,
+        trust policies, квоты) и членства. Отдельной сущности «команда» нет. Иерархии нет. Политики Cedar ссылаются
+        на `id`, не на `name`; `name` (slug) не переиспользуется никогда. Жёсткого удаления нет, только архивация.
       properties:
+        id:
+          type: string
+          format: uuid
         name:
           type: string
+          pattern: ^[a-z0-9][a-z0-9-]{1,62}$
+          description: 'Slug команды (неизменяемый), не переиспользуется.'
         display:
           type: string
+        description:
+          type:
+          - string
+          - 'null'
         created_at:
           type: string
           format: date-time
+        archived_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: Момент архивации; `null` - команда активна.
         _links:
           $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, crane:overview, crane:members'
+          description: 'Ссылки HAL: self, crane:overview, crane:members, crane:update-workspace, crane:archive-workspace
+            (у активной) | crane:unarchive-workspace (у архивной), crane:usage'
       required:
+      - id
       - name
       - display
+      - description
       - created_at
+      - archived_at
       - _links
     WorkspacePage:
       title: WorkspacePage
@@ -6125,10 +6223,33 @@ components:
       properties:
         name:
           type: string
+          pattern: ^[a-z0-9][a-z0-9-]{1,62}$
+          description: 'Slug команды; не переиспользуется (даже после архивации). Уникален, после создания не меняется. Имя вне шаблона даёт 422.'
         display:
           type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 2000
       required:
       - name
+      - display
+    WorkspacePatch:
+      title: WorkspacePatch
+      type: object
+      description: Изменение команды. Slug не меняется. Нужен `If-Match` с ETag команды.
+      properties:
+        display:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type:
+          - string
+          - 'null'
+          maxLength: 2000
+      minProperties: 1
     WorkspaceOverview:
       title: WorkspaceOverview
       type: object
@@ -7435,6 +7556,541 @@ components:
       required:
       - _links
       - _embedded
+
+    RoleBinding:
+      title: RoleBinding
+      type: object
+      description: Строка роли `role_binding`. Принципал с несколькими ролями или источниками даёт несколько строк;
+        эффективная роль - максимум. В `GET …/members` приходят только открытые строки (`valid_to` = `null`), в
+        `GET …/members/history` - любые.
+      properties:
+        principal:
+          $ref: '#/components/schemas/PrincipalRef'
+        role:
+          $ref: '#/components/schemas/WorkspaceRoleName'
+        source:
+          $ref: '#/components/schemas/BindingSource'
+        valid_from:
+          type: string
+          format: date-time
+          description: Момент, когда CRANE УВИДЕЛ факт, а не время изменения в IdP.
+        valid_to:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: '`null` - строка открыта.'
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL (только в `GET …/members`): self, crane:remove-member (у строки с источником `local`,
+            если вызывающий owner команды)'
+      required:
+      - principal
+      - role
+      - source
+      - valid_from
+      - valid_to
+    RoleBindingPage:
+      title: RoleBindingPage
+      type: object
+      description: Строки ролей команды, курсорная пагинация (текущий состав или история за окно `from`..`to`).
+      properties:
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self, next, prev; в `GET …/members` ещё crane:add-member (шаблон `{principal_id}`, `{role}`; только owner
+            команды и `access.local_membership=allow`) и crane:members-history (owner, secops, auditor)'
+        _embedded:
+          type: object
+          properties:
+            crane:role-bindings:
+              type: array
+              items:
+                $ref: '#/components/schemas/RoleBinding'
+          required:
+          - crane:role-bindings
+      required:
+      - _links
+      - _embedded
+    InstanceRoleName:
+      title: InstanceRoleName
+      type: string
+      enum:
+      - appsec
+      - secops
+      - auditor
+      - platform-admin
+      description: Роль экземпляра (не привязана к команде).
+    GroupMappingRole:
+      title: GroupMappingRole
+      type: string
+      enum:
+      - reader
+      - developer
+      - maintainer
+      - owner
+      - appsec
+      - secops
+      - auditor
+      - platform-admin
+      description: 'Роль маппинга: роль команды (`reader`, `developer`, `maintainer`, `owner`) или роль экземпляра
+        (`appsec`, `secops`, `auditor`, `platform-admin`). Ограничение CHECK: `workspace` равен `null` тогда и
+        только тогда, когда роль - роль экземпляра.'
+    GroupMapping:
+      title: GroupMapping
+      type: object
+      description: Единственный путь прав из IdP. Нормализованная группа (`group_ref`) отображается в роль команды
+        или в роль экземпляра. Команды создаются в CRANE, группа IdP команду не создаёт.
+      properties:
+        id:
+          type: string
+        group_ref:
+          type: string
+          description: 'Нормализованная группа: путь, имя, id или `role:<имя>`.'
+        workspace:
+          type:
+          - string
+          - 'null'
+          description: Slug команды; `null` - роль экземпляра.
+        role:
+          $ref: '#/components/schemas/GroupMappingRole'
+        created_by:
+          $ref: '#/components/schemas/PrincipalRef'
+        created_at:
+          type: string
+          format: date-time
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self, crane:delete-group-mapping'
+      required:
+      - id
+      - group_ref
+      - workspace
+      - role
+      - created_by
+      - created_at
+      - _links
+    GroupMappingPage:
+      title: GroupMappingPage
+      type: object
+      description: Страница ресурса GroupMapping.
+      properties:
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self, crane:create-group-mapping'
+        _embedded:
+          type: object
+          properties:
+            crane:group-mappings:
+              type: array
+              items:
+                $ref: '#/components/schemas/GroupMapping'
+          required:
+          - crane:group-mappings
+      required:
+      - _links
+      - _embedded
+    GroupMappingCreate:
+      title: GroupMappingCreate
+      type: object
+      description: 'Создание маппинга. Ограничение CHECK: `workspace` равен `null` тогда и только тогда, когда `role` -
+        роль экземпляра (`appsec`, `secops`, `auditor`, `platform-admin`); нарушение даёт 422. Повтор тройки
+        (`group_ref`, `workspace`, `role`) даёт 409.'
+      properties:
+        group_ref:
+          type: string
+          minLength: 1
+        workspace:
+          type:
+          - string
+          - 'null'
+          description: Slug команды; `null` - роль экземпляра.
+        role:
+          $ref: '#/components/schemas/GroupMappingRole'
+      required:
+      - group_ref
+      - workspace
+      - role
+    AccessGrantRole:
+      title: AccessGrantRole
+      type: string
+      enum:
+      - reader
+      - developer
+      - maintainer
+      description: Роль, которую грант даёт команде-получателю (`owner` не выдаётся).
+    AccessGrantResource:
+      title: AccessGrantResource
+      description: Ресурс гранта - ровно один из двух вариантов (`num_nonnulls(namespace_id, repository_id) = 1`).
+      oneOf:
+      - type: object
+        title: AccessGrantNamespace
+        properties:
+          namespace_id:
+            type: string
+        required:
+        - namespace_id
+        additionalProperties: false
+      - type: object
+        title: AccessGrantRepository
+        properties:
+          repository:
+            type: object
+            description: Репозиторий по формату и имени.
+            properties:
+              format:
+                $ref: '#/components/schemas/Format'
+              name:
+                type: string
+            required:
+            - format
+            - name
+        required:
+        - repository
+        additionalProperties: false
+    AccessGrant:
+      title: AccessGrant
+      type: object
+      description: Межкомандный доступ - команда-владелец ресурса даёт другой команде роль на свой namespace или
+        репозиторий, с необязательным сроком. Грант получают члены команды-получателя с ролью не ниже роли гранта (иерархия
+        reader < developer < maintainer < owner), то есть грант `maintainer` получают maintainer и owner, а `reader` - все члены. По умолчанию
+        приватные репозитории чужих команд не видны (404).
+      properties:
+        id:
+          type: string
+          format: uuid
+        grantee_workspace:
+          type: string
+          description: Slug команды-получателя.
+        owner_workspace:
+          type: string
+          description: Slug команды-владельца ресурса.
+        role:
+          $ref: '#/components/schemas/AccessGrantRole'
+        resource:
+          $ref: '#/components/schemas/AccessGrantResource'
+        granted_by:
+          $ref: '#/components/schemas/PrincipalRef'
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        revoked_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self, crane:revoke-access-grant (у действующего гранта)'
+      required:
+      - id
+      - grantee_workspace
+      - owner_workspace
+      - role
+      - resource
+      - granted_by
+      - created_at
+      - expires_at
+      - revoked_at
+      - _links
+    AccessGrantPage:
+      title: AccessGrantPage
+      type: object
+      description: Страница ресурса AccessGrant.
+      properties:
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self, crane:create-access-grant'
+        _embedded:
+          type: object
+          properties:
+            crane:access-grants:
+              type: array
+              items:
+                $ref: '#/components/schemas/AccessGrant'
+          required:
+          - crane:access-grants
+      required:
+      - _links
+      - _embedded
+    AccessGrantCreate:
+      title: AccessGrantCreate
+      type: object
+      properties:
+        grantee_workspace:
+          type: string
+          description: Slug команды-получателя.
+        role:
+          $ref: '#/components/schemas/AccessGrantRole'
+        resource:
+          $ref: '#/components/schemas/AccessGrantResource'
+        expires_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: Срок гранта; `null` - бессрочно.
+      required:
+      - grantee_workspace
+      - role
+      - resource
+      - expires_at
+    PackageKey:
+      title: PackageKey
+      type: object
+      description: Пакет без namespace (в пакета внутри namespace владелец - владелец namespace, отдельно не передаётся).
+      properties:
+        format:
+          $ref: '#/components/schemas/Format'
+        repository:
+          type: string
+        name:
+          type: string
+          description: Каноническое имя пакета.
+      required:
+      - format
+      - repository
+      - name
+    OwnershipResource:
+      title: OwnershipResource
+      description: Передаваемый ресурс - ровно один из трёх вариантов.
+      oneOf:
+      - type: object
+        title: OwnershipNamespace
+        properties:
+          namespace_id:
+            type: string
+        required:
+        - namespace_id
+        additionalProperties: false
+      - type: object
+        title: OwnershipPackage
+        properties:
+          package:
+            $ref: '#/components/schemas/PackageKey'
+        required:
+        - package
+        additionalProperties: false
+      - type: object
+        title: OwnershipRepository
+        properties:
+          repository:
+            type: object
+            description: Репозиторий по формату и имени.
+            properties:
+              format:
+                $ref: '#/components/schemas/Format'
+              name:
+                type: string
+            required:
+            - format
+            - name
+        required:
+        - repository
+        additionalProperties: false
+    OwnershipTransferCreate:
+      title: OwnershipTransferCreate
+      type: object
+      description: Передача владения применяется сразу. Роботы и trust policies не передаются.
+      properties:
+        resource:
+          $ref: '#/components/schemas/OwnershipResource'
+        to_workspace:
+          type: string
+          description: Slug команды-получателя.
+        justification:
+          $ref: '#/components/schemas/Justification'
+      required:
+      - resource
+      - to_workspace
+      - justification
+    OwnershipTransfer:
+      title: OwnershipTransfer
+      type: object
+      description: Результат передачи владения. Отдельного ресурса нет (история - события журнала `ownership.transferred`
+        и `package.claimed`); `self` ведёт на переданный ресурс.
+      properties:
+        resource:
+          $ref: '#/components/schemas/OwnershipResource'
+        from_workspace:
+          type: string
+        to_workspace:
+          type: string
+        transferred_at:
+          type: string
+          format: date-time
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self'
+      required:
+      - resource
+      - from_workspace
+      - to_workspace
+      - transferred_at
+      - _links
+    DownloadEvent:
+      title: DownloadEvent
+      type: object
+      description: Скачивание файла. Метаданные (packument, индекс) событий не дают. `bytes` - сколько байт
+        авторизовано к отдаче (для Range - длина диапазона); факт завершения передачи CRANE не знает. Значение без
+        собственного адреса.
+      properties:
+        ts:
+          type: string
+          format: date-time
+        repository:
+          $ref: '#/components/schemas/RepositoryRef'
+        purl:
+          type: string
+          description: Package URL версии.
+        blob_sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        actor:
+          $ref: '#/components/schemas/PrincipalRef'
+        credential_prefix:
+          type: string
+          description: Префикс токена.
+        workspace:
+          type:
+          - string
+          - 'null'
+          description: Команда из атрибуции credential (slug); `null` - не распределено.
+        client_ip:
+          type: string
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        source:
+          $ref: '#/components/schemas/DownloadSource'
+        request_id:
+          type: string
+      required:
+      - ts
+      - repository
+      - purl
+      - blob_sha256
+      - actor
+      - credential_prefix
+      - workspace
+      - client_ip
+      - bytes
+      - source
+      - request_id
+    DownloadCoverage:
+      title: DownloadCoverage
+      type: object
+      description: Полнота диапазона, читается из событий `audit.download_digest` (24 в сутки). Строки несброшенного
+        буфера упавшей реплики не считает никто, поэтому признака `complete` нет.
+      properties:
+        dropped_known:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Сколько строк известно как отброшенных в диапазоне (режим `drop`).
+        hours_without_digest:
+          type: array
+          items:
+            type: string
+            format: date-time
+          description: Часы диапазона (начала часов, UTC), для которых нет дайджеста.
+      required:
+      - dropped_known
+      - hours_without_digest
+    DownloadEventPage:
+      title: DownloadEventPage
+      type: object
+      description: Сырой след скачиваний за окно. Каждый вызов пишет `audit.viewed`.
+      properties:
+        coverage:
+          $ref: '#/components/schemas/DownloadCoverage'
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self, next, prev, crane:create-audit-export'
+        _embedded:
+          type: object
+          properties:
+            crane:downloads:
+              type: array
+              items:
+                $ref: '#/components/schemas/DownloadEvent'
+          required:
+          - crane:downloads
+      required:
+      - coverage
+      - _links
+      - _embedded
+    UsageGroupBy:
+      title: UsageGroupBy
+      type: string
+      enum:
+      - day
+      - workspace
+      - repository
+      - package
+      - version
+      - source
+      - principal_kind
+      description: Измерение группировки суточного агрегата.
+    UsageRow:
+      title: UsageRow
+      type: object
+      description: Строка агрегата. Присутствуют только поля, перечисленные в `group_by`; меры аддитивны. Значение
+        без собственного адреса.
+      properties:
+        day:
+          type: string
+          format: date
+        workspace:
+          type:
+          - string
+          - 'null'
+          description: Slug команды; `null` - не распределено.
+        repository:
+          type: string
+        purl:
+          type: string
+          description: Package URL (для `package` - без версии, для `version` - с версией).
+        source:
+          $ref: '#/components/schemas/DownloadSource'
+        principal_kind:
+          $ref: '#/components/schemas/PrincipalKind'
+        downloads:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - downloads
+      - bytes
+    UsagePage:
+      title: UsagePage
+      type: object
+      description: Суточный агрегат скачиваний. Личностей, токенов и IP нет.
+      properties:
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self, next, prev, crane:downloads (сырой след, если разрешён)'
+        _embedded:
+          type: object
+          properties:
+            crane:usage:
+              type: array
+              items:
+                $ref: '#/components/schemas/UsageRow'
+          required:
+          - crane:usage
+      required:
+      - _links
+      - _embedded
   pathItems:
     Status:
       get:
@@ -8545,12 +9201,12 @@ components:
         - audit
         summary: Выгрузить журнал
         description: |-
-          Диапазон ограничен; к файлу прикладываются хэш и якорь цепочки.
+          Диапазон ограничен; к файлу прикладываются хэш и якорь цепочки. Поток выбирает `stream`: `events` (журнал, по умолчанию), `downloads` (сырые скачивания), `usage` (суточный агрегат). Формат `ocsf` - только для `events`; `ndjson` и `csv` - для любого потока. Это единственный путь получить CSV и NDJSON следа и агрегата. Потоки `downloads` и `usage` доступны с v0.6.0, поток `events` (журнал) - с v1.1.0.
 
-          Роли: secops (MFA).
+          Роли по потокам: `events` - secops; `downloads` - secops; `usage` - secops, platform-admin, owner (фильтр `filter.workspace` на свою команду обязателен). Всегда MFA.
         operationId: createAuditExport
-        x-crane-phase: P2
-        x-crane-since: v1.1.0
+        x-crane-phase: P1
+        x-crane-since: v0.6.0
         x-crane-action: audit:export
         x-crane-step-up: true
         x-crane-audit:

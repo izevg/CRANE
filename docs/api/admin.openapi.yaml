@@ -126,6 +126,16 @@ info:
     | `crane:retry` | POST | `/jobs/{job_id}/retry` | нет |
     | `crane:create-import` | POST | `/imports` | `ImportCreate` |
     | `crane:create-workspace` | POST | `/workspaces` | `WorkspaceCreate` |
+    | `crane:update-workspace` | PATCH | `/workspaces/{workspace}` | `WorkspacePatch` |
+    | `crane:archive-workspace` | POST | `/workspaces/{workspace}/archive` | нет |
+    | `crane:unarchive-workspace` | POST | `/workspaces/{workspace}/unarchive` | нет |
+    | `crane:add-member` | PUT | `/workspaces/{workspace}/members/{principal_id}/roles/{role}` | нет |
+    | `crane:remove-member` | DELETE | `/workspaces/{workspace}/members/{principal_id}/roles/{role}` | нет |
+    | `crane:create-group-mapping` | POST | `/group-mappings` | `GroupMappingCreate` |
+    | `crane:delete-group-mapping` | DELETE | `/group-mappings/{mapping_id}` | нет |
+    | `crane:create-access-grant` | POST | `/access-grants` | `AccessGrantCreate` |
+    | `crane:revoke-access-grant` | POST | `/access-grants/{grant_id}/revoke` | нет |
+    | `crane:transfer-ownership` | POST | `/ownership-transfers` | `OwnershipTransferCreate` |
     | `crane:create-webhook` | POST | `/webhooks` | `WebhookCreate` |
     | `crane:redeliver` | POST | `/webhooks/{webhook_id}/deliveries/{delivery_id}/redeliver` | нет |
     | `crane:check-readiness` | POST | `/readiness` | `UploadBody` |
@@ -989,7 +999,10 @@ paths:
       tags:
       - catalog
       summary: Скачивания
-      description: 'Роли: reader, developer, maintainer, owner, appsec, secops, platform-admin.'
+      description: |-
+        Закрытые сутки берутся из суточного агрегата `download_daily`, текущие сутки - из сырого потока скачиваний.
+
+        Роли: reader, developer, maintainer, owner, appsec, secops, platform-admin.
       operationId: getDownloads
       x-crane-phase: P1
       x-crane-since: v0.6.0
@@ -2486,43 +2499,6 @@ paths:
           $ref: ./common.yaml#/components/responses/TooManyRequests
         '500':
           $ref: ./common.yaml#/components/responses/InternalError
-  /workspaces/{workspace}/members:
-    get:
-      tags:
-      - access
-      summary: Доступ команды
-      description: |-
-        Состав берётся из групп Keycloak `/crane/<workspace>/<роль>` (только чтение).
-
-        Роли: owner.
-      operationId: listWorkspaceMembers
-      x-crane-phase: P1
-      x-crane-since: v0.6.0
-      x-crane-action: workspace:list_members
-      x-crane-step-up: false
-      x-crane-audit: null
-      parameters:
-      - $ref: ./common.yaml#/components/parameters/Workspace
-      - $ref: ./common.yaml#/components/parameters/Cursor
-      - $ref: ./common.yaml#/components/parameters/Limit
-      responses:
-        '200':
-          description: Успешно.
-          headers:
-            X-Request-Id:
-              $ref: ./common.yaml#/components/headers/XRequestId
-          content:
-            application/hal+json:
-              schema:
-                $ref: ./common.yaml#/components/schemas/MemberPage
-        '401':
-          $ref: ./common.yaml#/components/responses/Unauthorized
-        '404':
-          $ref: ./common.yaml#/components/responses/NotFound
-        '429':
-          $ref: ./common.yaml#/components/responses/TooManyRequests
-        '500':
-          $ref: ./common.yaml#/components/responses/InternalError
   /platform/overview:
     get:
       tags:
@@ -3552,15 +3528,60 @@ paths:
           $ref: ./common.yaml#/components/responses/TooManyRequests
         '500':
           $ref: ./common.yaml#/components/responses/InternalError
+  /workspaces/{workspace}/overview:
+    get:
+      tags:
+      - platform
+      summary: Обзор команды
+      description: |-
+        Живые данные: опрос с ETag, `Cache-Control: private, max-age=15`.
+
+        Роли: owner.
+      operationId: getWorkspaceOverview
+      x-crane-phase: P1
+      x-crane-since: v0.6.0
+      x-crane-action: workspace:read_overview
+      x-crane-step-up: false
+      x-crane-audit: null
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/Workspace
+      - $ref: ./common.yaml#/components/parameters/IfNoneMatch
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+            ETag:
+              $ref: ./common.yaml#/components/headers/ETag
+            Cache-Control:
+              $ref: ./common.yaml#/components/headers/CacheControl
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/WorkspaceOverview
+        '304':
+          $ref: ./common.yaml#/components/responses/NotModified
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
   /workspaces:
     get:
       tags:
       - platform
-      summary: Workspaces
-      description: 'Роли: platform-admin.'
+      summary: Команды (workspaces)
+      description: |-
+        Свои команды остальные роли берут из `GET /me` (`workspaces`).
+
+        Роли: platform-admin.
       operationId: listWorkspaces
-      x-crane-phase: P1
-      x-crane-since: v0.6.0
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
       x-crane-action: workspace:list
       x-crane-step-up: false
       x-crane-audit: null
@@ -3588,11 +3609,14 @@ paths:
     post:
       tags:
       - platform
-      summary: Создать workspace
-      description: 'Роли: platform-admin.'
+      summary: Создать команду
+      description: |-
+        Slug (`name`) уникален и не переиспользуется никогда, даже после архивации (имя вне шаблона - 422).
+
+        Роли: platform-admin.
       operationId: createWorkspace
-      x-crane-phase: P1
-      x-crane-since: v0.6.0
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
       x-crane-action: workspace:create
       x-crane-step-up: false
       x-crane-audit:
@@ -3633,19 +3657,16 @@ paths:
           $ref: ./common.yaml#/components/responses/InternalError
         '503':
           $ref: ./common.yaml#/components/responses/ServiceUnavailable
-  /workspaces/{workspace}/overview:
+  /workspaces/{workspace}:
     get:
       tags:
       - platform
-      summary: Обзор команды
-      description: |-
-        Живые данные: опрос с ETag, `Cache-Control: private, max-age=15`.
-
-        Роли: owner.
-      operationId: getWorkspaceOverview
-      x-crane-phase: P1
-      x-crane-since: v0.6.0
-      x-crane-action: workspace:read_overview
+      summary: Команда
+      description: 'Роли: члены команды, platform-admin, secops, auditor.'
+      operationId: getWorkspace
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: workspace:read
       x-crane-step-up: false
       x-crane-audit: null
       parameters:
@@ -3659,18 +3680,901 @@ paths:
               $ref: ./common.yaml#/components/headers/XRequestId
             ETag:
               $ref: ./common.yaml#/components/headers/ETag
-            Cache-Control:
-              $ref: ./common.yaml#/components/headers/CacheControl
           content:
             application/hal+json:
               schema:
-                $ref: ./common.yaml#/components/schemas/WorkspaceOverview
+                $ref: ./common.yaml#/components/schemas/Workspace
         '304':
           $ref: ./common.yaml#/components/responses/NotModified
         '401':
           $ref: ./common.yaml#/components/responses/Unauthorized
         '404':
           $ref: ./common.yaml#/components/responses/NotFound
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+    patch:
+      tags:
+      - platform
+      summary: Изменить команду
+      description: |-
+        Меняются `display` и `description`; slug не меняется. Нужен `If-Match` с ETag команды (несовпадение - 412).
+
+        Роли: owner команды, platform-admin.
+      operationId: updateWorkspace
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: workspace:update
+      x-crane-step-up: false
+      x-crane-audit:
+        event: workspace.updated
+        ocsf_class: 6003
+      x-crane-rel: crane:update-workspace
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/Workspace
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKeyOptional
+      - $ref: ./common.yaml#/components/parameters/IfMatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./common.yaml#/components/schemas/WorkspacePatch
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+            ETag:
+              $ref: ./common.yaml#/components/headers/ETag
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/Workspace
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '412':
+          $ref: ./common.yaml#/components/responses/PreconditionFailed
+        '422':
+          $ref: ./common.yaml#/components/responses/Unprocessable
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /workspaces/{workspace}/archive:
+    post:
+      tags:
+      - platform
+      summary: Архивировать команду
+      description: |-
+        Разрешена, только если команда ничем не владеет: namespaces, пакеты без namespace, репозитории, активные роботы, trust policies, действующие access_grant как владельца ресурса. Иначе 409 (`…/problems/workspace-not-empty`), `reasons` перечисляет владеемые ресурсы. Архивация закрывает открытые строки `role_binding` команды (в том числе `idp`; новые не открываются, пока команда в архиве), отключает её роботов и отзывает их credentials. Жёсткого удаления нет: на команду ссылается история.
+
+        Роли: platform-admin (MFA).
+      operationId: archiveWorkspace
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: workspace:archive
+      x-crane-step-up: true
+      x-crane-audit:
+        event: workspace.archived
+        ocsf_class: 6003
+      x-crane-rel: crane:archive-workspace
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/Workspace
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/Workspace
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/StepUpRequired
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '422':
+          $ref: ./common.yaml#/components/responses/Unprocessable
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /workspaces/{workspace}/unarchive:
+    post:
+      tags:
+      - platform
+      summary: Разархивировать команду
+      description: |-
+        Возвращает команду в активное состояние. Закрытые при архивации строки ролей и отключённые роботы не восстанавливаются: роли вернутся при следующем наблюдении IdP или будут выданы заново.
+
+        Роли: platform-admin (MFA).
+      operationId: unarchiveWorkspace
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: workspace:unarchive
+      x-crane-step-up: true
+      x-crane-audit:
+        event: workspace.unarchived
+        ocsf_class: 6003
+      x-crane-rel: crane:unarchive-workspace
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/Workspace
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/Workspace
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/StepUpRequired
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '422':
+          $ref: ./common.yaml#/components/responses/Unprocessable
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /workspaces/{workspace}/members:
+    get:
+      tags:
+      - access
+      summary: Участники команды
+      description: |-
+        Текущий состав: открытые строки `role_binding` (источники `idp`, `local`). Принципал с несколькими ролями или источниками даёт несколько строк. Прошлое - только `GET …/members/history`.
+
+        Роли: члены команды, platform-admin, secops, auditor.
+      operationId: listWorkspaceMembers
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: workspace:list_members
+      x-crane-step-up: false
+      x-crane-audit: null
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/Workspace
+      - name: role
+        in: query
+        description: Роль.
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ./common.yaml#/components/schemas/WorkspaceRoleName
+      - name: source
+        in: query
+        description: Источник строки.
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ./common.yaml#/components/schemas/BindingSource
+      - $ref: ./common.yaml#/components/parameters/Cursor
+      - $ref: ./common.yaml#/components/parameters/Limit
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/RoleBindingPage
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+  /workspaces/{workspace}/members/history:
+    get:
+      tags:
+      - access
+      summary: История ролей команды
+      description: |-
+        Строки `role_binding` команды, пересекающие окно `from`..`to`, включая закрытые. Каждое открытие и закрытие строки есть событие журнала `access.role_granted` / `access.role_revoked`, поэтому история защищена цепочкой. `valid_from` - момент, когда CRANE увидел факт, а не время изменения в IdP.
+
+        Роли: owner команды, secops, auditor.
+      operationId: listWorkspaceMemberHistory
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: workspace:list_member_history
+      x-crane-step-up: false
+      x-crane-audit: null
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/Workspace
+      - name: from
+        in: query
+        description: Начало окна.
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        description: Конец окна.
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - $ref: ./common.yaml#/components/parameters/Cursor
+      - $ref: ./common.yaml#/components/parameters/Limit
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/RoleBindingPage
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+  /workspaces/{workspace}/members/{principal_id}/roles/{role}:
+    put:
+      tags:
+      - access
+      summary: Выдать роль в команде
+      description: |-
+        Добавляет локальную строку роли (источник `local`); повтор того же вызова возвращает существующую строку. Если флаг экземпляра `access.local_membership=deny`, отвечает 409 (`…/problems/local-membership-disabled`). Роли из IdP и SCIM этим вызовом не меняются.
+
+        Роли: owner команды.
+      operationId: addWorkspaceMember
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: workspace:add_member
+      x-crane-step-up: false
+      x-crane-audit:
+        event: access.role_granted
+        ocsf_class: 3001
+      x-crane-rel: crane:add-member
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/Workspace
+      - $ref: ./common.yaml#/components/parameters/PrincipalId
+      - $ref: ./common.yaml#/components/parameters/Role
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKeyOptional
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/RoleBinding
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '422':
+          $ref: ./common.yaml#/components/responses/Unprocessable
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+    delete:
+      tags:
+      - access
+      summary: Снять роль в команде
+      description: |-
+        Закрывает локальную строку роли (источник `local`); строки `idp` этим вызовом не закрываются. Нельзя снять последнюю локальную роль owner, если нет owner'ов из IdP: 409 (`…/problems/last-owner`).
+
+        Роли: owner команды.
+      operationId: removeWorkspaceMember
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: workspace:remove_member
+      x-crane-step-up: false
+      x-crane-audit:
+        event: access.role_revoked
+        ocsf_class: 3001
+      x-crane-rel: crane:remove-member
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/Workspace
+      - $ref: ./common.yaml#/components/parameters/PrincipalId
+      - $ref: ./common.yaml#/components/parameters/Role
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKeyOptional
+      responses:
+        '204':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '422':
+          $ref: ./common.yaml#/components/responses/Unprocessable
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /group-mappings:
+    get:
+      tags:
+      - access
+      summary: Маппинги групп IdP
+      description: |-
+        Единственный путь выдачи прав из IdP: нормализованная группа отображается в роль команды или в роль экземпляра.
+
+        Роли: platform-admin.
+      operationId: listGroupMappings
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: group_mapping:list
+      x-crane-step-up: false
+      x-crane-audit: null
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/Cursor
+      - $ref: ./common.yaml#/components/parameters/Limit
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/GroupMappingPage
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+    post:
+      tags:
+      - access
+      summary: Создать маппинг группы
+      description: |-
+        Выдача прав: только platform-admin и всегда с MFA. `workspace` равен `null` тогда и только тогда, когда роль - роль экземпляра (`appsec`, `secops`, `auditor`, `platform-admin`), иначе 422. Повтор тройки (`group_ref`, `workspace`, `role`) - 409.
+
+        Роли: platform-admin (MFA).
+      operationId: createGroupMapping
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: group_mapping:create
+      x-crane-step-up: true
+      x-crane-audit:
+        event: access.group_mapping_created
+        ocsf_class: 3001
+      x-crane-rel: crane:create-group-mapping
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./common.yaml#/components/schemas/GroupMappingCreate
+      responses:
+        '201':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/GroupMapping
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/StepUpRequired
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '422':
+          $ref: ./common.yaml#/components/responses/Unprocessable
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /group-mappings/{mapping_id}:
+    delete:
+      tags:
+      - access
+      summary: Удалить маппинг группы
+      description: |-
+        Строки ролей, выданные этим маппингом, закрываются при ближайшем наблюдении IdP.
+
+        Роли: platform-admin (MFA).
+      operationId: deleteGroupMapping
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: group_mapping:delete
+      x-crane-step-up: true
+      x-crane-audit:
+        event: access.group_mapping_deleted
+        ocsf_class: 3001
+      x-crane-rel: crane:delete-group-mapping
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/MappingId
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKeyOptional
+      responses:
+        '204':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/StepUpRequired
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /access-grants:
+    get:
+      tags:
+      - access
+      summary: Межкомандные гранты
+      description: |-
+        Фильтры `workspace` (команда-владелец ресурса) и `grantee` (команда-получатель). Владелец ресурса видит выданные им гранты, получатель - полученные.
+
+        Роли: owner команды-владельца ресурса; owner команды-получателя (чтение); platform-admin.
+      operationId: listAccessGrants
+      x-crane-phase: P1
+      x-crane-since: v0.6.0
+      x-crane-action: access_grant:list
+      x-crane-step-up: false
+      x-crane-audit: null
+      parameters:
+      - name: workspace
+        in: query
+        description: Slug команды-владельца ресурса.
+        schema:
+          type: string
+      - name: grantee
+        in: query
+        description: Slug команды-получателя.
+        schema:
+          type: string
+      - $ref: ./common.yaml#/components/parameters/Cursor
+      - $ref: ./common.yaml#/components/parameters/Limit
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/AccessGrantPage
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+    post:
+      tags:
+      - access
+      summary: Выдать межкомандный доступ
+      description: |-
+        Команда-владелец даёт другой команде роль `reader`, `developer` или `maintainer` на свой namespace или репозиторий, с необязательным сроком. Ресурс - ровно один из `namespace_id` и `repository`; не принадлежащий команде вызывающего ресурс - 404. Cedar: политика-шаблон, связанная со строкой гранта.
+
+        Роли: owner команды-владельца ресурса (MFA).
+      operationId: createAccessGrant
+      x-crane-phase: P1
+      x-crane-since: v0.6.0
+      x-crane-action: access_grant:create
+      x-crane-step-up: true
+      x-crane-audit:
+        event: access.grant_created
+        ocsf_class: 3001
+      x-crane-rel: crane:create-access-grant
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./common.yaml#/components/schemas/AccessGrantCreate
+      responses:
+        '201':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/AccessGrant
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/StepUpRequired
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '422':
+          $ref: ./common.yaml#/components/responses/Unprocessable
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /access-grants/{grant_id}/revoke:
+    post:
+      tags:
+      - access
+      summary: Отозвать межкомандный доступ
+      description: |-
+        Ставит `revoked_at`, связанная политика Cedar перестаёт действовать (кэш решений сбрасывается эпохой).
+
+        Роли: owner команды-владельца ресурса; platform-admin (MFA).
+      operationId: revokeAccessGrant
+      x-crane-phase: P1
+      x-crane-since: v0.6.0
+      x-crane-action: access_grant:revoke
+      x-crane-step-up: true
+      x-crane-audit:
+        event: access.grant_revoked
+        ocsf_class: 3001
+      x-crane-rel: crane:revoke-access-grant
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/AccessGrantId
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/AccessGrant
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/StepUpRequired
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '422':
+          $ref: ./common.yaml#/components/responses/Unprocessable
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /ownership-transfers:
+    post:
+      tags:
+      - access
+      summary: Передать владение
+      description: |-
+        Одно действие, применяется сразу (200, без согласия принимающей стороны): namespace, пакет без namespace или репозиторий переходят `to_workspace`. Пакет внутри namespace отдельно не передаётся (владелец - владелец namespace): 409 (`…/problems/package-in-namespace`). Ресурс не принадлежит команде вызывающего - 409 (`…/problems/not-owned`). Роботы и trust policies не передаются. История - события журнала `ownership.transferred` и `package.claimed`.
+
+        Роли: owner обеих команд; platform-admin (MFA).
+      operationId: createOwnershipTransfer
+      x-crane-phase: P1
+      x-crane-since: v0.6.0
+      x-crane-action: ownership:transfer
+      x-crane-step-up: true
+      x-crane-audit:
+        event: ownership.transferred
+        ocsf_class: 6003
+      x-crane-rel: crane:transfer-ownership
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./common.yaml#/components/schemas/OwnershipTransferCreate
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/OwnershipTransfer
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/StepUpRequired
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
+        '409':
+          $ref: ./common.yaml#/components/responses/Conflict
+        '422':
+          $ref: ./common.yaml#/components/responses/Unprocessable
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+        '503':
+          $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /audit/downloads:
+    get:
+      tags:
+      - audit
+      summary: След скачиваний
+      description: |-
+        Сырые события скачивания файлов (метаданные пакетов не входят). Каждый вызов пишет `audit.viewed` (параметры без результатов). `coverage` показывает потери: известное число отброшенных строк и часы без дайджеста. Окно `from`..`to` обязательно. В v0.4.0 доступ только у secops; маскированный доступ auditor появится в v1.1.0.
+
+        Роли: secops.
+      operationId: listDownloadEvents
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: audit:read_downloads
+      x-crane-step-up: false
+      x-crane-audit:
+        event: audit.viewed
+        ocsf_class: 6003
+      parameters:
+      - name: purl
+        in: query
+        description: Префикс Package URL.
+        schema:
+          type: string
+      - name: workspace
+        in: query
+        description: Slug команды.
+        schema:
+          type: string
+      - name: principal
+        in: query
+        description: Принципал.
+        schema:
+          type: string
+          format: uuid
+      - name: credential
+        in: query
+        description: Префикс токена.
+        schema:
+          type: string
+      - name: repository
+        in: query
+        description: Репозиторий.
+        schema:
+          type: string
+      - name: source
+        in: query
+        description: Источник скачивания.
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ./common.yaml#/components/schemas/DownloadSource
+      - name: from
+        in: query
+        description: Начало окна (обязательно).
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        description: Конец окна (обязательно).
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - $ref: ./common.yaml#/components/parameters/Cursor
+      - $ref: ./common.yaml#/components/parameters/Limit
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/DownloadEventPage
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+  /usage/downloads:
+    get:
+      tags:
+      - platform
+      summary: Использование скачиваний
+      description: |-
+        Суточный агрегат (хранится 400 дней), только аддитивные меры `downloads` и `bytes`. Личностей, токенов и IP нет. Owner видит только свою команду (Cedar по атрибуту ресурса), platform-admin и secops - все. CSV и NDJSON отдаёт только `POST /audit/exports` (`stream: usage`). Команда `null` - скачивания, не распределённые по командам.
+
+        Роли: owner (только своя команда); platform-admin; secops.
+      operationId: getDownloadUsage
+      x-crane-phase: P1
+      x-crane-since: v0.6.0
+      x-crane-action: usage:read
+      x-crane-step-up: false
+      x-crane-audit: null
+      parameters:
+      - name: workspace
+        in: query
+        description: Slug команды.
+        schema:
+          type: string
+      - name: repository
+        in: query
+        description: Репозиторий.
+        schema:
+          type: string
+      - name: purl
+        in: query
+        description: Префикс Package URL.
+        schema:
+          type: string
+      - name: source
+        in: query
+        description: Источник скачивания.
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ./common.yaml#/components/schemas/DownloadSource
+      - name: principal_kind
+        in: query
+        description: Вид принципала.
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ./common.yaml#/components/schemas/PrincipalKind
+      - name: from
+        in: query
+        description: Первые сутки UTC (обязательно).
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        description: Последние сутки UTC (обязательно).
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: group_by
+        in: query
+        description: Измерения группировки.
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ./common.yaml#/components/schemas/UsageGroupBy
+      - $ref: ./common.yaml#/components/parameters/Cursor
+      - $ref: ./common.yaml#/components/parameters/Limit
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/UsagePage
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
         '429':
           $ref: ./common.yaml#/components/responses/TooManyRequests
         '500':
@@ -3877,9 +4781,9 @@ paths:
         description: Просрочен SLA.
         schema:
           type: boolean
-      - name: team
+      - name: workspace
         in: query
-        description: Команда.
+        description: Команда-владелец (workspace).
         schema:
           type: string
       - name: ecosystem

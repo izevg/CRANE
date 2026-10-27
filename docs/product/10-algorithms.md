@@ -96,7 +96,7 @@ fn claim_name(principal, format, name):                  // первая пуб�
     ns = namespace_index.longest_match(format, name)
     require(ns != None or policy.allow_unscoped(format)) // иначе 403 с подсказкой
     require(decide(principal, CreatePackage, ns))
-    record namespace_owner_history
+    audit("package.claimed", principal, ns, name)        // владелец = команда namespace (или команда принципала без namespace, 14.15)
 ```
 
 Индекс namespaces хранится в памяти каждой реплики как префиксное дерево и перестраивается по событию изменения. Поиск занимает O(длины имени).
@@ -105,7 +105,7 @@ fn claim_name(principal, format, name):                  // первая пуб�
 
 ```rust
 fn authorize(req):
-    p = authenticate(req)                                 // JWT Keycloak | crp_ | crr_ | crci_
+    p = authenticate(req)                                 // JWT OIDC-провайдера | crp_ | crr_ | crci_
     key = (p.id, p.epoch, action, resource.scope_key)
     if d = decision_cache.get(key): return d              // moka, TTL 30 с
     d = cedar.is_authorized(p.entity, action, resource.entity, context)
@@ -118,7 +118,7 @@ on revoke(credential) | block(user) | groups_changed(user):
     // если pub/sub потерян, TTL 30 с ограничивает окно
 ```
 
-Токены CRANE имеют формат `<префикс><8 символов идентификатора><32 байта base62><crc32>`, префиксы: `crp_` личный, `crr_` робот, `crci_` нагрузка (раздел 13). Префикс позволяет найти запись без перебора, CRC позволяет secret-сканерам GitLab отличать настоящие токены от случайных строк. Храним HMAC-SHA256 с pepper: для высокоэнтропийного секрета это безопасно и в сотни раз быстрее argon2 на горячем пути.
+Токены CRANE имеют формат `<префикс><8 символов идентификатора><32 байта base62><crc32>`, префиксы: `crp_` личный, `crr_` робот, `crci_` нагрузка (раздел 13). Префикс позволяет найти запись без перебора, CRC позволяет secret-сканерам GitLab отличать настоящие токены от случайных строк. Храним HMAC-SHA256 с pepper: для высокоэнтропийного секрета это безопасно и в сотни раз быстрее argon2 на горячем пути. Команда атрибуции фиксируется при выпуске credential: 14.15.
 
 ```rust
 fn issue(req, kind):                                     // POST /tokens, /robots/{id}/credentials
@@ -409,3 +409,83 @@ fn readiness(lockfile_or_sbom):
 3.  **Metadata**: переносится необходимая metadata формата; история скачиваний не переносится как история использования.
 4.  **Сверка**: отчёт расхождений; повторный запуск идемпотентен.
 5.  **Переключение**: CI templates и конфигурации клиентов меняют URL; proxy-кэш прогревается заново.
+
+## 10.16 Членство, атрибуция и суточный агрегат
+
+Роли людей из IdP попадают в CRANE одним путём: нормализатор claims (13) даёт множество групп, `group_mapping` превращает его в права, `observe` приводит открытые строки `role_binding` источника `idp` в соответствие с правами. Cedar читает только `role_binding` (14.15).
+
+```rust
+// Вызывающий (адаптер или entry) сопоставляет GroupClaim и зовёт observe только для Complete:
+//   match identity.groups { Complete(g) => observe(p, &g, via), Overage | Absent => skip }
+// неизвестно не равно пусто: при Overage и Absent роли не меняются
+
+// observe: use case; via: login | exchange | refresh | directory | scim | admin_event
+fn observe(p, groups: &CompleteGroups, via: Via):
+    wanted = resolve(groups, mappings)                   // чистая функция домена, ниже
+    role_bindings.reconcile(p, Source::Idp, wanted, via)
+
+// RoleBindings::reconcile: одна транзакция
+tx:
+    open = role_binding.open_rows(p, source)
+    for r in open - wanted:  close(r, valid_to = now()); audit("access.role_revoked", via)
+    for r in wanted - open:  insert(r, valid_from = now()); audit("access.role_granted", via)
+    if changed: p.epoch += 1; valkey.publish("inv", Epoch(p.id))   // отзыв ≤ 5 с (10.4)
+
+fn resolve(g: &CompleteGroups, mappings: &[GroupMapping]) -> BTreeSet<Grant>:
+    g.filter(|ref| mappings.has(ref))                    // группа без маппинга ничего не даёт
+     .flat_map(|ref| mappings.for(ref))                  // (workspace_id, role) или роль экземпляра при workspace_id = NULL
+     .filter(|m| m.workspace is None or m.workspace.active)   // архивной команде новые строки не открываются
+     .collect()
+```
+
+`valid_from` и `valid_to` ставит момент наблюдения, а не изменения в IdP; открытая строка одна на факт (`role_binding_open`), поэтому повторное наблюдение идемпотентно. Локальные строки (`source = local`) `reconcile` для `Source::Idp` не трогает: их меняет owner команды через API.
+
+```rust
+// attribute: чистая функция, команда скачиваний фиксируется при выпуске credential
+fn attribute(principal, requested: Option<WorkspaceId>, teams_now: &[WorkspaceId])
+    -> Result<Attribution, AttributionError>:
+    match principal.kind:
+        robot | workload => Team(principal.workspace)    // requested игнорируется
+        human => match requested:
+            Some(w) if w in teams_now => Team(w)
+            Some(_)                   => Err(NotAMember)
+            None if teams_now.len() == 1 => Team(teams_now[0])
+            None                      => Unattributed    // «не распределено»
+```
+
+Результат записывается в `credential.workspace_id` и больше не меняется; смена состава команд посреди сессии атрибуцию токена не меняет до перевыпуска. Скачивание копирует значение в `download_event.workspace_id` без вычислений.
+
+```rust
+// context_mfa: чистая функция, вход для Cedar-атрибута context.mfa
+fn context_mfa(auth: &AuthStrength, cfg: &MfaConfig, now) -> bool:
+    strong = auth.acr in cfg.acr_accepted
+          or auth.amr intersects cfg.amr_accepted
+          or cfg.assume_idp_enforced
+    strong and auth.auth_time is Some(t) and now - t <= cfg.max_age   // нет auth_time: не свежо, fail closed
+```
+
+Задачи воркера:
+
+```rust
+// usage.rollup_day: после дайджеста последнего часа суток UTC; идемпотентна
+fn usage.rollup_day(d: Date):
+    require(digest_written(hour = d 23:00 UTC))
+    tx:
+        DELETE FROM download_daily WHERE day = d
+        INSERT INTO download_daily
+          SELECT d, e.workspace_id, e.repository_id, e.purl, e.source, p.kind, count(*), sum(e.bytes)
+          FROM download_event_<d> e JOIN principal p ON p.id = e.actor
+          GROUP BY e.workspace_id, e.repository_id, e.purl, e.source, p.kind
+
+// access.directory_sync: раз в 5 мин, если Directory настроен
+fn access.directory_sync():
+    members = {}                                         // subject -> группы, найденные в каталоге
+    for g in group_mapping.distinct_groups():            // единицы-десятки групп
+        for m in directory.members(g):
+            if m.active: members[m.subject].insert(g)
+            else:        principal(m.subject).epoch += 1 // отключён в IdP: отзыв ≤ 5 с по 10.4
+    for p in principals_with_open_rows(idp) + known(members.keys()):   // субъекты без principal пропускаются: принципал создаётся при первом входе (JIT)
+        observe(p, &CompleteGroups(members[p.subject] or {}), Via::Directory)   // кого в группе больше нет, у того строки idp закрываются
+```
+
+Число уникальных людей и машин агрегат не хранит. Опрос каталога и приём push (admin events, SCIM) вызывают один и тот же `observe`: 13.

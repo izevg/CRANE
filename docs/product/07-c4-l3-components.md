@@ -6,8 +6,8 @@
 |---|---|
 | Входные адаптеры | **Maven** (protocol), **npm** (protocol), **PyPI** (protocol), **NuGet** (protocol), **Cargo** (sparse protocol), **REST /api/v1** (OpenAPI), **A2A agent** (`/a2a`, Agent Card), **SPA + BFF** (UI kit) |
 | Доменное ядро (use cases) | **Identity** (OIDC, роботы, GitLab exchange), **Access** (Cedar, кэш, trace), **Catalog** (repos, namespaces), **Publishing** (upload, commit), **Proxy** (TTL, SWR, coalescing), **Evidence** (SBOM, findings), **Vulnerability intel** (фиды, сопоставление, приоритет, VEX), **Risk scoring** (systemone), **License** (SPDX, категории), **Promotion** (gates, approvals), **Usage graph** (impact), **Search** (FTS + vector), **Storage mgmt** (квоты, GC), **Audit** (hash chain), **Events** (outbox, webhooks), **AI assist** (LLM, RAG с ACL), **Security events** (OCSF, SIEM, SOAR), **Diagnostics** (problem+json) |
-| Порты (трейты) | `BlobStore`, `Repositories`, `Cache`, `JobQueue`, `Scanner`, `AdvisoryFeed`, `RiskScorer`, `AiProvider`, `SiemSink`, `UpstreamClient`, `IdentityProvider`, `VcsIntegration`, `Notifier` |
-| Выходные адаптеры (вкомпилированы) | **S3 / FS** (object_store), **PostgreSQL** (sqlx), **Valkey + moka** (2 уровня), **PG queue** (SKIP LOCKED), **Trivy** (server API), **systemone** (скоринг риска), **LLM, embedder, rerank** (OpenAI-совм.), **Фиды** (OSV, NVD, KEV, EPSS, CSAF), **SIEM** (syslog TLS, HTTP, OTLP; OCSF), **HTTP upstream** (SSRF guard), **Keycloak** (OIDC/JWKS), **GitLab** (REST, OIDC), **SMTP, webhooks** (уведомления) |
+| Порты (трейты) | `BlobStore`, `Repositories`, `Cache`, `JobQueue`, `Scanner`, `AdvisoryFeed`, `RiskScorer`, `AiProvider`, `SiemSink`, `UpstreamClient`, `IdentityVerifier`, `Directory`, `RoleBindings`, `VcsIntegration`, `Notifier` |
+| Выходные адаптеры (вкомпилированы) | **S3 / FS** (object_store), **PostgreSQL** (sqlx), **Valkey + moka** (2 уровня), **PG queue** (SKIP LOCKED), **Trivy** (server API), **systemone** (скоринг риска), **LLM, embedder, rerank** (OpenAI-совм.), **Фиды** (OSV, NVD, KEV, EPSS, CSAF), **SIEM** (syslog TLS, HTTP, OTLP; OCSF), **HTTP upstream** (SSRF guard), **OIDC (generic)** (discovery/JWKS), **Keycloak** (каталог: Admin REST), **GitLab** (REST, OIDC), **SMTP, webhooks** (уведомления) |
 
 *Рис. 7.1. Components. Зависимости направлены внутрь: адаптеры знают о портах, ядро не знает об адаптерах.*
 
@@ -16,7 +16,7 @@
 | Компонент | Ответственность | Ключевой инвариант |
 | --- | --- | --- |
 | Format protocols | Разбор URL и тел запросов каждого формата в канонические команды ядра; рендер metadata (packument, Simple API, maven-metadata.xml, NuGet V3 resources, Cargo sparse index и `config.json`); переписывание ссылок на адрес CRANE. | Никакой бизнес-логики, только трансляция протокола |
-| Identity | Проверка OIDC JWT от Keycloak, выпуск личных токенов и токенов роботов, обмен OIDC-токенов платформ (GitLab, Kubernetes, сервисные аккаунты) на краткоживущий credential, эпохи и отзыв. | Секрет показывается один раз, хранится только HMAC |
+| Identity | Проверка OIDC JWT от провайдера (`IdentityVerifier`), нормализация групп, наблюдение ролей (`RoleBindings`, 10.16), атрибуция команды при выпуске, выпуск личных токенов и токенов роботов, обмен OIDC-токенов платформ (GitLab, Kubernetes, сервисные аккаунты) на краткоживущий credential, эпохи и отзыв. | Секрет показывается один раз, хранится только HMAC |
 | Access | Вычисление решения по политикам Cedar с атрибутами principal, ресурса и контекста; кэш решений; trace сработавших правил. | Default deny; каждое решение объяснимо |
 | Catalog | Workspaces, repositories, namespaces, packages, владельцы, резервирование имён. | Внутреннее имя никогда не резолвится в публичный upstream |
 | Publishing | Приём загрузок, потоковое хэширование, атомарная фиксация версии, state machine версии. | Незавершённая загрузка невидима; release неизменяем |

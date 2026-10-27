@@ -18,7 +18,7 @@ crane/
 │  │  └─ maven/  npm/  pypi/  nuget/  cargo/
 │  ├─ adapters/               driven-адаптеры, реализуют порты
 │  │  ├─ persistence/         pg/  valkey/  objstore/
-│  │  ├─ identity/            keycloak/  gitlab/
+│  │  ├─ identity/            oidc/  keycloak/  gitlab/
 │  │  ├─ external/            upstream/  trivy/  feeds/  siem/
 │  │  └─ intelligence/        systemone/  llm/
 │  └─ entry/                  driving-слой и composition root

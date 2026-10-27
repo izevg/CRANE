@@ -4,7 +4,7 @@
 
 | Система | Протокол | Сценарии | Отказоустойчивость |
 | --- | --- | --- | --- |
-| Keycloak | OIDC (Authorization Code + PKCE, Device Grant, Client Credentials), Back-Channel Logout, JWKS, admin events через event listener, Admin REST (только чтение) | Вход в UI (Auth Code + PKCE), проверка JWT для CLI, маппинг групп и client roles на роли платформы, реакция на блокировку. | Кэш JWKS 1 ч; уже выданные сессии живут до exp |
+| OIDC-провайдер (Keycloak — профиль по умолчанию) | OIDC (Authorization Code + PKCE, Device Grant, Client Credentials), Back-Channel Logout, JWKS; для Keycloak дополнительно admin events через event listener и Admin REST (только чтение); для других провайдеров SCIM 2.0 | Вход в UI (Auth Code + PKCE), проверка JWT для CLI, маппинг групп и ролей на команды и роли платформы (`group_mapping`), реакция на блокировку. | Кэш JWKS 1 ч; уже выданные сессии живут до exp; без каталога и push роль, снятая в IdP, живёт до следующего входа (ниже) |
 | GitLab | OIDC ID token, REST API v4, webhooks | Workload identity, привязка пакета к проекту, создание issues, CI templates, приём SBOM, provenance и attestations из job. | Очередь с повторами для issues |
 | Sigstore и upstream attestations | npm attestations endpoint, PyPI Integrity API (PEP 740), Maven Central `.asc` и `.sigstore.json`; Sigstore bundle, Rekor; TUF для trust root | Проверка provenance upstream (10.6.1), приём attestations из CI, gate provenance требует валидную attestation (настройка по репозиторию и стадии). | В закрытом контуре trust root зеркалируется (TUF-репозиторий или `trusted_root.json` переносится вручную), проверка идёт офлайн по inclusion proof и SET внутри bundle. Если trust root не обновился, используется последний валидный до истечения метаданных TUF; устаревание алертится. Ошибка проверки даёт `unverifiable`, а не `invalid` |
 | Trivy | Trivy server (client/server mode) | Скан SBOM и распакованных артефактов, версия базы. | Circuit breaker; статус «ошибка анализа» |
@@ -18,11 +18,111 @@
 | Nexus | Nexus REST API | Разовая миграция hosted-пакетов. | Идемпотентный журнал |
 | Наблюдаемость | OpenMetrics `/metrics`, OTLP traces и logs, JSON-журналы, health endpoints, `/api/v1/status` | Каталог метрик `crane_*`, SLO и burn-rate алерты, дашборды Perses (раздел 16.6). | Телеметрия не влияет на обработку запросов |
 
-## Идентичность и токены доступа (Keycloak)
+## Идентичность и токены доступа
 
-Keycloak отвечает на вопрос «кто это», CRANE на вопрос «что ему можно». Пакетные менеджеры (npm, pip, Maven, Gradle, dotnet, cargo) не умеют проходить OIDC-вход, поэтому CRANE выдаёт им собственные токены, привязанные к личности из Keycloak. Права в токен не зашиваются: каждый запрос заново проходит авторизацию Cedar по текущим ролям, поэтому изменение групп в Keycloak действует сразу, без перевыпуска токенов.
+OIDC-провайдер (IdP) отвечает на вопрос «кто это», CRANE на вопрос «что ему можно». Пакетные менеджеры (npm, pip, Maven, Gradle, dotnet, cargo) не умеют проходить OIDC-вход, поэтому CRANE выдаёт им собственные токены, привязанные к личности из IdP. Права в токен не зашиваются: каждый запрос заново проходит авторизацию Cedar по текущим ролям (`role_binding`, 14.15), поэтому изменение ролей действует без перевыпуска токенов; насколько быстро CRANE узнаёт об изменении в IdP, зависит от способа сверки (ниже).
 
-### Настройка Keycloak
+### Идентичность: generic OIDC и профили
+
+CRANE принимает любого провайдера, который отдаёт стандартный OIDC (discovery, JWKS). Keycloak не особый случай, а профиль по умолчанию: готовая конфигурация и два необязательных расширения (каталог и push). Вендорных адаптеров Entra, Google и GitLab нет (решение 34 в 19).
+
+**Порты** (`crates/core/ports`; порт `IdentityProvider` из прежней схемы заменён тремя):
+
+```rust
+pub trait IdentityVerifier: Send + Sync {
+    async fn verify(&self, bearer: &str) -> Result<VerifiedIdentity, VerifyError>;
+}
+// VerifiedIdentity { issuer, subject, username, display, email, groups: GroupClaim, auth: AuthStrength, expires_at }
+// GroupClaim::{ Complete(CompleteGroups), Overage, Absent }  - «пусто» и «неизвестно» различаются типом; use case observe(p, &CompleteGroups, via) вызывают только для Complete
+// AuthStrength { acr: Option<String>, amr: Vec<String>, auth_time: Option<Timestamp> }
+pub trait Directory: Send + Sync {        // только pull, по группам из group_mapping
+    async fn members(&self, group: &GroupRef) -> Result<Vec<DirectoryMember>, DirectoryError>;
+}   // DirectoryMember { subject, active }; «нет каталога» = Option<Arc<dyn Directory>> == None
+pub trait RoleBindings: Send + Sync {     // имя совпадает с таблицей role_binding
+    async fn reconcile(&self, p: PrincipalId, source: Source, grants: &BTreeSet<Grant>, via: Via) -> Result<Diff, StoreError>; // атомарно с audit_event
+    async fn set_local(&self, p: PrincipalId, ws: WorkspaceId, role: Role, on: bool, by: PrincipalId) -> Result<Diff, StoreError>;
+    async fn active_at(&self, p: PrincipalId, at: Timestamp) -> Result<Vec<Grant>, StoreError>;
+}
+```
+
+Чистые функции домена: `resolve(&CompleteGroups, &[GroupMapping]) -> BTreeSet<Grant>`, `attribute(...)` и `context_mfa(...)` (10.16).
+
+**Адаптеры.** `adapters/identity/oidc` — единственный проверяющий: discovery, JWKS с кэшем 1 ч, нормализатор claims, device flow. `adapters/identity/keycloak` — только `Directory` через Admin REST (чтение) для опроса. Push принимают входящие адаптеры в `entry`: admin events Keycloak (event listener с HTTP-доставкой) и SCIM 2.0 (подмножество: `Users` с `active`, `Groups` с `members` через PATCH). Оба вызывают тот же use case `observe`, что и вход.
+
+**Конфигурация** (`entry`, YAML; один провайдер на экземпляр в v0.4.0):
+
+```yaml
+oidc:
+  issuer: https://kc.example/realms/acme
+  audience: crane
+  clients: { web: crane-web, cli: crane-cli }
+  claims:
+    subject: sub
+    username: preferred_username
+    email: email
+    groups:
+      - { claim: groups, format: path, prefix: /crane/ }     # format: path | name | id
+      - { claim: resource_access.crane.roles, as: "role:" }   # роли нормализуются в GroupRef с префиксом
+    nested: as_emitted     # as_emitted | expand_parents (только format: path: /a/b даёт и /a)
+  mfa:
+    acr_accepted: ["gold"]          # Keycloak LoA, Okta urn:okta:loa:2fa:any
+    amr_accepted: ["mfa", "hwk", "otp"]
+    max_age: 600s                   # свежесть: now - auth_time <= max_age
+    assume_idp_enforced: false      # true: оператор утверждает, что IdP требует MFA на каждом входе
+  device_flow: auto        # auto (по discovery device_authorization_endpoint) | off
+  session_ttl_without_directory: 1h  # потолок crp_ при отсутствии каталога и push
+access:
+  local_membership: allow  # allow | deny
+```
+
+**Нормализация claims и маппинг групп.** Нормализатор превращает все настроенные claims (groups, roles, client roles) в одно множество `GroupRef`; это множество отображает только `group_mapping`: группа → команда и роль, либо → роль экземпляра при `workspace_id NULL`. Пример для Keycloak: группа `/crane/payments/maintainer` → (payments, maintainer); client role `crane:platform-admin` нормализуется в `role:platform-admin` → роль экземпляра. Команды создаются в CRANE, группа IdP команду не создаёт. Маппинги ведёт только platform-admin со step-up: это выдача прав (14.15).
+
+-   **Префикс.** Учитываются только группы, начинающиеся с `prefix`; остальные отбрасываются до маппинга. Токен в памяти меньше, чужие группы не попадают в журнал.
+-   **Вложенность.** `as_emitted` берёт группы как их отдал IdP. `expand_parents` (только `format: path`) добавляет родителей: `/a/b` даёт и `/a`. Нужен там, где провайдер отдаёт только прямые группы (Keycloak, по исходному коду mapper).
+-   **Overage.** Если IdP не вместил группы в токен (Entra: `_claim_names`/`_claim_sources`), результат `GroupClaim::Overage`. Роли из токена не меняются: ничего не закрывается и не открывается (`observe` вызывается только для `Complete`; режима «взять группы из каталога» нет, overage всегда fail closed). Обход для Entra — «группы, назначенные приложению» или SCIM. «Пусто» и «неизвестно» различаются типом.
+-   **Локальное членство.** Флаг `access.local_membership` (`allow` по умолчанию; `deny` — организация запрещает права мимо IdP) управляет только строками источника `local` (14.15).
+
+**Свежесть MFA.** `context.mfa` для Cedar — чистая функция: `(acr ∈ acr_accepted ИЛИ amr ∩ amr_accepted ≠ ∅ ИЛИ assume_idp_enforced) И auth_time есть И now − auth_time ≤ max_age`. Нет `auth_time` → не свежо (fail closed). Step-up — повторный вход с `max_age=0` (и `acr_values`, если профиль их поддерживает); BFF и CLI запускают его по `401 insufficient_user_authentication`. Step-up всегда требует свежего MFA, а без `auth_time` подтвердить его нельзя: опасные действия недоступны. Правила выпуска токенов и список опасных действий описаны в разделах 13 и 14; здесь только вычисление `context.mfa`.
+
+**Вход из CLI.** Если у IdP есть device flow, `cctl login` использует его (`device_flow: auto` читает `device_authorization_endpoint` из discovery). Иначе CLI открывает loopback Authorization Code + PKCE на `127.0.0.1:<случайный порт>` (RFC 8252). Если на машине нет браузера, вставка кода из браузера другого устройства не поддерживается (решение 39 в 19): личный токен выпускается в SPA, и `cctl login --token` принимает его.
+
+**Сверка ролей с IdP.** Способы дополняют друг друга:
+
+| Способ | Когда работает | Что делает |
+| --- | --- | --- |
+| JIT из токена | Всегда: вход, обмен, обновление `crp_` через refresh | `observe` по группам токена |
+| Pull | Только если настроен `Directory` (Keycloak) | Задача `access.directory_sync` раз в 5 мин: проходит по группам из `group_mapping`, закрывает строки `idp` у тех, кого в группе больше нет, повышает эпоху неактивных (отзыв ≤ 5 с, 10.4); субъекты каталога без `principal` пропускаются, принципал создаётся при первом входе |
+| Push | Keycloak admin events; SCIM (Entra, Okta, Authentik) | Приём события вызывает `observe`; SCIM: `Users.active`, `Groups.members` |
+
+**Деградация без расширений Keycloak** (admin events, Admin REST). Без pull и push удаление человека из группы в IdP закрывает строку `role_binding` только при его следующем входе или обновлении токена; до этого роль остаётся открытой. Отключённый в IdP пользователь теряет доступ не позже `session_ttl_without_directory` (потолок `crp_`, по умолчанию 1 ч вместо 12 ч) или истечения refresh. Отзыв при блокировке идёт не за секунды, а за этот срок; отчёт о пересмотре доступа показывает «наблюдалось в момент» (`valid_from`), а не состояние IdP. Риск и митигирование: раздел 19.
+
+**Матрица провайдеров.** Проверено по официальной документации 2026-10-28; «не проверено» означает, что факт не подтверждён и перед использованием проверяется на стенде.
+
+| Провайдер | Группы в токене | Overage / лимит | MFA-сигнал | auth_time | Device flow | Каталог (pull) | Push | Рекомендуемый путь |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Keycloak | `groups` через Group Membership mapper (настроить); полный путь `/a/b` (по умолчанию) или имя; только прямые группы (по исходному коду mapper) → `nested: expand_parents` | нет | `acr` (ACR→LoA в realm), `amr` через AMR mapper; `acr_values`, `claims` поддерживаются | да | да (с 13.0, включить у клиента) | Admin REST (адаптер `keycloak`) | admin events через event listener (расширение SPI); SCIM в Keycloak только входящий | Родной профиль: JIT + опрос 5 мин + admin events |
+| Authentik | `groups` в scope `profile` по умолчанию; в ID token — при «Include claims in id_token»; формат и вложенность не проверены | не проверено | не проверено → `assume_idp_enforced` или проверить на стенде | не проверено | да (`/application/o/device/`, нужен device-code flow бренда) | не используется | SCIM provider (исходящий push, событийно + полная синхронизация раз в час) | JIT + SCIM; второй IdP в compose-тесте |
+| Zitadel | нативного `groups` нет; роли проекта `urn:zitadel:iam:org:project:roles` (по запросу) или группы через Action | — | `amr` (RFC 8176), `acr` | да | да | не используется | исходящего SCIM нет (только входящий) | JIT по ролям проекта (`as: "role:"`) + TTL |
+| Okta | `groups` только с настроенным фильтром; имена | 100; при превышении запрос токена падает (не усечение) → узкий фильтр/префикс обязателен | `amr` всегда (`pwd`, `mfa`, `otp`, `hwk`…), `acr_values` `urn:okta:loa:2fa:any` | да | да (native-приложения) | не используется | не проверено (вероятно, через парное SAML/SWA-приложение): по документации SCIM provisioning в Okta рассчитан на SAML/SWA-интеграции из App Integration Wizard, а не на OIDC-приложение; Event Hooks | JIT; SCIM не проверено |
+| Entra ID | `groups` = GUID объектов (имена только для синхронизированных из AD или `ApplicationGroup`); включает вложенные (кроме «групп, назначенных приложению») → `format: id` | 200 в JWT с учётом вложенных; при превышении `groups` нет, есть `_claim_names`/`_claim_sources` → `GroupClaim::Overage` → роли из токена не меняются | `amr` содержит `mfa`; step-up через `claims` с `acrs` (auth context, нужен P1); `acr` только v1 | да | да | не используется (Graph `transitiveMemberOf` не реализуем, решение 34) | SCIM provisioning (не-галерейное приложение) | JIT с «группами, назначенными приложению» (обходит overage) + SCIM |
+| Google Workspace | групп в ID token нет | — | `amr` только если включено в настройках Google Auth Platform и запрошено через `claims`; может отсутствовать; `acr` нет | да | только «TV and limited input»-клиенты, scopes `openid email profile` | Cloud Identity Groups API требует платных редакций — не реализуем | исходящий SCIM только для каталожных приложений | Локальное членство (`local`), вход через Google |
+| Dex | `groups` при scope `groups`; формат от коннектора | от коннектора | `acr`/`amr` нет | не проверено (в списке claims Dex нет) → считать «нет» | да, но не в `grantTypes` по умолчанию — включить | нет | нет | JIT + TTL; без `auth_time` опасные действия недоступны, `assume_idp_enforced` не помогает (нет свежести) |
+| GitLab | `groups_direct` в ID token (прямые, пути); `groups` и `https://gitlab.org/claims/groups/{owner,maintainer,developer}` только в userinfo | нет | `acr`/`amr` нет → `assume_idp_enforced` (группа требует 2FA) | да | да: с 17.2 за флагом, GA в 17.9 (исправление CVE-2025-0549 в 17.9.8 / 17.10.6 / 17.11.2) | не используется | system hooks (`user_add_to_group`, `user_remove_from_group`), блокировки пользователя нет — не реализуем | JIT по `groups_direct` + TTL |
+
+Back-channel logout: Keycloak да; Authentik да (preview с 2025.8); Zitadel да (с 2.65); Okta нет (Universal Logout); Entra только front-channel; Google, Dex, GitLab не документировано.
+
+### LDAP, Active Directory и SAML: только через IdP
+
+CRANE никогда не будет подключаться к LDAP или Active Directory напрямую. Это принцип продукта (решение 44 в 19), а не отложенная функция.
+
+-   **Пароли и привилегированная учётная запись.** Прямой bind означает, что CRANE принимает пароли пользователей и хранит привилегированную учётную запись для поиска в каталоге. Реестр на пути сборки стал бы держателем секретов, а поверхность атаки выросла бы.
+-   **Нет сигнала MFA и устойчивой к фишингу аутентификации.** В LDAP нет ни `acr`/`amr`/`auth_time`, ни WebAuthn и passkeys. Модель опасных действий CRANE (свежий MFA, step-up, раздел 13) при прямом подключении невыполнима.
+-   **Каталоги запутаны и разрастаются.** Деревья OU и групп в корпоративных каталогах обычно непоследовательны. Вывод прав из них ведёт к избыточным правам и тихому дрейфу доступа. CRANE выдаёт права только явным `group_mapping` (14.15).
+-   **Инъекции и цель атакующего.** LDAP-инъекции известны, а AD — главная цель при боковом перемещении и краже учётных данных. Реестр на пути сборки не должен быть ещё одним местом, где эти учётные данные вводятся.
+
+Поддерживаемый путь — федерация: перед каталогом стоит Keycloak (User Federation LDAP/AD) или другой OIDC-провайдер, а CRANE говорит только по OIDC. SAML напрямую тоже не поддерживается: SAML-провайдер подключается через федерирующий OIDC-провайдер (в Keycloak — identity brokering). Адаптеров и «плагинов» LDAP и SAML не будет.
+
+### Профиль Keycloak
 
 | Объект в Keycloak | Тип | Потоки OIDC | Назначение |
 | --- | --- | --- | --- |
@@ -30,9 +130,9 @@ Keycloak отвечает на вопрос «кто это», CRANE на воп
 | Клиент `crane-cli` | public | Device Authorization Grant (RFC 8628), refresh token | `cctl login` в терминале, на сервере без браузера и в IDE |
 | Клиент `crane` | bearer-only (audience) | — | Аудитория `aud: crane` в токенах; client roles для ролей уровня экземпляра (раздел 14.12) |
 | Сервисные аккаунты автоматизации | confidential | Client Credentials | Jenkins, Argo CD, скрипты: обмен токена на краткоживущий токен CRANE (ниже) |
-| Группы `/crane/<workspace>/<роль>` | группы | — | Роли в workspace: `owner`, `maintainer`, `developer`, `reader` |
+| Группы `/crane/<workspace>/<роль>` | группы | — | Источник прав в команде: маппинг группы в `group_mapping` даёт роль `owner`, `maintainer`, `developer` или `reader`; сама группа команду не создаёт |
 
-Мапперы в клиентах: аудитория `crane`, членство в группах (полный путь, claim `groups`), client roles клиента `crane`, `preferred_username`, `email`. Уровень аутентификации берётся из claim `acr` (Keycloak Level of Authentication): опасные операции требуют `acr` с MFA (step-up), иначе CRANE отвечает `401` с требуемым уровнем, и UI или CLI запускают повторный вход.
+Мапперы в клиентах: аудитория `crane`, членство в группах (Group Membership mapper, полный путь, claim `groups`), client roles клиента `crane`, `preferred_username`, `email`, `acr` (Level of Authentication) и `amr` (AMR mapper). Свежесть MFA и step-up вычисляются по `acr`/`amr` и `auth_time` (выше). Имя группы `/crane/<slug>/<роль>` — только рекомендация по именованию: UI предзаполняет `group_ref` при создании маппинга, путь не разбирается, права идут только через явный `group_mapping` (14.15). Каталог (Admin REST) и admin events включаются как расширения профиля: без них действует деградация, описанная выше.
 
 ### Какие токены принимает CRANE
 
@@ -89,7 +189,7 @@ CRANE реализует только sparse-протокол cargo (RFC 2789, �
 | Скачивание `.crate` | `GET /cargo/{repo}/api/v1/crates/{name}/{version}/download`: потоком или presigned redirect (раздел 11.2) |
 | Публикация | `PUT /cargo/{repo}/api/v1/crates/new`: бинарный формат cargo (длина + JSON metadata, длина + `.crate`); проверка SHA-256, `Cargo.toml` внутри архива и namespace |
 | Yank / unyank | `DELETE /cargo/{repo}/api/v1/crates/{name}/{version}/yank`, `PUT …/unyank` |
-| Поиск, владельцы | `GET …/api/v1/crates?q=`, `GET/PUT/DELETE …/api/v1/crates/{name}/owners` (владельцы отображаются на команды workspace) |
+| Поиск, владельцы | `GET …/api/v1/crates?q=`, `GET/PUT/DELETE …/api/v1/crates/{name}/owners` (владельцы = `owner` и `maintainer` команды-владельца, 14.15) |
 
 Для proxy-репозитория CRANE подставляет собственный `dl` в `config.json`, а файлы индекса и `.crate` берёт у `index.crates.io` и `static.crates.io` через общий кэш (раздел 11.1). Имена крейтов нормализуются без учёта регистра и с равенством `-` и `_`; индексный путь строится по нижнему регистру. Внутренние имена защищены от dependency confusion так же, как в других форматах: namespace с приоритетом hosted над proxy. Зависимости внутреннего крейта на другой реестр объявляются через поле `registry` в `Cargo.toml`; CRANE переписывает это поле в индексе на адрес своего реестра. Для SBOM используется `Cargo.lock` и PURL `pkg:cargo/{name}@{version}`.
 
@@ -97,12 +197,13 @@ CRANE реализует только sparse-протокол cargo (RFC 2789, �
 
 -   **GitLab CI (рекомендуется).** Секрет не хранится вообще: job предъявляет ID token с `aud: crane`, CRANE сверяет claims с trust policy и выдаёт `crci_` на время job (раздел 10.5, рис. 12.1). Scope записи выдаётся только для защищённых тегов и веток (`ref_protected`), пайплайны merge request и форков получают только чтение (10.5).
 -   **Другие платформы с OIDC.** Тот же обмен работает для любого доверенного издателя: projected ServiceAccount token Kubernetes, GitHub Actions, сервисный аккаунт Keycloak (Client Credentials). Запрос `POST /api/v1/tokens/exchange` по RFC 8693: `subject_token` = JWT платформы. Trust policy задаёт издателя, допустимые claims (проект, namespace, ref, имя сервисного аккаунта) и scopes.
--   **Робот с секретом.** Для систем без OIDC владелец workspace создаёт робота в UI: имя, команда-владелец, scopes (репозитории, namespaces, действия), обязательный срок. Токен `crr_` показывается один раз. Ротация: второй секрет выпускается заранее, оба действуют 24 часа, затем старый отзывается. Неиспользуемые роботы подсвечиваются через 30 дней и предлагаются к отзыву через 90 (раздел 11.5). Выпуск и ротация секрета требуют step-up, как создание робота, и интерактивной сессии IdP.
+-   **Робот с секретом.** Для систем без OIDC владелец workspace создаёт робота в UI: имя, workspace, scopes (репозитории, namespaces, действия), обязательный срок. Токен `crr_` показывается один раз. Ротация: второй секрет выпускается заранее, оба действуют 24 часа, затем старый отзывается. Неиспользуемые роботы подсвечиваются через 30 дней и предлагаются к отзыву через 90 (раздел 11.5). Выпуск и ротация секрета требуют step-up, как создание робота, и интерактивной сессии IdP.
 
-### Отзыв и синхронизация с Keycloak
+### Отзыв и синхронизация с IdP
 
--   **События Keycloak.** Выход из сессий приходит по OIDC Back-Channel Logout (штатно в Keycloak). Блокировка пользователя и изменение групп приходят как admin events, если в Keycloak подключён event listener с HTTP-доставкой (расширение SPI). По событию CRANE увеличивает эпоху пользователя, и все его `crp_` перестают действовать на всех репликах за ≤ 5 секунд (раздел 10.4).
--   **Страховка от потерянных событий.** Раз в 5 минут CRANE сверяет активных пользователей и их группы через Admin REST Keycloak (только чтение). Отключённый в Keycloak пользователь теряет доступ не позже чем через 5 минут, даже если событие потерялось.
+-   **События IdP.** Обычный OIDC Back-Channel Logout одной сессии IdP (если провайдер его поддерживает, матрица выше; в Keycloak штатно) не трогает эпоху пользователя: `sid` из logout token выставляет `revoked_at` у каждого credential с этим `idp_sid`, то есть у сессионных `crp_`, выпущенных из этой сессии. Долгоживущие личные и роботные токены не затрагиваются. В профиле Keycloak блокировка пользователя и изменение групп приходят как admin events, если подключён event listener с HTTP-доставкой (расширение SPI); у других провайдеров push идёт по SCIM 2.0. По такому событию CRANE вызывает `observe` и увеличивает эпоху пользователя, и все его `crp_` перестают действовать на всех репликах за ≤ 5 секунд (раздел 10.4).
+-   **Смена пароля, сброс учётных данных и «выйти из всех сессий».** Смена пароля или учётных данных в IdP (Keycloak: user events `UPDATE_PASSWORD` и `UPDATE_CREDENTIAL` через event listener, admin event для сброса credentials) и «выйти из всех сессий» (logout-all) увеличивают эпоху пользователя так же, как блокировка: все его `crp_` перестают действовать за ≤ 5 секунд. У других провайдеров работает back-channel logout там, где его показывает матрица, и SCIM `active=false`; иначе действует только потолок `session_ttl_without_directory`.
+-   **Страховка от потерянных событий.** Если настроен каталог (Keycloak), раз в 5 минут CRANE сверяет активных пользователей и их группы через Admin REST (только чтение): отключённый в IdP пользователь теряет доступ не позже чем через 5 минут, даже если событие потерялось. Без каталога и push срок определяет `session_ttl_without_directory` или refresh (по умолчанию 1 ч для `crp_`).
 -   **Отзыв в CRANE.** Пользователь видит свои токены и может отозвать любой; владелец workspace отзывает токены роботов; SecOps отзывает любой токен, в том числе по ответному действию SOAR (раздел 14.10).
 
 ## Публичный API платформы
