@@ -1,12 +1,12 @@
 use std::time::{Duration, SystemTime};
 
-use crane_domain::{
+use crane_domain::registry::{
     Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, RepositoryId,
     RepositoryKind, Sha256, Version, VersionId, VersionState,
 };
 use uuid::Uuid;
 
-use crate::{Catalog, CatalogError, NewVersion};
+use crate::registry::{Catalog, CatalogError, NewVersion};
 
 /// Проверяет реализацию `Catalog`; `new` создаёт чистый каталог для каждого сценария.
 pub async fn catalog_contract<C: Catalog>(new: impl Fn() -> C) {

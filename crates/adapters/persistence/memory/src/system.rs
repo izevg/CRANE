@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
-use crane_ports::{Clock, IdGen};
+use crane_ports::system::{Clock, IdGen};
 use uuid::Uuid;
 
 /// Часы, застывшие на заданном моменте.

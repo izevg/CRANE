@@ -3,8 +3,8 @@
 //! Асинхронные порты (`BlobStore`, `Catalog`) не dyn-совместимы: `app` обобщён по ним,
 //! а зависимости собирает `entry`. `Clock` и `IdGen` синхронны и dyn-совместимы.
 
-mod registry;
-mod system;
+pub mod registry;
+pub mod system;
 
 #[cfg(feature = "contract")]
 #[allow(
@@ -14,9 +14,3 @@ mod system;
     reason = "исполняемая спецификация порта: падение = нарушение контракта"
 )]
 pub mod contract;
-
-pub use registry::{
-    BlobError, BlobStore, ByteStream, Catalog, CatalogError, Digests, NewVersion, Staged,
-    StagingKey,
-};
-pub use system::{Clock, IdGen};

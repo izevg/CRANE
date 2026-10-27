@@ -1,10 +1,10 @@
 use std::io;
 
 use bytes::Bytes;
-use crane_domain::Sha256;
+use crane_domain::registry::Sha256;
 use futures_util::{StreamExt, stream};
 
-use crate::{BlobError, BlobStore, ByteStream, Digests, Staged, StagingKey};
+use crate::registry::{BlobError, BlobStore, ByteStream, Digests, Staged, StagingKey};
 
 /// SHA-256 от `hello`; константа, чтобы не тянуть хеш-библиотеку в порты.
 const HELLO_SHA256: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";

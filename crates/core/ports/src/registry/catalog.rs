@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::time::SystemTime;
 
-use crane_domain::{
+use crane_domain::registry::{
     Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, RepositoryId, Version,
     VersionId, VersionState,
 };

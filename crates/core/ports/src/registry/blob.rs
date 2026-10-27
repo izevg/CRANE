@@ -2,7 +2,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use bytes::Bytes;
-use crane_domain::Sha256;
+use crane_domain::registry::Sha256;
 use futures_core::Stream;
 
 /// Поток байт тела артефакта; ошибка чтения — `io::Error`.

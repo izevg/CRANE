@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::future::ready;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use crane_domain::{
+use crane_domain::registry::{
     Format, PackageName, PackageVersion, Repository, RepositoryId, Version, VersionId, VersionState,
 };
-use crane_ports::{Catalog, CatalogError, NewVersion};
+use crane_ports::registry::{Catalog, CatalogError, NewVersion};
 
 /// Каталог в памяти.
 #[derive(Debug, Default)]

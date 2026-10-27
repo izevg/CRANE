@@ -4,8 +4,8 @@ use std::io;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use bytes::{Bytes, BytesMut};
-use crane_domain::Sha256;
-use crane_ports::{BlobError, BlobStore, ByteStream, Digests, Staged, StagingKey};
+use crane_domain::registry::Sha256;
+use crane_ports::registry::{BlobError, BlobStore, ByteStream, Digests, Staged, StagingKey};
 use futures_util::{StreamExt, stream};
 use sha2::Digest;
 
