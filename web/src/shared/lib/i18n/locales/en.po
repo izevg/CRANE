@@ -46,6 +46,9 @@ msgstr "{label}: {shown}, {toneLabel}"
 msgid "{left, plural, one {Остался # символ} few {Осталось # символа} many {Осталось # символов} other {Осталось # символа}}"
 msgstr "{left, plural, one {# character left} other {# characters left}}"
 
+msgid "{requestedLabel} недоступен для этого репозитория, показаны команды для {shownLabel}"
+msgstr "{requestedLabel} isn't available for this repository, showing commands for {shownLabel}"
+
 msgid "{shown}, уверенность {confidenceText}"
 msgstr "{shown}, confidence {confidenceText}"
 

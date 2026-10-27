@@ -23,29 +23,33 @@ const INSTRUCTIONS = {
 const COPY_STEP = /^Копировать/;
 const KEY = "crane.install.npm";
 
-/** Страница-обёртка: список клиентов берёт из ответа сервера и отдаёт хуку, блок управляемый. */
+/** Страница-обёртка: предпочтение берёт у хука, «сервер» отвечает для переданного клиента, блок управляемый. */
 function Page({
   onClientChange,
-  answered = true,
+  answeredClient = "npm",
+  loading = false,
 }: {
   onClientChange: (client: InstallClient) => void;
-  /** `false` — первый рендер до ответа сервера: инструкций и списка клиентов ещё нет. */
-  answered?: boolean;
+  /** Клиент, для которого «сервер» дал инструкции; `null` — ответа ещё нет. */
+  answeredClient?: InstallClient | null;
+  loading?: boolean;
 }) {
-  const instructions = answered ? INSTRUCTIONS : undefined;
-  const [client, setClient] = useInstallClient("npm", instructions?.available_clients);
+  const [preferred, setPreferred] = useInstallClient("npm");
   const change = useCallback(
     (next: InstallClient) => {
-      setClient(next);
+      setPreferred(next);
       onClientChange(next);
     },
-    [setClient, onClientChange],
+    [setPreferred, onClientChange],
   );
+  const instructions =
+    answeredClient === null ? undefined : { ...INSTRUCTIONS, client: answeredClient };
   return (
     <InstallBlock
-      client={client}
+      preferred={preferred}
       onClientChange={change}
       instructions={instructions}
+      loading={loading}
       envHref="/help/env"
     />
   );
@@ -62,7 +66,7 @@ afterEach(() => {
 });
 
 describe("InstallBlock", () => {
-  it("по умолчанию выбран первый клиент формата", () => {
+  it("без предпочтения выделен клиент, которого дал сервер", () => {
     // Arrange
     // Act
     renderBlock();
@@ -93,20 +97,22 @@ describe("InstallBlock", () => {
     first.unmount();
 
     // Act
-    renderBlock();
+    render(<Page onClientChange={vi.fn()} answeredClient="yarn" />);
 
     // Assert
     expect(pressed("yarn")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("клиент из хранилища вне available_clients отбрасывается в пользу первого доступного", () => {
+  it("мусор в хранилище не принимается за предпочтение: заметки о подмене нет", () => {
     // Arrange
-    localStorage.setItem(KEY, "poetry");
+    localStorage.setItem(KEY, "rm -rf");
 
     // Act
     renderBlock();
 
     // Assert
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(pressed("npm")).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -115,7 +121,7 @@ describe("InstallBlock", () => {
     localStorage.setItem(KEY, "pnpm");
 
     // Act
-    renderBlock();
+    render(<Page onClientChange={vi.fn()} answeredClient="pnpm" />);
 
     // Assert
     expect(pressed("pnpm")).toHaveAttribute("aria-pressed", "true");
@@ -138,14 +144,23 @@ describe("InstallBlock", () => {
   it("до первого ответа сервера команд для копирования нет, шаги помечены занятыми", () => {
     // Arrange
     // Act
-    const { container } = render(<Page onClientChange={vi.fn()} answered={false} />);
+    const { container } = render(<Page onClientChange={vi.fn()} answeredClient={null} />);
 
     // Assert
     expect(screen.queryByRole("button", { name: COPY_STEP })).not.toBeInTheDocument();
     expect(container.querySelectorAll("[aria-busy=true]")).toHaveLength(2);
   });
 
-  it("инструкции не для выбранного клиента скрывают команды чужого клиента", () => {
+  it("пока идёт запрос, команды прежнего клиента скрыты", () => {
+    // Arrange
+    // Act
+    render(<Page onClientChange={vi.fn()} loading />);
+
+    // Assert
+    expect(screen.queryByRole("button", { name: COPY_STEP })).not.toBeInTheDocument();
+  });
+
+  it("если сервер дал не предпочитаемого клиента, заметка называет обоих", () => {
     // Arrange
     localStorage.setItem(KEY, "pnpm");
 
@@ -153,8 +168,20 @@ describe("InstallBlock", () => {
     renderBlock();
 
     // Assert
-    expect(pressed("pnpm")).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByRole("button", { name: COPY_STEP })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "pnpm недоступен для этого репозитория, показаны команды для npm",
+    );
+  });
+
+  it("пока идёт запрос, расхождение не объявляется подменой", () => {
+    // Arrange
+    localStorage.setItem(KEY, "pnpm");
+
+    // Act
+    render(<Page onClientChange={vi.fn()} loading />);
+
+    // Assert
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("кнопка копирования шага настройки называется по заголовку шага", () => {

@@ -6,15 +6,15 @@ import { CodeBlock } from "~/shared/ui/data-display";
 import { SegmentedControl } from "~/shared/ui/inputs";
 import { Button, Card, CardContent, CardHeader, Link, Skeleton } from "~/shared/ui/primitives";
 import { clientLabel } from "../model/clients";
+import { substitution } from "../model/substitution";
 
 type InstallBlockProps = {
-  /** Выбранный клиент: его держит страница (`useInstallClient`); `undefined` до первого ответа без сохранённого. */
-  client: InstallClient | undefined;
+  /** Предпочтение пользователя (`useInstallClient`); `undefined`, пока он ничего не выбирал. */
+  preferred: InstallClient | undefined;
   onClientChange: (client: InstallClient) => void;
   /**
-   * Инструкция сервера (токена в ней нет, только `${CRANE_TOKEN}`); `undefined`, пока ответа ещё не было. Список
-   * клиентов — её `available_clients`. Если инструкция не для выбранного клиента (идёт повторный запрос), вместо
-   * старых команд показываются заглушки: взять команду чужого клиента нельзя.
+   * Инструкция сервера (токена в ней нет, только `${CRANE_TOKEN}`); `undefined`, пока ответа ещё не было. Клиент
+   * в ней — фактический: его выделяет сегмент, а список — `available_clients`.
    */
   instructions:
     | Pick<
@@ -22,6 +22,11 @@ type InstallBlockProps = {
         "client" | "available_clients" | "setup_steps" | "manual_config" | "install"
       >
     | undefined;
+  /**
+   * Идёт запрос инструкций (например, после смены клиента): вместо старых команд — заглушки, взять команду чужого
+   * клиента нельзя.
+   */
+  loading?: boolean;
   /** Маршрут страницы «Переменные окружения» (SPA-ссылка, а не `href` из API). */
   envHref: string;
 };
@@ -32,21 +37,33 @@ function CommandSkeleton() {
 
 /**
  * Блок «Установка» (patterns §7): клиент пакетов, шаг 1 с настройкой один раз, ручная настройка файлом и шаг 2
- * с командой установки. Блок управляемый: клиента и данные дают пропсы, список клиентов берётся из формата.
+ * с командой установки. Блок управляемый: данные и состояние запроса дают пропсы. Если сервер подменил
+ * предпочитаемого клиента, под сегментом появляется заметка.
  */
-export function InstallBlock({ client, onClientChange, instructions, envHref }: InstallBlockProps) {
+export function InstallBlock({
+  preferred,
+  onClientChange,
+  instructions,
+  loading = false,
+  envHref,
+}: InstallBlockProps) {
   const { t } = useLingui();
   const [manualOpen, setManualOpen] = useState(false);
   const manualId = useId();
   const toggleManual = useCallback(() => setManualOpen((open) => !open), []);
-  const loading =
-    instructions === undefined || (client !== undefined && instructions.client !== client);
+  // Инструкция, которую можно показывать и копировать: ответ получен и не перезапрашивается
+  const current = loading ? undefined : instructions;
   const items = (instructions?.available_clients ?? []).map((value) => ({
     value,
     label: clientLabel(value),
   }));
-  const selected = client ?? instructions?.client;
-  const path = instructions?.manual_config.path ?? "";
+  // Пока ждём ответ, сегмент показывает выбор пользователя; после — клиента, которого дал сервер
+  const selected =
+    (loading ? preferred : instructions?.client) ?? instructions?.client ?? preferred;
+  const swapped = substitution(preferred, instructions?.client, loading);
+  const requestedLabel = swapped === null ? "" : clientLabel(swapped.requested);
+  const shownLabel = swapped === null ? "" : clientLabel(swapped.shown);
+  const path = current?.manual_config.path;
   return (
     <Card>
       <CardHeader>
@@ -63,12 +80,17 @@ export function InstallBlock({ client, onClientChange, instructions, envHref }: 
             onValueChange={onClientChange}
           />
         )}
-        <div className="flex flex-col gap-2" aria-busy={loading}>
+        {swapped === null ? null : (
+          <p role="status" className="text-caption text-muted-foreground">
+            {t`${requestedLabel} недоступен для этого репозитория, показаны команды для ${shownLabel}`}
+          </p>
+        )}
+        <div className="flex flex-col gap-2" aria-busy={current === undefined}>
           <h3 className="text-body font-semibold">{t`Шаг 1. Однократная настройка`}</h3>
-          {instructions === undefined || loading ? (
+          {current === undefined ? (
             <CommandSkeleton />
           ) : (
-            instructions.setup_steps.map(({ title, code: stepCode }) => (
+            current.setup_steps.map(({ title, code: stepCode }) => (
               <CodeBlock
                 key={title}
                 code={stepCode}
@@ -86,14 +108,14 @@ export function InstallBlock({ client, onClientChange, instructions, envHref }: 
             className="self-start"
           >
             <ChevronDownIcon aria-hidden="true" className={manualOpen ? "rotate-180" : ""} />
-            {path === "" ? t`Настроить вручную` : t`Настроить вручную (${path})`}
+            {path === undefined ? t`Настроить вручную` : t`Настроить вручную (${path})`}
           </Button>
           <div id={manualId} hidden={!manualOpen} className="flex flex-col gap-2">
-            {instructions === undefined || loading ? (
+            {current === undefined ? (
               <CommandSkeleton />
             ) : (
               <CodeBlock
-                code={instructions.manual_config.code}
+                code={current.manual_config.code}
                 label={t`Файл ${path}`}
                 copyLabel={t`Копировать ${path}`}
               />
@@ -106,13 +128,13 @@ export function InstallBlock({ client, onClientChange, instructions, envHref }: 
             </p>
           </div>
         </div>
-        <div className="flex flex-col gap-2" aria-busy={loading}>
+        <div className="flex flex-col gap-2" aria-busy={current === undefined}>
           <h3 className="text-body font-semibold">{t`Шаг 2. Установка`}</h3>
-          {instructions === undefined || loading ? (
+          {current === undefined ? (
             <CommandSkeleton />
           ) : (
             <CodeBlock
-              code={instructions.install.code}
+              code={current.install.code}
               label={t`Команда установки`}
               copyLabel={t`Копировать команду установки`}
             />

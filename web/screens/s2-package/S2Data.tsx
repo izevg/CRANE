@@ -14,8 +14,12 @@ import type { Banner } from "~/widgets/app-shell";
 import { PEOPLE } from "../data/common";
 import { Moment } from "../frame/Moment";
 
+const NPM_CLIENTS: InstallClient[] = ["npm", "pnpm", "yarn"];
+
 // i18n-fixture: заголовки шагов приходят с сервера (InstallInstructions) — контент витрины, а не текст интерфейса
-export function installInstructions(client: InstallClient): InstallInstructions {
+/** «Сервер»: без `client` или с клиентом вне списка отдаёт клиента по умолчанию, фактический — в `client`. */
+export function installInstructions(requested: InstallClient | undefined): InstallInstructions {
+  const client = requested !== undefined && NPM_CLIENTS.includes(requested) ? requested : "npm";
   const install: Partial<Record<InstallClient, string>> = {
     npm: "npm i @acme/ui@1.4.2",
     pnpm: "pnpm add @acme/ui@1.4.2",
@@ -23,7 +27,7 @@ export function installInstructions(client: InstallClient): InstallInstructions 
   };
   return {
     client,
-    available_clients: ["npm", "pnpm", "yarn"],
+    available_clients: NPM_CLIENTS,
     setup_steps: [{ title: "Вход и настройка npm", code: "cctl login\ncctl setup npm" }],
     manual_config: { path: ".npmrc", code: `//crane.example/npm/:_authToken=\${CRANE_TOKEN}` },
     install: { code: install[client] ?? "npm i @acme/ui@1.4.2" },

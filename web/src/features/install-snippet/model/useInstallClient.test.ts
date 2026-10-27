@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 describe("useInstallClient", () => {
-  it("до ответа сервера без сохранённого клиента — undefined: сервер выберет сам", () => {
+  it("без предпочтения — undefined: сервер выберет клиента сам", () => {
     // Arrange
     // Act
     const { result } = renderHook(() => useInstallClient("npm"));
@@ -18,7 +18,7 @@ describe("useInstallClient", () => {
     expect(result.current[0]).toBeUndefined();
   });
 
-  it("до ответа сервера возвращает сохранённого клиента для первого запроса", () => {
+  it("сохранённое предпочтение возвращается для первого запроса", () => {
     // Arrange
     localStorage.setItem(KEY, "pnpm");
 
@@ -29,7 +29,7 @@ describe("useInstallClient", () => {
     expect(result.current[0]).toBe("pnpm");
   });
 
-  it("мусор в хранилище не считается клиентом", () => {
+  it("мусор в хранилище не считается предпочтением", () => {
     // Arrange
     localStorage.setItem(KEY, "bogus");
 
@@ -40,31 +40,9 @@ describe("useInstallClient", () => {
     expect(result.current[0]).toBeUndefined();
   });
 
-  it("после ответа сохранённый клиент вне available_clients заменяется первым доступным", () => {
+  it("явный выбор возвращается хуком сразу и запоминается в хранилище", () => {
     // Arrange
-    localStorage.setItem(KEY, "poetry");
-
-    // Act
-    const { result } = renderHook(() => useInstallClient("npm", ["npm", "pnpm"]));
-
-    // Assert
-    expect(result.current[0]).toBe("npm");
-  });
-
-  it("после ответа сохранённый доступный клиент остаётся", () => {
-    // Arrange
-    localStorage.setItem(KEY, "pnpm");
-
-    // Act
-    const { result } = renderHook(() => useInstallClient("npm", ["npm", "pnpm"]));
-
-    // Assert
-    expect(result.current[0]).toBe("pnpm");
-  });
-
-  it("явный выбор запоминается в хранилище", () => {
-    // Arrange
-    const { result } = renderHook(() => useInstallClient("npm", ["npm", "pnpm"]));
+    const { result } = renderHook(() => useInstallClient("npm"));
 
     // Act
     act(() => result.current[1]("pnpm"));
