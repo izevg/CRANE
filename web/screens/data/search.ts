@@ -1,5 +1,5 @@
+import type { VersionState } from "~/shared/api";
 import type { Tone } from "~/shared/ui/primitives";
-import type { VersionState } from "./versions";
 
 export type SearchResult = {
   id: string;

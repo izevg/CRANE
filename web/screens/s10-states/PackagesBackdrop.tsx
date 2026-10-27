@@ -1,6 +1,7 @@
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { type ReactNode, useMemo } from "react";
+import type { VersionState } from "~/shared/api";
 import { i18n } from "~/shared/lib/i18n";
 import type { Action } from "~/shared/ui/actions";
 import { columnHelper, DataTable } from "~/shared/ui/data-display";
@@ -9,7 +10,6 @@ import { Badge } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { PEOPLE, REPOSITORIES } from "../data/common";
 import { versionBadge } from "../data/states";
-import type { VersionState } from "../data/versions";
 import { activeFormat } from "../frame/format";
 
 type PackageRow = {

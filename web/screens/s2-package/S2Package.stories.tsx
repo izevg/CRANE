@@ -4,6 +4,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ChevronDownIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { expect, within } from "storybook/test";
+import { LIFECYCLE_STATE, type VersionState } from "~/shared/api";
 import { copyToClipboard } from "~/shared/lib/core";
 import { i18n } from "~/shared/lib/i18n";
 import { CopyableId } from "~/shared/ui/actions";
@@ -26,7 +27,6 @@ import { StatusBadge } from "~/shared/ui/status";
 import type { Banner } from "~/widgets/app-shell";
 import { PEOPLE, REPOSITORIES } from "../data/common";
 import { versionBadge } from "../data/states";
-import type { VersionState } from "../data/versions";
 import { Moment } from "../frame/Moment";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
@@ -327,10 +327,14 @@ function S2Package({ proxy = false }: { proxy?: boolean }) {
         <PageHeader
           title="@acme/ui"
           status={
-            <StatusBadge
-              tone={proxy ? "warning" : "success"}
-              label={proxy ? "Stale" : t`Активен`}
-            />
+            proxy ? (
+              <StatusBadge tone="warning" label="Stale" />
+            ) : (
+              <StatusBadge
+                tone={LIFECYCLE_STATE.active.tone}
+                label={t(LIFECYCLE_STATE.active.label)}
+              />
+            )
           }
           chips={
             <>

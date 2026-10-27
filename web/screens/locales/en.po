@@ -273,9 +273,6 @@ msgstr "Issue a token"
 msgid "Выпустить токен для acme-ci"
 msgstr "Issue a token for acme-ci"
 
-msgid "Выпущена"
-msgstr "Released"
-
 msgid "Выпущенные"
 msgstr "Released"
 
@@ -329,9 +326,6 @@ msgstr "Activity log"
 
 msgid "За 30 дней: 12 340 скачиваний, рост к началу периода, максимум 912 в сутки 27 окт"
 msgstr "Last 30 days: 12,340 downloads, up from the start of the period, peak 912 per day on Oct 27"
-
-msgid "Заблокирована"
-msgstr "Blocked"
 
 msgid "Заблокированные"
 msgstr "Blocked"
@@ -395,9 +389,6 @@ msgstr "Package name"
 
 msgid "Исключения"
 msgstr "Exceptions"
-
-msgid "Исправлено в 4.17.21"
-msgstr "Fixed in 4.17.21"
 
 msgid "Истекает"
 msgstr "Expires"
@@ -572,9 +563,6 @@ msgstr "Nothing found for \"{query}\""
 
 msgid "Новый токен"
 msgstr "New token"
-
-msgid "Номер версии нельзя использовать повторно"
-msgstr "A version number cannot be reused"
 
 msgid "Нужен MFA"
 msgstr "MFA required"
@@ -1137,9 +1125,6 @@ msgstr "Exact match"
 msgid "Уберите фильтры по репозиторию или workspace"
 msgstr "Remove the repository or workspace filters"
 
-msgid "Удалена"
-msgstr "Deleted"
-
 msgid "Удалённые"
 msgstr "Deleted"
 
@@ -1217,6 +1202,3 @@ msgstr "Step 2. Install"
 
 msgid "Экспорт"
 msgstr "Export"
-
-msgid "Экстренно · CVE-2026-31337"
-msgstr "Emergency · CVE-2026-31337"
