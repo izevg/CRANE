@@ -91,6 +91,7 @@ fn upstream_failure(failure: &UpstreamFailure) -> (Option<&'static str>, Option<
     match failure {
         UpstreamFailure::Refused(refusal) => (Some("refused"), Some(refusal.to_string())),
         UpstreamFailure::Unavailable => (Some("unavailable"), None),
+        UpstreamFailure::Throttled => (Some("throttled"), None),
     }
 }
 

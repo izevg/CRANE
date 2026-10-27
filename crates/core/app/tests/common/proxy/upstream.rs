@@ -26,6 +26,8 @@ pub(crate) enum Step {
     NotFound,
     Refused(EgressRefusal),
     Unavailable,
+    /// 429/403: upstream ограничил запросы.
+    Throttled,
     /// Тело оборвалось на чтении.
     BrokenBody,
 }
@@ -132,6 +134,7 @@ impl Upstream for FakeUpstream {
                 etag: None,
                 max_age: None,
             }),
+            Some(Step::Throttled) => Err(UpstreamError::Throttled),
             Some(Step::Unavailable) | None => {
                 Err(UpstreamError::Unavailable("upstream лежит".into()))
             }
