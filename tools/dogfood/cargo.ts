@@ -113,8 +113,24 @@ const step = (name: string, body: () => void): void => {
   }
 };
 
-/** Выполняет сценарий и возвращает события аудита, которые он обязан породить. */
-export function scenario(stand: Stand, client: CargoClient, minor: number): Expected[] {
+/** Всё, что нужно шагам сценария: запуск cargo, запись крейтов и учёт ожидаемых событий аудита. */
+interface Kit {
+  agent: string;
+  a: string;
+  b: string;
+  main: string;
+  events: Expected[];
+  freshHome(): string;
+  cargo(dir: string, home: string, args: string[], token?: string): Result;
+  must(dir: string, home: string, args: string[]): Result;
+  expectOutput(result: Result, want: string): void;
+  app(name: string, dependency: string, call: string): void;
+  audited(operation: "publish" | "yank" | "unyank", name: string, version: string): void;
+  libA(version: string): Crate;
+  publish(crate: Crate): void;
+}
+
+function scenarioKit(stand: Stand, client: CargoClient, minor: number): Kit {
   const suffix = `${stand.id}_${minor}`;
   const a = `dfa_${suffix}`;
   const b = `dfb_${suffix}`;
@@ -172,6 +188,41 @@ export function scenario(stand: Stand, client: CargoClient, minor: number): Expe
     must(crate.name, main, ["publish", "--registry", REGISTRY]);
     audited("publish", crate.name, crate.version);
   };
+
+  return {
+    agent,
+    a,
+    b,
+    main,
+    events,
+    freshHome,
+    cargo,
+    must,
+    expectOutput,
+    app,
+    audited,
+    libA,
+    publish,
+  };
+}
+
+/** Выполняет сценарий и возвращает события аудита, которые он обязан породить. */
+export function scenario(stand: Stand, client: CargoClient, minor: number): Expected[] {
+  const {
+    agent,
+    a,
+    b,
+    main,
+    events,
+    freshHome,
+    cargo,
+    must,
+    expectOutput,
+    app,
+    audited,
+    publish,
+    libA,
+  } = scenarioKit(stand, client, minor);
 
   step("1 публикация a@0.1.0, a@0.1.1, b@0.1.0", () => {
     publish(libA("0.1.0"));
