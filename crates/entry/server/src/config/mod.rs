@@ -14,7 +14,7 @@ use std::str::FromStr;
 
 use crane_app::proxy::ProxyLimits;
 use crane_domain::access::{Principal, PrincipalKind};
-use crane_domain::registry::Format;
+use crane_domain::registry::{Format, RepositoryKind};
 use crane_http::TrustedProxies;
 use crane_objstore::S3Key;
 pub(crate) use file::layered;
@@ -111,28 +111,53 @@ pub(crate) fn proxy_var(format: Format) -> &'static str {
         .map_or("CRANE_<FORMAT>_PROXY_REPOS", |vars| vars.proxy)
 }
 
-/// Имена репозиториев по форматам.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) struct FormatRepos(BTreeMap<Format, Vec<String>>);
+/// Репозитории из конфигурации по форматам: что завести в каталоге при старте.
+/// Имя уникально внутри формата для обоих видов: это ключ каталога `(format, name)`.
+#[derive(Debug)]
+pub(crate) struct Repos(BTreeMap<Format, Lists>);
 
-impl FormatRepos {
+#[derive(Debug, Default)]
+struct Lists {
+    hosted: Vec<String>,
+    proxy: Vec<String>,
+}
+
+impl Lists {
+    fn of(&self, kind: RepositoryKind) -> &[String] {
+        match kind {
+            RepositoryKind::Hosted => &self.hosted,
+            RepositoryKind::Proxy => &self.proxy,
+        }
+    }
+}
+
+impl Repos {
     #[cfg(test)]
-    pub(crate) fn of(format: Format, names: Vec<String>) -> Self {
-        Self(BTreeMap::from([(format, names)]))
+    pub(crate) fn of(format: Format, kind: RepositoryKind, names: Vec<String>) -> Self {
+        let mut lists = Lists::default();
+        match kind {
+            RepositoryKind::Hosted => lists.hosted = names,
+            RepositoryKind::Proxy => lists.proxy = names,
+        }
+        Self(BTreeMap::from([(format, lists)]))
     }
 
-    pub(crate) fn names(&self, format: Format) -> &[String] {
-        self.0.get(&format).map_or(&[], Vec::as_slice)
+    pub(crate) fn names(&self, format: Format, kind: RepositoryKind) -> &[String] {
+        self.0.get(&format).map_or(&[], |lists| lists.of(kind))
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (Format, &[String])> {
+    pub(crate) fn of_kind(
+        &self,
+        kind: RepositoryKind,
+    ) -> impl Iterator<Item = (Format, &[String])> {
         self.0
             .iter()
-            .map(|(format, names)| (*format, names.as_slice()))
+            .map(move |(format, lists)| (*format, lists.of(kind)))
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.0.values().all(Vec::is_empty)
+    /// Есть ли хоть один репозиторий вида `kind` в любом формате.
+    pub(crate) fn any(&self, kind: RepositoryKind) -> bool {
+        self.0.values().any(|lists| !lists.of(kind).is_empty())
     }
 }
 
@@ -331,8 +356,8 @@ pub(crate) struct Settings {
     pub(crate) admin_port: u16,
     pub(crate) public_url: String,
     pub(crate) token: Secret,
-    /// Hosted-репозитории по форматам.
-    pub(crate) repos: FormatRepos,
+    /// Hosted- и proxy-репозитории по форматам.
+    pub(crate) repos: Repos,
     pub(crate) max_publish_bytes: usize,
     pub(crate) storage: Storage,
     pub(crate) proxy: Proxy,
@@ -340,8 +365,6 @@ pub(crate) struct Settings {
 
 /// Настройки proxy-движка. Без `Debug`, как `Cache`: в адресе Valkey бывает пароль.
 pub(crate) struct Proxy {
-    /// Имена proxy-репозиториев по форматам; пусто везде — proxy выключен.
-    pub(crate) repos: FormatRepos,
     pub(crate) cache: Cache,
     /// Потолок размера одного проксируемого артефакта в байтах.
     pub(crate) max_artifact_bytes: u64,
@@ -352,9 +375,8 @@ impl Settings {
         var: &impl Fn(&str) -> Option<String>,
         read_file: &impl Fn(&Path) -> io::Result<String>,
     ) -> Result<Self, ConfigError> {
-        let (hosted, proxied) = format_repos(var)?;
+        let repos = format_repos(var)?;
         let proxy = Proxy {
-            repos: proxied,
             cache: Cache::from_env(var, read_file)?,
             max_artifact_bytes: proxy_max_artifact_bytes(var)?,
         };
@@ -365,7 +387,7 @@ impl Settings {
             admin_port: admin_port(var)?,
             public_url: public_url(var)?,
             token: secret(var, read_file, TOKEN, TOKEN_FILE)?,
-            repos: hosted,
+            repos,
             max_publish_bytes: max_publish_bytes(var)?,
             storage: Storage::from_env(var, read_file)?,
             proxy,
@@ -531,17 +553,14 @@ fn repo_name_is_valid(name: &str) -> bool {
 }
 
 /// Hosted- и proxy-списки всех форматов.
-fn format_repos(
-    var: &impl Fn(&str) -> Option<String>,
-) -> Result<(FormatRepos, FormatRepos), ConfigError> {
-    let mut hosted = BTreeMap::new();
-    let mut proxied = BTreeMap::new();
+fn format_repos(var: &impl Fn(&str) -> Option<String>) -> Result<Repos, ConfigError> {
+    let mut formats = BTreeMap::new();
     for vars in &REPO_VARS {
-        let own = hosted_list(var, vars)?;
-        proxied.insert(vars.format, proxy_list(var, vars, &own)?);
-        hosted.insert(vars.format, own);
+        let hosted = hosted_list(var, vars)?;
+        let proxy = proxy_list(var, vars, &hosted)?;
+        formats.insert(vars.format, Lists { hosted, proxy });
     }
-    Ok((FormatRepos(hosted), FormatRepos(proxied)))
+    Ok(Repos(formats))
 }
 
 /// Разбирает список имён: непустые, допустимые, без повторов; `taken` — имена, которые занимать нельзя.
@@ -681,9 +700,8 @@ mod tests {
         let actual = cases.map(|pairs| {
             parse(&pairs)
                 .unwrap()
-                .proxy
                 .repos
-                .names(Format::Cargo)
+                .names(Format::Cargo, RepositoryKind::Proxy)
                 .to_vec()
         });
 
@@ -743,9 +761,18 @@ mod tests {
         let actual = cases.map(|pairs| {
             let settings = parse(&pairs).unwrap();
             (
-                settings.repos.names(Format::Npm).to_vec(),
-                settings.proxy.repos.names(Format::Npm).to_vec(),
-                settings.repos.names(Format::Cargo).to_vec(),
+                settings
+                    .repos
+                    .names(Format::Npm, RepositoryKind::Hosted)
+                    .to_vec(),
+                settings
+                    .repos
+                    .names(Format::Npm, RepositoryKind::Proxy)
+                    .to_vec(),
+                settings
+                    .repos
+                    .names(Format::Cargo, RepositoryKind::Hosted)
+                    .to_vec(),
             )
         });
 
@@ -807,8 +834,8 @@ mod tests {
         // Assert
         assert_eq!(
             (
-                settings.repos.names(Format::Cargo),
-                settings.proxy.repos.names(Format::Npm)
+                settings.repos.names(Format::Cargo, RepositoryKind::Hosted),
+                settings.repos.names(Format::Npm, RepositoryKind::Proxy)
             ),
             (&["shared".to_owned()][..], &["shared".to_owned()][..])
         );
@@ -825,7 +852,10 @@ mod tests {
         // Assert
         assert_eq!(settings.http_port, 8080);
         assert_eq!(settings.admin_port, 9464);
-        assert_eq!(settings.repos.names(Format::Cargo), ["internal"]);
+        assert_eq!(
+            settings.repos.names(Format::Cargo, RepositoryKind::Hosted),
+            ["internal"]
+        );
         assert_eq!(settings.max_publish_bytes, 10 * 1024 * 1024);
         assert_eq!(settings.public_url, "https://crane.example");
         assert_eq!(settings.token.expose(), "t");
@@ -1113,7 +1143,7 @@ mod tests {
 
         // Assert
         assert_eq!(
-            settings.repos.names(Format::Cargo),
+            settings.repos.names(Format::Cargo, RepositoryKind::Hosted),
             ["alpha", "beta", "gamma"]
         );
     }
