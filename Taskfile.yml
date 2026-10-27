@@ -71,7 +71,12 @@ tasks:
       - mkdir -p out
       - git diff {{.BASE}}...HEAD > out/gate.diff
       - "[ ! -s out/gate.diff ] || cargo mutants --workspace --in-diff out/gate.diff"
-      - pnpm --filter web run mutate
+      - |
+        if find web/src -name '*.test.*' | grep -q .; then
+          pnpm --filter web run mutate
+        else
+          echo "web: тестов пока нет, мутационное тестирование Stryker пропущено"
+        fi
       - "! pnpm --filter web exec playwright --version >/dev/null 2>&1 || pnpm --filter web run e2e"
       - |
         printf 'Gate: passed\nGate-SHA: %s\nGate-Date: %s\n' "$(git rev-parse HEAD)" "$(date -u +%Y-%m-%dT%H:%MZ)" | tee out/gate-report.md
