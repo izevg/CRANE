@@ -5,7 +5,7 @@ use crane_pg::{SchemaError, migrate};
 use crate::support;
 
 /// Число миграций в `migrator()`: два файла, `0001` и `0002`.
-const MIGRATIONS: i64 = 2;
+const MIGRATIONS: i64 = 3;
 
 #[test]
 fn migrate_is_idempotent_on_empty_database() {

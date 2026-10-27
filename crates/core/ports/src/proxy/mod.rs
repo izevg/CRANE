@@ -2,6 +2,7 @@
 
 mod cache;
 mod leases;
+mod names;
 
 use std::fmt;
 use std::time::Duration;
@@ -12,6 +13,7 @@ use crate::registry::ByteStream;
 
 pub use cache::{CacheError, Cached, CachedState, ETag, ProxyCache};
 pub use leases::{Claim, FetchLeases, Lease, LeaseError};
+pub use names::{NoUpstream, Presence, UpstreamNames};
 
 #[derive(Debug)]
 pub struct UpstreamRequest<'a> {

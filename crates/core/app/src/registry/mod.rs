@@ -15,6 +15,7 @@ use crane_domain::registry::{
     VersionId, VersionState,
 };
 use crane_ports::audit::AuditSink;
+use crane_ports::proxy::UpstreamNames;
 use crane_ports::registry::{BlobError, BlobStore, ByteStream, Catalog, CatalogError};
 use crane_ports::system::{Clock, IdGen};
 
@@ -102,6 +103,23 @@ pub enum RegistryError {
     /// Каталог или blob-хранилище не отвечают: для клиента это 503, повтор позже имеет смысл.
     #[error("хранилище не отвечает")]
     Unreachable(#[source] Box<dyn std::error::Error + Send + Sync>),
+    /// Имя внутреннее и из публичного upstream не отдаётся. Клиенту это выглядит как
+    /// обычное «не найдено»: причину наружу не раскрываем.
+    #[error("имя внутреннее: из публичного upstream не отдаётся")]
+    Shadowed,
+    /// Текст без имени владельца: чужие workspace не раскрываются.
+    #[error("имя принадлежит namespace другого workspace")]
+    NamespaceOwned,
+    #[error(
+        "имя занято в публичном реестре: для публикации нужна резервация платформы (CRANE_NAMESPACES)"
+    )]
+    PublicName,
+    #[error("не удалось проверить имя в публичном upstream: повторите позже")]
+    UpstreamUnavailable,
+    #[error("формат требует scope в имени пакета")]
+    UnscopedName,
+    #[error("namespace уже принадлежит другому workspace")]
+    NamespaceConflict,
     /// Сбой хранилища или нарушенный инвариант: для клиента это 500.
     #[error("ошибка бэкенда")]
     Backend(#[source] Box<dyn std::error::Error + Send + Sync>),
@@ -141,6 +159,8 @@ pub struct Registry<C, B> {
     clock: Arc<dyn Clock>,
     ids: Arc<dyn IdGen>,
     audit: Arc<dyn AuditSink>,
+    /// Что публичный upstream знает об имени: формат без proxy получает `NoUpstream`.
+    upstream: Arc<dyn UpstreamNames>,
 }
 
 impl<C, B> fmt::Debug for Registry<C, B> {
@@ -158,6 +178,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         clock: Arc<dyn Clock>,
         ids: Arc<dyn IdGen>,
         audit: Arc<dyn AuditSink>,
+        upstream: Arc<dyn UpstreamNames>,
     ) -> Self {
         Self {
             catalog,
@@ -165,6 +186,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             clock,
             ids,
             audit,
+            upstream,
         }
     }
 
@@ -293,91 +315,23 @@ fn use_case_futures_are_send<C: Catalog, B: BlobStore>(
     send(registry.ready());
 }
 
+/// То же для защиты имён: проверка при компиляции.
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    reason = "в тестах падение unwrap — это падение теста"
+#[expect(
+    dead_code,
+    reason = "проверка типов: функцию не вызывают, её компилируют"
 )]
-mod tests {
-    use std::io;
-
-    use super::*;
-
-    fn sha(byte: u8) -> Sha256 {
-        Sha256::from([byte; 32])
-    }
-
-    fn is_backend(error: &RegistryError) -> bool {
-        matches!(error, RegistryError::Backend(_))
-    }
-
-    #[test]
-    fn catalog_version_exists_maps_to_version_exists() {
-        // Arrange
-        let error = CatalogError::VersionExists;
-
-        // Act
-        let mapped = RegistryError::from(error);
-
-        // Assert
-        assert!(
-            matches!(mapped, RegistryError::VersionExists),
-            "tombstone и дубликат должны давать 409, а не 500: {mapped:?}"
-        );
-    }
-
-    #[test]
-    fn catalog_broken_invariants_map_to_backend() {
-        // Arrange
-        let errors = [
-            CatalogError::NotFound,
-            CatalogError::StateConflict {
-                actual: VersionState::Deleted,
-            },
-            CatalogError::Backend("сбой".into()),
-        ];
-
-        // Act
-        let mapped = errors.map(RegistryError::from);
-
-        // Assert
-        assert!(
-            mapped.iter().all(is_backend),
-            "прочие ошибки каталога — 500: {mapped:?}"
-        );
-    }
-
-    #[test]
-    fn blob_body_error_maps_to_body() {
-        // Arrange
-        let error = BlobError::Body(io::Error::other("обрыв"));
-
-        // Act
-        let mapped = RegistryError::from(error);
-
-        // Assert
-        assert!(
-            matches!(mapped, RegistryError::Body(_)),
-            "обрыв тела — ошибка клиента: {mapped:?}"
-        );
-    }
-
-    #[test]
-    fn other_blob_errors_map_to_backend() {
-        // Arrange
-        let errors = [
-            BlobError::NotFound(sha(1)),
-            BlobError::Backend("сбой".into()),
-        ];
-
-        // Act
-        let mapped = errors.map(RegistryError::from);
-
-        // Assert
-        assert!(
-            mapped.iter().all(is_backend),
-            "отсутствующий blob при записи каталога — 500, не AssetNotFound: {mapped:?}"
-        );
-    }
+fn namespace_futures_are_send<C: Catalog, B: BlobStore>(
+    registry: &Registry<C, B>,
+    caller: &Caller,
+    namespace: crane_domain::registry::Namespace,
+    package: &crane_domain::registry::PackageName,
+) {
+    fn send<T: Send>(_: T) {}
+    send(registry.reserve(caller, namespace));
+    send(registry.admit_upstream(caller, Format::Cargo, package));
 }
+
+#[cfg(test)]
+#[path = "tests/mod.rs"]
+mod tests;

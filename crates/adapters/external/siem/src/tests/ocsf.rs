@@ -4,7 +4,7 @@
 )]
 
 use crane_domain::access::{RequestContext, RequestId};
-use crane_domain::registry::{Coordinate, PackageRef};
+use crane_domain::registry::{Coordinate, Namespace, NamespacePattern, PackageRef, WorkspaceId};
 
 use super::*;
 
@@ -50,6 +50,21 @@ fn deprecate(message: Option<&str>) -> AuditAction {
     AuditAction::Deprecate {
         coordinate: coord("serde", "1.0.0"),
         message: message.map(str::to_owned),
+    }
+}
+
+fn reserve() -> AuditAction {
+    AuditAction::Reserve(Namespace {
+        format: Format::Cargo,
+        pattern: NamespacePattern::parse(Format::Cargo, "acme-*").expect("паттерн"),
+        workspace: WorkspaceId::DEFAULT,
+    })
+}
+
+fn shadow() -> AuditAction {
+    AuditAction::ShadowUpstream {
+        format: Format::Cargo,
+        package: PackageName::parse(Format::Cargo, "acme-core").expect("имя"),
     }
 }
 
@@ -127,6 +142,35 @@ fn action_and_outcome_map_to_class_activity_type_status_and_severity() {
             (6003, 6, 3, 600_303, 1, 1, Some("undeprecate")),
             (6003, 6, 3, 600_303, 1, 1, Some("tag")),
             (6003, 6, 3, 600_303, 2, 2, Some("untag")),
+        ]
+    );
+}
+
+#[test]
+fn namespace_actions_map_to_api_activity_without_resource() {
+    // Arrange
+    let robot = Some(principal(PrincipalKind::Robot));
+    let cases = [(reserve(), Outcome::Success), (shadow(), failure())];
+
+    // Act
+    let actual = cases.map(|(action, outcome)| {
+        let r = record(action, outcome, robot.clone());
+        (
+            r.class_uid,
+            r.activity_id,
+            r.type_uid,
+            r.status_id,
+            r.operation,
+            r.resource_uid,
+        )
+    });
+
+    // Assert
+    assert_eq!(
+        actual,
+        [
+            (6003, 1, 600_301, 1, Some("namespace.reserve"), None),
+            (6003, 2, 600_302, 2, Some("upstream.shadow"), None),
         ]
     );
 }

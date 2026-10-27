@@ -19,7 +19,7 @@ pub async fn catalog_contract<C: Catalog>(new: impl Fn() -> C) {
     tags::scenarios(&new).await;
 }
 
-fn name(raw: &str) -> PackageName {
+pub(super) fn name(raw: &str) -> PackageName {
     PackageName::parse(Format::Cargo, raw).expect("тестовое имя пакета валидно")
 }
 
@@ -27,7 +27,7 @@ fn version(raw: &str) -> Version {
     Version::parse(Format::Cargo, raw).expect("тестовая версия валидна")
 }
 
-fn repository(id: u128, name: &str) -> Repository {
+pub(super) fn repository(id: u128, name: &str) -> Repository {
     Repository {
         id: RepositoryId::new(Uuid::from_u128(id)),
         format: Format::Cargo,
@@ -36,7 +36,7 @@ fn repository(id: u128, name: &str) -> Repository {
     }
 }
 
-fn new_version(seq: u64, repo: RepositoryId, package: &str, raw: &str) -> NewVersion {
+pub(super) fn new_version(seq: u64, repo: RepositoryId, package: &str, raw: &str) -> NewVersion {
     NewVersion {
         id: VersionId::new(Uuid::from_u128(seq.into())),
         repository: repo,
@@ -55,7 +55,11 @@ fn new_version(seq: u64, repo: RepositoryId, package: &str, raw: &str) -> NewVer
     }
 }
 
-async fn ensure_repo<C: Catalog>(catalog: &C, id: u128, repo_name: &str) -> RepositoryId {
+pub(super) async fn ensure_repo<C: Catalog>(
+    catalog: &C,
+    id: u128,
+    repo_name: &str,
+) -> RepositoryId {
     catalog
         .ensure_repository(repository(id, repo_name))
         .await
@@ -76,7 +80,7 @@ async fn find<C: Catalog>(
         .expect("версия должна быть найдена")
 }
 
-async fn publish<C: Catalog>(catalog: &C, new: NewVersion) -> PackageVersion {
+pub(super) async fn publish<C: Catalog>(catalog: &C, new: NewVersion) -> PackageVersion {
     catalog
         .publish_version(new)
         .await

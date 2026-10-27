@@ -12,16 +12,16 @@ use super::packument_uri;
 fn publish_with_wrong_sha512_is_rejected_and_nothing_is_published() {
     // Arrange
     let api = Api::new();
-    let mut doc = publish_doc("left-pad", "1.0.0", TARBALL);
+    let mut doc = publish_doc("@acme/left-pad", "1.0.0", TARBALL);
     doc["versions"]["1.0.0"]["dist"]["integrity"] = json!(integrity(b"other bytes"));
 
     // Act
-    let reply = api.npm_put(&packument_uri("left-pad"), &doc);
+    let reply = api.npm_put(&packument_uri("@acme/left-pad"), &doc);
 
     // Assert
     assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(
-        api.npm_get(&packument_uri("left-pad")).status,
+        api.npm_get(&packument_uri("@acme/left-pad")).status,
         StatusCode::NOT_FOUND
     );
 }
@@ -30,10 +30,10 @@ fn publish_with_wrong_sha512_is_rejected_and_nothing_is_published() {
 fn publishing_the_same_version_twice_conflicts() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
 
     // Act
-    let reply = api.npm_publish("left-pad", "1.0.0", TARBALL);
+    let reply = api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
 
     // Assert
     assert_eq!(reply.status, StatusCode::CONFLICT);
@@ -43,11 +43,11 @@ fn publishing_the_same_version_twice_conflicts() {
 fn malformed_publish_is_a_bad_request_with_the_reason() {
     // Arrange
     let api = Api::new();
-    let mut doc = publish_doc("left-pad", "1.0.0", TARBALL);
+    let mut doc = publish_doc("@acme/left-pad", "1.0.0", TARBALL);
     doc["versions"]["1.0.0"]["dependencies"] = json!({"evil": "github:a/b"});
 
     // Act
-    let reply = api.npm_put(&packument_uri("left-pad"), &doc);
+    let reply = api.npm_put(&packument_uri("@acme/left-pad"), &doc);
 
     // Assert
     assert_eq!(reply.status, StatusCode::BAD_REQUEST);
@@ -58,11 +58,11 @@ fn malformed_publish_is_a_bad_request_with_the_reason() {
 fn put_without_attachments_or_versions_is_unsupported() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
-    let doc = json!({"name": "left-pad", "maintainers": [{"name": "x"}]});
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
+    let doc = json!({"name": "@acme/left-pad", "maintainers": [{"name": "x"}]});
 
     // Act
-    let reply = api.npm_put(&packument_uri("left-pad"), &doc);
+    let reply = api.npm_put(&packument_uri("@acme/left-pad"), &doc);
 
     // Assert
     assert_eq!(reply.status, StatusCode::BAD_REQUEST);
@@ -76,12 +76,12 @@ fn oversized_publish_document_is_rejected_before_storage() {
     let big = vec![7u8; crate::common::MAX_NPM_PUBLISH_BYTES];
 
     // Act
-    let reply = api.npm_publish("left-pad", "1.0.0", &big);
+    let reply = api.npm_publish("@acme/left-pad", "1.0.0", &big);
 
     // Assert
     assert_eq!(reply.status, StatusCode::PAYLOAD_TOO_LARGE);
     assert_eq!(
-        api.npm_get(&packument_uri("left-pad")).status,
+        api.npm_get(&packument_uri("@acme/left-pad")).status,
         StatusCode::NOT_FOUND
     );
 }

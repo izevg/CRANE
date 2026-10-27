@@ -1,4 +1,5 @@
 use crane_domain::access::Caller;
+use crane_domain::audit::AuditAction;
 use crane_domain::registry::{Format, PackageName, PackageVersion};
 use crane_ports::registry::{BlobStore, Catalog};
 
@@ -64,5 +65,37 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
                 .collect(),
             tags,
         })
+    }
+}
+
+impl<C: Catalog, B: BlobStore> Registry<C, B> {
+    /// Можно ли идти за именем в публичный upstream. Внутреннее имя (покрыто namespace
+    /// или есть в любом hosted-репозитории формата) оттуда не отдаётся никогда:
+    /// иначе чужой пакет с тем же именем подменил бы внутренний.
+    ///
+    /// Сбой каталога - `Backend`: вызывающий обязан не ходить в upstream (fail-closed).
+    /// Отказ аудируется как `ShadowUpstream`, разрешение - нет (чтения не аудируются).
+    pub async fn admit_upstream(
+        &self,
+        caller: &Caller,
+        format: Format,
+        name: &PackageName,
+    ) -> Result<(), RegistryError> {
+        if !self.is_internal(format, name).await? {
+            return Ok(());
+        }
+        let result = Err(RegistryError::Shadowed);
+        let action = AuditAction::ShadowUpstream {
+            format,
+            package: name.clone(),
+        };
+        self.audited(caller, action, &result);
+        result
+    }
+
+    async fn is_internal(&self, format: Format, name: &PackageName) -> Result<bool, RegistryError> {
+        // Короткое замыкание: namespace дешевле, чем поиск по пакетам.
+        Ok(self.catalog.namespace_for(format, name).await?.is_some()
+            || self.catalog.hosted_exists(format, name).await?)
     }
 }

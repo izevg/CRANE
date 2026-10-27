@@ -1,5 +1,6 @@
 use crane_domain::registry::{
-    Format, PackageName, PackageVersion, Repository, RepositoryId, Version, VersionId, VersionState,
+    Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Version, VersionId,
+    VersionState,
 };
 use crane_ports::registry::{Catalog, CatalogError, NewVersion};
 use sqlx::PgPool;
@@ -36,6 +37,7 @@ macro_rules! select_version {
     };
 }
 
+mod names;
 mod publish;
 mod rows;
 
@@ -248,5 +250,25 @@ impl Catalog for PgCatalog {
             .await
             .map_err(backend)?;
         tx.commit().await.map_err(backend)
+    }
+
+    async fn namespace_for(
+        &self,
+        format: Format,
+        name: &PackageName,
+    ) -> Result<Option<Namespace>, CatalogError> {
+        names::namespace_for(&self.pool, format, name).await
+    }
+
+    async fn hosted_exists(
+        &self,
+        format: Format,
+        name: &PackageName,
+    ) -> Result<bool, CatalogError> {
+        names::hosted_exists(&self.pool, format, name).await
+    }
+
+    async fn ensure_namespace(&self, namespace: Namespace) -> Result<Namespace, CatalogError> {
+        names::ensure_namespace(&self.pool, namespace).await
     }
 }

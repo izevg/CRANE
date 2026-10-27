@@ -2,7 +2,8 @@ use std::future::ready;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crane_domain::registry::{
-    Format, PackageName, PackageVersion, Repository, RepositoryId, Version, VersionId, VersionState,
+    Format, Namespace, NamespacePattern, PackageName, PackageVersion, Repository, RepositoryId,
+    RepositoryKind, Version, VersionId, VersionState,
 };
 use crane_ports::registry::{Catalog, CatalogError, NewVersion};
 
@@ -15,6 +16,7 @@ pub struct MemoryCatalog {
 #[derive(Debug, Default)]
 struct State {
     repositories: Vec<Repository>,
+    namespaces: Vec<Namespace>,
     /// В порядке публикации, как того требует контракт `versions`.
     versions: Vec<PackageVersion>,
     tags: Vec<Tag>,
@@ -272,5 +274,57 @@ impl Catalog for MemoryCatalog {
             record.state = to;
             Ok(())
         }))
+    }
+
+    fn namespace_for(
+        &self,
+        format: Format,
+        name: &PackageName,
+    ) -> impl Future<Output = Result<Option<Namespace>, CatalogError>> + Send {
+        let state = self.lock();
+        // Порядок `covering` задаёт специфичность: первый найденный и есть ответ.
+        let found = NamespacePattern::covering(format, name)
+            .iter()
+            .find_map(|pattern| {
+                state
+                    .namespaces
+                    .iter()
+                    .find(|n| n.format == format && n.pattern == *pattern)
+            })
+            .cloned();
+        ready(Ok(found))
+    }
+
+    fn hosted_exists(
+        &self,
+        format: Format,
+        name: &PackageName,
+    ) -> impl Future<Output = Result<bool, CatalogError>> + Send {
+        let state = self.lock();
+        // Пакет существует, пока есть хоть одна его версия: записи не удаляются.
+        let exists = state.versions.iter().any(|v| {
+            v.package == *name
+                && state.repositories.iter().any(|r| {
+                    r.id == v.repository && r.format == format && r.kind == RepositoryKind::Hosted
+                })
+        });
+        ready(Ok(exists))
+    }
+
+    fn ensure_namespace(
+        &self,
+        namespace: Namespace,
+    ) -> impl Future<Output = Result<Namespace, CatalogError>> + Send {
+        let mut state = self.lock();
+        let existing = state
+            .namespaces
+            .iter()
+            .find(|n| n.format == namespace.format && n.pattern == namespace.pattern)
+            .cloned();
+        let stored = existing.unwrap_or_else(|| {
+            state.namespaces.push(namespace.clone());
+            namespace
+        });
+        ready(Ok(stored))
     }
 }

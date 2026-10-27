@@ -92,6 +92,8 @@ fn shape(action: &AuditAction) -> Shape {
         ),
         AuditAction::Tag { .. } => api(3, "Update", "tag"),
         AuditAction::Untag { .. } => api(3, "Update", "untag"),
+        AuditAction::Reserve(_) => api(1, "Create", "namespace.reserve"),
+        AuditAction::ShadowUpstream { .. } => api(2, "Read", "upstream.shadow"),
     }
 }
 
@@ -105,7 +107,9 @@ struct Resource<'a> {
 
 fn resource(action: &AuditAction) -> Option<Resource<'_>> {
     match action {
-        AuditAction::Authenticate => None,
+        AuditAction::Authenticate
+        | AuditAction::Reserve(_)
+        | AuditAction::ShadowUpstream { .. } => None,
         AuditAction::Publish(c)
         | AuditAction::Yank(c)
         | AuditAction::Unyank(c)

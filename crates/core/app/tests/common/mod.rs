@@ -8,6 +8,7 @@
 )]
 
 pub(crate) mod faults;
+pub(crate) mod namespace;
 pub(crate) mod proxy;
 
 use std::io;
@@ -22,6 +23,7 @@ use crane_domain::registry::{
     RepositoryId, RepositoryKind, Sha1, Sha256, Sha512, Version, VersionId, VersionState,
 };
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_ports::proxy::{NoUpstream, UpstreamNames};
 use crane_ports::registry::{BlobStore, ByteStream, Catalog, NewVersion};
 use crane_ports::system::IdGen;
 use futures_executor::block_on;
@@ -151,6 +153,7 @@ pub(crate) struct Seed {
     pub(crate) blobs: MemoryBlobStore,
     pub(crate) ids: Arc<SequentialIdGen>,
     audit: Arc<MemoryAudit>,
+    upstream: Arc<dyn UpstreamNames>,
     pub(crate) hosted: RepositoryId,
 }
 
@@ -164,6 +167,8 @@ impl Seed {
             blobs: MemoryBlobStore::default(),
             ids,
             audit: Arc::default(),
+            // По умолчанию публичного upstream нет: новые имена свободны.
+            upstream: Arc::new(NoUpstream),
             hosted,
         }
     }
@@ -296,6 +301,7 @@ impl Seed {
             Arc::new(ManualClock::new(now)),
             self.ids,
             self.audit,
+            self.upstream,
         )
     }
 

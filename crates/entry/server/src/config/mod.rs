@@ -5,6 +5,7 @@
 //! каждое правило проверяется без обращения к настоящему окружению. Файл (`file`) лишь
 //! достраивает поиск по имени переменной, разбор отдельных параметров о нём не знает.
 
+mod namespaces;
 mod network;
 mod proxy;
 mod repos;
@@ -16,6 +17,7 @@ use std::io;
 use std::path::Path;
 
 use crane_domain::access::Principal;
+use crane_domain::registry::Namespace;
 use crane_http::TrustedProxies;
 use source::{Secret, secret};
 
@@ -37,6 +39,7 @@ fn vars() -> impl Iterator<Item = &'static str> {
         storage::VARS.as_slice(),
         proxy::VARS.as_slice(),
         repos::VARS.as_slice(),
+        namespaces::VARS.as_slice(),
     ]
     .into_iter()
     .flatten()
@@ -114,6 +117,8 @@ pub(crate) struct Settings {
     pub(crate) max_publish_bytes: usize,
     pub(crate) storage: Storage,
     pub(crate) proxy: Proxy,
+    /// Резервирования платформы (`CRANE_NAMESPACES`), применяются при старте.
+    pub(crate) namespaces: Vec<Namespace>,
 }
 
 impl Settings {
@@ -136,6 +141,7 @@ impl Settings {
             max_publish_bytes: repos::max_publish_bytes(var)?,
             storage: Storage::from_env(var, read_file)?,
             proxy,
+            namespaces: namespaces::from_env(var)?,
         })
     }
 }

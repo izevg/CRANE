@@ -12,11 +12,12 @@ use axum::Router;
 use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_http::{
-    CargoSettings, FormatSettings, NpmSettings, StaticToken, admin_router, api_router,
+    CargoSettings, FormatSettings, NpmSettings, ProxyRouters, StaticToken, admin_router, api_router,
 };
 use crane_memory::{MemoryBlobStore, MemoryCatalog};
 use crane_objstore::ObjectBlobStore;
 use crane_pg::PgCatalog;
+use crane_ports::proxy::{NoUpstream, UpstreamNames};
 use crane_ports::registry::{BlobStore, Catalog};
 use crane_ports::system::IdGen;
 use crane_siem::OcsfLogSink;
@@ -27,6 +28,7 @@ use tokio::net::TcpListener;
 use tokio::runtime::Builder;
 
 use crate::config::{Database, Settings, Storage};
+use crate::namespaces;
 use crate::system::{SystemClock, UuidV7Ids};
 pub(crate) use health::healthcheck;
 
@@ -77,6 +79,20 @@ async fn connect(database: &Database) -> Result<PgPool, RunError> {
         })
 }
 
+/// Настройки HTTP-слоя форматов: публичный адрес и предел публикации у всех общие.
+fn format_settings(public_url: String, max_publish_bytes: usize) -> FormatSettings {
+    FormatSettings {
+        cargo: CargoSettings {
+            public_url: public_url.clone(),
+            max_publish_bytes,
+        },
+        npm: NpmSettings {
+            public_url,
+            max_publish_bytes,
+        },
+    }
+}
+
 async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     catalog: C,
     blobs: B,
@@ -97,36 +113,36 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
                 .await?;
         }
     }
-    let formats = FormatSettings {
-        cargo: CargoSettings {
-            public_url: settings.public_url.clone(),
-            max_publish_bytes: settings.max_publish_bytes,
-        },
-        npm: NpmSettings {
-            public_url: settings.public_url,
-            max_publish_bytes: settings.max_publish_bytes,
-        },
-    };
+    let formats = format_settings(settings.public_url, settings.max_publish_bytes);
     // Registry и движок делят один CAS: скачанные архивы лежат там же, где опубликованные.
     let blobs = Arc::new(blobs);
-    let proxy_repos = proxy::proxies(
+    // Движок и источники строятся до `Registry`: из того же движка берётся проверка, знает ли
+    // публичный реестр имя, а каталог ещё нужен, чтобы зарегистрировать proxy-репозитории.
+    let proxies = proxy::prepare_proxies(
         &catalog,
         ids.as_ref(),
         Arc::clone(&blobs),
         &settings.repos,
         settings.proxy,
-        &formats,
     )
     .await?;
+    let upstream: Arc<dyn UpstreamNames> = proxies
+        .as_ref()
+        .map_or_else(|| Arc::new(NoUpstream), proxy::Prepared::upstream_names);
     // Один приёмник на use cases и на слой auth; в v0.4.0 действия записи уйдут в журнал PG.
     let audit = Arc::new(OcsfLogSink::new(Arc::new(SystemClock), ids.clone()));
     let registry = Arc::new(Registry::new(
         catalog,
         blobs,
         Arc::new(SystemClock),
-        ids,
+        ids.clone(),
         audit.clone(),
+        upstream,
     ));
+    namespaces::reserve(&registry, ids.as_ref(), settings.namespaces).await?;
+    let proxy_repos = proxies.map_or_else(ProxyRouters::default, |proxies| {
+        proxies.mount(&registry, &formats)
+    });
     let admin = admin_router(registry.clone());
     // Сырой токен живёт только до этой строки: дальше остаётся его хэш.
     let token = StaticToken::new(settings.token.expose().as_bytes(), settings.principal);

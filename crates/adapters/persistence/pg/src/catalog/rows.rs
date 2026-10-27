@@ -11,8 +11,9 @@ use std::fmt::Display;
 use std::time::{Duration, SystemTime};
 
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, RepositoryId,
-    RepositoryKind, Sha256, Version, VersionId, VersionState,
+    Asset, Format, FormatMetadata, Namespace, NamespacePattern, PackageName, PackageVersion,
+    Repository, RepositoryId, RepositoryKind, Sha256, Version, VersionId, VersionState,
+    WorkspaceId,
 };
 use crane_ports::registry::CatalogError;
 use sqlx::postgres::PgRow;
@@ -134,6 +135,20 @@ pub(crate) fn repository_from_row(row: &PgRow) -> Result<Repository, CatalogErro
             .map_err(corrupt)?,
         kind: kind_parse(column::<&str>(row, "kind")?)?,
         name: column::<String>(row, "name")?,
+    })
+}
+
+/// Колонки: `workspace_id`, `format`, `pattern`.
+pub(crate) fn namespace_from_row(row: &PgRow) -> Result<Namespace, CatalogError> {
+    let format = column::<&str>(row, "format")?
+        .parse::<Format>()
+        .map_err(corrupt)?;
+    Ok(Namespace {
+        format,
+        // Хранится нормализованным, поэтому разбор возвращает ту же строку.
+        pattern: NamespacePattern::parse(format, column::<&str>(row, "pattern")?)
+            .map_err(corrupt)?,
+        workspace: WorkspaceId::new(column::<Uuid>(row, "workspace_id")?),
     })
 }
 

@@ -185,6 +185,13 @@ fn migrator() -> Migrator {
             include_str!("../../migrations/0002_npm.sql").into_sql_str(),
             false,
         ),
+        Migration::new(
+            3,
+            "namespace".into(),
+            MigrationType::Simple,
+            include_str!("../../migrations/0003_namespace.sql").into_sql_str(),
+            false,
+        ),
     ])
 }
 

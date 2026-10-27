@@ -9,6 +9,7 @@
 
 pub(crate) mod capture;
 pub(crate) mod cargo;
+pub(crate) mod names;
 pub(crate) mod npm;
 pub(crate) mod proxy;
 
@@ -31,6 +32,7 @@ use crane_http::{
 };
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::audit::AuditSink;
+use crane_ports::proxy::{NoUpstream, UpstreamNames};
 use crane_ports::registry::Catalog;
 use crane_ports::system::IdGen;
 use http_body_util::BodyExt;
@@ -39,6 +41,8 @@ use tokio::runtime::{Builder, Runtime};
 use tower::ServiceExt;
 
 use self::cargo::{index_path, publish_body};
+/// Реестр фикстуры; proxy-router получает его для защиты имён.
+pub(crate) type TestRegistry = Registry<MemoryCatalog, MemoryBlobStore>;
 
 pub(crate) const TOKEN: &str = "s3cret-token";
 pub(crate) const PUBLIC_URL: &str = "https://crane.example";
@@ -89,6 +93,8 @@ pub(crate) struct Api {
     admin: Router,
     audit: Arc<MemoryAudit>,
     clock: Arc<ManualClock>,
+    registry: Arc<TestRegistry>,
+    ids: Arc<SequentialIdGen>,
 }
 
 impl Api {
@@ -104,42 +110,47 @@ impl Api {
 
     /// `sink` получает события и use cases, и слоя auth; `audit` — то, что отдаёт `audit_events`.
     pub(crate) fn build(proxies: &str, sink: Arc<dyn AuditSink>, audit: Arc<MemoryAudit>) -> Self {
-        Self::build_with(proxies, sink, audit, ProxyRouters::default())
+        Self::build_with(proxies, sink, audit, Arc::new(NoUpstream), |_| {
+            ProxyRouters::default()
+        })
     }
 
-    /// Рядом с hosted-репозиториями монтируются готовые proxy-routers.
-    pub(crate) fn with_proxy_repos(proxy_repos: Vec<(String, Router)>) -> Self {
+    /// Рядом с hosted-репозиториями монтируется cargo proxy-router над тем же `Registry`.
+    pub(crate) fn with_proxy(proxy: &proxy::Proxy) -> Self {
         let audit = Arc::new(MemoryAudit::default());
-        Self::build_with(
-            "",
-            audit.clone(),
-            audit,
+        Self::build_with("", audit.clone(), audit, Arc::new(NoUpstream), |registry| {
             ProxyRouters {
-                cargo: proxy_repos,
+                cargo: vec![(proxy::NAME.to_owned(), proxy.router(registry.clone()))],
                 npm: Vec::new(),
-            },
-        )
+            }
+        })
     }
 
-    /// Рядом с hosted-репозиториями монтируются готовые proxy-routers npm.
-    pub(crate) fn with_npm_proxy_repos(npm: Vec<(String, Router)>) -> Self {
+    /// Рядом с hosted-репозиториями монтируется npm proxy-router над тем же `Registry`.
+    pub(crate) fn with_npm_proxy(proxy: &proxy::NpmProxy) -> Self {
         let audit = Arc::new(MemoryAudit::default());
-        Self::build_with(
-            "",
-            audit.clone(),
-            audit,
+        Self::build_with("", audit.clone(), audit, Arc::new(NoUpstream), |registry| {
             ProxyRouters {
                 cargo: Vec::new(),
-                npm,
-            },
-        )
+                npm: vec![(proxy::NPM_NAME.to_owned(), proxy.router(registry.clone()))],
+            }
+        })
+    }
+
+    /// Публичный реестр отвечает на вопрос «знаешь ли имя» заданным ответом.
+    pub(crate) fn with_upstream(upstream: Arc<dyn UpstreamNames>) -> Self {
+        let audit = Arc::new(MemoryAudit::default());
+        Self::build_with("", audit.clone(), audit, upstream, |_| {
+            ProxyRouters::default()
+        })
     }
 
     fn build_with(
         proxies: &str,
         sink: Arc<dyn AuditSink>,
         audit: Arc<MemoryAudit>,
-        proxy_repos: ProxyRouters,
+        upstream: Arc<dyn UpstreamNames>,
+        mount: impl FnOnce(&Arc<TestRegistry>) -> ProxyRouters,
     ) -> Self {
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let ids = Arc::new(SequentialIdGen::default());
@@ -164,9 +175,11 @@ impl Api {
             catalog,
             MemoryBlobStore::default(),
             clock.clone(),
-            ids,
+            ids.clone(),
             sink.clone(),
+            upstream,
         ));
+        let proxy_repos = mount(&registry);
         let router = api_router(
             registry.clone(),
             FormatSettings {
@@ -193,9 +206,11 @@ impl Api {
         Self {
             runtime,
             router,
-            admin: admin_router(registry),
+            admin: admin_router(registry.clone()),
             audit,
             clock,
+            registry,
+            ids,
         }
     }
 

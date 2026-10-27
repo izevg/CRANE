@@ -2,8 +2,8 @@ use std::future::Future;
 use std::time::SystemTime;
 
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, RepositoryId, Version,
-    VersionId, VersionState,
+    Asset, Format, FormatMetadata, Namespace, PackageName, PackageVersion, Repository,
+    RepositoryId, Version, VersionId, VersionState,
 };
 
 /// Версия к публикации. `yanked` при публикации всегда `false`, а `deprecated` — `None`, поэтому полей нет.
@@ -130,4 +130,32 @@ pub trait Catalog: Send + Sync {
         from: VersionState,
         to: VersionState,
     ) -> impl Future<Output = Result<(), CatalogError>> + Send;
+
+    /// Самый специфичный namespace формата, покрывающий имя: перебор в порядке
+    /// `NamespacePattern::covering` (точное имя, затем от длинного префикса к короткому),
+    /// возвращается первое сохранённое совпадение. Нет покрытия: `None`.
+    fn namespace_for(
+        &self,
+        format: Format,
+        name: &PackageName,
+    ) -> impl Future<Output = Result<Option<Namespace>, CatalogError>> + Send;
+
+    /// Есть ли пакет с этим нормализованным именем хотя бы в одном hosted-репозитории формата
+    /// (версий может быть сколько угодно, в том числе только `Deleted`).
+    ///
+    /// Несущий инвариант: строки пакетов не удаляются никогда (исчезают только версии,
+    /// остаются tombstone), поэтому строка пакета и есть резервирование имени, а защита
+    /// от dependency confusion опирается именно на это.
+    fn hosted_exists(
+        &self,
+        format: Format,
+        name: &PackageName,
+    ) -> impl Future<Output = Result<bool, CatalogError>> + Send;
+
+    /// Идемпотентно по `(format, pattern)`: если namespace есть, возвращает сохранённый
+    /// (владелец остаётся прежним), а переданный владелец игнорируется.
+    fn ensure_namespace(
+        &self,
+        namespace: Namespace,
+    ) -> impl Future<Output = Result<Namespace, CatalogError>> + Send;
 }

@@ -1,7 +1,5 @@
 //! Обработчик proxy-репозитория npm.
 
-use std::sync::Arc;
-
 use axum::body::Body;
 use axum::extract::{Extension, Path, State};
 use axum::http::{HeaderMap, Method, StatusCode, header};
@@ -17,20 +15,20 @@ use crane_format_npm::{
     Route, TarballBase, TarballError, View, content_type, render_upstream, tarball,
 };
 use crane_ports::proxy::{FetchLeases, ProxyCache, Upstream};
-use crane_ports::registry::BlobStore;
+use crane_ports::registry::{BlobStore, Catalog};
 use tracing::warn;
 
-use super::Shared;
+use super::{Handle, Shared};
 use crate::context::CacheFacts;
 use crate::error::{ClientError, chain};
 use crate::npm::{parse_route, service_reply};
-use crate::serve::{document_response, failure, respond, with_facts};
+use crate::serve::{document_response, refuse, respond, with_facts};
 
 const OCTET_STREAM: &str = "application/octet-stream";
 const UPSTREAM_DETAIL: &str = "upstream недоступен";
 
-pub(super) async fn handle<U, PC, L, B>(
-    State(shared): State<Arc<Shared<U, PC, L, B>>>,
+pub(super) async fn handle<U, PC, L, B, RC, RB>(
+    State(shared): State<Handle<U, PC, L, B, RC, RB>>,
     Extension(caller): Extension<Caller>,
     Path(path): Path<String>,
     method: Method,
@@ -42,6 +40,8 @@ where
     PC: ProxyCache + 'static,
     L: FetchLeases + 'static,
     B: BlobStore + 'static,
+    RC: Catalog + 'static,
+    RB: BlobStore + 'static,
 {
     let route = match parse_route(&method, &path) {
         Ok(route) => route,
@@ -53,9 +53,16 @@ where
     match route {
         Route::Packument { package } => {
             let accept = headers.get(header::ACCEPT).and_then(|v| v.to_str().ok());
-            packument(&shared, &package, View::from_accept(accept), if_none_match).await
+            packument(
+                &shared,
+                &caller,
+                &package,
+                View::from_accept(accept),
+                if_none_match,
+            )
+            .await
         }
-        Route::Tarball { package, file } => artifact(&shared, &package, &file).await,
+        Route::Tarball { package, file } => artifact(&shared, &caller, &package, &file).await,
         Route::Write { .. }
         | Route::DeleteTarball { .. }
         | Route::DeletePackage { .. }
@@ -70,8 +77,9 @@ where
     }
 }
 
-async fn packument<U, PC, L, B>(
-    shared: &Shared<U, PC, L, B>,
+async fn packument<U, PC, L, B, RC, RB>(
+    shared: &Shared<U, PC, L, B, RC, RB>,
+    caller: &Caller,
     package: &PackageName,
     view: View,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
@@ -81,8 +89,10 @@ where
     PC: ProxyCache + 'static,
     L: FetchLeases + 'static,
     B: BlobStore + 'static,
+    RC: Catalog + 'static,
+    RB: BlobStore + 'static,
 {
-    respond(shared.packument(package).await, |raw| {
+    respond(shared.packument(caller, package).await, |raw| {
         let body =
             render_upstream(&raw, package, view, TarballBase(&shared.base)).map_err(|error| {
                 // Upstream прислал мусор: клиенту — 502, подробности только журналу.
@@ -93,8 +103,9 @@ where
     })
 }
 
-async fn artifact<U, PC, L, B>(
-    shared: &Shared<U, PC, L, B>,
+async fn artifact<U, PC, L, B, RC, RB>(
+    shared: &Shared<U, PC, L, B, RC, RB>,
+    caller: &Caller,
     package: &PackageName,
     file: &str,
 ) -> Response
@@ -103,10 +114,12 @@ where
     PC: ProxyCache + 'static,
     L: FetchLeases + 'static,
     B: BlobStore + 'static,
+    RC: Catalog + 'static,
+    RB: BlobStore + 'static,
 {
-    let document = match shared.packument(package).await {
+    let document = match shared.packument(caller, package).await {
         Ok(document) => document,
-        Err(error) => return failure(error),
+        Err(refusal) => return refuse(refusal),
     };
     // Ревалидация документа здесь не запускается: она ленивая и брошенной ничего не стоит,
     // а свежесть документа поддерживают его собственные запросы.

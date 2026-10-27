@@ -79,7 +79,7 @@ fn accepted_token_records_no_authentication_event() {
 }
 
 #[test]
-fn publish_records_one_success_attributed_to_the_configured_principal() {
+fn publish_records_success_attributed_to_the_configured_principal() {
     // Arrange
     let api = Api::new();
 
@@ -89,7 +89,8 @@ fn publish_records_one_success_attributed_to_the_configured_principal() {
     // Assert
     assert_eq!(reply.status, 200);
     let events = api.audit_events();
-    assert_eq!(events.len(), 1);
+    // Публикация нового имени даёт два события: Publish и захват имени Reserve.
+    assert_eq!(events.len(), 2);
     assert_eq!(
         (
             events[0].actor.clone(),
@@ -120,5 +121,9 @@ fn reads_add_no_events_to_the_journal() {
 
     // Assert
     assert_eq!(reply.status, 200);
-    assert_eq!(api.audit_events().len(), 1, "только событие публикации");
+    assert_eq!(
+        api.audit_events().len(),
+        2,
+        "только события публикации: Publish и Reserve"
+    );
 }

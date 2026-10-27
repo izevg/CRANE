@@ -18,3 +18,4 @@ pub use auth::StaticToken;
 pub use cargo::{CargoProxyOrigins, CargoSettings, cargo_proxy_router};
 pub use context::{ACCESS_TARGET, ProxyParseError, TrustedProxies};
 pub use npm::{NpmSettings, npm_proxy_router};
+pub use serve::EngineUpstreamNames;

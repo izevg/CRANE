@@ -19,6 +19,7 @@ const INTERNAL_DETAIL: &str = "внутренняя ошибка сервера"
 const UNREACHABLE_DETAIL: &str = "хранилище временно недоступно";
 const NOT_READY_DETAIL: &str = "хранилище не готово";
 const UPSTREAM_DETAIL: &str = "upstream недоступен";
+const NOT_FOUND_DETAIL: &str = "не найдено";
 
 /// Что именно писать в тело ошибки. Ответ несёт его в расширениях с пустым телом:
 /// id запроса известен только внешнему слою, он и рендерит тело (`context::render`).
@@ -56,7 +57,7 @@ impl ClientError {
     }
 
     pub(crate) fn not_found() -> Self {
-        Self::new(StatusCode::NOT_FOUND, "не найдено")
+        Self::new(StatusCode::NOT_FOUND, NOT_FOUND_DETAIL)
     }
 
     /// 500 с обобщённым текстом: причину видит только журнал.
@@ -207,13 +208,23 @@ fn describe(error: &RegistryError) -> ClientError {
         RegistryError::Unavailable {
             state: VersionState::Deleted,
         } => StatusCode::GONE,
-        RegistryError::Unavailable { .. } | RegistryError::DeleteWindowClosed => {
-            StatusCode::FORBIDDEN
+        RegistryError::Unavailable { .. }
+        | RegistryError::DeleteWindowClosed
+        | RegistryError::NamespaceOwned
+        | RegistryError::PublicName => StatusCode::FORBIDDEN,
+        RegistryError::DigestMismatch { .. } | RegistryError::UnscopedName => {
+            StatusCode::UNPROCESSABLE_ENTITY
         }
-        RegistryError::DigestMismatch { .. } => StatusCode::UNPROCESSABLE_ENTITY,
         RegistryError::Body(_) => StatusCode::BAD_REQUEST,
         RegistryError::Unreachable(_) => return ClientError::unreachable(error),
-        RegistryError::Backend(_) => return ClientError::internal(error),
+        // Внутреннее имя для клиента неотличимо от отсутствующего: причину не раскрываем.
+        RegistryError::Shadowed => {
+            return ClientError::new(StatusCode::NOT_FOUND, NOT_FOUND_DETAIL);
+        }
+        RegistryError::UpstreamUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+        RegistryError::NamespaceConflict | RegistryError::Backend(_) => {
+            return ClientError::internal(error);
+        }
     };
     ClientError::new(status, error.to_string())
 }

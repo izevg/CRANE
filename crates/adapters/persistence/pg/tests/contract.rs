@@ -6,7 +6,7 @@
 )]
 mod support;
 
-use crane_ports::contract::catalog_contract;
+use crane_ports::contract::{catalog_contract, namespace_contract};
 use tokio::runtime::Handle;
 use tokio::task::block_in_place;
 
@@ -18,5 +18,14 @@ fn pg_catalog_satisfies_catalog_contract() {
         let handle = Handle::current();
 
         catalog_contract(|| block_in_place(|| handle.block_on(server.fresh_catalog()))).await;
+    });
+}
+
+#[test]
+fn pg_catalog_satisfies_namespace_contract() {
+    support::run(async |server| {
+        let handle = Handle::current();
+
+        namespace_contract(|| block_in_place(|| handle.block_on(server.fresh_catalog()))).await;
     });
 }

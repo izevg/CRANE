@@ -17,10 +17,10 @@ fn dist_tags_uri(name: &str) -> String {
 fn dist_tags_can_be_added_listed_and_removed() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
-    let tag_uri = format!("{}/next", dist_tags_uri("left-pad"));
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
+    let tag_uri = format!("{}/next", dist_tags_uri("@acme/left-pad"));
     let added = api.npm(Method::PUT, &tag_uri, br#""1.0.0""#.to_vec());
-    let listed: Value = api.npm_get(&dist_tags_uri("left-pad")).json();
+    let listed: Value = api.npm_get(&dist_tags_uri("@acme/left-pad")).json();
 
     // Act
     let removed = api.npm(Method::DELETE, &tag_uri, Vec::new());
@@ -30,7 +30,7 @@ fn dist_tags_can_be_added_listed_and_removed() {
     assert_eq!(listed, json!({"latest": "1.0.0", "next": "1.0.0"}));
     assert_eq!(removed.status, StatusCode::OK);
     assert_eq!(
-        api.npm_get(&dist_tags_uri("left-pad")).json(),
+        api.npm_get(&dist_tags_uri("@acme/left-pad")).json(),
         json!({"latest": "1.0.0"})
     );
 }
@@ -39,8 +39,8 @@ fn dist_tags_can_be_added_listed_and_removed() {
 fn dist_tag_errors_are_reported_to_the_client() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
-    let base = dist_tags_uri("left-pad");
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
+    let base = dist_tags_uri("@acme/left-pad");
     let cases = [
         (Method::DELETE, format!("{base}/latest"), Vec::new()),
         (Method::DELETE, format!("{base}/missing"), Vec::new()),

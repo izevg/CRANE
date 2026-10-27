@@ -3,9 +3,10 @@ use std::time::SystemTime;
 use crane_domain::access::Caller;
 use crane_domain::audit::AuditAction;
 use crane_domain::registry::{
-    Asset, Coordinate, DeletePolicy, Format, PackageName, PackageVersion, RepositoryKind,
-    VersionId, VersionState,
+    Asset, Coordinate, DeletePolicy, Format, Namespace, NamespacePattern, PackageName,
+    PackageVersion, Repository, RepositoryKind, VersionId, VersionState, hosted_name_allowed,
 };
+use crane_ports::proxy::Presence;
 use crane_ports::registry::{BlobStore, Catalog, CatalogError, NewVersion};
 
 use super::{Publish, Registry, RegistryError, Upload};
@@ -20,12 +21,25 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         request: Publish,
     ) -> Result<PackageVersion, RegistryError> {
         let action = AuditAction::Publish(request.coordinate.clone());
-        let result = self.try_publish(request).await;
+        let (result, claim) = match self.try_publish(request).await {
+            Ok((published, claim)) => (Ok(published), claim),
+            Err(error) => (Err(error), None),
+        };
         self.audited(caller, action, &result);
+        // Отступление от «одно событие на use case»: захват имени - отдельный факт
+        // безопасности (с него имя становится внутренним), и аудитору он нужен как
+        // самостоятельная запись, а не как догадка по первой публикации.
+        if let Some(claim) = claim {
+            self.audited(caller, AuditAction::Reserve(claim), &result);
+        }
         result
     }
 
-    async fn try_publish(&self, request: Publish) -> Result<PackageVersion, RegistryError> {
+    /// Кроме версии отдаёт namespace точного имени, если публикация захватила новое имя.
+    async fn try_publish(
+        &self,
+        request: Publish,
+    ) -> Result<(PackageVersion, Option<Namespace>), RegistryError> {
         let Publish {
             coordinate,
             file,
@@ -38,6 +52,10 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         if repository.kind != RepositoryKind::Hosted {
             return Err(RegistryError::NotHosted);
         }
+
+        let claim = self
+            .admit_publication(&repository, coordinate.format, &coordinate.package)
+            .await?;
 
         // Отказ до чтения тела и без blob-«сироты» в CAS; гонку после предпроверки
         // ловит `publish_version` каталога.
@@ -67,7 +85,64 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
                 tags,
             })
             .await?;
-        Ok(published)
+        Ok((published, claim))
+    }
+
+    /// Защита от dependency confusion при публикации: имя должно быть допустимо для формата,
+    /// не принадлежать чужому namespace, а новое имя - не быть известно публичному upstream.
+    /// Возвращает namespace точного имени, если публикация захватывает новое имя.
+    ///
+    /// Захват не пишет отдельной строки: первая версия создаёт строку пакета атомарно
+    /// в `publish_version`, и эта строка (их не удаляют) и есть резервирование.
+    async fn admit_publication(
+        &self,
+        repository: &Repository,
+        format: Format,
+        package: &PackageName,
+    ) -> Result<Option<Namespace>, RegistryError> {
+        if !hosted_name_allowed(format, package) {
+            return Err(RegistryError::UnscopedName);
+        }
+        let claim = match self.catalog.namespace_for(format, package).await? {
+            Some(namespace) if namespace.workspace != repository.workspace() => {
+                return Err(RegistryError::NamespaceOwned);
+            }
+            // Имя под собственным namespace уже зарезервировано: upstream не спрашиваем.
+            Some(_) => false,
+            None if self.catalog.hosted_exists(format, package).await? => false,
+            None => match self.upstream.presence(format, package).await {
+                Presence::Absent => true,
+                Presence::Public => return Err(RegistryError::PublicName),
+                Presence::Unknown => return Err(RegistryError::UpstreamUnavailable),
+            },
+        };
+        Ok(claim.then(|| Namespace {
+            format,
+            pattern: NamespacePattern::exact(package),
+            workspace: repository.workspace(),
+        }))
+    }
+
+    /// Резервирует namespace: идемпотентно по `(format, pattern)`; чужой владелец даёт
+    /// `NamespaceConflict`. Аудируется всегда, успех и отказ.
+    ///
+    /// В v0.2.0 вызывает только конфигурация сервера (власть платформы).
+    // Крючок v0.4.0: пересечения и вырезание вложенного namespace чужого workspace
+    // (только platform-admin со step-up) и решение Cedar - здесь, до `ensure_namespace`.
+    pub async fn reserve(
+        &self,
+        caller: &Caller,
+        namespace: Namespace,
+    ) -> Result<Namespace, RegistryError> {
+        let action = AuditAction::Reserve(namespace.clone());
+        let requested = namespace.workspace;
+        let result = match self.catalog.ensure_namespace(namespace).await {
+            Ok(stored) if stored.workspace == requested => Ok(stored),
+            Ok(_) => Err(RegistryError::NamespaceConflict),
+            Err(error) => Err(error.into()),
+        };
+        self.audited(caller, action, &result);
+        result
     }
 
     /// Складывает тело во временную зону, сверяет заявленные клиентом суммы и только

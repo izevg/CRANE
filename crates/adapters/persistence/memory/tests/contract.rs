@@ -5,12 +5,18 @@ use crane_memory::{
     ManualClock, MemoryBlobStore, MemoryCatalog, MemoryFetchLeases, MemoryProxyCache,
 };
 use crane_ports::contract::{
-    blob_store_contract, catalog_contract, fetch_leases_contract, proxy_cache_contract,
+    blob_store_contract, catalog_contract, fetch_leases_contract, namespace_contract,
+    proxy_cache_contract,
 };
 
 #[test]
 fn memory_catalog_satisfies_catalog_contract() {
     futures_executor::block_on(catalog_contract(MemoryCatalog::default));
+}
+
+#[test]
+fn memory_catalog_satisfies_namespace_contract() {
+    futures_executor::block_on(namespace_contract(MemoryCatalog::default));
 }
 
 #[test]
