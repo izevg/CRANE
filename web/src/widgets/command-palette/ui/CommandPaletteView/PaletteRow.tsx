@@ -7,7 +7,7 @@ import { Badge } from "~/shared/ui/primitives";
 import type { PaletteOption } from "../../lib/palette/model";
 
 const ITEM =
-  "flex min-h-9 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-body outline-hidden data-highlighted:bg-accent data-disabled:cursor-not-allowed data-disabled:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0";
+  "flex min-h-9 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-body outline-hidden data-highlighted:bg-accent data-highlighted:outline-2 data-highlighted:-outline-offset-2 data-highlighted:outline-ring forced-colors:data-highlighted:outline-[Highlight] data-disabled:cursor-not-allowed data-disabled:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0";
 const ICON = "text-muted-foreground";
 const CAPTION = "shrink-0 text-caption text-muted-foreground";
 const LABEL = "min-w-0 flex-1 truncate";

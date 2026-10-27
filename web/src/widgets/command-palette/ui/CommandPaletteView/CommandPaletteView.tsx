@@ -11,6 +11,7 @@ import {
   type PaletteGroup,
   type PaletteOption,
   pickTarget,
+  resultsStatus,
 } from "../../lib/palette/model";
 import { PaletteRow } from "./PaletteRow";
 
@@ -154,6 +155,7 @@ export function CommandPaletteView({
     [onNavigate, handleOpenChange],
   );
 
+  const statusText = packagesLoading ? SEARCHING : resultsStatus({ query: value, groups });
   const showSkeletons = packagesLoading && packages.length === 0;
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -174,9 +176,7 @@ export function CommandPaletteView({
             placeholder={PLACEHOLDER}
             className="h-12 w-full border-b border-border bg-transparent px-4 text-body text-foreground outline-hidden placeholder:text-hint"
           />
-          <Autocomplete.Status className="sr-only">
-            {packagesLoading ? SEARCHING : null}
-          </Autocomplete.Status>
+          <Autocomplete.Status className="sr-only">{statusText}</Autocomplete.Status>
           <Groups onPick={handlePick} />
           {showSkeletons ? <Skeletons /> : null}
           {packagesLoading ? null : (

@@ -217,4 +217,38 @@ describe("CommandPaletteView", () => {
     // Assert
     expect(within(option).getByText("MFA")).toBeInTheDocument();
   });
+
+  it("после загрузки пакетов статус объявляет число результатов", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const props = {
+      open: true,
+      onOpenChange: vi.fn(),
+      onQueryChange: vi.fn(),
+      onNavigate: vi.fn(),
+      navigation: [],
+      actions: [],
+    };
+    const { rerender } = render(<CommandPaletteView {...props} packages={[]} packagesLoading />);
+    await user.type(screen.getByRole("combobox", { name: NAME }), "left");
+
+    // Act
+    rerender(<CommandPaletteView {...props} packages={packages} packagesLoading={false} />);
+
+    // Assert
+    expect(await screen.findByText("Результатов: 1")).toBeInTheDocument();
+  });
+
+  it("стрелка вниз подсвечивает пункт атрибутом data-highlighted", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByRole("combobox", { name: NAME }));
+
+    // Act
+    await user.keyboard("{ArrowDown}");
+
+    // Assert
+    expect(screen.getByRole("option", { name: NAV_PACKAGES })).toHaveAttribute("data-highlighted");
+  });
 });
