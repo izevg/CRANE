@@ -57,7 +57,8 @@ describe("EmptyState", () => {
     render(<EmptyState variant="first-run" title="Пакетов пока нет" secondary={secondary} />);
 
     // Assert
-    expect(screen.queryByRole("button", { name: "Как опубликовать" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Импорт из Nexus" })).toBeInTheDocument();
   });
 
