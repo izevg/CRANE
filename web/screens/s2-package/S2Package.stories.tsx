@@ -211,7 +211,7 @@ function RightColumn({ proxy }: { proxy: boolean }) {
           items={[
             {
               label: "PURL",
-              value: <CopyableId value="pkg:npm/%40acme/ui@1.4.2" label="Скопировать PURL" />,
+              value: <CopyableId plain value="pkg:npm/%40acme/ui@1.4.2" label="Скопировать PURL" />,
             },
             {
               label: "SHA-256",

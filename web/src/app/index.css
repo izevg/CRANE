@@ -50,6 +50,8 @@
   --color-hint: var(--hint);
   --color-surface-high: var(--surface-high);
   --color-surface-highest: var(--surface-highest);
+  --color-char-digit: var(--char-digit);
+  --color-char-symbol: var(--char-symbol);
   --color-inverse: var(--inverse);
   --color-inverse-foreground: var(--inverse-foreground);
   --color-success: var(--success);

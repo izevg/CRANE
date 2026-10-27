@@ -17,7 +17,9 @@ export const Truncated: Story = {
   name: "Усечение в середине, полное значение в имени",
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText("0192…6973")).toBeInTheDocument();
+    await expect(canvasElement.querySelector("[data-slot=machine-value]")).toHaveTextContent(
+      "0192…6973",
+    );
     await expect(canvas.getByRole("button")).toHaveAccessibleName(`Скопировать ID: ${REQUEST_ID}`);
     await expect(canvas.getByTitle(REQUEST_ID)).toBeInTheDocument();
   },

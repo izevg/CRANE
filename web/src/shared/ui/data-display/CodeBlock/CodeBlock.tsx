@@ -2,6 +2,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { cx } from "~/shared/lib/core";
 import { CopyButton } from "../../actions";
+import { MachineValue } from "../../primitives";
 
 const DEFAULT_LABEL = "Код";
 
@@ -13,6 +14,8 @@ type CodeBlockProps = {
   label?: string;
   /** Переносить длинные строки; по умолчанию строки прокручиваются по горизонтали. */
   wrap?: boolean;
+  /** Секрет, хэш или токен: символы красятся по классам (до 64 знаков). Для команд и конфигов не включать. */
+  machine?: boolean;
 };
 
 /**
@@ -25,6 +28,7 @@ export function CodeBlock({
   copyLabel,
   label = DEFAULT_LABEL,
   wrap = false,
+  machine = false,
 }: CodeBlockProps) {
   const ref = useRef<HTMLPreElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: смена текста не меняет размер рамки, но меняет переполнение
@@ -64,7 +68,9 @@ export function CodeBlock({
           wrap ? "whitespace-pre-wrap wrap-anywhere" : "whitespace-pre",
         )}
       >
-        <code>{code}</code>
+        <code>
+          <MachineValue value={code} plain={!machine} />
+        </code>
       </pre>
     </div>
   );

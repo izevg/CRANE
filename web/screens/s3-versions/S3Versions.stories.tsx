@@ -254,7 +254,7 @@ function SummaryTab() {
       </Callout>
       <KeyValueList
         items={[
-          { label: "PURL", value: <CopyableId value={PURL} full label="Скопировать PURL" /> },
+          { label: "PURL", value: <CopyableId plain value={PURL} full label="Скопировать PURL" /> },
           { label: "Опубликована", value: "27.10.2026, 13:42" },
           { label: "Кем", value: "crr_9f8e7d6c · ui-release" },
           { label: "Размер", value: format.bytes(188_416) },

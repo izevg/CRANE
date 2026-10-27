@@ -21,7 +21,12 @@ describe("CopyableId", () => {
     render(<CopyableId value={value} />);
 
     // Assert
-    expect(screen.getByText("a88d…6973")).toBeInTheDocument();
+    const marked = screen.getByText(
+      (_, element) =>
+        element?.getAttribute("data-slot") === "machine-value" &&
+        element.textContent === "a88d…6973",
+    );
+    expect(marked).toBeInTheDocument();
   });
 
   it("полное значение есть в доступном имени кнопки", () => {

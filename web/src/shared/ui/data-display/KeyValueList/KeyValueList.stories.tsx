@@ -13,7 +13,7 @@ const meta = {
   args: {
     items: [
       { label: "Формат", value: <Badge variant="outline">npm</Badge> },
-      { label: "PURL", value: <CopyableId value={PURL} full label="Скопировать PURL" /> },
+      { label: "PURL", value: <CopyableId plain value={PURL} full label="Скопировать PURL" /> },
       { label: "SHA-256", value: <CopyableId value={SHA} label="Скопировать SHA-256" /> },
       { label: "Размер", value: "184 КБ" },
       { label: "Лицензия", value: "Apache-2.0" },

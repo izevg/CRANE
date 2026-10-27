@@ -40,6 +40,13 @@
   --surface-highest: #d0d1d5;
   --inverse: #29303e;
   --inverse-foreground: #f9f9f9;
+
+  /* Цветовая разметка машинных значений (patterns §«Машинные значения»); буквы остаются --foreground */
+  --char-digit: #4338ca;
+  --char-symbol: #2f7065;
+  /* На инверсной поверхности (Tooltip) значения меняются местами: светлая тема даёт тёмный тултип */
+  --char-digit-inverse: #a99cf7;
+  --char-symbol-inverse: #8ab8ad;
   --scrim: rgb(41 48 62 / 0.5);
 
   /* статусы: fg (текст/иконка), bg (контейнер), strong (точка/линия) */
@@ -151,6 +158,11 @@
   --surface-highest: #343a48;
   --inverse: #ecedef;
   --inverse-foreground: #29303e;
+
+  --char-digit: #a99cf7;
+  --char-symbol: #8ab8ad;
+  --char-digit-inverse: #4338ca;
+  --char-symbol-inverse: #2f7065;
   --scrim: rgb(0 0 0 / 0.6);
 
   --success: #86efac;

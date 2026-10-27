@@ -45,7 +45,7 @@ export function TooltipContent({
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cx(
-            "anim-fade z-50 inline-flex w-fit max-w-xs items-center gap-1.5 rounded-sm bg-inverse px-3 py-1.5 text-caption text-inverse-foreground has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:border-transparent **:data-[slot=kbd]:bg-inverse-foreground/15 **:data-[slot=kbd]:text-inverse-foreground",
+            "anim-fade z-50 inline-flex [--char-digit:var(--char-digit-inverse)] [--char-symbol:var(--char-symbol-inverse)] w-fit max-w-xs items-center gap-1.5 rounded-sm bg-inverse px-3 py-1.5 text-caption text-inverse-foreground has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:border-transparent **:data-[slot=kbd]:bg-inverse-foreground/15 **:data-[slot=kbd]:text-inverse-foreground",
             className,
           )}
           {...props}
