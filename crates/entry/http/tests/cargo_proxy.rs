@@ -13,10 +13,9 @@ use std::time::Duration;
 
 use axum::http::{Method, StatusCode};
 use common::proxy::{FakeUpstream, NAME, Proxy, Step};
-use common::{Api, PUBLIC_URL, REPO, Reply, SharedBuf, TOKEN, sha256_hex};
+use common::{Api, PUBLIC_URL, REPO, Reply, TOKEN, capture_logs, sha256_hex};
 use crane_domain::proxy::EgressRefusal;
 use crane_memory::ManualClock;
-use tracing_subscriber::fmt;
 
 const INDEX_PATH: &str = "se/rd/serde";
 const INDEX_URI: &str = "/cargo/crates-io/index/se/rd/serde";
@@ -58,18 +57,9 @@ fn download_uri(name: &str, version: &str) -> String {
 
 /// Один запрос с токеном под перехватом JSON-журнала, как его пишет сервер.
 fn logged(api: &Api, uri: &str, headers: &[(&str, &str)]) -> (Reply, String) {
-    let buffer = SharedBuf::default();
-    let subscriber = fmt()
-        .json()
-        .flatten_event(true)
-        .with_writer(buffer.clone())
-        .finish();
     let mut all = vec![("authorization", TOKEN)];
     all.extend_from_slice(headers);
-    let reply = tracing::subscriber::with_default(subscriber, || {
-        api.with_headers(Method::GET, uri, &all, Vec::new())
-    });
-    (reply, buffer.text())
+    capture_logs(|| api.with_headers(Method::GET, uri, &all, Vec::new()))
 }
 
 #[test]
