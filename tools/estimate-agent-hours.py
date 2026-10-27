@@ -4,7 +4,11 @@
 Эталон замерен по git-истории и файлам (непустые строки, без lock-файлов,
 сгенерированного кода, импортированных спецификаций и бинарных файлов).
 Запуск: python3 tools/estimate-agent-hours.py [--start ГГГГ-ММ-ДД] [--holidays ГГГГ-ММ-ДД ...] [--gantt]
-С --start печатает календарь релизов по трём сценариям (рабочие дни пн–пт, нерабочие даты задаются --holidays).
+                                              [--parallel N] [--hours Ч] [--every-day]
+С --start печатает календарь релизов по трём сценариям (рабочие дни пн–пт, нерабочие даты задаются --holidays)
+и календарь base по наблюдению 27.10 (5 × 12, без выходных, OBSERVED) независимо от --parallel, --hours и --every-day.
+--parallel и --hours задают ёмкость (параллельных веток, часов в рабочий день; по умолчанию 4 × 8, BASE),
+--every-day снимает выходные (по умолчанию пн–пт); все три меняют все расчёты в днях и датах.
 С --gantt дополнительно печатает диаграмму Ганта (Mermaid) для базового сценария.
 Работы «после v1» считаются в итоге, но в календарь и диаграмму не попадают.
 """
@@ -94,11 +98,13 @@ EXTRA = [
 CALENDAR = [
     ("Нагрузочный PoC на целевом железе", POST_V1, 3),
     ("Пентест (Strix) на реальном корпоративном реестре", POST_V1, 7),
+    # RC ждёт обратной связи, а не работы: длительность в днях календаря сценария, число веток её не ускоряет
     ("Release candidate: стабилизация и обратная связь", "P1", 5),  # допущение, уточняется по ходу
 ]
 SCENARIO_COMPLEXITY = {"low": 0.9, "base": 1.0, "high": 1.25}
-PARALLEL = 4             # одновременно работающих агентов
-AGENT_H_PER_DAY = 8      # часов работы агентов в рабочий день
+# ёмкость: (имя, параллельных веток, часов в рабочий день, работа и в выходные)
+BASE = ("база плана: 4 × 8 ч", 4, 8, False)  # на ней посчитаны даты ROADMAP
+OBSERVED = ("по наблюдению 27.10: 5 веток × 12 ч, 7 дней в неделю", 5, 12, True)  # обоснование — ROADMAP, «Как посчитаны даты»
 OPERATOR_FACTOR = 1.5    # Rust и безопасность требуют больше ревью, чем эталон
 
 
@@ -153,7 +159,7 @@ def estimate(scn):
     return by_stage
 
 
-def main():
+def main(cap):
     print(f"Эталон: {REF_AGENT_H:.0f} агент-ч, {RATE:.2f} агент-ч/KLOC, оператор {OPERATOR_RATIO:.2f} ч на агент-ч")
     rust = sum(m[2] for m in MODULES if m[3] == "rust"); ts = sum(m[2] for m in MODULES if m[3] == "ts")
     print(f"CRANE: Rust {rust:g} KLOC, TypeScript {ts} KLOC")
@@ -162,12 +168,16 @@ def main():
         print(f"\n[{scn}] всего {total:.0f} агент-ч (из них {POST_V1}: {st[POST_V1]:.0f}), "
               f"оператор {total * OPERATOR_RATIO * OPERATOR_FACTOR:.0f} ч")
         for s in ("P0", "P1", "P2", "P3", POST_V1):
-            dev_days = st[s] / (PARALLEL * AGENT_H_PER_DAY)
+            dev_days = st[s] / per_day(cap)
             tail = ""
             if s == POST_V1:
                 tail = f", календарь {sum(d for _, cs, d in CALENDAR if cs == s)} раб. дн., вне графика"
             print(f"  {s}: {st[s]:5.0f} агент-ч, разработка {dev_days:4.1f} раб. дн., "
                   f"оператор {st[s] * OPERATOR_RATIO * OPERATOR_FACTOR:4.0f} ч{tail}")
+        if scn == "base":
+            hours = work_hours(scn)
+            print(f"  Чувствительность, не прогноз: если объём протоколов 50% оценки — "
+                  f"всего {total - hours[module(hours, 'Протоколы:')] / 2:.0f} агент-ч (base)")
     st = estimate("base")
     print("\nМодули (base):")
     for name, stage, kloc, lang, k in MODULES:
@@ -184,6 +194,13 @@ def work_hours(scn):
     return hours
 
 
+def module(hours, prefix):
+    """Имя единственного модуля или работы, начинающихся с prefix."""
+    matches = [n for n in hours if n.startswith(prefix)]
+    assert len(matches) == 1, f"префикс «{prefix}» → {matches}"
+    return matches[0]
+
+
 def release_hours(scn):
     hours = work_hours(scn)
     used = {name: 0.0 for name in hours}
@@ -191,43 +208,48 @@ def release_hours(scn):
     for version, stage, title, parts in RELEASES:
         total = 0.0
         for prefix, share in parts:
-            matches = [n for n in hours if n.startswith(prefix)]
-            assert len(matches) == 1, f"{version}: префикс «{prefix}» → {matches}"
-            total += hours[matches[0]] * share
-            used[matches[0]] += share
+            name = module(hours, prefix)
+            total += hours[name] * share
+            used[name] += share
         result.append((version, stage, title, total))
     unassigned = [n for n, u in used.items() if abs(u - 1) > 1e-9]
     assert not unassigned, f"модули не распределены по релизам ровно один раз: {unassigned}"
     return result
 
 
-def workday(start, offset):
+def workday(start, offset, every_day=False):
     """Дата рабочего дня с номером offset (0 — первый рабочий день не раньше start)."""
+    def off(day):  # --holidays действуют и без выходных
+        return day in HOLIDAYS or (not every_day and day.weekday() >= 5)
     day = start
-    while day.weekday() >= 5 or day in HOLIDAYS:
+    while off(day):
         day += dt.timedelta(days=1)
     for _ in range(offset):
         day += dt.timedelta(days=1)
-        while day.weekday() >= 5 or day in HOLIDAYS:
+        while off(day):
             day += dt.timedelta(days=1)
     return day
 
 
-def schedule(scn, start):
+def per_day(cap):
+    _, parallel, hours, _ = cap
+    return parallel * hours
+
+
+def schedule(scn, start, cap):
     """Календарь релизов. Время — в рабочих днях от start (дробное для работы агентов)."""
-    per_day = PARALLEL * AGENT_H_PER_DAY
     cal = {name: days for name, _, days in CALENDAR}
     rel = {v: (stage, title, h) for v, stage, title, h in release_hours(scn)}
     rows, t = [], 0.0
 
     def dev(version, begin):
         stage, title, h = rel[version]
-        end = begin + h / per_day
+        end = begin + h / per_day(cap)
         return title, h, begin, end
 
     def row(version, title, h, begin, end, note=""):
-        rows.append((version, title, h, workday(start, math.floor(begin)),
-                     workday(start, max(math.ceil(end) - 1, 0)), note))
+        rows.append((version, title, h, workday(start, math.floor(begin), cap[3]),
+                     workday(start, max(math.ceil(end) - 1, 0), cap[3]), note))
 
     for v in ("v0.1.0", "v0.2.0", "v0.3.0", "v0.4.0", "v0.5.0"):
         if v in DONE:
@@ -247,32 +269,33 @@ def schedule(scn, start):
     return rows
 
 
-def print_schedule(start):
-    for scn in ("low", "base", "high"):
-        print(f"\nКалендарь [{scn}] от {start.isoformat()} (4 агента × 8 ч, рабочие дни пн–пт):")
-        for version, title, h, b, e, note in schedule(scn, start):
-            hrs = f"{h:4.0f} агент-ч" if h else " " * 11
-            tail = f"  ({note})" if note else ""
-            print(f"  {version:7} {b.isoformat()} → {e.isoformat()}  {hrs}  {title}{tail}")
+def print_schedule(start, scn, cap):
+    name, _, _, every_day = cap
+    mode = "все дни недели" if every_day else "рабочие дни пн–пт"
+    print(f"\nКалендарь [{scn}] от {start.isoformat()} ({name}, {mode}):")
+    for version, title, h, b, e, note in schedule(scn, start, cap):
+        hrs = f"{h:4.0f} агент-ч" if h else " " * 11
+        tail = f"  ({note})" if note else ""
+        print(f"  {version:7} {b.isoformat()} → {e.isoformat()}  {hrs}  {title}{tail}")
 
 
-def print_gantt(start):
+def print_gantt(start, cap):
     """Диаграмма Ганта (Mermaid) для базового сценария."""
     sections = {"P0": "P0 ядро", "P1": "P1 удобство", "P2": "P2 безопасность", "P3": "P3 развитие"}
     stage = {v: st for v, st, _, _ in RELEASES}
     stage["v1.0.0"] = "P1"
     print("```mermaid")
     print('%%{init: {"gantt": {"fontSize": 14, "sectionFontSize": 14, "barHeight": 26, "barGap": 6, "leftPadding": 150}}}%%')
-    print("gantt\n  todayMarker off\n  dateFormat YYYY-MM-DD\n  axisFormat %d.%m\n  excludes weekends")
+    print("gantt\n  todayMarker off\n  dateFormat YYYY-MM-DD\n  axisFormat %d.%m" + ("" if cap[3] else "\n  excludes weekends"))
     current = None
-    for version, title, _, b, e, note in schedule("base", start):
+    for version, title, _, b, e, note in schedule("base", start, cap):
         if stage[version] != current:
             current = stage[version]
             print(f"  section {sections[current]}")
         label = f"{version} {title.split(':')[0]}".replace(":", " ").replace("(", "").replace(")", "")
         days, day = 0, b
         while day <= e:  # Mermaid с excludes weekends считает только рабочие дни
-            days += day.weekday() < 5 and day not in HOLIDAYS
+            days += (cap[3] or day.weekday() < 5) and day not in HOLIDAYS
             day += dt.timedelta(days=1)
         tag = "done, " if version in DONE else ""
         print(f"  {label} :{tag}{b.isoformat()}, {max(days, 1)}d")
@@ -285,10 +308,21 @@ if __name__ == "__main__":
     parser.add_argument("--holidays", type=dt.date.fromisoformat, nargs="*", default=[],
                         help="нерабочие даты сверх выходных")
     parser.add_argument("--gantt", action="store_true", help="диаграмма Ганта (Mermaid), нужен --start")
+    parser.add_argument("--parallel", type=int, default=BASE[1],
+                        help="параллельных веток (единица нормы эталона), по умолчанию %(default)s")
+    parser.add_argument("--every-day", action="store_true", help="календарь без выходных (по умолчанию пн–пт)")
+    parser.add_argument("--hours", type=float, default=BASE[2],
+                        help="часов работы в рабочий день, 0 < ч ≤ 24, по умолчанию %(default)s")
     args = parser.parse_args()
+    if args.parallel <= 0 or not 0 < args.hours <= 24:
+        parser.error("ёмкость: --parallel > 0 и 0 < --hours ≤ 24")
     HOLIDAYS.update(args.holidays)
-    main()
+    cap = (args.parallel, args.hours, args.every_day)
+    cap = BASE if cap == BASE[1:] else (f"ёмкость: {args.parallel} × {args.hours:g} ч", *cap)
+    main(cap)
     if args.start:
-        print_schedule(args.start)
+        for scn in ("low", "base", "high"):
+            print_schedule(args.start, scn, cap)
+        print_schedule(args.start, "base", OBSERVED)
         if args.gantt:
-            print_gantt(args.start)
+            print_gantt(args.start, cap)
