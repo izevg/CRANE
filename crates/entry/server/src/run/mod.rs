@@ -9,7 +9,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
-use crane_app::proxy::ProxyLimits;
 use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_http::{CargoSettings, StaticToken, admin_router, api_router};
@@ -100,14 +99,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         &catalog,
         ids.as_ref(),
         Arc::clone(&blobs),
-        proxy::Engine {
-            cache: settings.cache,
-            limits: ProxyLimits {
-                max_artifact_bytes: settings.proxy_max_artifact_bytes,
-                ..ProxyLimits::DEFAULT
-            },
-        },
-        &settings.cargo_proxy_repos,
+        settings.proxy,
         &cargo,
     )
     .await?;
@@ -138,7 +130,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
 async fn serve_async(settings: Settings) -> Result<(), RunError> {
     let (http_port, admin_port) = (settings.http_port, settings.admin_port);
     let repos = settings.cargo_repos.clone();
-    let proxy_repos = settings.cargo_proxy_repos.clone();
+    let proxy_repos = settings.proxy.cargo_repos.clone();
     let (api, admin) = routers(settings).await?;
 
     let api_listener = bind(http_port).await?;
