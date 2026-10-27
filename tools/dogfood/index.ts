@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { type Expected, leaks, verify } from "./audit.ts";
 import { scenario, startCargo } from "./cargo.ts";
 import { docker, log, MS_PER_SECOND, warn } from "./exec.ts";
+import { proxyScenario } from "./proxy.ts";
 import { describeStand, type Stand } from "./stand.ts";
 import { parseCargo } from "./versions.ts";
 
@@ -49,13 +50,15 @@ function resolveTargets(which: Which[]): Target[] {
 function exercise(stand: Stand, targets: Target[]): number {
   const expected: Expected[] = [];
   const versions: string[] = [];
-  for (const target of targets) {
+  for (const [index, target] of targets.entries()) {
     const client = startCargo(stand, target.image);
     try {
       log(`${target.image}: cargo ${client.version}`);
       versions.push(client.version);
       expected.push(...scenario(stand, client, target.minor));
       log(`${target.image}: сценарий пройден`);
+      proxyScenario(stand, client, target.minor, index);
+      log(`${target.image}: proxy crates.io пройден`);
     } finally {
       client.stop();
     }

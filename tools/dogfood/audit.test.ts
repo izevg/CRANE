@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { type Expected, leaks, type Mismatch, verify } from "./audit.ts";
+import { accessLines, type Expected, leaks, type Mismatch, verify } from "./audit.ts";
 
 const AGENT = "cargo/1.99.0";
 const PRINCIPAL = "dogfood-1";
@@ -259,5 +259,46 @@ describe("leaks", () => {
 
     // Assert
     assert.deepEqual(found, []);
+  });
+});
+
+describe("accessLines", () => {
+  it("возвращает cache и upstream_failure строк access и пропускает остальные", () => {
+    // Arrange
+    const ndjson = [
+      JSON.stringify({
+        target: "crane::access",
+        path: "/cargo/crates-io/index/se/rd/serde",
+        status: 200,
+        cache: "miss",
+      }),
+      JSON.stringify({
+        target: "crane::access",
+        path: "/cargo/crates-io/api/v1/crates/serde/1.0.0/download",
+        status: 502,
+        upstream_failure: "digest-mismatch",
+      }),
+      JSON.stringify({ target: "crane::audit", class_uid: 3002 }),
+      "не json",
+    ].join("\n");
+
+    // Act
+    const actual = accessLines(ndjson);
+
+    // Assert
+    assert.deepEqual(actual, [
+      {
+        path: "/cargo/crates-io/index/se/rd/serde",
+        status: 200,
+        cache: "miss",
+        failure: undefined,
+      },
+      {
+        path: "/cargo/crates-io/api/v1/crates/serde/1.0.0/download",
+        status: 502,
+        cache: undefined,
+        failure: "digest-mismatch",
+      },
+    ]);
   });
 });

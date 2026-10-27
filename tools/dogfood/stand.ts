@@ -43,6 +43,8 @@ const DIR_MODE = 0o700;
 const ENV_LINE = /^([A-Z][A-Z0-9_]*)=(.*)$/;
 const OVERLAP = /Pool overlaps|invalid pool request/;
 const ENV_DIST = ".env.dist";
+/** Имя proxy-репозитория crates.io на стенде: `/cargo/<имя>/`. */
+export const PROXY_REPO = "crates-io";
 
 const hex = (bytes: number): string => randomBytes(bytes).toString("hex");
 
@@ -167,6 +169,7 @@ function startCompose(
       `POSTGRES_PASSWORD_SECRET=${join(tmp, "postgres_password")}`,
       `CRANE_DATABASE_URL_SECRET=${join(tmp, "database_url")}`,
       `CRANE_TOKEN_PRINCIPAL=${principal}`,
+      `CRANE_CARGO_PROXY_REPOS=${PROXY_REPO}`,
       `CRANE_EDGE_SUBNET=${subnet}`,
       "CADDY_HTTP_PORT=127.0.0.1:",
       "CADDY_HTTPS_PORT=127.0.0.1:",
