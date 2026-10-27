@@ -40,10 +40,11 @@ const CARGO_REPOS: &str = "CRANE_CARGO_REPOS";
 const MAX_PUBLISH_BYTES: &str = "CRANE_MAX_PUBLISH_BYTES";
 const TOKEN_PRINCIPAL: &str = "CRANE_TOKEN_PRINCIPAL";
 const TRUSTED_PROXIES: &str = "CRANE_TRUSTED_PROXIES";
+const CARGO_PROXY_REPOS: &str = "CRANE_CARGO_PROXY_REPOS";
 
 /// Единственный список имён переменных. Ключи файла выводятся из него (`file::variable`),
 /// отдельного перечня в файле нет. `CRANE_CONFIG` сюда не входит намеренно.
-pub(super) const VARS: [&str; 12] = [
+pub(super) const VARS: [&str; 13] = [
     HTTP_PORT,
     ADMIN_PORT,
     PUBLIC_URL,
@@ -56,6 +57,7 @@ pub(super) const VARS: [&str; 12] = [
     DATABASE_URL,
     DATABASE_URL_FILE,
     BLOBS,
+    CARGO_PROXY_REPOS,
 ];
 
 /// Ошибка конфигурации. Значения секретных переменных в тексте не появляются никогда.
@@ -253,6 +255,8 @@ pub(crate) struct Settings {
     pub(crate) public_url: String,
     pub(crate) token: Secret,
     pub(crate) cargo_repos: Vec<String>,
+    /// Имена proxy-репозиториев crates.io; пустой список — proxy выключен.
+    pub(crate) cargo_proxy_repos: Vec<String>,
     pub(crate) max_publish_bytes: usize,
     pub(crate) storage: Storage,
 }
@@ -262,6 +266,8 @@ impl Settings {
         var: &impl Fn(&str) -> Option<String>,
         read_file: &impl Fn(&Path) -> io::Result<String>,
     ) -> Result<Self, ConfigError> {
+        let cargo_repos = repos(var)?;
+        let cargo_proxy_repos = proxy_repos(var, &cargo_repos)?;
         Ok(Self {
             principal: principal(var)?,
             trusted_proxies: trusted_proxies(var)?,
@@ -269,7 +275,8 @@ impl Settings {
             admin_port: admin_port(var)?,
             public_url: public_url(var)?,
             token: secret(var, read_file, TOKEN, TOKEN_FILE)?,
-            cargo_repos: repos(var)?,
+            cargo_repos,
+            cargo_proxy_repos,
             max_publish_bytes: max_publish_bytes(var)?,
             storage: Storage::from_env(var, read_file)?,
         })
@@ -410,6 +417,46 @@ fn repos(var: &impl Fn(&str) -> Option<String>) -> Result<Vec<String>, ConfigErr
         .collect()
 }
 
+/// Имя попадает в путь `/cargo/<имя>`, поэтому набор символов ограничен: `{`, `}` и `/` сломали бы маршрутизацию.
+fn proxy_name_is_valid(name: &str) -> bool {
+    name.chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+/// Пустая переменная (compose передаёт `""`) и отсутствующая — пустой список.
+fn proxy_repos(
+    var: &impl Fn(&str) -> Option<String>,
+    hosted: &[String],
+) -> Result<Vec<String>, ConfigError> {
+    let raw = var(CARGO_PROXY_REPOS).unwrap_or_default();
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut names: Vec<String> = Vec::new();
+    for item in raw.split(',') {
+        let name = item.trim();
+        let reason = if name.is_empty() {
+            Some("пустое имя репозитория в списке")
+        } else if !proxy_name_is_valid(name) {
+            Some("имя может содержать только буквы, цифры, `-`, `_` и `.`")
+        } else if hosted.iter().any(|hosted| hosted == name) {
+            Some("имя совпадает с hosted-репозиторием")
+        } else if names.iter().any(|seen| seen == name) {
+            Some("имя повторяется в списке")
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            return Err(ConfigError::Invalid {
+                var: CARGO_PROXY_REPOS,
+                reason,
+            });
+        }
+        names.push(name.to_owned());
+    }
+    Ok(names)
+}
+
 fn unsupported(var: &'static str, value: &str) -> ConfigError {
     ConfigError::Unsupported {
         var,
@@ -480,6 +527,62 @@ mod tests {
 
     fn error_of(pairs: &[(&str, &str)]) -> ConfigError {
         parse(pairs).err().unwrap()
+    }
+
+    #[test]
+    fn proxy_repos_list_is_parsed_and_empty_values_mean_no_proxy() {
+        // Arrange
+        let cases = [
+            with(&[]),
+            with(&[(CARGO_PROXY_REPOS, "")]),
+            with(&[(CARGO_PROXY_REPOS, "crates-io")]),
+            with(&[(CARGO_PROXY_REPOS, " crates-io , mirror.2 ")]),
+        ];
+
+        // Act
+        let actual = cases.map(|pairs| parse(&pairs).unwrap().cargo_proxy_repos);
+
+        // Assert
+        assert_eq!(
+            actual,
+            [
+                Vec::<String>::new(),
+                Vec::new(),
+                vec!["crates-io".to_owned()],
+                vec!["crates-io".to_owned(), "mirror.2".to_owned()],
+            ]
+        );
+    }
+
+    #[test]
+    fn invalid_proxy_repos_are_rejected_with_reason() {
+        // Arrange
+        let cases = [
+            with(&[(CARGO_PROXY_REPOS, "crates-io,,other")]),
+            with(&[(CARGO_PROXY_REPOS, "internal")]),
+            with(&[(CARGO_PROXY_REPOS, "a,a")]),
+            with(&[(CARGO_PROXY_REPOS, "a{b}")]),
+            with(&[(CARGO_PROXY_REPOS, "a/b")]),
+        ];
+
+        // Act
+        let actual = cases.map(|pairs| error_of(&pairs));
+
+        // Assert
+        let invalid = |reason| ConfigError::Invalid {
+            var: CARGO_PROXY_REPOS,
+            reason,
+        };
+        assert_eq!(
+            actual,
+            [
+                invalid("пустое имя репозитория в списке"),
+                invalid("имя совпадает с hosted-репозиторием"),
+                invalid("имя повторяется в списке"),
+                invalid("имя может содержать только буквы, цифры, `-`, `_` и `.`"),
+                invalid("имя может содержать только буквы, цифры, `-`, `_` и `.`"),
+            ]
+        );
     }
 
     #[test]
