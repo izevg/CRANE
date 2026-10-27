@@ -173,43 +173,19 @@ async fn settled<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
         .then_some(entry)
 }
 
+/// Состояние записи для кэша и срок её хранения.
+type Stored = (CachedState, Duration);
+
 async fn fetch<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
     inner: &Inner<U, C, L, B>,
     job: &Job,
 ) -> Outcome {
-    // Условные запросы только для документов: артефакт неизменяем, его нечем «подтверждать».
-    let validator = match job.target {
-        Target::Document { .. } => prev_document(job).and_then(|prev| prev.etag),
-        Target::Artifact { .. } => None,
-    };
-    let response = inner
-        .upstream
-        .fetch(UpstreamRequest {
-            base: &job.base,
-            path: &job.path,
-            if_none_match: validator,
-        })
-        .await
-        .map_err(|error| match error {
-            UpstreamError::Refused(refusal) => UpstreamFailure::Refused(refusal),
-            UpstreamError::Unavailable(_) => UpstreamFailure::Unavailable,
-        })?;
+    let response = ask_upstream(&inner.upstream, job).await?;
     // Время берём после ответа: `fetched_at` отсчитывает свежесть от момента получения, а не запроса.
     let fetched_at = inner.clock.now();
     let (state, keep_for) = match (response, job.target) {
         (UpstreamResponse::NotModified { max_age }, Target::Document { policy }) => {
-            // 304 без прежнего документа — сбой протокола upstream: отдавать нечего.
-            let prev = prev_document(job).ok_or(UpstreamFailure::Unavailable)?;
-            let unchanged = prev.unchanged.saturating_add(1);
-            // Свежий срок из 304 важнее (RFC 9111 §4.3.4); без него действует последний объявленный.
-            let max_age = max_age.or(prev.max_age);
-            let state = CachedState::Document {
-                body: prev.body.clone(),
-                etag: prev.etag.cloned(),
-                unchanged,
-                max_age,
-            };
-            (state, policy.keep_for(unchanged, max_age))
+            confirm_document(job, &policy, max_age)?
         }
         (UpstreamResponse::NotModified { .. }, Target::Artifact { .. }) => {
             return Err(UpstreamFailure::Unavailable.into());
@@ -223,54 +199,113 @@ async fn fetch<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStore>(
             Target::Document { policy },
         ) => {
             let body = collect(body, inner.limits.max_document_bytes).await?;
-            // 304 и «200 с тем же телом» одинаково значат «не изменилось».
-            let unchanged = prev_document(job)
-                .filter(|prev| *prev.body == body)
-                .map_or(0, |prev| prev.unchanged.saturating_add(1));
-            let state = CachedState::Document {
-                body,
-                etag,
-                unchanged,
-                max_age,
-            };
-            (state, policy.keep_for(unchanged, max_age))
+            replace_document(job, &policy, body, etag, max_age)
         }
         (UpstreamResponse::Found { body, .. }, Target::Artifact { .. }) => {
-            // Потолок ставим до staging: сбежавший поток не должен забить диск временной зоны.
-            let bounded = bounded(body, inner.limits.max_artifact_bytes);
-            let staged = inner
-                .blobs
-                .stage(bounded)
-                .await
-                .map_err(|error| match error {
-                    BlobError::Body(error) => body_failure(&error),
-                    other => ProxyError::backend(other),
-                })?;
-            // Несовпавший staged-объект не коммитим: чужие байты не должны попасть в CAS.
-            job.target.check_digest(staged.digests())?;
-            let digests = inner
-                .blobs
-                .commit(staged)
-                .await
-                .map_err(ProxyError::backend)?;
-            // Содержимое неизменяемо: запись без срока, вытеснение — право бэкенда.
-            (CachedState::Blob(digests), Duration::MAX)
+            store_artifact(&inner.blobs, job, body, inner.limits.max_artifact_bytes).await?
         }
-        (UpstreamResponse::NotFound, target) => {
-            let misses = match job.prev.as_ref().map(|prev| &prev.state) {
-                Some(CachedState::Missing { misses }) => misses.saturating_add(1),
-                _ => 1,
-            };
-            (
-                CachedState::Missing { misses },
-                target.negative().ttl_after(misses),
-            )
-        }
+        (UpstreamResponse::NotFound, target) => record_miss(job, &target),
     };
     let entry = Cached { fetched_at, state };
     // Кэш не источник истины: не записался — следующий запрос просто сходит в upstream.
     let _ = inner.cache.put(&job.key, entry.clone(), keep_for).await;
     Ok(entry)
+}
+
+/// Запрос к upstream; отказ egress и недоступность различаются, детали сбоя наружу не идут.
+async fn ask_upstream<U: Upstream>(
+    upstream: &U,
+    job: &Job,
+) -> Result<UpstreamResponse, UpstreamFailure> {
+    // Условные запросы только для документов: артефакт неизменяем, его нечем «подтверждать».
+    let validator = match job.target {
+        Target::Document { .. } => prev_document(job).and_then(|prev| prev.etag),
+        Target::Artifact { .. } => None,
+    };
+    upstream
+        .fetch(UpstreamRequest {
+            base: &job.base,
+            path: &job.path,
+            if_none_match: validator,
+        })
+        .await
+        .map_err(|error| match error {
+            UpstreamError::Refused(refusal) => UpstreamFailure::Refused(refusal),
+            UpstreamError::Unavailable(_) => UpstreamFailure::Unavailable,
+        })
+}
+
+/// 304: прежний документ подтверждён, счётчик «не изменился» растёт, срок обновляется.
+fn confirm_document(
+    job: &Job,
+    policy: &MetadataPolicy,
+    max_age: Option<Duration>,
+) -> Result<Stored, ProxyError> {
+    // 304 без прежнего документа — сбой протокола upstream: отдавать нечего.
+    let prev = prev_document(job).ok_or(UpstreamFailure::Unavailable)?;
+    let unchanged = prev.unchanged.saturating_add(1);
+    // Свежий срок из 304 важнее (RFC 9111 §4.3.4); без него действует последний объявленный.
+    let max_age = max_age.or(prev.max_age);
+    let state = CachedState::Document {
+        body: prev.body.clone(),
+        etag: prev.etag.cloned(),
+        unchanged,
+        max_age,
+    };
+    Ok((state, policy.keep_for(unchanged, max_age)))
+}
+
+/// 200 с документом: новое тело, счётчик «не изменился» считается сравнением с прежним.
+fn replace_document(
+    job: &Job,
+    policy: &MetadataPolicy,
+    body: Bytes,
+    etag: Option<ETag>,
+    max_age: Option<Duration>,
+) -> Stored {
+    // 304 и «200 с тем же телом» одинаково значат «не изменилось».
+    let unchanged = prev_document(job)
+        .filter(|prev| *prev.body == body)
+        .map_or(0, |prev| prev.unchanged.saturating_add(1));
+    let state = CachedState::Document {
+        body,
+        etag,
+        unchanged,
+        max_age,
+    };
+    (state, policy.keep_for(unchanged, max_age))
+}
+
+/// 200 с артефактом: staging с потолком размера, проверка дайджеста, коммит в CAS.
+async fn store_artifact<B: BlobStore>(
+    blobs: &B,
+    job: &Job,
+    body: ByteStream,
+    max_bytes: u64,
+) -> Result<Stored, ProxyError> {
+    // Потолок ставим до staging: сбежавший поток не должен забить диск временной зоны.
+    let bounded = bounded(body, max_bytes);
+    let staged = blobs.stage(bounded).await.map_err(|error| match error {
+        BlobError::Body(error) => body_failure(&error),
+        other => ProxyError::backend(other),
+    })?;
+    // Несовпавший staged-объект не коммитим: чужие байты не должны попасть в CAS.
+    job.target.check_digest(staged.digests())?;
+    let digests = blobs.commit(staged).await.map_err(ProxyError::backend)?;
+    // Содержимое неизменяемо: запись без срока, вытеснение — право бэкенда.
+    Ok((CachedState::Blob(digests), Duration::MAX))
+}
+
+/// 404: отрицательная запись, счётчик промахов растёт от прежней отрицательной записи.
+fn record_miss(job: &Job, target: &Target) -> Stored {
+    let misses = match job.prev.as_ref().map(|prev| &prev.state) {
+        Some(CachedState::Missing { misses }) => misses.saturating_add(1),
+        _ => 1,
+    };
+    (
+        CachedState::Missing { misses },
+        target.negative().ttl_after(misses),
+    )
 }
 
 /// Маркер переполнения в ошибке потока: по нему `body_failure` отличает превышение от обрыва.
