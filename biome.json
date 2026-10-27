@@ -76,6 +76,13 @@
         "noAccumulatingSpread": "error"
       },
       "complexity": {
+        "noExcessiveLinesPerFunction": {
+          "level": "error",
+          "options": {
+            "maxLines": 80,
+            "skipBlankLines": true
+          }
+        },
         "noExcessiveCognitiveComplexity": {
           "level": "error",
           "options": {
@@ -104,6 +111,16 @@
             "noJsxLiterals": "off",
             "noMagicNumbers": "off",
             "useComponentExportOnlyModules": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.*"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": "off"
           }
         }
       }
