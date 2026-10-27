@@ -202,7 +202,7 @@ export function DataRow<TData extends RowData>({
       onClick={focusable ? handleClick : undefined}
       onKeyDown={focusable ? handleKeyDown : undefined}
       className={cx(
-        "group/row h-11 border-b bg-card transition-[background-color] duration-(--dur-instant) ease-(--ease-out) hover:bg-(--row-hover-bg) aria-selected:bg-(--row-selected-bg) focus-visible:outline-hidden forced-colors:focus-visible:outline-2 forced-colors:focus-visible:-outline-offset-2 forced-colors:aria-selected:outline-2 forced-colors:aria-selected:-outline-offset-2 forced-colors:aria-selected:outline-[Highlight]",
+        "group/row h-11 border-b bg-card hover:bg-(--row-hover-bg) hover:transition-[background-color] hover:duration-(--dur-instant) hover:ease-(--ease-out) aria-selected:bg-(--row-selected-bg) focus-visible:outline-hidden forced-colors:focus-visible:outline-2 forced-colors:focus-visible:-outline-offset-2 forced-colors:aria-selected:outline-2 forced-colors:aria-selected:-outline-offset-2 forced-colors:aria-selected:outline-[Highlight]",
         focusable && "cursor-pointer",
       )}
     >

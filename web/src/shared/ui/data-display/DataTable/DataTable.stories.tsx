@@ -177,6 +177,8 @@ export const SelectedRow: Story = {
     await userEvent.keyboard("{ArrowDown}");
     await expect(selected()).toHaveTextContent("1.4.0");
     await expect(selected()).toHaveFocus();
+    // Выбор стрелками не анимируется: у выбранной строки нет перехода цвета фона
+    await expect(getComputedStyle(selected()).transitionDuration).toBe("0s");
     await userEvent.keyboard("{ArrowUp}{ArrowUp}");
     await expect(selected()).toHaveTextContent("1.4.2");
   },
