@@ -178,14 +178,14 @@ msgstr "Copy JSON"
 msgid "Копировать request_id"
 msgstr "Copy request_id"
 
-msgid "Копировать команду настройки"
-msgstr "Copy setup command"
-
 msgid "Копировать команду установки"
 msgstr "Copy install command"
 
 msgid "Копировать токен"
 msgstr "Copy token"
+
+msgid "Копировать: {title}"
+msgstr "Copy: {title}"
 
 msgid "корень"
 msgstr "root"

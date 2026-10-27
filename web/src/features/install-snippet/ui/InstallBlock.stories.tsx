@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { type ComponentProps, useCallback, useState } from "react";
 import { expect, fn, spyOn, userEvent, within } from "storybook/test";
-import { CLIENTS_BY_FORMAT, InstallBlock } from "../index";
+import { InstallBlock } from "../index";
 
 // Ссылка на переменную окружения собирается из частей, чтобы линтер не принял её за шаблонную строку.
+const COPY = /^Копировать/;
 const TOKEN_REF = ["$", "{CRANE_TOKEN}"].join("");
 const onClientChange = fn();
 
@@ -11,7 +13,6 @@ const VIEWPORTS = {
 };
 
 const NPM = {
-  client: "npm" as const,
   setup_steps: [{ title: "Вход и настройка npm", code: "cctl login\ncctl setup npm" }],
   manual_config: {
     path: ".npmrc",
@@ -20,9 +21,24 @@ const NPM = {
   install: { code: "npm i @acme/ui@1.4.2" },
 };
 
+/** Страница держит выбранного клиента; в истории это локальное состояние, а выбор ещё и уходит в `onClientChange`. */
+function Controlled(props: ComponentProps<typeof InstallBlock>) {
+  const [client, setClient] = useState(props.client);
+  const { onClientChange: notify } = props;
+  const change = useCallback(
+    (next: ComponentProps<typeof InstallBlock>["client"]) => {
+      setClient(next);
+      notify(next);
+    },
+    [notify],
+  );
+  return <InstallBlock {...props} client={client} onClientChange={change} />;
+}
+
 const meta = {
   title: "Возможности/Установка",
   component: InstallBlock,
+  render: (args) => <Controlled {...args} />,
   parameters: { viewport: { options: VIEWPORTS } },
   // Буфер Chromium в headless недоступен без разрешений; выбор клиента не должен течь между историями.
   beforeEach: () => {
@@ -31,7 +47,7 @@ const meta = {
   },
   args: {
     format: "npm",
-    clients: CLIENTS_BY_FORMAT.npm,
+    client: "npm",
     instructions: NPM,
     onClientChange,
     envHref: "/help/environment",
@@ -62,9 +78,8 @@ export const Pypi: Story = {
   name: "PyPI: pip, uv, poetry",
   args: {
     format: "pypi",
-    clients: CLIENTS_BY_FORMAT.pypi,
+    client: "pip",
     instructions: {
-      client: "pip",
       setup_steps: [{ title: "Вход и настройка pip", code: "cctl login\ncctl setup pypi" }],
       manual_config: {
         path: "pip.conf",
@@ -79,9 +94,8 @@ export const Maven: Story = {
   name: "Maven: Maven и Gradle",
   args: {
     format: "maven",
-    clients: CLIENTS_BY_FORMAT.maven,
+    client: "maven",
     instructions: {
-      client: "maven",
       setup_steps: [{ title: "Вход и настройка Maven", code: "cctl login\ncctl setup maven" }],
       manual_config: {
         path: "settings.xml",
@@ -98,9 +112,8 @@ export const Cargo: Story = {
   name: "Cargo: один клиент",
   args: {
     format: "cargo",
-    clients: CLIENTS_BY_FORMAT.cargo,
+    client: "cargo",
     instructions: {
-      client: "cargo",
       setup_steps: [{ title: "Вход и настройка cargo", code: "cctl login\ncctl setup cargo" }],
       manual_config: {
         path: ".cargo/config.toml",
@@ -108,6 +121,16 @@ export const Cargo: Story = {
       },
       install: { code: "cargo add serde@1.0.217 --registry crane" },
     },
+  },
+};
+
+export const Loading: Story = {
+  name: "Загрузка инструкций: заглушки вместо чужих команд",
+  args: { loading: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole("button", { name: COPY })).toBeNull();
+    await expect(canvasElement.querySelectorAll("[aria-busy=true]")).toHaveLength(2);
   },
 };
 

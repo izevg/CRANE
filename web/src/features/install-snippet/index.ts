@@ -1,2 +1,2 @@
-export { CLIENTS_BY_FORMAT } from "./model/clients";
+export { useInstallClient } from "./model/useInstallClient";
 export { InstallBlock } from "./ui/InstallBlock";

@@ -1,9 +1,9 @@
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { expect, within } from "storybook/test";
-import { CLIENTS_BY_FORMAT, InstallBlock } from "~/features/install-snippet";
+import { InstallBlock, useInstallClient } from "~/features/install-snippet";
 import {
   type InstallClient,
   type InstallInstructions,
@@ -171,13 +171,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function InstallSection() {
-  const [client, setClient] = useState<InstallClient>("npm");
+  // Страница держит клиента и сразу получает инструкции для него (здесь — из макета, без запроса)
+  const [client, setClient] = useInstallClient("npm");
   return (
     <InstallBlock
       format="npm"
-      clients={CLIENTS_BY_FORMAT.npm}
-      instructions={installInstructions(client)}
+      client={client}
       onClientChange={setClient}
+      instructions={installInstructions(client)}
       envHref="/help/environment"
     />
   );
