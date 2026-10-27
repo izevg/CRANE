@@ -1,4 +1,3 @@
-import { MotionConfig } from "motion/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { LiveRegion } from "~/shared/lib/a11y";
@@ -17,12 +16,10 @@ initColorScheme();
 
 createRoot(root).render(
   <StrictMode>
-    <MotionConfig reducedMotion="user">
-      <TooltipProvider>
-        <App />
-        <LiveRegion />
-        <Toaster />
-      </TooltipProvider>
-    </MotionConfig>
+    <TooltipProvider>
+      <App />
+      <LiveRegion />
+      <Toaster />
+    </TooltipProvider>
   </StrictMode>,
 );

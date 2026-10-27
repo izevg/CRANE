@@ -16,7 +16,5 @@ export default defineConfig({
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./test/setup.ts"],
-    // CSS в тестах не обрабатывается; исключение — токены движения, которые сверяет тест с TS-константами
-    css: { include: [/motion\.css/] },
   },
 });

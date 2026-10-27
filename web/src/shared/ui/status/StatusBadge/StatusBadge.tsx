@@ -1,18 +1,15 @@
 import { cx } from "~/shared/lib/core";
-import { usePrefersReducedMotion } from "~/shared/lib/state";
 import { TONE_ICON, TONE_RING, TONE_STRONG, TONE_SURFACE, type Tone } from "../../primitives";
 
 type StatusBadgeProps = {
   tone: Tone;
   /** Текст обязателен: статус не передаётся одним цветом. */
   label: string;
-  /** Пульсация только у выполняющихся процессов; при reduced motion выключена. */
+  /** Пульсация только у выполняющихся процессов; при prefers-reduced-motion выключена в CSS. */
   pulse?: boolean;
 };
 
 export function StatusBadge({ tone, label, pulse = false }: StatusBadgeProps) {
-  const reducedMotion = usePrefersReducedMotion();
-  const animated = pulse && !reducedMotion;
   const Icon = TONE_ICON[tone];
   return (
     <span
@@ -24,12 +21,13 @@ export function StatusBadge({ tone, label, pulse = false }: StatusBadgeProps) {
     >
       <span
         aria-hidden="true"
-        data-pulse={animated ? "true" : undefined}
+        data-pulse={pulse ? "true" : undefined}
         className={cx(
           "relative inline-flex shrink-0 items-center justify-center",
-          animated &&
+          // prefers-reduced-motion отключает пульсацию в CSS (motion-safe), JS о нём не знает
+          pulse &&
             cx(
-              "after:absolute after:inset-0 after:animate-status-pulse after:rounded-full",
+              "after:absolute after:inset-0 after:rounded-full motion-safe:after:animate-status-pulse",
               TONE_RING[tone],
             ),
         )}

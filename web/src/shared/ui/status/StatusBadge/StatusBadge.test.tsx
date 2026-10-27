@@ -1,18 +1,11 @@
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Tone } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
-import { stubMatchMedia } from "~test/matchMedia";
-
-const REDUCED = "(prefers-reduced-motion: reduce)";
 
 // Иконка помечена data-slot="status-icon", точка — "status-dot": класс не проверяем, проверяем наличие глифа.
 const WITH_ICON: Tone[] = ["warning", "error"];
 const WITH_DOT: Tone[] = ["success", "info", "neutral"];
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("StatusBadge", () => {
   it("показывает обязательную подпись", () => {
@@ -65,8 +58,6 @@ describe("StatusBadge", () => {
 
   it("pulse включает пульсацию", () => {
     // Arrange
-    stubMatchMedia();
-
     // Act
     const { container } = render(<StatusBadge tone="info" label="Идёт проверка" pulse />);
 
@@ -76,21 +67,8 @@ describe("StatusBadge", () => {
 
   it("без pulse глиф статичен", () => {
     // Arrange
-    stubMatchMedia();
-
     // Act
     const { container } = render(<StatusBadge tone="info" label="Идёт проверка" />);
-
-    // Assert
-    expect(container.querySelector("[data-pulse]")).toBeNull();
-  });
-
-  it("при prefers-reduced-motion пульсация выключена", () => {
-    // Arrange
-    stubMatchMedia([REDUCED]);
-
-    // Act
-    const { container } = render(<StatusBadge tone="info" label="Идёт проверка" pulse />);
 
     // Assert
     expect(container.querySelector("[data-pulse]")).toBeNull();
