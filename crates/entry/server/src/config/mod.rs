@@ -10,10 +10,12 @@ mod file;
 use std::fmt;
 use std::io;
 use std::path::Path;
+use std::str::FromStr;
 
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_http::TrustedProxies;
 pub(crate) use file::layered;
+use sqlx::postgres::PgConnectOptions;
 use url::Url;
 
 const DEFAULT_HTTP_PORT: u16 = 8080;
@@ -156,13 +158,7 @@ pub(crate) enum Storage {
     /// Данные теряются при рестарте; только оба хранилища вместе.
     Memory,
     /// Каталог и CAS переживают рестарт одинаково, иначе каталог ссылался бы на потерянные blob.
-    Durable { database: Secret, blobs: Url },
-}
-
-/// Режим одной переменной до сверки пары; `T` — разобранное значение постоянного режима.
-enum Mode<T> {
-    Memory,
-    Durable(T),
+    Durable { database: Database, blobs: Url },
 }
 
 impl Storage {
@@ -173,30 +169,44 @@ impl Storage {
         read_file: &impl Fn(&Path) -> io::Result<String>,
     ) -> Result<Self, ConfigError> {
         let database = secret(var, read_file, DATABASE_URL, DATABASE_URL_FILE)?;
-        let database_mode = database_mode(database.expose())?;
-        let blobs_mode = blobs_mode(&required(var, BLOBS)?)?;
-        match (database_mode, blobs_mode) {
-            (Mode::Memory, Mode::Memory) => Ok(Self::Memory),
-            (Mode::Durable(()), Mode::Durable(blobs)) => Ok(Self::Durable { database, blobs }),
+        let blobs = required(var, BLOBS)?;
+        match (database.expose() == MEMORY, blobs == MEMORY) {
+            (true, true) => Ok(Self::Memory),
+            (false, false) => Ok(Self::Durable {
+                database: Database::parse(&database)?,
+                blobs: blobs_url(&blobs)?,
+            }),
             _ => Err(ConfigError::MixedStorage),
         }
     }
 }
 
-fn database_mode(value: &str) -> Result<Mode<()>, ConfigError> {
-    if value == MEMORY {
-        Ok(Mode::Memory)
-    } else if value.starts_with("postgres://") || value.starts_with("postgresql://") {
-        Ok(Mode::Durable(()))
-    } else {
-        Err(unsupported(DATABASE_URL, value))
+/// Параметры подключения к PostgreSQL. Строка с паролем разбирается сразу и тут же
+/// уничтожается, дальше живут только разобранные параметры. Без `Debug`: пароль в журнал не попадёт.
+pub(crate) struct Database(Box<PgConnectOptions>);
+
+impl Database {
+    fn parse(url: &Secret) -> Result<Self, ConfigError> {
+        let value = url.expose();
+        // `PgConnectOptions` не проверяет схему: `mysql://…` он принял бы как PostgreSQL.
+        if !(value.starts_with("postgres://") || value.starts_with("postgresql://")) {
+            return Err(unsupported(DATABASE_URL, value));
+        }
+        // Текст ошибки sqlx цитирует часть URL (например, значение `sslmode`), поэтому он не выводится.
+        PgConnectOptions::from_str(value)
+            .map(|options| Self(Box::new(options)))
+            .map_err(|_| ConfigError::Invalid {
+                var: DATABASE_URL,
+                reason: "не разобран как URL postgres://",
+            })
+    }
+
+    pub(crate) fn options(&self) -> &PgConnectOptions {
+        &self.0
     }
 }
 
-fn blobs_mode(value: &str) -> Result<Mode<Url>, ConfigError> {
-    if value == MEMORY {
-        return Ok(Mode::Memory);
-    }
+fn blobs_url(value: &str) -> Result<Url, ConfigError> {
     // Ошибка разбора и сам URL не выводятся: в запросе `s3://` бывают ключи доступа.
     let url = Url::parse(value).map_err(|_| ConfigError::Invalid {
         var: BLOBS,
@@ -214,7 +224,7 @@ fn blobs_mode(value: &str) -> Result<Mode<Url>, ConfigError> {
         });
     }
     match url.scheme() {
-        "file" | "s3" => Ok(Mode::Durable(url)),
+        "file" | "s3" => Ok(url),
         scheme => Err(ConfigError::Unsupported {
             var: BLOBS,
             scheme: scheme.to_owned(),
@@ -227,7 +237,8 @@ fn is_credential_key(key: &str) -> bool {
     ["secret", "token", "password"]
         .iter()
         .any(|word| key.contains(word))
-        || key == "aws_access_key_id"
+        // `access_key_id` - псевдоним без префикса, его тоже понимает object_store.
+        || matches!(key.as_str(), "aws_access_key_id" | "access_key_id")
 }
 
 /// Секрет (токен, URL базы). Без `Debug` и `Display`: случайно попасть в журнал он не может.
@@ -759,7 +770,10 @@ mod tests {
     #[test]
     fn unsupported_database_names_scheme_but_never_the_secret() {
         // Arrange
-        let pairs = with(&[(DATABASE_URL, "mysql://u:SECRET@h/db")]);
+        let pairs = with(&[
+            (DATABASE_URL, "mysql://u:SECRET@h/db"),
+            (BLOBS, "file:///b"),
+        ]);
 
         // Act
         let error = error_of(&pairs);
@@ -778,9 +792,33 @@ mod tests {
     }
 
     #[test]
+    fn unparsable_database_url_error_never_contains_the_password() {
+        // Arrange
+        // sqlx цитирует значение `sslmode` в тексте ошибки: пароль в нём покажет, что маскировка снята.
+        let urls = [
+            "postgres://u:pw@h/db?sslmode=SECRETPW",
+            "postgres://u:SECRETPW@h:notaport/db",
+        ];
+
+        // Act
+        let messages = urls.map(|url| {
+            Database::parse(&Secret(url.to_owned()))
+                .err()
+                .map(|error| error.to_string())
+        });
+
+        // Assert
+        let leaked = messages.map(|message| message.is_none_or(|text| text.contains("SECRETPW")));
+        assert_eq!(leaked, [false; 2]);
+    }
+
+    #[test]
     fn unsupported_blobs_scheme_is_named_without_the_rest_of_the_value() {
         // Arrange
-        let pairs = with(&[(BLOBS, "gcs://SECRETbucket?key=SECRETkey")]);
+        let pairs = with(&[
+            (DATABASE_URL, "postgres://u:pw@h/db"),
+            (BLOBS, "gcs://SECRETbucket?key=SECRETkey"),
+        ]);
 
         // Act
         let message = error_of(&pairs).to_string();
@@ -808,7 +846,12 @@ mod tests {
         match result {
             Ok(Storage::Memory) => "memory".to_owned(),
             Ok(Storage::Durable { database, blobs }) => {
-                format!("durable {} {}", database.expose(), blobs.scheme())
+                format!(
+                    "durable {}/{} {}",
+                    database.options().get_host(),
+                    database.options().get_database().unwrap_or_default(),
+                    blobs.scheme()
+                )
             }
             Err(error) => format!("error {error}"),
         }
@@ -842,8 +885,8 @@ mod tests {
             shapes,
             [
                 "memory",
-                "durable postgres://u:pw@h/db file",
-                "durable postgresql://u:pw@h/db s3",
+                "durable h/db file",
+                "durable h/db s3",
                 mixed,
                 mixed
             ]
@@ -858,11 +901,12 @@ mod tests {
             "s3://b?aws_secret_access_key=SECRETKEY",
             "s3://b?AWS_SESSION_TOKEN=SECRETKEY",
             "s3://b?aws_access_key_id=SECRETKEY",
+            "s3://b?access_key_id=SECRETKEY",
         ];
 
         // Act
         let results = cases.map(|blobs| {
-            blobs_mode(blobs)
+            blobs_url(blobs)
                 .err()
                 .map_or_else(|| "принято".to_owned(), |error| error.to_string())
         });
@@ -880,6 +924,7 @@ mod tests {
                 rejected("aws_secret_access_key"),
                 rejected("AWS_SESSION_TOKEN"),
                 rejected("aws_access_key_id"),
+                rejected("access_key_id"),
             ]
         );
     }
@@ -901,7 +946,7 @@ mod tests {
         let storage = Storage::from_env(&source, &read);
 
         // Assert
-        assert_eq!(shape(storage), "durable postgres://u:pw@h/db file");
+        assert_eq!(shape(storage), "durable h/db file");
     }
 
     #[test]

@@ -4,10 +4,10 @@ mod health;
 
 use std::future::IntoFuture;
 use std::net::SocketAddr;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::Router;
 use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_http::{CargoSettings, StaticToken, admin_router, api_router};
@@ -19,21 +19,17 @@ use crane_ports::system::IdGen;
 use crane_siem::OcsfLogSink;
 use futures_util::future::{self, Either};
 use sqlx::PgPool;
-use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
 use tokio::runtime::Builder;
 
-use crate::config::{Secret, Settings, Storage};
+use crate::config::{Database, Settings, Storage};
 use crate::system::{SystemClock, UuidV7Ids};
 pub(crate) use health::healthcheck;
 
 /// Дольше ждать соединение смысла нет: на старте сервер падает с понятной ошибкой,
 /// а оркестратор перезапускает его, когда PostgreSQL поднимется.
 const DB_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
-
-/// Имена переменных в сообщениях об ошибках: значения не показываются никогда.
-const BLOBS_VAR: &str = "CRANE_BLOBS";
-const DATABASE_VAR: &str = "CRANE_DATABASE_URL";
 
 pub(crate) type RunError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -42,10 +38,12 @@ pub(crate) fn serve(settings: Settings) -> Result<(), RunError> {
     runtime.block_on(serve_async(settings))
 }
 
-async fn serve_async(settings: Settings) -> Result<(), RunError> {
+/// Собирает роутеры API и admin над хранилищами из настроек. Отдельно от `serve`,
+/// чтобы сборку (выбор хранилищ, подключение, репозитории) проверяли тесты без сокетов.
+pub(crate) async fn routers(settings: Settings) -> Result<(Router, Router), RunError> {
     match &settings.storage {
         Storage::Memory => {
-            serve_with(
+            assemble(
                 MemoryCatalog::default(),
                 MemoryBlobStore::default(),
                 settings,
@@ -56,35 +54,28 @@ async fn serve_async(settings: Settings) -> Result<(), RunError> {
             // Подключаемся сразу: недоступная БД валит старт, а не первый запрос.
             let pool = connect(database).await?;
             let store = ObjectBlobStore::from_url(blobs)
-                .map_err(|error| format!("не удалось открыть {BLOBS_VAR}: {error}"))?;
-            serve_with(PgCatalog::new(pool), store, settings).await
+                .map_err(|error| format!("не удалось открыть CRANE_BLOBS: {error}"))?;
+            assemble(PgCatalog::new(pool), store, settings).await
         }
     }
 }
 
-/// Параметры подключения без текста ошибки разбора: он может процитировать URL с паролем.
-fn connect_options(url: &str) -> Result<PgConnectOptions, RunError> {
-    PgConnectOptions::from_str(url)
-        .map_err(|_| format!("{DATABASE_VAR} не разобран как URL PostgreSQL").into())
-}
-
-async fn connect(database: &Secret) -> Result<PgPool, RunError> {
-    let options = connect_options(database.expose())?;
+async fn connect(database: &Database) -> Result<PgPool, RunError> {
     PgPoolOptions::new()
         .acquire_timeout(DB_ACQUIRE_TIMEOUT)
-        .connect_with(options)
+        .connect_with(database.options().clone())
         .await
         .map_err(|error| {
-            format!("не удалось подключиться к PostgreSQL ({DATABASE_VAR}): {error}").into()
+            format!("не удалось подключиться к PostgreSQL (CRANE_DATABASE_URL): {error}").into()
         })
 }
 
-async fn serve_with<C: Catalog + 'static, B: BlobStore + 'static>(
+async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     catalog: C,
     blobs: B,
     settings: Settings,
-) -> Result<(), RunError> {
-    // Адрес базы с паролем нужен был только для подключения.
+) -> Result<(Router, Router), RunError> {
+    // Параметры подключения с паролем нужны были только для подключения.
     drop(settings.storage);
     let ids = Arc::new(UuidV7Ids);
     for name in &settings.cargo_repos {
@@ -120,13 +111,20 @@ async fn serve_with<C: Catalog + 'static, B: BlobStore + 'static>(
         settings.trusted_proxies,
         audit,
     );
+    Ok((api, admin))
+}
 
-    let api_listener = bind(settings.http_port).await?;
-    let admin_listener = bind(settings.admin_port).await?;
+async fn serve_async(settings: Settings) -> Result<(), RunError> {
+    let (http_port, admin_port) = (settings.http_port, settings.admin_port);
+    let repos = settings.cargo_repos.clone();
+    let (api, admin) = routers(settings).await?;
+
+    let api_listener = bind(http_port).await?;
+    let admin_listener = bind(admin_port).await?;
     tracing::info!(
-        http_port = settings.http_port,
-        admin_port = settings.admin_port,
-        repos = ?settings.cargo_repos,
+        http_port,
+        admin_port,
+        repos = ?repos,
         "сервер запущен"
     );
 
@@ -209,23 +207,4 @@ async fn terminate() {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn unparsable_database_url_error_never_contains_the_password() {
-        // Arrange
-        // sqlx цитирует значение `sslmode` в тексте ошибки: пароль в нём показал бы, что маскировка снята.
-        let urls = [
-            "postgres://u:pw@h/db?sslmode=SECRETPW",
-            "postgres://u:SECRETPW@h:notaport/db",
-        ];
-
-        // Act
-        let messages = urls.map(|url| connect_options(url).err().map(|error| error.to_string()));
-
-        // Assert
-        let leaked = messages.map(|message| message.is_none_or(|text| text.contains("SECRETPW")));
-        assert_eq!(leaked, [false; 2]);
-    }
-}
+mod stack_tests;
