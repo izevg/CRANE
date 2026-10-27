@@ -96,14 +96,11 @@ export function SearchResultCard({ item, href, typosquatHref }: SearchResultCard
             {item.name.display}
           </Link>
         </h3>
-        <Badge variant="outline">{t(FORMAT[item.format].label)}</Badge>
+        <Badge variant="outline">{FORMAT[item.format]}</Badge>
         <Badge variant="secondary">{`${item.repository.name} · ${item.repository.workspace}`}</Badge>
-        <Badge variant="outline">{t(REPOSITORY_KIND[item.repository.kind].label)}</Badge>
+        <Badge variant="outline">{REPOSITORY_KIND[item.repository.kind]}</Badge>
         {showsLifecycleBadge(item) ? (
-          <StatusBadge
-            tone={LIFECYCLE_STATE[item.lifecycle.state].tone}
-            label={t(LIFECYCLE_STATE[item.lifecycle.state].label)}
-          />
+          <StatusBadge {...LIFECYCLE_STATE[item.lifecycle.state]} />
         ) : null}
         {risk === null ? null : (
           <span className="ml-auto">
@@ -120,10 +117,7 @@ export function SearchResultCard({ item, href, typosquatHref }: SearchResultCard
             <span className="inline-flex gap-1">
               <span>{t`Последняя`}</span> <span className="font-mono">{latest.version}</span>
             </span>
-            <StatusBadge
-              tone={VERSION_STATE[latest.state].tone}
-              label={t(VERSION_STATE[latest.state].label)}
-            />
+            <StatusBadge {...VERSION_STATE[latest.state]} />
           </span>
         )}
         {downloads === null ? null : (

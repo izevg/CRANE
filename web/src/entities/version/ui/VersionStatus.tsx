@@ -16,7 +16,6 @@ const SEPARATOR = " · ";
  */
 export function VersionStatus({ version }: VersionStatusProps) {
   const { t } = useLingui();
-  const { tone, label } = VERSION_STATE[version.state];
   const reason = reasonView(version.state, version.block_reason);
   const fixedIn = reason?.fixedIn;
   const reasonText =
@@ -25,7 +24,7 @@ export function VersionStatus({ version }: VersionStatusProps) {
       : [t(BLOCK_REASON_KIND[reason.kind]), reason.detail].filter(Boolean).join(SEPARATOR);
   return (
     <span className="flex flex-wrap items-center gap-2">
-      <StatusBadge tone={tone} label={t(label)} />
+      <StatusBadge {...VERSION_STATE[version.state]} />
       {reason === null ? null : fixedIn === undefined ? (
         <Badge variant="destructive">{reasonText}</Badge>
       ) : (

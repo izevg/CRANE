@@ -1,15 +1,18 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { useLingui } from "@lingui/react/macro";
 import { cx } from "~/shared/lib/core";
 import { TONE_ICON, TONE_RING, TONE_STRONG, TONE_SURFACE, type Tone } from "../../primitives";
 
 type StatusBadgeProps = {
   tone: Tone;
-  /** Текст обязателен: статус не передаётся одним цветом. */
-  label: string;
+  /** Текст обязателен: статус не передаётся одним цветом. Дескриптор из словаря API переводится здесь. */
+  label: string | MessageDescriptor;
   /** Пульсация только у выполняющихся процессов; при prefers-reduced-motion выключена в CSS. */
   pulse?: boolean;
 };
 
 export function StatusBadge({ tone, label, pulse = false }: StatusBadgeProps) {
+  const { t } = useLingui();
   const Icon = TONE_ICON[tone];
   return (
     <span
@@ -41,7 +44,7 @@ export function StatusBadge({ tone, label, pulse = false }: StatusBadgeProps) {
           <Icon data-slot="status-icon" className="size-3.5" />
         )}
       </span>
-      {label}
+      {typeof label === "string" ? label : t(label)}
     </span>
   );
 }

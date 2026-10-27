@@ -55,41 +55,17 @@ msgstr "{total, plural, one {Результатов: #} few {Результат�
 msgid "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
 msgstr "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
 
-msgid "Cargo"
-msgstr "Cargo"
-
 msgid "CRANE, Реестр артефактов: на главную"
 msgstr "CRANE, Реестр артефактов: на главную"
 
 msgid "EOL"
 msgstr "EOL"
 
-msgid "hosted"
-msgstr "hosted"
-
-msgid "Maven"
-msgstr "Maven"
-
-msgid "npm"
-msgstr "npm"
-
-msgid "NuGet"
-msgstr "NuGet"
-
-msgid "proxy"
-msgstr "proxy"
-
-msgid "PyPI"
-msgstr "PyPI"
-
 msgid "Активен"
 msgstr "Активен"
 
 msgid "Безопасность"
 msgstr "Безопасность"
-
-msgid "Блокирующий"
-msgstr "Блокирующий"
 
 msgid "Было"
 msgstr "Было"
@@ -114,9 +90,6 @@ msgstr "Выполняется…"
 
 msgid "Выпущена"
 msgstr "Выпущена"
-
-msgid "Высокий"
-msgstr "Высокий"
 
 msgid "Главное меню"
 msgstr "Главное меню"
@@ -217,9 +190,6 @@ msgstr "Копировать токен"
 msgid "корень"
 msgstr "корень"
 
-msgid "Критично"
-msgstr "Критично"
-
 msgid "Личное и справка"
 msgstr "Личное и справка"
 
@@ -261,9 +231,6 @@ msgstr "Нет данных"
 
 msgid "Нет соединения"
 msgstr "Нет соединения"
-
-msgid "Низкий"
-msgstr "Низкий"
 
 msgid "Ничего не найдено"
 msgstr "Ничего не найдено"
@@ -411,9 +378,6 @@ msgstr "Сохраните сейчас — больше мы его не пок
 
 msgid "Справка"
 msgstr "Справка"
-
-msgid "Средний"
-msgstr "Средний"
 
 msgid "Стало"
 msgstr "Стало"

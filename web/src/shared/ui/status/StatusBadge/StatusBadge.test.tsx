@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { VERSION_STATE } from "~/shared/api";
 import type { Tone } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 
@@ -72,5 +73,14 @@ describe("StatusBadge", () => {
 
     // Assert
     expect(container.querySelector("[data-pulse]")).toBeNull();
+  });
+
+  it("подпись-дескриптор из словаря API переводится на активной локали", () => {
+    // Arrange
+    // Act
+    render(<StatusBadge {...VERSION_STATE.blocked} />);
+
+    // Assert
+    expect(screen.getByText("Заблокирована")).toBeVisible();
   });
 });

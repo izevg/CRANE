@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
+import { VERSION_STATE } from "~/shared/api";
 import { StatusBadge } from "~/shared/ui/status";
 
 const meta = {
@@ -58,5 +59,22 @@ export const Pulse: Story = {
   args: { tone: "info", label: "Перенос хранилища", pulse: true },
   play: async ({ canvasElement }) => {
     await expect(canvasElement.querySelector('[data-pulse="true"]')).not.toBeNull();
+  },
+};
+
+export const FromDictionary: Story = {
+  name: "Словарь API: подпись-дескриптор",
+  args: { ...VERSION_STATE.quarantined },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByText("Карантин")).toBeVisible();
+  },
+};
+
+export const FromDictionaryEnglish: Story = {
+  name: "EN: подпись-дескриптор переводится",
+  args: { ...VERSION_STATE.quarantined },
+  globals: { locale: "en" },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByText("Quarantine")).toBeVisible();
   },
 };

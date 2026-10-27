@@ -39,11 +39,7 @@ function formatSegments() {
       label: i18n._(msg`Все`),
       count: 38,
     },
-    { value: "npm", label: "npm", count: 21 },
-    { value: "pypi", label: "PyPI", count: 8 },
-    { value: "maven", label: "Maven", count: 5 },
-    { value: "nuget", label: "NuGet", count: 3 },
-    { value: "cargo", label: "Cargo", count: 1 },
+    ...FORMAT_FACETS.map(({ value, label, count }) => ({ value, label, count: count.count })),
   ] as const;
 }
 

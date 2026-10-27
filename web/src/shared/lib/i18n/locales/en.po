@@ -55,41 +55,17 @@ msgstr "{total, plural, other {Results: #}}"
 msgid "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
 msgstr "{unread, plural, one {Notifications, # unread} other {Notifications, # unread}}"
 
-msgid "Cargo"
-msgstr "Cargo"
-
 msgid "CRANE, Реестр артефактов: на главную"
 msgstr "CRANE, Artifact registry: go to home"
 
 msgid "EOL"
 msgstr "EOL"
 
-msgid "hosted"
-msgstr "hosted"
-
-msgid "Maven"
-msgstr "Maven"
-
-msgid "npm"
-msgstr "npm"
-
-msgid "NuGet"
-msgstr "NuGet"
-
-msgid "proxy"
-msgstr "proxy"
-
-msgid "PyPI"
-msgstr "PyPI"
-
 msgid "Активен"
 msgstr "Active"
 
 msgid "Безопасность"
 msgstr "Security"
-
-msgid "Блокирующий"
-msgstr "Blocking"
 
 msgid "Было"
 msgstr "Before"
@@ -114,9 +90,6 @@ msgstr "In progress…"
 
 msgid "Выпущена"
 msgstr "Released"
-
-msgid "Высокий"
-msgstr "High"
 
 msgid "Главное меню"
 msgstr "Main menu"
@@ -217,9 +190,6 @@ msgstr "Copy token"
 msgid "корень"
 msgstr "root"
 
-msgid "Критично"
-msgstr "Critical"
-
 msgid "Личное и справка"
 msgstr "Personal and help"
 
@@ -261,9 +231,6 @@ msgstr "No data"
 
 msgid "Нет соединения"
 msgstr "No connection"
-
-msgid "Низкий"
-msgstr "Low"
 
 msgid "Ничего не найдено"
 msgstr "Nothing found"
@@ -411,9 +378,6 @@ msgstr "Save it now — we won't show it again"
 
 msgid "Справка"
 msgstr "Help"
-
-msgid "Средний"
-msgstr "Medium"
 
 msgid "Стало"
 msgstr "After"

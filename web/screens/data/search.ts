@@ -1,4 +1,4 @@
-import type { SearchItem, VersionState } from "~/shared/api";
+import { FORMAT, type Format, type SearchItem, type VersionState } from "~/shared/api";
 
 type Draft = {
   id: string;
@@ -231,13 +231,18 @@ export const RESULTS: readonly ResultRow[] = DRAFTS.map((draft) => ({
   item: toItem(draft),
 }));
 
-export const FORMAT_FACETS = [
-  { value: "npm", label: "npm", count: { count: 21, capped: false } },
-  { value: "pypi", label: "PyPI", count: { count: 8, capped: false } },
-  { value: "maven", label: "Maven", count: { count: 5, capped: false } },
-  { value: "nuget", label: "NuGet", count: { count: 3, capped: false } },
-  { value: "cargo", label: "Cargo", count: { count: 1, capped: false } },
-] as const;
+const FORMAT_COUNTS = { npm: 21, pypi: 8, maven: 5, nuget: 3, cargo: 1 } as const satisfies Record<
+  Format,
+  number
+>;
+
+const FORMATS = ["npm", "pypi", "maven", "nuget", "cargo"] as const satisfies readonly Format[];
+
+export const FORMAT_FACETS = FORMATS.map((value) => ({
+  value,
+  label: FORMAT[value],
+  count: { count: FORMAT_COUNTS[value], capped: false },
+}));
 
 export const WORKSPACE_FACETS = [
   { value: "platform", label: "platform", count: { count: 19, capped: false } },
