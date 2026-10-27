@@ -37,3 +37,9 @@ node_modules/
 # Гайдбук собирается локально (tools/build-guidebook.sh), в git не хранится
 guidebook/
 __pycache__/
+
+# Граф graft строится локально (`graft build`), в git не хранится.
+/graft/
+
+# Граф graphify строится локально (`graphify update .`), в git не хранится.
+/graphify-out/
