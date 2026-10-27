@@ -257,7 +257,12 @@ function markerViolations(t: TestFn, fail: (rule: string, todo: string) => strin
 export function checkAaa(t: TestFn): string[] {
   const fail = (rule: string, todo: string): string => report(t.path, t.line, t.name, rule, todo);
   const indent = indentOf(t.body.find((l) => l.trim() !== "") ?? "");
-  const isBinding = countStatements(t.body, indent) === 1 && BINDING_CALL.test(t.body.join("\n"));
+  const text = t.body.join("\n");
+  // Привязка не проверяет: оператор с assert под исключение не подпадает.
+  const isBinding =
+    countStatements(t.body, indent) === 1 &&
+    BINDING_CALL.test(text) &&
+    !ASSERT_BEFORE[t.lang].test(text);
   if (isBinding) {
     return [];
   }

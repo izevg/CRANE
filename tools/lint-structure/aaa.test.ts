@@ -317,6 +317,12 @@ const violating = [
     expected: [`${RS}:2 sample — маркеры: // Arrange ×0, // Act ×0, // Assert ×0`],
   },
   {
+    name: "один оператор с assert и _contract( не считается привязкой",
+    path: RS,
+    src: rustTest(["    assert!(meets_contract(x));"]),
+    expected: [`${RS}:2 sample — маркеры: // Arrange ×0, // Act ×0, // Assert ×0`],
+  },
+  {
     name: "TS без маркеров",
     path: TS,
     src: tsTest(["  assert.equal(f(), 1);"]),
