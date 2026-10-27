@@ -10,7 +10,7 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crane_domain::proxy::EgressPolicy;
 use crane_ports::proxy::{Upstream, UpstreamError, UpstreamRequest, UpstreamResponse};
@@ -18,6 +18,7 @@ use futures_util::TryStreamExt;
 use reqwest::dns::Resolve;
 use reqwest::header::IF_NONE_MATCH;
 use reqwest::redirect;
+use reqwest::{Response, StatusCode};
 
 use guard::{GuardedResolver, Hop, hop, refusal};
 use headers::{Classified, classify};
@@ -28,6 +29,10 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Таймаут тишины между чтениями. Общего таймаута нет сознательно: большой `.crate` легально качается долго,
 /// а зависший поток обрывается по простою.
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Цель журнала egress (раздел 16.6): одна запись на каждую реальную выборку из upstream, включая отказы
+/// SSRF guard. Без заголовков, тел и `ETag`: журнал для безопасников, а не отладочный дамп.
+pub const EGRESS_TARGET: &str = "crane::upstream";
 
 /// Политика crates.io требует идентифицируемый User-Agent.
 const USER_AGENT: &str = concat!("crane/", env!("CARGO_PKG_VERSION"));
@@ -83,16 +88,60 @@ fn unavailable(error: impl Into<Box<dyn Error + Send + Sync>>) -> UpstreamError 
     UpstreamError::Unavailable(error.into())
 }
 
+/// Пишет событие egress по уже классифицированному исходу. `path` — путь upstream без query;
+/// `elapsed_ms` — время до получения заголовков.
+fn record_egress(
+    host: &str,
+    path: &str,
+    outcome: Result<StatusCode, &UpstreamError>,
+    elapsed: Duration,
+) {
+    let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
+    match outcome {
+        Ok(status) => tracing::info!(
+            target: EGRESS_TARGET,
+            host,
+            path,
+            status = status.as_u16(),
+            elapsed_ms,
+            "выборка из upstream"
+        ),
+        Err(error) => {
+            let failure = match error {
+                UpstreamError::Refused(_) => "refused",
+                UpstreamError::Unavailable(_) => "unavailable",
+            };
+            tracing::info!(
+                target: EGRESS_TARGET,
+                host,
+                path,
+                failure,
+                elapsed_ms,
+                "выборка из upstream"
+            );
+        }
+    }
+}
+
 impl Upstream for HttpUpstream {
     async fn fetch(&self, request: UpstreamRequest<'_>) -> Result<UpstreamResponse, UpstreamError> {
         let url = request.base.url(request.path);
-        let mut call = self.client.get(url);
+        let mut call = self.client.get(&url);
         if let Some(etag) = request.if_none_match {
             call = call.header(IF_NONE_MATCH, etag.as_str());
         }
-        let response = call.send().await.map_err(|error| {
+        let started = Instant::now();
+        // Исход классифицируется один раз: по нему же пишется журнал egress.
+        let sent = call.send().await.map_err(|error| {
             refusal(&error).map_or_else(|| unavailable(error), UpstreamError::Refused)
-        })?;
+        });
+        record_egress(
+            request.base.host(),
+            request.path.as_str(),
+            sent.as_ref().map(Response::status),
+            started.elapsed(),
+        );
+        let response = sent?;
         match classify(response.status(), response.headers()) {
             Classified::Found { etag, max_age } => Ok(UpstreamResponse::Found {
                 body: Box::pin(response.bytes_stream().map_err(io::Error::other)),

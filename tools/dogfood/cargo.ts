@@ -16,7 +16,8 @@ const INDEX = "https://localhost/cargo/internal/index/";
 const READY_SECONDS = 60;
 const YANKED = /yanked/i;
 const TOKEN_ENV = "CARGO_REGISTRIES_CRANE_TOKEN";
-const REGISTRY = "crane";
+/** Имя hosted-реестра в конфигурации клиента: `[registries.crane]` приходит из env. */
+export const REGISTRY = "crane";
 // Cargo не читает токен альтернативного реестра из окружения без явного провайдера учётных данных.
 const CLIENT_ENV = {
   CARGO_HTTP_CAINFO: ROOT_CERT,
@@ -24,6 +25,17 @@ const CLIENT_ENV = {
   CARGO_REGISTRIES_CRANE_CREDENTIAL_PROVIDER: "cargo:token",
   CARGO_TERM_COLOR: "never",
 };
+
+/** Токен hosted-реестра в окружение cargo: значение идёт через env, в argv попадает только имя. */
+export const craneCredentials = (token: string): Record<string, string> => ({
+  [TOKEN_ENV]: token,
+});
+
+/** curl с токеном через stdin (`-K -`): секрет не виден в `ps`. `args` — всё остальное, включая URL. */
+export const authorizedCurl = (client: Client, token: string, args: string[]): Result =>
+  client.exec(["curl", "--cacert", ROOT_CERT, "-K", "-", ...args], {
+    input: `header = "Authorization: ${token}"\n`,
+  });
 
 /**
  * Запускает клиент и ждёт, пока Caddy выпустит сертификат, а crane отдаст config.json.
@@ -34,25 +46,17 @@ export function startCargo(stand: Stand, image: string): CargoClient {
   log(`клиент ${image}: запуск`);
   const client = startClient(stand, image, CLIENT_ENV);
   try {
-    const ready = client.exec(
-      [
-        "curl",
-        "-fsS",
-        "--retry",
-        String(READY_SECONDS),
-        "--retry-delay",
-        "1",
-        "--retry-all-errors",
-        "--retry-max-time",
-        String(READY_SECONDS),
-        "--cacert",
-        ROOT_CERT,
-        "-K",
-        "-",
-        `${INDEX}config.json`,
-      ],
-      { input: `header = "Authorization: ${stand.token}"\n` },
-    );
+    const ready = authorizedCurl(client, stand.token, [
+      "-fsS",
+      "--retry",
+      String(READY_SECONDS),
+      "--retry-delay",
+      "1",
+      "--retry-all-errors",
+      "--retry-max-time",
+      String(READY_SECONDS),
+      `${INDEX}config.json`,
+    ]);
     if (ready.status !== 0) {
       throw new Error(`индекс не ответил за ${READY_SECONDS} с: ${tail(ready.stderr)}`);
     }
@@ -118,7 +122,7 @@ export function scenario(stand: Stand, client: CargoClient, minor: number): Expe
   const cargo = (dir: string, home: string, args: string[], token = stand.token): Result =>
     client.exec(["cargo", ...args], {
       cwd: `/work/${dir}`,
-      env: { CARGO_HOME: home, CARGO_TARGET_DIR: `${home}-target`, [TOKEN_ENV]: token },
+      env: { CARGO_HOME: home, CARGO_TARGET_DIR: `${home}-target`, ...craneCredentials(token) },
     });
   const must = (dir: string, home: string, args: string[]): Result => {
     const result = cargo(dir, home, args);

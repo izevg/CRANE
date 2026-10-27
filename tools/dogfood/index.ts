@@ -1,36 +1,23 @@
 // Dogfood и e2e: одноразовый стенд compose и настоящий cargo.
-// Использование: node tools/dogfood/index.ts [--cargo latest|latest,previous]
+// Использование: node tools/dogfood/index.ts [--cargo latest|latest,previous] [--full]
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Expected, leaks, verify } from "./audit.ts";
 import { scenario, startCargo } from "./cargo.ts";
-import { docker, log, MS_PER_SECOND, warn } from "./exec.ts";
+import { docker, log, MS_PER_SECOND, timed, warn } from "./exec.ts";
+import { fullScenario } from "./full.ts";
 import { proxyScenario } from "./proxy.ts";
 import { describeStand, proxyRepo, type Stand } from "./stand.ts";
-import { parseCargo } from "./versions.ts";
+import { parseArgs, parseCargo, type Which } from "./versions.ts";
 
 const ROOT = join(fileURLToPath(import.meta.url), "..", "..", "..");
 // Клиент делит сетевое пространство имён с Caddy и ходит на localhost: сервер увидит loopback.
 const LOOPBACK = ["127.0.0.1", "::1"];
 
-type Which = "latest" | "previous";
-
 interface Target {
+  which: Which;
   image: string;
   minor: number;
-}
-
-function parseArgs(argv: string[]): Which[] {
-  const flag = argv.indexOf("--cargo");
-  if (flag === -1) {
-    return ["latest"];
-  }
-  const values = (argv[flag + 1] ?? "").split(",");
-  const known = values.filter((v): v is Which => v === "latest" || v === "previous");
-  if (known.length === 0 || known.length !== values.length) {
-    throw new Error("--cargo принимает latest, previous или их список через запятую");
-  }
-  return [...new Set(known)];
 }
 
 /** Образы rust:1.M-bookworm и rust:1.(M-1)-bookworm по самой свежей стабильной версии. */
@@ -42,12 +29,12 @@ function resolveTargets(which: Which[]): Target[] {
     const minor = minors[w];
     const image = `rust:1.${minor}-bookworm`;
     docker(["pull", "-q", image]);
-    return { image, minor };
+    return { which: w, image, minor };
   });
 }
 
 /** Сценарий на каждой версии cargo, затем сверка аудита и поиск утечек. Возвращает число проблем. */
-function exercise(stand: Stand, targets: Target[]): number {
+function exercise(stand: Stand, targets: Target[], root: string, full: boolean): number {
   const expected: Expected[] = [];
   const versions: string[] = [];
   for (const [index, target] of targets.entries()) {
@@ -62,6 +49,16 @@ function exercise(stand: Stand, targets: Target[]): number {
     } finally {
       client.stop();
     }
+  }
+  const latest = targets.find((target) => target.which === "latest");
+  if (full && latest !== undefined) {
+    // Последним: офлайн необратим, после него стенд пригоден только для сверки журналов.
+    expected.push(
+      ...timed("полный сценарий", () =>
+        fullScenario(stand, { root, image: latest.image, repo: proxyRepo(targets.length) }),
+      ),
+    );
+    log("полный сценарий пройден");
   }
   const mismatches = verify(stand.craneLogs(), expected, {
     principal: stand.principal,
@@ -85,16 +82,16 @@ const logPath = (stand: Stand): string => join(ROOT, "out", "dogfood", `${stand.
 
 function main(): number {
   const started = Date.now();
-  const targets = resolveTargets(parseArgs(process.argv.slice(2)));
-  const stand = describeStand(
-    ROOT,
-    targets.map((_, index) => proxyRepo(index)),
-  );
+  const args = parseArgs(process.argv.slice(2));
+  const targets = timed("образы rust", () => resolveTargets(args.which));
+  // Полному сценарию отведён свой proxy-репозиторий после репозиториев целей cargo.
+  const repos = targets.map((_, index) => proxyRepo(index));
+  const stand = describeStand(ROOT, args.full ? [...repos, proxyRepo(repos.length)] : repos);
   let problems = 1;
   let leftovers: string[] = [];
   try {
-    stand.start();
-    problems = exercise(stand, targets);
+    timed("стенд: сборка образа и compose up", () => stand.start());
+    problems = timed("сценарии", () => exercise(stand, targets, ROOT, args.full));
   } catch (error) {
     warn(error instanceof Error ? error.message : String(error));
   } finally {

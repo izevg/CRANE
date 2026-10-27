@@ -216,6 +216,8 @@ Open decisions: [section 19](docs/product/19-risks-open-decisions.md).
 
 The project is in the design stage, so the most valuable contribution right now is an architecture review: open an issue that links to the relevant documentation section. Repository layout, documentation and code guidelines, DCO sign-off and the review process are in [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md). By participating, you agree to the [Code of Conduct](CODE_OF_CONDUCT-EN.md).
 
+**Dogfooding.** `task dogfood:full` starts a throwaway stand, publishes every CRANE crate to it, builds the server from CRANE's own registry (external dependencies go through the crates.io proxy) and repeats the build with the upstream unreachable. Details: [section 16.7](docs/product/16-deployment.md) (in Russian).
+
 **Security issues** in CRANE must not be reported in public issues: private reporting and scope are in [SECURITY-EN.md](SECURITY-EN.md).
 
 ## License

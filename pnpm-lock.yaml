@@ -29,6 +29,9 @@ importers:
       git-cliff:
         specifier: 2.14.2
         version: 2.14.2
+      smol-toml:
+        specifier: 1.9.1
+        version: 1.9.1
       typescript:
         specifier: ^6
         version: 6.0.3

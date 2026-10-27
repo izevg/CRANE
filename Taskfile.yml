@@ -119,6 +119,10 @@ tasks:
     desc: "E2E: стенд compose + cargo двух последних стабильных версий (нужен Docker)"
     cmds: ["node tools/dogfood/index.ts --cargo latest,previous"]
 
+  dogfood:full:
+    desc: "Полный dogfood: CRANE публикует себя в свой реестр и собирается из него, в том числе без upstream (нужен Docker, до часа на слабой машине)"
+    cmds: ["node tools/dogfood/index.ts --full"]
+
   gate:
     desc: "Полный гейт перед PR release/* → main (юниты, e2e, мутации по дифу релиза, Playwright). В CI не запускается"
     vars:
@@ -134,7 +138,8 @@ tasks:
       # Поднимают PostgreSQL и Valkey: шаг cargo mutants ниже рассчитывает, что они уже работают.
       - task: rust:test:pg
       - task: rust:test:valkey
-      - task: e2e
+      # Один стенд: e2e на двух версиях cargo, затем полный dogfood на latest (офлайн необратим, он последний).
+      - node tools/dogfood/index.ts --cargo latest,previous --full
       - mkdir -p out
       - git diff {{.BASE}}...HEAD > out/gate.diff
       - >-

@@ -12,6 +12,8 @@ export interface Stand {
   project: string;
   /** Детерминированное имя контейнера Caddy в compose: `<проект>-caddy-1`. */
   caddy: string;
+  /** Имя контейнера crane в compose: `<проект>-crane-1`; в его сетевом пространстве гасится маршрут. */
+  crane: string;
   principal: string;
   token: string;
   wrongToken: string;
@@ -88,6 +90,7 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
     id,
     project,
     caddy: `${project}-caddy-1`,
+    crane: `${project}-crane-1`,
     principal,
     token,
     wrongToken,
