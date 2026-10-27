@@ -21,6 +21,11 @@ export interface Stand {
   secrets: { name: string; value: string }[];
   /** Секреты, сборка образа, compose up. Побочные эффекты начинаются здесь. */
   start(): void;
+  /**
+   * Перезапускает crane и возвращается, когда он снова `healthy`. Обнуляет память процесса (L1), контейнер
+   * и журнал остаются прежними. Сетевое пространство пересоздаётся, поэтому снятые маршруты возвращаются.
+   */
+  restartCrane(): void;
   /** Журнал сервиса crane (NDJSON) без префиксов compose. */
   craneLogs(): string;
   allLogs(): string;
@@ -81,7 +86,18 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
   ];
 
   const overrides = join(tmp, "overrides.env");
-  const compose = ["compose", "-p", project, "--env-file", ENV_DIST, "--env-file", overrides];
+  // Профиль cache в базовой команде: up, logs и down (в том числе повторный после смены подсети) видят valkey.
+  const compose = [
+    "compose",
+    "-p",
+    project,
+    "--profile",
+    "cache",
+    "--env-file",
+    ENV_DIST,
+    "--env-file",
+    overrides,
+  ];
   const composeRun = (args: string[]): string => docker([...compose, ...args], { cwd: root });
   const logs = (services: string[]): string =>
     composeRun(["logs", "--no-log-prefix", "--no-color", ...services]);
@@ -101,6 +117,23 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
       log(`стенд ${project}: сборка образа ${image}`);
       docker(["build", "-t", image, root], { timeoutMs: BUILD_TIMEOUT_MS });
       startCompose(tmp, overrides, { id, principal, proxyRepos }, composeRun);
+    },
+    restartCrane() {
+      // `restart`, а не пересоздание: контейнер тот же, журнал compose сохраняется, а память процесса
+      // обнулена. Клиент не делает запросов до `healthy`: пока crane не готов, Caddy отвечает 502.
+      composeRun(["restart", "--timeout", String(DOWN_TIMEOUT_SECONDS), "crane"]);
+      // После restart docker сбрасывает статус healthcheck в `starting`, поэтому `--wait` ждёт новую проверку.
+      // `--no-recreate --no-deps` не дают up тронуть контейнер и соседние сервисы.
+      composeRun([
+        "up",
+        "-d",
+        "--wait",
+        "--wait-timeout",
+        String(UP_TIMEOUT_SECONDS),
+        "--no-recreate",
+        "--no-deps",
+        "crane",
+      ]);
     },
     craneLogs: () => logs(["crane"]),
     allLogs: () => logs([]),
@@ -175,6 +208,9 @@ function startCompose(
       `CRANE_DATABASE_URL_SECRET=${join(tmp, "database_url")}`,
       `CRANE_TOKEN_PRINCIPAL=${settings.principal}`,
       `CRANE_CARGO_PROXY_REPOS=${settings.proxyRepos.join(",")}`,
+      // L2-кэш в Valkey. Адрес без пароля и учётных данных, поэтому не секрет: сервис valkey в compose
+      // без auth и доступен только по сети default.
+      "CRANE_CACHE=valkey://valkey:6379",
       `CRANE_EDGE_SUBNET=${subnet}`,
       "CADDY_HTTP_PORT=127.0.0.1:",
       "CADDY_HTTPS_PORT=127.0.0.1:",

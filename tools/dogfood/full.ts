@@ -290,12 +290,18 @@ function cutUpstream(stand: Stand): void {
 
 function offline(context: Context): void {
   const { client, stand, base, proxyUrl } = context;
-  // Стенд идёт с CRANE_CACHE=memory из .env.dist, поэтому crane не перезапускается. Переход стенда на профиль
-  // cache (Valkey L2) с рестартом crane между прогревом и отключением — отдельное решение.
-  cutUpstream(stand);
-  // Обе отметки берутся вместе: egress-строки до них относятся к прогреву.
+  // Обе отметки берутся сразу после прогрева install, ДО рестарта и отключения: окно проверок включает и
+  // рестарт, так что между рестартом и офлайном нет ни одной успешной выборки из upstream. Egress-строки до
+  // отметок относятся к прогреву.
   const marked = stand.craneLogs();
   const mark = { access: accessLines(marked).length, egress: egressLines(marked).length };
+  // Стенд работает на Valkey L2. После рестарта L1 (moka в памяти процесса) пуст, а клиент до отключения
+  // ничего не запрашивает, поэтому hit офлайн может прийти только из L2: это и доказывает, что кэш переживает
+  // процесс. Запись в Valkey живёт keep_for = ttl + max(окно, stale-if-error) (policy.rs), что покрывает минуты
+  // прогона; истёкшая запись дала бы miss и красную проверку, а не ложный зелёный.
+  // Рестарт пересоздаёт netns, поэтому маршруты снимаются строго после него.
+  stand.restartCrane();
+  cutUpstream(stand);
   must(context, ["rm", "-rf", `${INSTALL_HOME}/registry`], {
     home: INSTALL_HOME,
     timeoutMs: minutes(1),
