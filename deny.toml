@@ -17,6 +17,12 @@ allow = [
   "MPL-2.0",
 ]
 
+# Корневые сертификаты Mozilla как данные, лицензия пермиссивная. Тянется цепочкой
+# object_store[aws] -> reqwest -> rustls-platform-verifier; глобально лицензию не разрешаем.
+[[licenses.exceptions]]
+crate = "webpki-root-certs"
+allow = ["CDLA-Permissive-2.0"]
+
 [advisories]
 version = 2
 yanked = "deny"
