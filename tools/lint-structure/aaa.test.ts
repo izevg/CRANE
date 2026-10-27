@@ -44,6 +44,11 @@ const GOOD = [
   "    // Assert",
   "    assert_eq!(y, 2);",
 ];
+const wrapped = (lines: string[]): string[] => [
+  "    support::run(async |server| {",
+  ...lines.map((l) => (l === "" ? l : `    ${l}`)),
+  "    });",
+];
 const GOOD_TS = [
   "  // Arrange",
   "  const x = 1;",
@@ -144,6 +149,11 @@ const compliant = [
     name: "сигнатура на нескольких строках",
     path: RS,
     src: rustTest(GOOD, ["#[test]"], ["fn sample<C>(", "    value: C,", ") -> Result<(), E> {"]),
+  },
+  {
+    name: "секции внутри обёртки-раннера",
+    path: RS,
+    src: rustTest(wrapped(GOOD)),
   },
   {
     name: "привязка адаптера к контракту без маркеров",
@@ -321,6 +331,18 @@ const violating = [
     path: RS,
     src: rustTest(["    assert!(meets_contract(x));"]),
     expected: [`${RS}:2 sample — маркеры: // Arrange ×0, // Act ×0, // Assert ×0`],
+  },
+  {
+    name: "обёртка-раннер: два оператора в Act",
+    path: RS,
+    src: rustTest(wrapped(twoActs.flatMap((l) => l.split("\n")))),
+    expected: [`${RS}:2 sample — в Act 2 оператора`],
+  },
+  {
+    name: "маркеры на разных уровнях",
+    path: RS,
+    src: rustTest(GOOD.map((l) => (l === "    // Act" ? "        // Act" : l))),
+    expected: [`${RS}:2 sample — маркеры на разных уровнях`],
   },
   {
     name: "TS без маркеров",

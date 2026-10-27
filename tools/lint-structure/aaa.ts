@@ -243,12 +243,21 @@ function markerViolations(t: TestFn, fail: (rule: string, todo: string) => strin
     ];
   }
   const [a = -1, b = -1, c = -1] = positions.map((x) => x[0] ?? -1);
-  return a < b && b < c
+  if (!(a < b && b < c)) {
+    return [
+      fail(
+        "маркеры не по порядку",
+        `расставьте ${ARRANGE}, ${ACT}, ${ASSERT} именно в этом порядке`,
+      ),
+    ];
+  }
+  const levels = new Set([a, b, c].map((i) => indentOf(t.body[i] ?? "")));
+  return levels.size === 1
     ? []
     : [
         fail(
-          "маркеры не по порядку",
-          `расставьте ${ARRANGE}, ${ACT}, ${ASSERT} именно в этом порядке`,
+          "маркеры на разных уровнях",
+          `поставьте ${ARRANGE}, ${ACT}, ${ASSERT} на одном уровне вложенности`,
         ),
       ];
 }
@@ -256,11 +265,12 @@ function markerViolations(t: TestFn, fail: (rule: string, todo: string) => strin
 /** Нарушения одного теста; пусто — тест в форме AAA. */
 export function checkAaa(t: TestFn): string[] {
   const fail = (rule: string, todo: string): string => report(t.path, t.line, t.name, rule, todo);
-  const indent = indentOf(t.body.find((l) => l.trim() !== "") ?? "");
+  // Привязка — один оператор верхнего уровня тела.
+  const topIndent = indentOf(t.body.find((l) => l.trim() !== "") ?? "");
   const text = t.body.join("\n");
   // Привязка не проверяет: оператор с assert под исключение не подпадает.
   const isBinding =
-    countStatements(t.body, indent) === 1 &&
+    countStatements(t.body, topIndent) === 1 &&
     BINDING_CALL.test(text) &&
     !ASSERT_BEFORE[t.lang].test(text);
   if (isBinding) {
@@ -272,7 +282,9 @@ export function checkAaa(t: TestFn): string[] {
   }
   const idx = (m: string): number => t.body.findIndex((l) => l.trim() === m);
   const [act, assertAt] = [idx(ACT), idx(ASSERT)];
-  const actStatements = countStatements(t.body.slice(act + 1, assertAt), indent);
+  // Секции могут лежать глубже тела (обёртка-раннер): считаем на уровне маркера Act.
+  const actIndent = indentOf(t.body[act] ?? "");
+  const actStatements = countStatements(t.body.slice(act + 1, assertAt), actIndent);
   if (actStatements !== 1) {
     found.push(
       actStatements === 0
