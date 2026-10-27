@@ -14,6 +14,24 @@ fn not_supported(reason: impl Into<Box<dyn std::error::Error + Send + Sync>>) ->
     }
 }
 
+/// Статический ключ доступа S3. Без `Debug`, `Display` и `Clone`: случайно попасть в журнал или
+/// размножиться он не может.
+#[allow(
+    missing_debug_implementations,
+    reason = "секрет: Debug мог бы попасть в журнал"
+)]
+pub struct S3Key {
+    id: String,
+    secret: String,
+}
+
+impl S3Key {
+    #[must_use]
+    pub fn new(id: String, secret: String) -> Self {
+        Self { id, secret }
+    }
+}
+
 impl ObjectBlobStore {
     /// Собирает хранилище по URL из `CRANE_BLOBS`.
     ///
@@ -23,16 +41,22 @@ impl ObjectBlobStore {
     /// * `s3://bucket[/prefix]?key=value&...` — S3-совместимое хранилище. Учётные данные и регион
     ///   берутся из окружения (`AWS_*`), каждая пара запроса — ключ `AmazonS3ConfigKey`. Неизвестный
     ///   ключ — ошибка, а не молчаливый пропуск. Для SeaweedFS/MinIO: `endpoint=http://host:8333`
-    ///   и `aws_allow_http=true` (для `http://`).
+    ///   и `allow_http=true` (для `http://`). Явный `key` (прочитан сервером из `AWS_*_FILE`)
+    ///   перекрывает ключ из окружения; без него работают плоские `AWS_*`, роли и метаданные.
     ///
     /// # Errors
     ///
-    /// `NotSupported` для другой схемы, параметров у `file://` и URL без бакета; ошибки
-    /// конфигурации и ФС — как их вернул `object_store`.
-    pub fn from_url(url: &Url) -> Result<Self, Error> {
+    /// `NotSupported` для другой схемы, параметров у `file://`, ключа у `file://` и URL без
+    /// бакета; ошибки конфигурации и ФС — как их вернул `object_store`.
+    pub fn from_url(url: &Url, key: Option<S3Key>) -> Result<Self, Error> {
         let store = match url.scheme() {
-            "file" => local(url)?,
-            "s3" => s3(url)?,
+            "file" => {
+                if key.is_some() {
+                    return Err(not_supported("ключ S3 для file:// не нужен"));
+                }
+                local(url)?
+            }
+            "s3" => s3(url, key)?,
             other => return Err(not_supported(format!("схема {other}:// не поддерживается"))),
         };
         Ok(Self::new(store))
@@ -105,7 +129,7 @@ pub fn is_public_s3_param(key: &str, value: &str) -> bool {
     PUBLIC_S3_KEYS.contains(&name) && !endpoint_has_credentials
 }
 
-fn s3(url: &Url) -> Result<Arc<dyn ObjectStore>, Error> {
+fn s3(url: &Url, key: Option<S3Key>) -> Result<Arc<dyn ObjectStore>, Error> {
     let bucket = url
         .host_str()
         .ok_or_else(|| not_supported("в s3:// URL не указан бакет"))?;
@@ -114,6 +138,11 @@ fn s3(url: &Url) -> Result<Arc<dyn ObjectStore>, Error> {
     let mut builder = AmazonS3Builder::from_env().with_url(format!("s3://{bucket}"));
     for (key, value) in url.query_pairs() {
         builder = builder.with_config(key.parse::<AmazonS3ConfigKey>()?, value.into_owned());
+    }
+    if let Some(key) = key {
+        builder = builder
+            .with_access_key_id(key.id)
+            .with_secret_access_key(key.secret);
     }
     // `s3://bucket/prefix` кладёт всё под `prefix/`. Path отбрасывает пустые сегменты,
     // поэтому пустой путь или `/` даёт пустой префикс, а PrefixStore с ним ничего не меняет.

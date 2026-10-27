@@ -54,7 +54,7 @@ pub fn file_url(dir: &Path) -> Url {
 }
 
 pub fn store_in(dir: &Path) -> ObjectBlobStore {
-    ObjectBlobStore::from_url(&file_url(dir)).expect("file:// хранилище создаётся")
+    ObjectBlobStore::from_url(&file_url(dir), None).expect("file:// хранилище создаётся")
 }
 
 pub fn body(chunks: Vec<io::Result<Bytes>>) -> ByteStream {
