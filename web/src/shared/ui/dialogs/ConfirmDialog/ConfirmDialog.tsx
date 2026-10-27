@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useRef } from "react";
 import { type Action, ActionButton } from "../../actions";
 import {
   AlertDialog,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -78,14 +79,16 @@ export function ConfirmDialog({
             <AlertDialogDescription>{description}</AlertDialogDescription>
           )}
         </AlertDialogHeader>
-        {consequences && consequences.length > 0 ? (
-          <ul className="m-0 ml-5 flex list-disc flex-col gap-1 text-body">
-            {consequences.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        ) : null}
-        {children}
+        <AlertDialogBody>
+          {consequences && consequences.length > 0 ? (
+            <ul className="m-0 ml-5 flex list-disc flex-col gap-1 text-body">
+              {consequences.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          ) : null}
+          {children}
+        </AlertDialogBody>
         <AlertDialogFooter>
           <AlertDialogCancel ref={cancelRef}>{CANCEL}</AlertDialogCancel>
           <span data-confirm-slot="" className="contents">

@@ -37,7 +37,7 @@ export function SheetContent({
         data-slot="sheet-content"
         data-side={side}
         className={cx(
-          "anim-sheet fixed z-50 flex flex-col gap-4 bg-popover text-body text-popover-foreground shadow-card",
+          "anim-sheet fixed z-50 flex max-h-dvh flex-col gap-4 bg-popover text-body text-popover-foreground shadow-card outline-none",
           SIDE[side],
           className,
         )}
@@ -68,7 +68,18 @@ export function SheetHeader({ className, ...props }: React.ComponentProps<"div">
   return (
     <div
       data-slot="sheet-header"
-      className={cx("flex flex-col gap-0.5 p-4", className)}
+      className={cx("flex shrink-0 flex-col gap-0.5 p-4", className)}
+      {...props}
+    />
+  );
+}
+
+/** Прокручиваемое тело: заголовок и подвал остаются на виду, длинное содержимое прокручивается внутри (WCAG 1.4.10). */
+export function SheetBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="sheet-body"
+      className={cx("min-h-0 flex-1 overflow-y-auto px-4", className)}
       {...props}
     />
   );
@@ -78,7 +89,7 @@ export function SheetFooter({ className, ...props }: React.ComponentProps<"div">
   return (
     <div
       data-slot="sheet-footer"
-      className={cx("mt-auto flex flex-col gap-2 p-4", className)}
+      className={cx("mt-auto flex shrink-0 flex-col gap-2 p-4", className)}
       {...props}
     />
   );

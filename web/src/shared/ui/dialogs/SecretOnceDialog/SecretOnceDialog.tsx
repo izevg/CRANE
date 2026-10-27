@@ -3,6 +3,7 @@ import { type Action, ActionButton } from "../../actions";
 import { CodeBlock } from "../../data-display";
 import {
   AlertDialog,
+  AlertDialogBody,
   AlertDialogContent,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -57,14 +58,16 @@ function SecretDialogBody({ secret, title, onDone }: BodyProps) {
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
         </AlertDialogHeader>
-        <Callout tone="warning">
-          <CalloutTitle>{WARNING}</CalloutTitle>
-        </Callout>
-        <CodeBlock code={secret} copyLabel={COPY} />
-        <div className="flex items-center gap-2 text-body">
-          <Checkbox id={checkboxId} checked={saved} onCheckedChange={setSaved} />
-          <label htmlFor={checkboxId}>{SAVED}</label>
-        </div>
+        <AlertDialogBody className="flex flex-col gap-4">
+          <Callout tone="warning">
+            <CalloutTitle>{WARNING}</CalloutTitle>
+          </Callout>
+          <CodeBlock code={secret} copyLabel={COPY} />
+          <div className="flex items-center gap-2 text-body">
+            <Checkbox id={checkboxId} checked={saved} onCheckedChange={setSaved} />
+            <label htmlFor={checkboxId}>{SAVED}</label>
+          </div>
+        </AlertDialogBody>
         <AlertDialogFooter>
           <ActionButton action={done} variant="primary" />
         </AlertDialogFooter>

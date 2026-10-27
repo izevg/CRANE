@@ -48,7 +48,7 @@ export function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cx(
-          "anim-dialog fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-body text-popover-foreground shadow-card",
+          "anim-dialog fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] flex-col -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-body text-popover-foreground shadow-card outline-none",
           SIZE[size],
           flush ? FLUSH : PADDED,
           className,
@@ -78,7 +78,23 @@ export function DialogContent({
 
 export function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div data-slot="dialog-header" className={cx("flex flex-col gap-2", className)} {...props} />
+    <div
+      data-slot="dialog-header"
+      className={cx("flex shrink-0 flex-col gap-2", className)}
+      {...props}
+    />
+  );
+}
+
+/** Прокручиваемое тело: заголовок и подвал остаются на виду, длинное содержимое прокручивается внутри (WCAG 1.4.10). */
+export function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  // -m-1/p-1: запас под outline элементов в фокусе, чтобы край области прокрутки его не обрезал
+  return (
+    <div
+      data-slot="dialog-body"
+      className={cx("-m-1 min-h-0 flex-1 overflow-y-auto p-1", className)}
+      {...props}
+    />
   );
 }
 
@@ -86,7 +102,7 @@ export function DialogFooter({ className, ...props }: React.ComponentProps<"div"
   return (
     <div
       data-slot="dialog-footer"
-      className={cx("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
+      className={cx("flex shrink-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
       {...props}
     />
   );

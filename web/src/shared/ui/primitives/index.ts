@@ -62,6 +62,7 @@ export { Tabs, TabsContent, TabsList, TabsTrigger } from "./nav/tabs";
 export {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -72,6 +73,7 @@ export {
 } from "./overlays/dialogs/alert-dialog";
 export {
   Dialog,
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -89,6 +91,7 @@ export {
 } from "./overlays/dialogs/popover";
 export {
   Sheet,
+  SheetBody,
   SheetContent,
   SheetDescription,
   SheetFooter,

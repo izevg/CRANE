@@ -1,9 +1,10 @@
 // biome-ignore-all lint/style/useComponentExportOnlyModules: тестовые компоненты-помощники не экспортируются
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import {
   Sheet,
+  SheetBody,
   SheetContent,
   SheetDescription,
   SheetFooter,
@@ -21,6 +22,7 @@ function Example() {
           <SheetTitle>{"Событие"}</SheetTitle>
           <SheetDescription>{"Сведения о событии журнала"}</SheetDescription>
         </SheetHeader>
+        <SheetBody>{"Тело события"}</SheetBody>
         <SheetFooter>{"Подвал"}</SheetFooter>
       </SheetContent>
     </Sheet>
@@ -52,5 +54,19 @@ describe("Sheet", () => {
 
     // Assert
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("тело листа лежит внутри диалога", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    render(<Example />);
+
+    // Act
+    await user.click(screen.getByRole("button", { name: "Детали" }));
+
+    // Assert
+    expect(
+      await within(await screen.findByRole("dialog")).findByText("Тело события"),
+    ).toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -25,6 +26,7 @@ function Example({ onConfirm }: { onConfirm: () => void }) {
           <AlertDialogTitle>{"Удалить пакет?"}</AlertDialogTitle>
           <AlertDialogDescription>{"Версии станут недоступны"}</AlertDialogDescription>
         </AlertDialogHeader>
+        <AlertDialogBody>{"Что будет удалено: все версии"}</AlertDialogBody>
         <AlertDialogFooter>
           <AlertDialogAction variant="destructive" onClick={onConfirm}>
             {"Удалить"}
@@ -78,5 +80,18 @@ describe("AlertDialog", () => {
 
     // Assert
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  it("тело и подвал лежат внутри alertdialog", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    render(<Example onConfirm={vi.fn()} />);
+
+    // Act
+    await user.click(screen.getByRole("button", { name: "Удалить" }));
+
+    // Assert
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Что будет удалено: все версии")).toBeInTheDocument();
   });
 });

@@ -35,7 +35,7 @@ export function AlertDialogContent({
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         className={cx(
-          "anim-dialog fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-[calc(100%-2rem)] flex-col -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-6 text-body text-popover-foreground shadow-card",
+          "anim-dialog fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-[calc(100%-2rem)] flex-col -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-6 text-body text-popover-foreground shadow-card outline-none",
           SIZE[size],
           className,
         )}
@@ -49,7 +49,18 @@ export function AlertDialogHeader({ className, ...props }: React.ComponentProps<
   return (
     <div
       data-slot="alert-dialog-header"
-      className={cx("flex min-h-0 flex-col gap-1.5", className)}
+      className={cx("flex shrink-0 flex-col gap-1.5", className)}
+      {...props}
+    />
+  );
+}
+
+/** Прокручиваемое тело: заголовок и подвал остаются на виду, длинное содержимое прокручивается внутри (WCAG 1.4.10). */
+export function AlertDialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="alert-dialog-body"
+      className={cx("-m-1 min-h-0 flex-1 overflow-y-auto p-1", className)}
       {...props}
     />
   );

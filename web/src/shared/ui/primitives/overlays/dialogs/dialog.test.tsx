@@ -1,9 +1,10 @@
 // biome-ignore-all lint/style/useComponentExportOnlyModules: тестовые компоненты-помощники не экспортируются
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import {
   Dialog,
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -22,6 +23,7 @@ function Example() {
           <DialogTitle>{"Новый токен"}</DialogTitle>
           <DialogDescription>{"Срок действия до 90 дней"}</DialogDescription>
         </DialogHeader>
+        <DialogBody>{"Длинное содержимое"}</DialogBody>
         <DialogFooter>
           <DialogClose>{"Отмена"}</DialogClose>
         </DialogFooter>
@@ -70,5 +72,19 @@ describe("Dialog", () => {
 
     // Assert
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("тело диалога находится внутри него вместе с заголовком и подвалом", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    render(<Example />);
+
+    // Act
+    await user.click(screen.getByRole("button", { name: "Открыть" }));
+
+    // Assert
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Длинное содержимое")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Отмена" })).toBeInTheDocument();
   });
 });
