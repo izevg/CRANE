@@ -8,7 +8,6 @@
 mod file;
 
 use std::collections::BTreeMap;
-use std::fmt;
 use std::io;
 use std::path::Path;
 use std::str::FromStr;
@@ -138,105 +137,57 @@ impl FormatRepos {
 }
 
 /// Ошибка конфигурации. Значения секретных переменных в тексте не появляются никогда.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum ConfigError {
-    Missing {
-        var: &'static str,
-    },
+    #[error("не задана переменная {var}")]
+    Missing { var: &'static str },
+    #[error("некорректное значение {var}: {reason}")]
     Invalid {
         var: &'static str,
         reason: &'static str,
     },
+    #[error("переменные {first} и {second} взаимоисключающие")]
     Conflict {
         first: &'static str,
         second: &'static str,
     },
     /// В `scheme` только схема URL, без логина, пароля и адреса.
-    Unsupported {
-        var: &'static str,
-        scheme: String,
-    },
+    #[error("{var}: значение со схемой `{scheme}` пока не поддерживается")]
+    Unsupported { var: &'static str, scheme: String },
     /// `var` — имя переменной `*_FILE`; причина ввода-вывода не содержит содержимого файла.
-    SecretFile {
-        var: &'static str,
-        reason: String,
-    },
+    #[error("не удалось прочитать {var}: {reason}")]
+    SecretFile { var: &'static str, reason: String },
     /// Ключ запроса `CRANE_BLOBS` вне списка несекретных параметров; значение в ошибку не попадает.
-    BlobsKey {
-        key: String,
-    },
+    #[error(
+        "{}: ключ `{key}` не из списка несекретных параметров; учётные данные и их \
+         поставщики S3 задаются только переменными AWS_*",
+        BLOBS
+    )]
+    BlobsKey { key: String },
     /// Каталог в PostgreSQL над blob в памяти после рестарта ссылался бы на потерянные blob.
+    #[error(
+        "{} и {}: memory нельзя смешивать с постоянным хранилищем",
+        DATABASE_URL,
+        BLOBS
+    )]
     MixedStorage,
     /// Ключ S3 из файлов при `memory`: мёртвая конфигурация хуже ошибки.
+    #[error("{} и {}: ключ S3 не нужен при memory", S3_KEY_ID_FILE, S3_SECRET_FILE)]
     S3KeyWithMemory,
-    UnknownKey {
-        key: String,
-    },
-    FileValue {
-        key: String,
-        reason: &'static str,
-    },
-    FileRead {
-        path: String,
-        reason: String,
-    },
+    #[error("неизвестный ключ `{key}` в файле конфигурации")]
+    UnknownKey { key: String },
+    #[error("некорректное значение ключа `{key}` в файле конфигурации: {reason}")]
+    FileValue { key: String, reason: &'static str },
+    #[error("не удалось прочитать файл конфигурации {path}: {reason}")]
+    FileRead { path: String, reason: String },
     /// Только позиция: сообщение парсера цитирует строку файла, а там может быть токен.
+    #[error("ошибка разбора TOML в {path}: строка {line}, столбец {column}")]
     FileParse {
         path: String,
         line: usize,
         column: usize,
     },
 }
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Missing { var } => write!(f, "не задана переменная {var}"),
-            Self::Invalid { var, reason } => write!(f, "некорректное значение {var}: {reason}"),
-            Self::Conflict { first, second } => {
-                write!(f, "переменные {first} и {second} взаимоисключающие")
-            }
-            Self::Unsupported { var, scheme } => {
-                write!(
-                    f,
-                    "{var}: значение со схемой `{scheme}` пока не поддерживается"
-                )
-            }
-            Self::SecretFile { var, reason } => {
-                write!(f, "не удалось прочитать {var}: {reason}")
-            }
-            Self::BlobsKey { key } => write!(
-                f,
-                "{BLOBS}: ключ `{key}` не из списка несекретных параметров; учётные данные и их \
-                 поставщики S3 задаются только переменными AWS_*"
-            ),
-            Self::MixedStorage => write!(
-                f,
-                "{DATABASE_URL} и {BLOBS}: memory нельзя смешивать с постоянным хранилищем"
-            ),
-            Self::S3KeyWithMemory => write!(
-                f,
-                "{S3_KEY_ID_FILE} и {S3_SECRET_FILE}: ключ S3 не нужен при memory"
-            ),
-            Self::UnknownKey { key } => write!(f, "неизвестный ключ `{key}` в файле конфигурации"),
-            Self::FileValue { key, reason } => {
-                write!(
-                    f,
-                    "некорректное значение ключа `{key}` в файле конфигурации: {reason}"
-                )
-            }
-            Self::FileRead { path, reason } => {
-                write!(f, "не удалось прочитать файл конфигурации {path}: {reason}")
-            }
-            Self::FileParse { path, line, column } => write!(
-                f,
-                "ошибка разбора TOML в {path}: строка {line}, столбец {column}"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for ConfigError {}
 
 /// Выбор хранилищ. Один режим на оба, а не два независимых выбора: смешанная пара
 /// непредставима. Новый бэкенд blob (GCS, Azure) этот тип не меняет: схему разбирает `from_url`.
