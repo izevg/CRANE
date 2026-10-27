@@ -94,22 +94,43 @@ on revoke(credential) | block(user) | groups_changed(user):
 
 Токены CRANE имеют формат `<префикс><8 символов идентификатора><32 байта base62><crc32>`, префиксы: `crp_` личный, `crr_` робот, `crci_` нагрузка (раздел 13). Префикс позволяет найти запись без перебора, CRC позволяет secret-сканерам GitLab отличать настоящие токены от случайных строк. Храним HMAC-SHA256 с pepper: для высокоэнтропийного секрета это безопасно и в сотни раз быстрее argon2 на горячем пути.
 
+```rust
+fn issue(req, kind):                                     // POST /tokens, /robots/{id}/credentials
+    p = authenticate(req)
+    require(p.is_human() and p.interactive_idp_session)  // токен CRANE или client credentials → 403
+    if kind in [personal, robot_secret]: require(context.mfa)   // свежий MFA (раздел 13)
+    require(req.scopes ⊆ rights(p, kind))                // только сужение
+    ttl = min(req.ttl, policy.max_ttl(kind))
+    if kind == session: ttl = min(ttl, 12h, p.idp_session_left)
+    // команда атрибуции фиксируется при выпуске: 14.15
+    return mint(prefix(kind), scopes = req.scopes, ttl)
+```
+
+Правила выпуска и их причины — раздел 13.
+
 ## 10.5 Обмен OIDC-токена платформы на credential
 
 ```rust
 fn exchange(id_token):
     jwt = verify(id_token, jwks(gitlab_issuer))          // подпись, iss, aud = "crane", exp, nbf
-    c = jwt.claims    // project_path, namespace_path, ref, ref_type, ref_protected,
+    c = jwt.claims    // project_path, source_project_path, namespace_path, ref, ref_type, ref_protected,
                       // pipeline_source, job_id, pipeline_id, user_login, environment
-    if c.pipeline_source == "merge_request_event" and from_fork(c): scopes = read_only
     rules = trust_policy.matching(c.project_path)         // явные проекты, не wildcard по умолчанию
     scopes = rules.filter(|r| r.matches(c.ref, c.ref_type, c.ref_protected)).union()
+    // запись только из защищённого ref вне merge request; проект-источник MR отличается от целевого у форка
+    can_write = c.ref_protected and c.ref_type in [tag, branch]
+                and c.pipeline_source != "merge_request_event"
+                and c.source_project_path == c.project_path
+    if !can_write: scopes = scopes.read_only()
     require(!scopes.is_empty())
-    ttl = min(rules.max_ttl, 1h, job_timeout)              // по умолчанию 15 мин
-    return issue("crci_", scopes, ttl, provenance = {project, commit, pipeline, job})
+    // команда атрибуции фиксируется при выпуске: 14.15
+    ttl = min(rules.max_ttl, 1h, job_timeout)              // по умолчанию 15 мин; со scope записи 5 мин
+    return issue("crci_", scopes, ttl, provenance = {project, commit, pipeline, job, ref, ref_protected, pipeline_source})
 ```
 
-Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Эти claims пишутся и как evidence (`predicate_type = https://slsa.dev/provenance/v1`, `kind = jwt`, `trust = crane`, `signer_issuer` = `iss` токена, `signer_san` = `project_path` без ref (ref законно меняется от версии к версии), `facts` = `repo` (тот же `project_path`), commit, pipeline, job), поэтому gate provenance и правило регрессии (10.6.1) читают один источник и для hosted. Такая provenance выпущена CRANE, а не подписана сборочной платформой, поэтому сама по себе не означает SLSA Build L2; L2 дают attestations из CI (`trust = publisher`). Это закрывает требование связи публикации с project, commit, pipeline и job.
+Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Эти claims пишутся и как evidence (`predicate_type = https://slsa.dev/provenance/v1`, `kind = jwt`, `trust = crane`, `signer_issuer` = `iss` токена, `signer_san` = `project_path` без ref (ref законно меняется от версии к версии), `facts` = `repo` (тот же `project_path`), commit, pipeline, job, `ref`, `ref_protected`, `pipeline_source`), поэтому gate provenance и правило регрессии (10.6.1) читают один источник и для hosted. Такая provenance выпущена CRANE, а не подписана сборочной платформой, поэтому сама по себе не означает SLSA Build L2; L2 дают attestations из CI (`trust = publisher`). Это закрывает требование связи публикации с project, commit, pipeline и job.
+
+Scope записи выдаётся, только если `ref_protected`, `ref_type` — тег или ветка и пайплайн не из merge request; проверка `source_project_path != project_path` ловит форк (claim GitLab ID token: проект с исходным кодом в merge request). Иначе токен получает только чтение. Scope publish ограничен списком имён пакетов из правила trust policy; срок `crci_` со scope записи по умолчанию 5 минут. Правило регрессии (10.6.1) сравнивает и `facts.ref_protected`: версия из незащищённой ветки после истории из защищённых получает hold.
 
 ## 10.6 Promotion и gates
 
@@ -128,7 +149,7 @@ fn evaluate(version, target_stage):
     return verdict                   // всегда с перечнем причин для UI
 ```
 
-Gate не знает видов доказательств: он объявляет, какие `predicate_types` читает (раздел 9). Provenance читает SLSA Provenance, а `trust` отличает claims CRANE от подписанной provenance CI и upstream; cve читает vulns и VEX; license читает CycloneDX и SPDX; quality читает quality gate SonarQube. Требование «без валидной attestation не продвигать» — настройка gate provenance по репозиторию и стадии: какие `trust` он принимает (`publisher`, `upstream`, `crane` для claims) и требует ли `valid`. Версия без подходящего evidence не уходит дальше quarantine.
+Gate не знает видов доказательств: он объявляет, какие `predicate_types` читает (раздел 9). Provenance читает SLSA Provenance, а `trust` отличает claims CRANE от подписанной provenance CI и upstream; cve читает vulns и VEX; license читает CycloneDX и SPDX; quality читает quality gate SonarQube. Требование «без валидной attestation не продвигать» — настройка gate provenance по репозиторию и стадии: какие `trust` он принимает (`publisher`, `upstream`, `crane` для claims) и требует ли `valid`. Версия без подходящего evidence не уходит дальше quarantine. Gate cve требует evidence скана артефакта самим CRANE (`trust = crane`); SBOM издателя дополняет, но не заменяет его.
 
 Promotion меняет только строку в БД: digest и байты те же. Повторная оценка запускается событиями «новое evidence», «новая версия базы уязвимостей», «истекло исключение», «изменилась политика».
 
@@ -159,14 +180,18 @@ PGP (`kind = pgp`, Maven `.asc`): подпись проверяется по п�
 ```rust
 on attestation_verified(new_version):                     // attestation.verify → правило регрессии
     past = previous_versions(new_version.package)
-    signer(x) = match x.kind { pgp => x.signer_subject,                  // отпечаток ключа
-                               _   => (x.signer_issuer, x.signer_san) }  // Sigstore, jwt
+    signer(x) = match x.kind { pgp      => x.signer_subject,                       // отпечаток ключа
+                               sigstore => (x.signer_issuer, x.facts.source_repo, x.facts.workflow_path),
+                               _        => (x.signer_issuer, x.signer_san) }       // jwt
     for prev in evidence.latest_valid_per_type(past):      // каждый predicate_type, что был valid раньше
         e = evidence.latest(new_version.id, [prev.predicate_type])
-        if e.is_none() or e.invalid or signer(e) != signer(prev) or e.facts.repo != prev.facts.repo:
+        if e.is_none() or e.invalid or signer(e) != signer(prev) or e.facts.repo != prev.facts.repo
+           or (prev.facts.ref_protected and !e.facts.ref_protected):   // из защищённого ref в незащищённый
             hold(new_version, quarantine | blocked)        // по политике репозитория
             siem(SupplyChainSignal(new_version, prev, e)); break   // сигнал захвата аккаунта maintainer'а
 ```
+
+Для Sigstore сравнивается не SAN целиком: у GitHub Actions и PyPI Trusted Publishing он содержит `@refs/tags/vX.Y.Z` и меняется каждый релиз. Берутся издатель (OID 1.3.6.1.4.1.57264.1.8), репозиторий (1.15 Source Repository Identifier, при пустом — 1.12 Source Repository URI) и путь workflow (1.9 Build Signer URI без `@ref`). Ref (1.14), триггер (1.20) и окружение раннера (1.11) идут в `facts`. Источник: github.com/sigstore/fulcio, docs/oid-info.md.
 
 Регрессия — главный практический сигнал: у прошлых версий была валидная attestation или подпись, а у новой её нет, она `invalid` или сменились издатель и репозиторий. Так может выглядеть публикация с украденным токеном мимо CI. Карточка версии показывает «собрано в <CI> из <repo>@<commit>» из `facts`.
 
@@ -341,7 +366,8 @@ redis.call('SET', KEYS[1], new_tat, 'PX', burst*interval) return {1, 0}
 ```rust
 fn readiness(lockfile_or_sbom):
     coords = parse(lockfile)          // package-lock, pnpm-lock, yarn.lock, poetry.lock, uv.lock,
-                                      // requirements с hash, packages.lock.json, CycloneDX/SPDX
+                                      // requirements с hash, packages.lock.json, CycloneDX/SPDX;
+                                      // из lockfile берутся только координаты и хэши, `resolved` и URL игнорируются
     for c in coords: status[c] = (metadata_cached?, blob_cached?, integrity_match?)
     report = {ready: %, missing: [...], integrity_mismatch: [...]}
     if warm: enqueue(cache.warm(missing))

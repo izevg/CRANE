@@ -42,8 +42,8 @@ CREATE TYPE ver_state  AS ENUM ('quarantined','released','blocked','deleted');
 CREATE TABLE repository (
   id uuid PRIMARY KEY, workspace_id uuid NOT NULL REFERENCES workspace,
   format pkg_format NOT NULL, kind repo_kind NOT NULL, name text NOT NULL,
-  upstream_url text,                 -- только proxy, проверяется allowlist
-  config jsonb NOT NULL DEFAULT '{}', -- TTL, лимиты, mutability, delivery, класс хранения
+  upstream_url text,                 -- только proxy, из allowlist экземпляра; смена — через /protection
+  config jsonb NOT NULL DEFAULT '{}', -- эксплуатационные: TTL, лимиты, delivery, класс хранения; защитные (mutable, dev_skip_quarantine) — только через /protection
   UNIQUE (format, name));
 
 CREATE TABLE namespace (
@@ -177,6 +177,8 @@ Evidence расширяется строками, а не колонками. Н
 Порядок версий в схеме не хранится: `sort_key` убран из таблицы. Порядко-сохраняющее кодирование для Maven и PEP 440 — отдельная задача на появление потребителя; индекс Cargo упорядочен по публикации `(published_at, id)`.
 
 `metadata` имеет тип `json`, а не `jsonb`: `jsonb` переписывает текст (порядок ключей, пробелы), а metadata формата — непрозрачные байты для индекса Cargo и ETag, они должны вернуться побайтно.
+
+Настройки репозитория делятся на эксплуатационные (TTL, лимиты, delivery, класс хранения) и защитные. Эксплуатационные меняет owner. Защитные: `mutable` (только Maven SNAPSHOT), `dev_skip_quarantine` (только hosted dev, для proxy запрещён) и `upstream_url` (из allowlist экземпляра). При создании репозитория защитные настройки принимают только значения по умолчанию; меняет их отдельная операция `PUT /repositories/{format}/{repository}/protection` со step-up: `mutable` и `dev_skip_quarantine` — appsec, `upstream_url` — platform-admin. Изменение — событие SIEM «Ослабление политики» (14.9) до применения.
 
 ### Эмбеддинги пакетов
 

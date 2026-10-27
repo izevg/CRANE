@@ -73,14 +73,14 @@ sequenceDiagram
   D->>A: GET /pypi/internal/simple/acme-billing/
   A->>A: decide(Read, acme-billing) = deny, rule ws-billing-readers
   A->>P: audit_event (deny, rule, request id)
-  A-->>D: 403 и текст: нет доступа к workspace billing, правило ws-billing-readers, request id R-7f3a
+  A-->>D: 404 и нейтральный текст «пакет не найден», request id R-7f3a
   D->>UI: открыть страницу диагностики R-7f3a
   UI->>A: GET /api/v1/diagnostics/R-7f3a
   A->>A: проверка права видеть событие
   A-->>UI: причина, правило, trace политик, кому писать, кнопка «запросить доступ»
 ```
 
-*Рис. 12.3. Отказ, который можно исправить без обращения в поддержку.*
+*Рис. 12.3. Отказ, который можно исправить без обращения в поддержку. Протокол не различает «нет доступа» и «нет пакета»: клиент получает 404, причина (workspace, правило) видна только в диагностике.*
 
 ## 12.4 Новая CVE: от фида до задач командам и SIEM
 
@@ -168,7 +168,7 @@ sequenceDiagram
   K-->>D: user_code, ссылка для входа
   D->>K: вход в браузере, MFA
   K-->>D: access token (aud crane, groups), refresh token
-  D->>A: POST /api/v1/tokens/session (Bearer JWT, scopes)
+  D->>A: POST /api/v1/tokens, kind session (Bearer JWT, scopes)
   A->>P: credential crp_, HMAC, TTL 12 ч, audit
   A-->>D: crp_… (показан один раз)
   D->>D: запись в ~/.npmrc, settings.xml, ~/.netrc
