@@ -1,3 +1,4 @@
+// i18n-fixture: имена, роли и репозитории — контент витрины, а не текст интерфейса
 /** Общие данные экранов: пользователи, workspace'ы и репозитории CRANE. */
 export const CURRENT_USER = {
   name: "Иванов И.",
@@ -16,6 +17,7 @@ export const REPOSITORIES = [
   { id: "cargo-sparse", format: "Cargo", kind: "proxy" },
 ] as const;
 
+// i18n-fixture: имена, роли и репозитории — контент витрины, а не текст интерфейса
 export const PEOPLE = [
   "Иванов И.",
   "Петрова А.",

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test as it } from "node:test";
-import { checkSource, checkTree, MARKER } from "./checks.ts";
+import { checkSource, checkTree } from "./checks.ts";
 
 const FILE = "web/src/shared/ui/Sample.tsx";
 const source = (...lines: string[]): string => `${lines.join("\n")}\n`;
@@ -58,39 +58,6 @@ it("комментарии и латиница не считаются", () => {
   assert.deepEqual(actual, []);
 });
 
-it("i18n-ignore с причиной снимает нарушение на строке", () => {
-  // Arrange
-  const code = source("// i18n-ignore: эндоним языка", 'const a = "Русский";');
-
-  // Act
-  const actual = checkSource(code, FILE);
-
-  // Assert
-  assert.deepEqual(actual, []);
-});
-
-it("маркер немигрированного файла пропускает его литералы", () => {
-  // Arrange
-  const code = source(MARKER, 'const a = "Закрыть";');
-
-  // Act
-  const actual = checkSource(code, FILE);
-
-  // Assert
-  assert.deepEqual(actual, []);
-});
-
-it("маркер в файле без литералов — нарушение: его нужно удалить", () => {
-  // Arrange
-  const code = source(MARKER, "const a = 1;");
-
-  // Act
-  const actual = checkSource(code, FILE);
-
-  // Assert
-  assert.equal(actual.length, 1);
-});
-
 const writeTree = (files: Record<string, string>): string => {
   const root = mkdtempSync(join(tmpdir(), "li18n-"));
   for (const [path, content] of Object.entries(files)) {
@@ -117,20 +84,31 @@ it("тесты и stories в src не проверяются, а экраны в
   assert.deepEqual(actual, ["web/screens/s1/S1.stories.tsx"]);
 });
 
-it("фикстуры витрины в web/screens/data — контент, а не интерфейс: не проверяются", () => {
+it("файлы данных витрины проверяются, а контент в них помечается i18n-fixture", () => {
   // Arrange
-  const bad = 'export const a = "Иванов И.";\n';
+  const marked = '// i18n-fixture: имена людей — контент витрины\nexport const a = "Иванов И.";\n';
   const root = writeTree({
     "web/src/a.ts": "export const a = 1;\n",
-    "web/screens/data/people.ts": bad,
-    "web/screens/s1/S1.stories.tsx": bad,
+    "web/screens/data/people.ts": 'export const a = "Иванов И.";\n',
+    "web/screens/data/marked.ts": marked,
   });
 
   // Act
   const actual = checkTree(root).map((v) => v.split(":")[0]);
 
   // Assert
-  assert.deepEqual(actual, ["web/screens/s1/S1.stories.tsx"]);
+  assert.deepEqual(actual, ["web/screens/data/people.ts"]);
+});
+
+it("i18n-fixture без причины не снимает нарушение", () => {
+  // Arrange
+  const code = source("// i18n-fixture:", 'export const a = "Иванов И.";');
+
+  // Act
+  const actual = checkSource(code, FILE);
+
+  // Assert
+  assert.equal(actual.length, 1);
 });
 
 it("тело play и title/name истории — служебные части stories, не интерфейс", () => {

@@ -74,7 +74,7 @@ export const VERSION_ROWS: readonly VersionRow[] = NAMES.map((version, index) =>
     publishedAt: new Date(FIRST - index * 6 * MS_PER_DAY - index * 1_137_000).toISOString(),
     by:
       index % 3 === 1 || robot === undefined
-        ? { kind: "human", name: PEOPLE[index % PEOPLE.length] ?? "Иванов И." }
+        ? { kind: "human", name: PEOPLE[index % PEOPLE.length] ?? PEOPLE[0] }
         : { kind: "robot", ...robot },
     source: `#${4521 - index * 7}`,
     downloads: 12_340 - index * 211,

@@ -1,4 +1,5 @@
 // biome-ignore-all lint/style/noMagicNumbers: детерминированные данные макетов, не продуктовый код
+// i18n-fixture: события и виды акторов журнала — контент витрины, а не текст интерфейса
 type ActorKind = "Человек" | "Робот" | "Workload" | "Агент";
 export type Decision = "allow" | "deny" | "challenge";
 type Channel = "UI" | "CLI" | "API" | "CI" | "A2A" | "SOAR";
@@ -16,6 +17,7 @@ export type AuditEvent = {
   requestId: string;
 };
 
+// i18n-fixture: события и виды акторов журнала — контент витрины, а не текст интерфейса
 const ACTIONS = [
   { code: "package.version.blocked", label: "Версия заблокирована" },
   { code: "package.version.published", label: "Версия опубликована" },
@@ -27,6 +29,7 @@ const ACTIONS = [
   { code: "audit.revealed", label: "Данные раскрыты" },
 ] as const;
 
+// i18n-fixture: события и виды акторов журнала — контент витрины, а не текст интерфейса
 const ACTORS = [
   { alias: "user-7f3a", kind: "Человек" },
   { alias: "user-c912", kind: "Человек" },
@@ -36,6 +39,7 @@ const ACTORS = [
   { alias: "user-04be", kind: "Человек" },
 ] as const satisfies readonly { alias: string; kind: ActorKind }[];
 
+// i18n-fixture: события и виды акторов журнала — контент витрины, а не текст интерфейса
 const RESOURCES = [
   "@acme/ui@1.4.2",
   "lodash@4.17.20",

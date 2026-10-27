@@ -16,6 +16,7 @@ export type TokenRow = {
   revoked?: string;
 };
 
+// i18n-fixture: токены (названия, владельцы, области) — контент витрины, а не текст интерфейса
 const PURPOSES = [
   "ci-platform",
   "ci-payments",
@@ -34,6 +35,7 @@ const TARGETS = ["npm", "PyPI", "Maven", "NuGet"] as const;
 
 const REPOS = ["npm-hosted", "pypi-hosted", "maven-central-proxy", "nuget-hosted", "cargo-sparse"];
 
+// i18n-fixture: токены (названия, владельцы, области) — контент витрины, а не текст интерфейса
 const MONTHS = [
   "янв",
   "фев",
@@ -67,6 +69,7 @@ function prefixOf(index: number): string {
   return `crp_${hex.toString(16).padStart(8, "0")}`;
 }
 
+// i18n-fixture: токены (названия, владельцы, области) — контент витрины, а не текст интерфейса
 function buildToken(index: number): TokenRow {
   const purpose = PURPOSES[index % PURPOSES.length] ?? "ci-platform";
   const target = TARGETS[(index * 3 + Math.floor(index / PURPOSES.length)) % TARGETS.length];

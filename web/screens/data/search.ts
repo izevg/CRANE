@@ -32,6 +32,7 @@ const RELEASED = "released";
 const QUARANTINE = "quarantined";
 const BLOCKED = "blocked";
 
+// i18n-fixture: результаты поиска (названия, описания, команды) — контент витрины, а не текст интерфейса
 export const RESULTS: readonly SearchResult[] = [
   {
     id: "acme-ui",

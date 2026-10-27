@@ -2,19 +2,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import ts from "typescript";
 
-/** Файл, ещё не переведённый на i18n: строка в первых строках файла. Поток миграции удаляет её вместе с литералами. */
-export const MARKER = "// i18n: не мигрирован";
-
 const CYRILLIC = /[А-Яа-яЁё]/;
-const MARKER_SCAN_LINES = 5;
 const SOURCE = /\.tsx?$/;
 const SKIPPED_FILE = /\.(test|stories)\.tsx?$/;
-/**
- * Фикстуры витрины: пользовательский контент (имена пакетов, описания, ФИО, события журнала), а не текст интерфейса.
- * Они остаются русскими, переводить их незачем; тексты интерфейса экранов лежат в самих stories.
- */
-const FIXTURE_DIR = "web/screens/data/";
-const IGNORE_COMMENT = /\/\/ i18n-ignore: \S/;
 /** Комментарий над объявлением: всё объявление — фикстура (контент витрины), а не текст интерфейса. */
 const FIXTURE_COMMENT = /^\/\/ i18n-fixture: \S/;
 const STORY_TYPE = /^Story\b/;
@@ -119,7 +109,6 @@ function isLiteralText(node: ts.Node): boolean {
 /** Узлы-литералы с кириллицей вне макросов и исключений: то, что нужно перевести. */
 export function violationNodes(sourceFile: ts.SourceFile): ts.Node[] {
   const source = sourceFile.text;
-  const lines = source.split("\n");
   const found: ts.Node[] = [];
   const visit = (node: ts.Node): void => {
     if (
@@ -127,11 +116,7 @@ export function violationNodes(sourceFile: ts.SourceFile): ts.Node[] {
       CYRILLIC.test(node.getText(sourceFile)) &&
       !isInsideMacro(node, source)
     ) {
-      const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line;
-      const near = `${lines[line - 1] ?? ""}\n${lines[line] ?? ""}`;
-      if (!IGNORE_COMMENT.test(near)) {
-        found.push(node);
-      }
+      found.push(node);
     }
     ts.forEachChild(node, visit);
   };
@@ -139,7 +124,7 @@ export function violationNodes(sourceFile: ts.SourceFile): ts.Node[] {
   return found;
 }
 
-/** Нарушения в одном исходнике: кириллический литерал вне макросов. Пусто, если файл помечен маркером. */
+/** Нарушения в одном исходнике: кириллический литерал вне макросов и исключений. */
 export function findViolations(source: string, fileName: string): Found[] {
   const sourceFile = ts.createSourceFile(
     fileName,
@@ -154,24 +139,11 @@ export function findViolations(source: string, fileName: string): Found[] {
   }));
 }
 
-export function hasMarker(source: string): boolean {
-  return source
-    .split("\n")
-    .slice(0, MARKER_SCAN_LINES)
-    .some((line) => line.trim() === MARKER);
-}
-
 /** Проверка одного файла: [] — чисто; иначе список сообщений. */
 export function checkSource(source: string, fileName: string): string[] {
-  const found = findViolations(source, fileName);
-  if (hasMarker(source)) {
-    return found.length === 0
-      ? [`${fileName}: маркер «${MARKER}» больше не нужен — литералов нет, удалите строку`]
-      : [];
-  }
-  return found.map(
+  return findViolations(source, fileName).map(
     (item) =>
-      `${fileName}:${item.line} кириллический литерал вне t/msg/plural/Trans: ${item.text} — оберните в макрос Lingui или поставьте маркер «${MARKER}»`,
+      `${fileName}:${item.line} кириллический литерал вне t/msg/plural/Trans: ${item.text} — оберните в макрос Lingui или, если это контент витрины, поставьте над объявлением «// i18n-fixture: причина»`,
   );
 }
 
@@ -185,20 +157,17 @@ function walk(dir: string): string[] {
   });
 }
 
-function isFixture(path: string): boolean {
-  return path.split(sep).join("/").startsWith(FIXTURE_DIR);
-}
-
 /**
- * Проверяемые файлы: `web/src` без тестов и stories (фикстуры витрины на русском) и `web/screens` целиком
- * (там stories — это и есть экраны, их тексты тоже должны быть переведены).
+ * Проверяемые файлы: `web/src` без тестов и stories и `web/screens` целиком (там stories — это и есть экраны, их
+ * тексты тоже должны быть переведены, а файлы данных проверяются как остальные). Контент витрины (имена пакетов,
+ * ФИО, описания, события журнала) остаётся русским и помечается над объявлением строкой `// i18n-fixture: причина`.
  */
 export function checkTree(root: string): string[] {
   const web = join(root, "web");
   const files = [
     ...walk(join(web, "src")).filter((f) => SOURCE.test(f) && !SKIPPED_FILE.test(f)),
     ...walk(join(web, "screens")).filter((f) => SOURCE.test(f)),
-  ].filter((file) => !isFixture(relative(root, file)));
+  ];
   return files.flatMap((file) =>
     checkSource(readFileSync(file, "utf8"), relative(root, file).split(sep).join("/")),
   );
