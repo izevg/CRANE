@@ -685,7 +685,7 @@ components:
       enum:
       - allow
       - deny
-      description: 'Решение Cedar или гейта: allow - разрешено, deny - запрещено. Для гейта (`on_missing`, `on_stale`) - решение по политике, когда данных нет или они устарели.'
+      description: 'Решение: allow - разрешено, deny - запрещено.'
     ComponentState:
       title: ComponentState
       type: string
@@ -2112,6 +2112,7 @@ components:
           type: boolean
         on_missing:
           $ref: '#/components/schemas/Decision'
+          description: Решение по политике гейта, когда данных нет.
         reasons:
           type: array
           items:
@@ -6307,8 +6308,10 @@ components:
           type: boolean
         on_missing:
           $ref: '#/components/schemas/Decision'
+          description: Решение по политике гейта, когда данных нет.
         on_stale:
           $ref: '#/components/schemas/Decision'
+          description: Решение по политике гейта, когда данные устарели.
       required:
       - kind
       - required

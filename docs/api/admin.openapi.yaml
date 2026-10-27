@@ -2552,6 +2552,7 @@ paths:
       x-crane-action: platform:read_overview
       x-crane-step-up: false
       x-crane-audit: null
+      x-crane-open-question: Экрану S6 «Запросы и задержки» нужен ряд числа запросов, а в ответе только p50/p95/p99 и slo_ms.
       parameters:
       - name: window
         in: query
@@ -2598,6 +2599,7 @@ paths:
       x-crane-action: retention:read
       x-crane-step-up: false
       x-crane-audit: null
+      x-crane-open-question: Нет разбивки кандидатов по правилам: S6 строит топ-3 правил из `/retention/rules`.
       parameters:
       - name: rule_id
         in: query
@@ -2732,6 +2734,7 @@ paths:
       x-crane-action: storage:check_integrity
       x-crane-step-up: false
       x-crane-audit: null
+      x-crane-open-question: Нет поля доли выборки, и порядок истории не зафиксирован: S6 берёт `limit=1` как последнюю проверку.
       parameters:
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
