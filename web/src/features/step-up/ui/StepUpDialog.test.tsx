@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { StepUpDialog } from "../index";
@@ -29,6 +29,26 @@ describe("StepUpDialog", () => {
     expect(
       screen.getByText("После подтверждения вы вернётесь к действию, данные формы сохранятся"),
     ).toBeVisible();
+  });
+
+  it("пояснение — абзац-подпись, а не список из одного пункта", () => {
+    // Arrange
+    // Act
+    open();
+
+    // Assert
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+  });
+
+  it("начальный фокус на «Продолжить в Keycloak», а не на «Отмена»", async () => {
+    // Arrange
+    // Act
+    open();
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Продолжить в Keycloak" })).toHaveFocus(),
+    );
   });
 
   it("«Продолжить в Keycloak» вызывает onContinue", async () => {

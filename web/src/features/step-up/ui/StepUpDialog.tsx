@@ -23,7 +23,8 @@ export function StepUpDialog({ open, onOpenChange, actionLabel, onContinue }: St
       onOpenChange={onOpenChange}
       title={t`Подтвердите вход`}
       description={t`Действие «${actionLabel}» требует подтверждения вторым фактором`}
-      consequences={[t`После подтверждения вы вернётесь к действию, данные формы сохранятся`]}
+      note={t`После подтверждения вы вернётесь к действию, данные формы сохранятся`}
+      size="wide"
       confirm={{ label: t`Продолжить в Keycloak`, run: { onSelect: onContinue } }}
     />
   );

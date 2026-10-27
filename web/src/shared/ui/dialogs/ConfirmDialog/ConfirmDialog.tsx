@@ -22,6 +22,10 @@ type ConfirmDialogProps = {
   description?: string;
   /** Что произойдёт после подтверждения (3–4 пункта). */
   consequences?: readonly string[];
+  /** Пояснение-подпись под описанием, когда пункты списка не нужны (один абзац). */
+  note?: string;
+  /** `wide` — 448 px. */
+  size?: "default" | "wide";
   /** Поле причины и подобное: `Field` из примитивов собирает вызывающий. */
   children?: ReactNode;
   /** Подтверждающее действие. `destructive` переводит начальный фокус на «Отмена». */
@@ -40,6 +44,8 @@ export function ConfirmDialog({
   title,
   description,
   consequences,
+  note,
+  size = "default",
   children,
   confirm,
   pending = false,
@@ -71,7 +77,7 @@ export function ConfirmDialog({
   const action: Action = pending ? { ...confirm, disabledReason: t`Выполняется…` } : confirm;
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent initialFocus={confirm.destructive ? cancelRef : firstFocus}>
+      <AlertDialogContent size={size} initialFocus={confirm.destructive ? cancelRef : firstFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description === undefined ? null : (
@@ -79,6 +85,9 @@ export function ConfirmDialog({
           )}
         </AlertDialogHeader>
         <AlertDialogBody>
+          {note === undefined ? null : (
+            <p className="m-0 text-caption text-muted-foreground">{note}</p>
+          )}
           {consequences && consequences.length > 0 ? (
             <ul className="m-0 ml-5 flex list-disc flex-col gap-1 text-body">
               {consequences.map((item) => (
