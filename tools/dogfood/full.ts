@@ -51,8 +51,13 @@ const PARALLEL = 8;
 // Закреплён тегом и digest (v0.2.0 п.7): нужен только `ip`.
 const BUSYBOX =
   "busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e";
-const DROP_ROUTES =
-  'ip route del default; [ -z "$(ip route show default)" ] || exit 1; ip -6 route del default 2>/dev/null || true';
+// Маршрутов по умолчанию может быть несколько (по одному на сеть): снимаются все, остаток печатается как диагностика.
+const DROP_ROUTES = [
+  "while ip route del default 2>/dev/null; do :; done",
+  "while ip -6 route del default 2>/dev/null; do :; done",
+  // busybox `ip route show default` печатает все маршруты, поэтому ищем строку default сами.
+  "! ip route show | grep -q '^default' || { ip route show >&2; exit 1; }",
+].join("; ");
 
 interface Workspace {
   version: string;
