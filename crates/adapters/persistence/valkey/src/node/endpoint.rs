@@ -31,6 +31,15 @@ impl Endpoint {
     /// Разбирает `valkey[s][-cluster|-sentinel]://[user:password@]host[:port][/db]`.
     pub fn parse(url: &str) -> Result<Self, EndpointError> {
         let (scheme, _) = url.split_once("://").ok_or(EndpointError::Invalid)?;
+        // Префикс мог оказаться логином или паролем (опечатка в URL): цитируем его только
+        // если он синтаксически похож на схему.
+        let looks_like_scheme = !scheme.is_empty()
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+        if !looks_like_scheme {
+            return Err(EndpointError::Invalid);
+        }
         if !SCHEMES.contains(&scheme) {
             return Err(EndpointError::Scheme {
                 scheme: scheme.to_owned(),
@@ -87,15 +96,23 @@ mod tests {
     }
 
     #[test]
-    fn parse_rejects_text_without_scheme_separator() {
+    fn parse_rejects_text_without_scheme_or_with_non_scheme_prefix() {
         // Arrange
-        let cases = ["", "valkey", "valkey:/h", "h:6379"];
+        let cases = [
+            "",
+            "valkey",
+            "valkey:/h",
+            "h:6379",
+            "://h",
+            "p@ss word://x",
+            "user:secret@h://x",
+        ];
 
         // Act
         let actual = cases.map(|url| Endpoint::parse(url).err());
 
         // Assert
-        assert_eq!(actual, [const { Some(EndpointError::Invalid) }; 4]);
+        assert_eq!(actual, [const { Some(EndpointError::Invalid) }; 7]);
     }
 
     #[test]

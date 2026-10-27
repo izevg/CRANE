@@ -46,12 +46,28 @@ pub(super) enum CodecError {
     TooLong,
 }
 
+/// Верхняя оценка размера записи: тело до 64 мегабайт не должно расти удвоениями буфера.
+fn encoded_len(state: &CachedState) -> usize {
+    const HEADER: usize = 1 + 8 + 4 + 1;
+    const DOCUMENT_FIXED: usize = 4 + 1 + 4 + 1 + 8;
+    const BLOB: usize = DIGEST_LEN + 8;
+    HEADER
+        + match state {
+            CachedState::Document { body, etag, .. } => {
+                DOCUMENT_FIXED + body.len() + etag.as_ref().map_or(0, |etag| etag.as_str().len())
+            }
+            CachedState::Blob(_) => BLOB,
+            CachedState::Missing { .. } => 4,
+        }
+}
+
 pub(super) fn encode(entry: &Cached) -> Result<Vec<u8>, CodecError> {
     let since_epoch = entry
         .fetched_at
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_err(|_| CodecError::Time)?;
-    let mut out = vec![VERSION];
+    let mut out = Vec::with_capacity(encoded_len(&entry.state));
+    out.push(VERSION);
     out.extend(since_epoch.as_secs().to_be_bytes());
     out.extend(since_epoch.subsec_nanos().to_be_bytes());
     match &entry.state {
