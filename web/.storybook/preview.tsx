@@ -1,7 +1,7 @@
 import type { Decorator, Preview } from "@storybook/react-vite";
 import "~/shared/styles";
 import "../src/app/index.css";
-import { activateLocale, type Locale } from "~/shared/lib/i18n";
+import { activateLocale, i18n, type Locale } from "~/shared/lib/i18n";
 import { StoryShell } from "./StoryShell";
 
 type ThemeMode = "light" | "dark";
@@ -32,7 +32,14 @@ const preview: Preview = {
   // Каталог грузится до рендера story; выбор в хранилище витрина не пишет (activateLocale без записи).
   loaders: [
     async ({ globals }) => {
-      await activateLocale((globals as { locale?: Locale }).locale ?? "ru");
+      const locale = (globals as { locale?: Locale }).locale ?? "ru";
+      await activateLocale(locale);
+      // Сообщения экранов витрины ложатся поверх каталога приложения и в продовый бандл не попадают.
+      const screens =
+        locale === "en"
+          ? await import("../screens/locales/en.po")
+          : await import("../screens/locales/ru.po");
+      i18n.load(locale, screens.messages);
     },
   ],
   decorators: [withGlobals],

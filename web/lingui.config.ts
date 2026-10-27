@@ -9,9 +9,14 @@ export default defineConfig({
   catalogs: [
     {
       path: "<rootDir>/src/shared/lib/i18n/locales/{locale}",
-      // Экраны витрины (web/screens) — тоже источник сообщений; их stories и есть экраны, а не фикстуры компонентов.
-      include: ["<rootDir>/src/", "<rootDir>/screens/"],
+      include: ["<rootDir>/src/"],
       exclude: ["<rootDir>/src/**/*.stories.tsx", "**/*.test.ts", "**/*.test.tsx"],
+    },
+    {
+      // Тексты экранов витрины живут в своём каталоге: он грузится только в Storybook и не попадает в бандл приложения.
+      path: "<rootDir>/screens/locales/{locale}",
+      include: ["<rootDir>/screens/"],
+      exclude: ["**/*.test.ts", "**/*.test.tsx"],
     },
   ],
   // Без номеров строк: запись в каталоге меняется только вместе с самим сообщением, а не при сдвиге кода.
