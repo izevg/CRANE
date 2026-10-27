@@ -213,7 +213,7 @@ components:
     Workspace:
       name: workspace
       in: path
-      description: 'Slug команды (workspace), не совпадает с именами ролей (reader, developer, maintainer, owner, appsec, secops, auditor, platform-admin) и с `role`; не переиспользуется.'
+      description: 'Slug команды (workspace), не переиспользуется.'
       required: true
       schema:
         type: string
@@ -3441,7 +3441,9 @@ components:
     DownloadFilter:
       title: DownloadFilter
       type: object
-      description: Фильтр следа скачиваний (потоки `downloads` и `usage` выгрузки).
+      description: Фильтр следа скачиваний (потоки `downloads` и `usage` выгрузки). Поток `downloads` принимает все поля. Поток `usage`
+        принимает только `workspace`, `repository`, `purl`, `source`, `principal_kind`; `principal` и `credential` для него дают 422
+        (в агрегате личностей и токенов нет).
       properties:
         purl:
           type: string
@@ -3461,6 +3463,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DownloadSource'
+        principal_kind:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrincipalKind'
     AuditExportCreate:
       title: AuditExportCreate
       type: object
@@ -5636,87 +5642,14 @@ components:
       required:
       - _links
       - _embedded
-    TeamPrincipalKind:
-      title: TeamPrincipalKind
-      type: string
-      enum:
-      - user
-      - robot
-      - workload
-      description: Вид принципала в модели доступа команд (`principal.kind`). `user` - человек (ключ `iss` + `sub`),
-        `robot` - создаётся owner команды, `workload` - CI-проект или ServiceAccount k8s (создаётся при первом обмене).
-    TeamPrincipal:
-      title: TeamPrincipal
-      type: object
-      description: Принципал команды или события следа. ФИО из IdP допустимо.
-      properties:
-        id:
-          type: string
-          format: uuid
-        kind:
-          $ref: '#/components/schemas/TeamPrincipalKind'
-        display:
-          type: string
-      required:
-      - id
-      - kind
-      - display
     BindingSource:
       title: BindingSource
       type: string
       enum:
       - idp
       - local
-      - scim
-      description: 'Источник строки роли: `idp` - наблюдение claims, каталога или admin events; `local` - добавил owner
-        команды через API; `scim` - SCIM 2.0.'
-    Member:
-      title: Member
-      type: object
-      description: Открытая строка роли `role_binding` (на момент `at` или на сейчас). Принципал с несколькими ролями
-        или источниками даёт несколько строк; эффективная роль - максимум.
-      properties:
-        principal:
-          $ref: '#/components/schemas/TeamPrincipal'
-        role:
-          $ref: '#/components/schemas/WorkspaceRoleName'
-        source:
-          $ref: '#/components/schemas/BindingSource'
-        since:
-          type: string
-          format: date-time
-          description: '`valid_from` строки: момент, когда CRANE УВИДЕЛ факт, не время изменения в IdP.'
-        _links:
-          $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, crane:remove-member (только у строки с источником `local`, если вызывающий
-            owner команды и при `at` на текущий момент)'
-      required:
-      - principal
-      - role
-      - source
-      - since
-      - _links
-    MemberPage:
-      title: MemberPage
-      type: object
-      description: Страница ресурса Member.
-      properties:
-        _links:
-          $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, crane:add-member (шаблон `{principal_id}`, `{role}`; только owner команды
-            и `access.local_membership=allow`), crane:members-history'
-        _embedded:
-          type: object
-          properties:
-            crane:members:
-              type: array
-              items:
-                $ref: '#/components/schemas/Member'
-          required:
-          - crane:members
-      required:
-      - _links
-      - _embedded
+      description: 'Кто утверждает факт: `idp` - наблюдение claims и каталога IdP; `local` - добавил owner команды через
+        API. Канал наблюдения в API не отдаётся (он пишется в `reason` события журнала).'
     StorageStore:
       title: StorageStore
       type: object
@@ -6236,7 +6169,7 @@ components:
         name:
           type: string
           pattern: ^[a-z0-9][a-z0-9-]{1,62}$
-          description: 'Slug команды (неизменяемый), не совпадает с именами ролей (reader, developer, maintainer, owner, appsec, secops, auditor, platform-admin) и с `role`; не переиспользуется.'
+          description: 'Slug команды (неизменяемый), не переиспользуется.'
         display:
           type: string
         description:
@@ -6291,7 +6224,7 @@ components:
         name:
           type: string
           pattern: ^[a-z0-9][a-z0-9-]{1,62}$
-          description: 'Slug команды; не совпадает с именами ролей (reader, developer, maintainer, owner, appsec, secops, auditor, platform-admin) и с `role`; не переиспользуется (даже после архивации). Уникален, после создания не меняется. Запрещённое имя даёт 422.'
+          description: 'Slug команды; не переиспользуется (даже после архивации). Уникален, после создания не меняется. Имя вне шаблона даёт 422.'
         display:
           type: string
           minLength: 1
@@ -7627,10 +7560,12 @@ components:
     RoleBinding:
       title: RoleBinding
       type: object
-      description: Строка истории ролей `role_binding`. Значение без собственного адреса.
+      description: Строка роли `role_binding`. Принципал с несколькими ролями или источниками даёт несколько строк;
+        эффективная роль - максимум. В `GET …/members` приходят только открытые строки (`valid_to` = `null`), в
+        `GET …/members/history` - любые.
       properties:
         principal:
-          $ref: '#/components/schemas/TeamPrincipal'
+          $ref: '#/components/schemas/PrincipalRef'
         role:
           $ref: '#/components/schemas/WorkspaceRoleName'
         source:
@@ -7638,12 +7573,17 @@ components:
         valid_from:
           type: string
           format: date-time
+          description: Момент, когда CRANE УВИДЕЛ факт, а не время изменения в IdP.
         valid_to:
           type:
           - string
           - 'null'
           format: date-time
           description: '`null` - строка открыта.'
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL (только в `GET …/members`): self, crane:remove-member (у строки с источником `local`,
+            если вызывающий owner команды)'
       required:
       - principal
       - role
@@ -7653,11 +7593,12 @@ components:
     RoleBindingPage:
       title: RoleBindingPage
       type: object
-      description: История ролей команды за окно `from`..`to`, курсорная пагинация.
+      description: Строки ролей команды, курсорная пагинация (текущий состав или история за окно `from`..`to`).
       properties:
         _links:
           $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, next, prev'
+          description: 'Ссылки HAL: self, next, prev; в `GET …/members` ещё crane:add-member (шаблон `{principal_id}`, `{role}`; только owner
+            команды и `access.local_membership=allow`) и crane:members-history (owner, secops, auditor)'
         _embedded:
           type: object
           properties:
@@ -7713,7 +7654,7 @@ components:
         role:
           $ref: '#/components/schemas/GroupMappingRole'
         created_by:
-          $ref: '#/components/schemas/TeamPrincipal'
+          $ref: '#/components/schemas/PrincipalRef'
         created_at:
           type: string
           format: date-time
@@ -7777,18 +7718,6 @@ components:
       - developer
       - maintainer
       description: Роль, которую грант даёт команде-получателю (`owner` не выдаётся).
-    RepositoryKey:
-      title: RepositoryKey
-      type: object
-      description: Репозиторий по формату и имени.
-      properties:
-        format:
-          $ref: '#/components/schemas/Format'
-        name:
-          type: string
-      required:
-      - format
-      - name
     AccessGrantResource:
       title: AccessGrantResource
       description: Ресурс гранта - ровно один из двух вариантов (`num_nonnulls(namespace_id, repository_id) = 1`).
@@ -7805,7 +7734,16 @@ components:
         title: AccessGrantRepository
         properties:
           repository:
-            $ref: '#/components/schemas/RepositoryKey'
+            type: object
+            description: Репозиторий по формату и имени.
+            properties:
+              format:
+                $ref: '#/components/schemas/Format'
+              name:
+                type: string
+            required:
+            - format
+            - name
         required:
         - repository
         additionalProperties: false
@@ -7813,7 +7751,9 @@ components:
       title: AccessGrant
       type: object
       description: Межкомандный доступ - команда-владелец ресурса даёт другой команде роль на свой namespace или
-        репозиторий, с необязательным сроком. По умолчанию приватные репозитории чужих команд не видны (404).
+        репозиторий, с необязательным сроком. Грант получают члены команды-получателя с ролью не ниже роли гранта (иерархия
+        reader < developer < maintainer < owner), то есть грант `maintainer` получают maintainer и owner, а `reader` - все члены. По умолчанию
+        приватные репозитории чужих команд не видны (404).
       properties:
         id:
           type: string
@@ -7829,7 +7769,7 @@ components:
         resource:
           $ref: '#/components/schemas/AccessGrantResource'
         granted_by:
-          $ref: '#/components/schemas/TeamPrincipal'
+          $ref: '#/components/schemas/PrincipalRef'
         created_at:
           type: string
           format: date-time
@@ -7939,7 +7879,16 @@ components:
         title: OwnershipRepository
         properties:
           repository:
-            $ref: '#/components/schemas/RepositoryKey'
+            type: object
+            description: Репозиторий по формату и имени.
+            properties:
+              format:
+                $ref: '#/components/schemas/Format'
+              name:
+                type: string
+            required:
+            - format
+            - name
         required:
         - repository
         additionalProperties: false
@@ -7983,20 +7932,6 @@ components:
       - to_workspace
       - transferred_at
       - _links
-    DownloadRepository:
-      title: DownloadRepository
-      type: object
-      properties:
-        name:
-          type: string
-        format:
-          $ref: '#/components/schemas/Format'
-        kind:
-          $ref: '#/components/schemas/RepositoryKind'
-      required:
-      - name
-      - format
-      - kind
     DownloadEvent:
       title: DownloadEvent
       type: object
@@ -8008,7 +7943,7 @@ components:
           type: string
           format: date-time
         repository:
-          $ref: '#/components/schemas/DownloadRepository'
+          $ref: '#/components/schemas/RepositoryRef'
         purl:
           type: string
           description: Package URL версии.
@@ -8016,7 +7951,7 @@ components:
           type: string
           pattern: ^[0-9a-f]{64}$
         actor:
-          $ref: '#/components/schemas/TeamPrincipal'
+          $ref: '#/components/schemas/PrincipalRef'
         credential_prefix:
           type: string
           description: Префикс токена.
@@ -8124,7 +8059,7 @@ components:
         source:
           $ref: '#/components/schemas/DownloadSource'
         principal_kind:
-          $ref: '#/components/schemas/TeamPrincipalKind'
+          $ref: '#/components/schemas/PrincipalKind'
         downloads:
           type: integer
           format: int64
@@ -9266,12 +9201,12 @@ components:
         - audit
         summary: Выгрузить журнал
         description: |-
-          Диапазон ограничен; к файлу прикладываются хэш и якорь цепочки. Поток выбирает `stream`: `events` (журнал, по умолчанию), `downloads` (сырые скачивания), `usage` (суточный агрегат). Формат `ocsf` - только для `events`; `ndjson` и `csv` - для любого потока. Это единственный путь получить CSV и NDJSON следа и агрегата.
+          Диапазон ограничен; к файлу прикладываются хэш и якорь цепочки. Поток выбирает `stream`: `events` (журнал, по умолчанию), `downloads` (сырые скачивания), `usage` (суточный агрегат). Формат `ocsf` - только для `events`; `ndjson` и `csv` - для любого потока. Это единственный путь получить CSV и NDJSON следа и агрегата. Потоки `downloads` и `usage` доступны с v0.6.0, поток `events` (журнал) - с v1.1.0.
 
           Роли по потокам: `events` - secops; `downloads` - secops; `usage` - secops, platform-admin, owner (фильтр `filter.workspace` на свою команду обязателен). Всегда MFA.
         operationId: createAuditExport
-        x-crane-phase: P2
-        x-crane-since: v1.1.0
+        x-crane-phase: P1
+        x-crane-since: v0.6.0
         x-crane-action: audit:export
         x-crane-step-up: true
         x-crane-audit:

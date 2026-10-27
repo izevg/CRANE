@@ -3576,9 +3576,9 @@ paths:
       - platform
       summary: Команды (workspaces)
       description: |-
-        Platform-admin видит все команды, остальные - только свои (где у них есть открытая роль).
+        Свои команды остальные роли берут из `GET /me` (`workspaces`).
 
-        Роли: platform-admin (все); любой аутентифицированный (свои).
+        Роли: platform-admin.
       operationId: listWorkspaces
       x-crane-phase: P0
       x-crane-since: v0.4.0
@@ -3611,7 +3611,7 @@ paths:
       - platform
       summary: Создать команду
       description: |-
-        Slug (`name`) уникален, не совпадает с именами ролей и не переиспользуется никогда, даже после архивации (запрещённое имя - 422).
+        Slug (`name`) уникален и не переиспользуется никогда, даже после архивации (имя вне шаблона - 422).
 
         Роли: platform-admin.
       operationId: createWorkspace
@@ -3647,8 +3647,6 @@ paths:
           $ref: ./common.yaml#/components/responses/Unauthorized
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
-        '404':
-          $ref: ./common.yaml#/components/responses/NotFound
         '409':
           $ref: ./common.yaml#/components/responses/Conflict
         '422':
@@ -3859,7 +3857,7 @@ paths:
       - access
       summary: Участники команды
       description: |-
-        Открытые строки ролей из `role_binding`: источники `idp`, `local`, `scim`. Параметр `at` возвращает состав на момент (история строится по `valid_from`/`valid_to`). Принципал с несколькими ролями или источниками даёт несколько строк.
+        Текущий состав: открытые строки `role_binding` (источники `idp`, `local`). Принципал с несколькими ролями или источниками даёт несколько строк. Прошлое - только `GET …/members/history`.
 
         Роли: члены команды, platform-admin, secops, auditor.
       operationId: listWorkspaceMembers
@@ -3870,12 +3868,6 @@ paths:
       x-crane-audit: null
       parameters:
       - $ref: ./common.yaml#/components/parameters/Workspace
-      - name: at
-        in: query
-        description: Состав на момент (по умолчанию - сейчас).
-        schema:
-          type: string
-          format: date-time
       - name: role
         in: query
         description: Роль.
@@ -3905,7 +3897,7 @@ paths:
           content:
             application/hal+json:
               schema:
-                $ref: ./common.yaml#/components/schemas/MemberPage
+                $ref: ./common.yaml#/components/schemas/RoleBindingPage
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
@@ -4003,7 +3995,7 @@ paths:
           content:
             application/hal+json:
               schema:
-                $ref: ./common.yaml#/components/schemas/Member
+                $ref: ./common.yaml#/components/schemas/RoleBinding
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':
@@ -4027,7 +4019,7 @@ paths:
       - access
       summary: Снять роль в команде
       description: |-
-        Закрывает локальную строку роли (источник `local`); строки `idp` и `scim` этим вызовом не закрываются. Нельзя снять последнюю локальную роль owner, если нет owner'ов из IdP: 409 (`…/problems/last-owner`).
+        Закрывает локальную строку роли (источник `local`); строки `idp` этим вызовом не закрываются. Нельзя снять последнюю локальную роль owner, если нет owner'ов из IdP: 409 (`…/problems/last-owner`).
 
         Роли: owner команды.
       operationId: removeWorkspaceMember
@@ -4541,7 +4533,7 @@ paths:
         schema:
           type: array
           items:
-            $ref: ./common.yaml#/components/schemas/TeamPrincipalKind
+            $ref: ./common.yaml#/components/schemas/PrincipalKind
       - name: from
         in: query
         description: Первые сутки UTC (обязательно).
