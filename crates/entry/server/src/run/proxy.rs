@@ -8,12 +8,13 @@ use crane_domain::proxy::{EgressPolicy, Origin};
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_format_cargo::{DL_HOST, INDEX_HOST};
 use crane_http::{CargoProxyOrigins, CargoSettings, cargo_proxy_router};
-use crane_memory::{MemoryFetchLeases, MemoryProxyCache};
 use crane_ports::registry::{BlobStore, Catalog};
 use crane_ports::system::IdGen;
 use crane_upstream::HttpUpstream;
 
 use super::RunError;
+use crate::cache;
+use crate::config::Cache;
 use crate::system::SystemClock;
 
 /// Регистрирует репозитории в каталоге и строит router для каждого имени.
@@ -23,6 +24,7 @@ pub(super) async fn cargo_proxies<C: Catalog, B: BlobStore + 'static>(
     catalog: &C,
     ids: &dyn IdGen,
     blobs: Arc<B>,
+    cache: Cache,
     names: &[String],
     settings: &CargoSettings,
 ) -> Result<Vec<(String, Router)>, RunError> {
@@ -33,12 +35,12 @@ pub(super) async fn cargo_proxies<C: Catalog, B: BlobStore + 'static>(
     let policy = EgressPolicy::new([INDEX_HOST, DL_HOST], false);
     let index = policy.admit("https", INDEX_HOST, None, "")?;
     let dl = policy.admit("https", DL_HOST, None, "")?;
-    // Временно: кэш и координатор заменит `crate::cache::backend(settings.cache)` из ROADMAP v0.2.0 п. 2
-    // (`let shared = …; ProxyEngine::new(upstream, shared.clone(), shared, …)`).
+    // Один бэкенд на оба порта: кэш и lease выбираются вместе (`CRANE_CACHE`).
+    let shared = cache::backend(cache);
     let engine = ProxyEngine::new(
         HttpUpstream::new(policy)?,
-        MemoryProxyCache::default(),
-        MemoryFetchLeases::new(Arc::new(SystemClock)),
+        shared.clone(),
+        shared,
         blobs,
         Arc::new(SystemClock),
         ProxyLimits::DEFAULT,
@@ -122,6 +124,7 @@ mod tests {
             catalog,
             &SequentialIdGen::default(),
             Arc::new(MemoryBlobStore::default()),
+            Cache::Memory,
             &[NAME.to_owned()],
             &settings(),
         )

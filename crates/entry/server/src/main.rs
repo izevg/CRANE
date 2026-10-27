@@ -2,6 +2,7 @@
 //!
 //! Конфигурация: env поверх необязательного TOML (`config`), логи JSON в stdout (раздел 16.6).
 
+mod cache;
 mod config;
 mod run;
 mod system;

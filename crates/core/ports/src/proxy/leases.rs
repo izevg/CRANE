@@ -42,7 +42,7 @@ pub enum LeaseError {
 }
 
 /// Межрепликовый singleflight. В процессе выборки схлопывает `app`; этот порт нужен только
-/// между репликами (Valkey: `SET NX PX` и pub/sub `ready:`).
+/// между репликами (Valkey: `SET NX PX` и канал `inv`).
 pub trait FetchLeases: Send + Sync {
     /// Стать лидером по ключу на `lease` или дождаться чужого лидера не дольше `patience`.
     fn claim(

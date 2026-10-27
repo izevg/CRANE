@@ -24,7 +24,7 @@ fn publish(principal, repo, upload):
       insert assets; insert job('analyze.package'); NOTIFY job   // задача в той же транзакции, без outbox
       insert audit_event
     tx.commit()                                          // точка видимости
-    cache.invalidate(md:{repo}:{name})                    // + pub/sub на все реплики
+    cache.invalidate(md:<repo>:<name>)                    // + pub/sub на все реплики
 ```
 
 Сбой до `commit` оставляет только объект в `staging/`, который удаляется правилом lifecycle. Сбой между копированием в CAS и коммитом оставляет blob без ссылок, его заберёт GC после grace period.
@@ -33,12 +33,12 @@ fn publish(principal, repo, upload):
 
 ```rust
 fn fetch(repo, key):                                    // key = нормализованный путь upstream
-    if e = l1.get(key) or l2.get(key):                   // moka в процессе, затем Valkey
+    if e = l1.get(key) or l2.get(key):                   // L1 (moka в процессе), затем L2 (Valkey)
         if e.fresh(): return e
         if e.stale_ok(): spawn(refresh(repo, key)); return e.with_header("Age")
     return singleflight(key, || {                        // один fetch на кластер
         lock = valkey.set_nx("sf:"+key, token, 30s)
-        if !lock: return wait_for(key, timeout=25s)      // pub/sub "ready:"+key, затем чтение кэша
+        if !lock: return wait_for(key, timeout=25s)      // подписка на "inv" до SET NX, затем чтение кэша
         resp = upstream.get(key, if_none_match=e?.etag)  // SSRF guard, лимиты, таймауты
         match resp:
           304            => touch(e)
@@ -46,11 +46,11 @@ fn fetch(repo, key):                                    // key = нормали�
           200 blob       => tee(resp.stream → client, → blob_store staging); verify; commit CAS
           404            => store_negative(key, neg_ttl(key))
           5xx | timeout  => if e: return e.stale_if_error() else 502 с диагностикой
-        publish("ready:"+key)
+        publish("inv", "px:"+key)
     })
 ```
 
-Внутри одного процесса singleflight реализуется через общий `Shared<Future>`, поэтому сотни одновременных запросов одного архива ждут один поток байт. Между репликами работает блокировка Valkey; при её недоступности реплики ходят в upstream независимо, это безопасно, потому что запись в CAS идемпотентна.
+Внутри одного процесса singleflight реализуется через общий `Shared<Future>`, поэтому сотни одновременных запросов одного архива ждут один поток байт. L1 внутри Valkey-адаптера когерентна между репликами: каждая запись в кэш и снятие lease публикуют имя ключа в канал `inv`, подписчик сбрасывает L1; ждущий подписан на `inv` (одна подписка на процесс) и регистрируется до `SET NX`, поэтому снятие lease между `SET NX` и ожиданием не теряется. Между репликами работает блокировка Valkey; при её недоступности реплики ходят в upstream независимо, это безопасно, потому что запись в CAS идемпотентна.
 
 Ограничение v0.2.0: исходящий HTTP(S)_PROXY не поддерживается (клиент upstream игнорирует переменные прокси, иначе резолв ушёл бы за пределы проверки адреса); при поддержке прокси guard проверяет хост, а адрес — дело прокси.
 

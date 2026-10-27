@@ -41,10 +41,12 @@ const MAX_PUBLISH_BYTES: &str = "CRANE_MAX_PUBLISH_BYTES";
 const TOKEN_PRINCIPAL: &str = "CRANE_TOKEN_PRINCIPAL";
 const TRUSTED_PROXIES: &str = "CRANE_TRUSTED_PROXIES";
 const CARGO_PROXY_REPOS: &str = "CRANE_CARGO_PROXY_REPOS";
+const CACHE: &str = "CRANE_CACHE";
+const CACHE_FILE: &str = "CRANE_CACHE_FILE";
 
 /// Единственный список имён переменных. Ключи файла выводятся из него (`file::variable`),
 /// отдельного перечня в файле нет. `CRANE_CONFIG` сюда не входит намеренно.
-pub(super) const VARS: [&str; 13] = [
+pub(super) const VARS: [&str; 15] = [
     HTTP_PORT,
     ADMIN_PORT,
     PUBLIC_URL,
@@ -58,6 +60,8 @@ pub(super) const VARS: [&str; 13] = [
     DATABASE_URL_FILE,
     BLOBS,
     CARGO_PROXY_REPOS,
+    CACHE,
+    CACHE_FILE,
 ];
 
 /// Ошибка конфигурации. Значения секретных переменных в тексте не появляются никогда.
@@ -184,6 +188,41 @@ impl Storage {
     }
 }
 
+/// Выбор кэша proxy и координатора выборок. Без `Debug`: в адресе Valkey бывает пароль.
+pub(crate) enum Cache {
+    /// Реплики ничего не делят (single-node).
+    Memory,
+    Valkey(crane_valkey::Endpoint),
+}
+
+impl Cache {
+    /// Необязателен, в отличие от `Storage`: кэш не источник истины, его потеря не теряет данных,
+    /// поэтому молчаливое `memory` по умолчанию безопасно.
+    pub(crate) fn from_env(
+        var: &impl Fn(&str) -> Option<String>,
+        read_file: &impl Fn(&Path) -> io::Result<String>,
+    ) -> Result<Self, ConfigError> {
+        if var(CACHE).is_none() && var(CACHE_FILE).is_none() {
+            return Ok(Self::Memory);
+        }
+        let value = secret(var, read_file, CACHE, CACHE_FILE)?;
+        if value.expose() == MEMORY {
+            return Ok(Self::Memory);
+        }
+        // Текст ошибки адаптера в ConfigError не попадает: он может цитировать адрес.
+        match crane_valkey::Endpoint::parse(value.expose()) {
+            Ok(endpoint) => Ok(Self::Valkey(endpoint)),
+            Err(crane_valkey::EndpointError::Scheme { scheme }) => {
+                Err(ConfigError::Unsupported { var: CACHE, scheme })
+            }
+            Err(crane_valkey::EndpointError::Invalid) => Err(ConfigError::Invalid {
+                var: CACHE,
+                reason: "ожидалось memory или valkey[s][-cluster|-sentinel]://…",
+            }),
+        }
+    }
+}
+
 /// Параметры подключения к PostgreSQL. Строка с паролем разбирается сразу и тут же
 /// уничтожается, дальше живут только разобранные параметры. Без `Debug`: пароль в журнал не попадёт.
 pub(crate) struct Database(Box<PgConnectOptions>);
@@ -259,6 +298,7 @@ pub(crate) struct Settings {
     pub(crate) cargo_proxy_repos: Vec<String>,
     pub(crate) max_publish_bytes: usize,
     pub(crate) storage: Storage,
+    pub(crate) cache: Cache,
 }
 
 impl Settings {
@@ -279,6 +319,7 @@ impl Settings {
             cargo_proxy_repos,
             max_publish_bytes: max_publish_bytes(var)?,
             storage: Storage::from_env(var, read_file)?,
+            cache: Cache::from_env(var, read_file)?,
         })
     }
 }
@@ -1071,6 +1112,137 @@ mod tests {
                 second: DATABASE_URL_FILE
             }
         );
+    }
+
+    fn cache_kind(result: Result<Cache, ConfigError>) -> Result<&'static str, ConfigError> {
+        result.map(|cache| match cache {
+            Cache::Memory => "memory",
+            Cache::Valkey(_) => "valkey",
+        })
+    }
+
+    #[test]
+    fn cache_is_optional_and_selected_by_value() {
+        // Arrange
+        let cases: [&[(&str, &str)]; 5] = [
+            &[],
+            &[(CACHE, "memory")],
+            &[(CACHE, "valkey://h:6379")],
+            &[(CACHE, "valkeys://u:secret@h:6380/1")],
+            &[(CACHE, "valkey-cluster://h:6379")],
+        ];
+
+        // Act
+        let actual = cases.map(|pairs| cache_kind(Cache::from_env(&env(pairs), &no_files)));
+
+        // Assert
+        assert_eq!(
+            actual,
+            [
+                Ok("memory"),
+                Ok("memory"),
+                Ok("valkey"),
+                Ok("valkey"),
+                Ok("valkey")
+            ]
+        );
+    }
+
+    #[test]
+    fn cache_rejects_foreign_scheme_and_malformed_address() {
+        // Arrange
+        let cases = ["redis://u:secret@h", "p@ss word://x", "valkey://[::1"];
+
+        // Act
+        let actual = cases
+            .map(|value| cache_kind(Cache::from_env(&env(&[(CACHE, value)]), &no_files)).err());
+
+        // Assert
+        let invalid = || {
+            Some(ConfigError::Invalid {
+                var: CACHE,
+                reason: "ожидалось memory или valkey[s][-cluster|-sentinel]://…",
+            })
+        };
+        assert_eq!(
+            actual,
+            [
+                Some(ConfigError::Unsupported {
+                    var: CACHE,
+                    scheme: "redis".to_owned()
+                }),
+                invalid(),
+                invalid(),
+            ]
+        );
+    }
+
+    #[test]
+    fn cache_errors_never_quote_the_address() {
+        // Arrange
+        let cases = [
+            "redis://u:secret@h",
+            "user:secret@h://x",
+            "valkey://u:secret@[::1",
+        ];
+
+        // Act
+        let messages = cases.map(|value| {
+            Cache::from_env(&env(&[(CACHE, value)]), &no_files)
+                .err()
+                .unwrap()
+                .to_string()
+        });
+
+        // Assert
+        assert!(messages.iter().all(|message| !message.contains("secret")));
+    }
+
+    #[test]
+    fn cache_url_and_its_file_together_conflict() {
+        // Arrange
+        let source = env(&[(CACHE, "memory"), (CACHE_FILE, "/cache")]);
+
+        // Act
+        let error = Cache::from_env(&source, &no_files).err().unwrap();
+
+        // Assert
+        assert_eq!(
+            error,
+            ConfigError::Conflict {
+                first: CACHE,
+                second: CACHE_FILE
+            }
+        );
+    }
+
+    #[test]
+    fn cache_file_is_read_without_trailing_newline() {
+        // Arrange
+        let source = env(&[(CACHE_FILE, "/run/secrets/cache")]);
+        let read = |path: &Path| {
+            (path == Path::new("/run/secrets/cache"))
+                .then(|| "valkey://:pw@h:6379\n".to_owned())
+                .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))
+        };
+
+        // Act
+        let cache = cache_kind(Cache::from_env(&source, &read));
+
+        // Assert
+        assert_eq!(cache, Ok("valkey"));
+    }
+
+    #[test]
+    fn cache_key_in_config_file_is_accepted() {
+        // Arrange
+        let get = file_lookup(&[], "cache = \"valkey://h:6379\"\n");
+
+        // Act
+        let cache = cache_kind(Cache::from_env(&get, &no_files));
+
+        // Assert
+        assert_eq!(cache, Ok("valkey"));
     }
 
     #[test]

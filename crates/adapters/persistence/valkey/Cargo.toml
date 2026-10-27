@@ -9,3 +9,30 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+# Тело записи кэша: Bytes отдаётся из буфера ответа без копирования.
+bytes = "1"
+crane-domain = { path = "../../../core/domain" }
+crane-ports = { path = "../../../core/ports" }
+# Клиент Valkey. Минимальный набор фич: команды ключей (GET/SET), pub/sub, отдельный
+# subscriber-клиент и TLS на aws-lc-rs (тот же TLS-стек, что у sqlx). Без `i-scripts`/`sha-1`:
+# EVAL идёт через `custom`, потому что `WithOptions` (быстрый отказ, таймаут) не реализует LuaInterface.
+fred = { version = "10.1", default-features = false, features = ["i-keys", "i-pubsub", "subscriber-client", "enable-rustls"] }
+# Общий `Shared`-future снятия lease: ждущие `claim` и сама задача снятия делят один результат.
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# L1-кэш в процессе с вытеснением по весу записи (sync: доступ без await).
+moka = { version = "0.12", features = ["sync"] }
+# Типы ошибок кодека и разбора адреса.
+thiserror = "2"
+# Фоновые задачи подключения, таймаут терпения `claim`, oneshot для ждущих, select диспетчера.
+tokio = { version = "1", default-features = false, features = ["rt", "time", "sync", "macros"] }
+# Диагностика фоновых отказов подключения (без текста ошибок клиента: он может цитировать адрес).
+tracing = "0.1"
+# Случайный фенсинг-токен lease и строковое представление id репозитория в ключах.
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+crane-ports = { path = "../../../core/ports", features = ["contract"] }
+# Общий рантайм интеграционных тестов: фабрика контракта синхронна и блокирует поток пула.
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "time"] }
