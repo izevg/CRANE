@@ -35,9 +35,11 @@ const SEEDS = [
   { name: "serde", format: "Cargo", latest: "1.0.217", repo: 5 },
 ] as const;
 
+const RELEASED: PackageRow["state"] = { tone: "success", label: "Выпущена" };
+
 const STATES: readonly PackageRow["state"][] = [
-  { tone: "success", label: "Выпущена" },
-  { tone: "success", label: "Выпущена" },
+  RELEASED,
+  RELEASED,
   { tone: "warning", label: "Карантин" },
   { tone: "error", label: "Заблокирована" },
 ];
@@ -59,7 +61,7 @@ function buildRows(): PackageRow[] {
         round === 0 ? seed.name : `${seed.name}-${["next", "legacy", "core", "cli"][round - 1]}`,
       format: seed.format,
       latest: round === 0 ? seed.latest : `${round}.${index % PATCH_CYCLE}.${index % MINOR_CYCLE}`,
-      state: STATES[index % STATES.length] ?? STATES[0],
+      state: STATES[index % STATES.length] ?? RELEASED,
       repository: REPOSITORIES[seed.repo]?.id ?? "npm-hosted",
       downloads: DOWNLOADS_BASE + ((index * DOWNLOADS_STEP) % DOWNLOADS_SPAN),
       owner: PEOPLE[index % PEOPLE.length] ?? PEOPLE[0],
