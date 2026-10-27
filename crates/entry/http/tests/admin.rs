@@ -16,7 +16,7 @@ use axum::http::{Request, StatusCode};
 use crane_app::registry::Registry;
 use crane_domain::registry::Sha256;
 use crane_http::admin_router;
-use crane_memory::{FixedClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::registry::{BlobError, BlobStore, ByteStream, Digests, Staged};
 use http_body_util::BodyExt;
 use serde_json::Value;
@@ -57,7 +57,7 @@ fn registry<B: BlobStore>(blobs: B) -> Arc<Registry<MemoryCatalog, B>> {
     Arc::new(Registry::new(
         MemoryCatalog::default(),
         blobs,
-        Arc::new(FixedClock::new(SystemTime::UNIX_EPOCH)),
+        Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH)),
         Arc::new(SequentialIdGen::default()),
         Arc::new(MemoryAudit::default()),
     ))

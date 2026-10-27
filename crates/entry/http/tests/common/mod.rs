@@ -22,7 +22,7 @@ use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::audit::AuditEvent;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_http::{CargoSettings, StaticToken, TrustedProxies, admin_router, api_router};
-use crane_memory::{FixedClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::audit::AuditSink;
 use crane_ports::registry::Catalog;
 use crane_ports::system::IdGen;
@@ -107,7 +107,7 @@ impl Api {
         let registry = Arc::new(Registry::new(
             catalog,
             MemoryBlobStore::default(),
-            Arc::new(FixedClock::new(SystemTime::UNIX_EPOCH)),
+            Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH)),
             ids,
             sink.clone(),
         ));

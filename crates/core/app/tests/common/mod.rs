@@ -19,7 +19,7 @@ use crane_domain::registry::{
     Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, RepositoryId,
     RepositoryKind, Sha256, Version, VersionId, VersionState,
 };
-use crane_memory::{FixedClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::registry::{
     BlobError, BlobStore, ByteStream, Catalog, CatalogError, Digests, NewVersion, Staged,
 };
@@ -232,7 +232,7 @@ impl Seed {
         Registry::new(
             wrap_catalog(self.catalog),
             wrap_blobs(self.blobs),
-            Arc::new(FixedClock::new(fixed_now())),
+            Arc::new(ManualClock::new(fixed_now())),
             self.ids,
             self.audit,
         )
