@@ -645,6 +645,32 @@ components:
       - P3
       - P4
       description: Приоритет находки (P0 - экстренно, P4 - низкий).
+    PrioritySource:
+      title: PrioritySource
+      type: string
+      enum:
+      - rules
+      - score
+      description: 'Источник приоритета находки: rules - правила, score - оценка systemone.'
+    DepScope:
+      title: DepScope
+      type: string
+      enum:
+      - runtime
+      - dev
+      - test
+      description: 'Область зависимости: runtime - рабочая, dev - разработка, test - тесты.'
+    FindingStatus:
+      title: FindingStatus
+      type: string
+      enum:
+      - open
+      - fixed
+      - not_affected
+      - excepted
+      - withdrawn
+      description: 'Статус находки (машинный код): open - открыта, fixed - закрыта выпуском с исправлением, not_affected - закрыта по VEX not_affected, excepted - закрыта исключением с TTL, withdrawn - закрыта отзывом advisory.'
+      x-crane-open-question: Набор статусов - предложение на основе docs/product/14-security.md 14.4 шаг 7 и «Автозакрытие» (закрытие выпуском с исправлением, по VEX not_affected, исключением с TTL, отзывом advisory). Вопрос - финальный ли это набор и нужно ли показывать VEX-статусы affected и under_investigation как статусы находки.
     LicenseDecision:
       title: LicenseDecision
       type: string
@@ -653,6 +679,13 @@ components:
       - review
       - denied
       description: Решение лицензионной политики.
+    Decision:
+      title: Decision
+      type: string
+      enum:
+      - allow
+      - deny
+      description: 'Решение: allow - разрешено, deny - запрещено.'
     ComponentState:
       title: ComponentState
       type: string
@@ -840,13 +873,87 @@ components:
       required:
       - repository
       - permission
+    ActionRel:
+      title: ActionRel
+      type: string
+      enum:
+      - crane:issue-token
+      - crane:revoke
+      - crane:create-robot
+      - crane:credentials
+      - crane:disable
+      - crane:create-namespace
+      - crane:delete-namespace
+      - crane:create-trust-policy
+      - crane:update-trust-policy
+      - crane:delete-trust-policy
+      - crane:favorite
+      - crane:unfavorite
+      - crane:deprecate
+      - crane:undeprecate
+      - crane:yank
+      - crane:unyank
+      - crane:unlist
+      - crane:relist
+      - crane:set-dist-tag
+      - crane:delete
+      - crane:request-approval
+      - crane:promote
+      - crane:evaluate
+      - crane:approve-request
+      - crane:reject-request
+      - crane:quarantine-release
+      - crane:quarantine-block
+      - crane:accept-vex
+      - crane:create-exception
+      - crane:create-issue
+      - crane:block
+      - crane:lift-block
+      - crane:revoke-exception
+      - crane:decide
+      - crane:create-break-glass
+      - crane:approve-break-glass
+      - crane:reject-break-glass
+      - crane:revoke-break-glass
+      - crane:create-advisory
+      - crane:update-license-policy
+      - crane:update-vulnerability-policy
+      - crane:update-gates
+      - crane:reveal
+      - crane:create-audit-export
+      - crane:create-audit-integrity-check
+      - crane:create-siem-sink
+      - crane:update-siem-sink
+      - crane:create-compliance-report
+      - crane:create-repository
+      - crane:update-repository
+      - crane:purge-cache
+      - crane:run
+      - crane:create-retention-rule
+      - crane:create-retention-hold
+      - crane:create-integrity-check
+      - crane:create-storage-move
+      - crane:update-quota
+      - crane:retry
+      - crane:create-import
+      - crane:create-workspace
+      - crane:create-webhook
+      - crane:redeliver
+      - crane:check-readiness
+      - crane:warm-cache
+      - crane:mark-read
+      - crane:mark-all-read
+      - crane:confirm-plan
+      - crane:reject-plan
+      description: Отношения-действия HAL (ключи `_links`) с префиксом `crane:`. ActionRel - машинный реестр; таблица «Отношения ссылок» в info.description admin.openapi.yaml и `x-crane-rel` операций обязаны совпадать с ним точно.
     DeniedAction:
       title: DeniedAction
       type: object
       description: Действие, которое недоступно вызывающему, и причина (UI показывает кнопку disabled).
       properties:
         action:
-          type: string
+          $ref: '#/components/schemas/ActionRel'
+          description: 'Значение равно ключу ссылки-действия в `_links`: UI привязывает причину к кнопке с тем же rel.'
         rule_id:
           type: string
         reason:
@@ -904,6 +1011,14 @@ components:
       - since
       - reason
       - served_until
+    NoticeSeverity:
+      title: NoticeSeverity
+      type: string
+      enum:
+      - info
+      - warning
+      - error
+      description: Серьёзность баннера или уведомления (не путать с шкалой `min_severity` у SIEM-фильтра).
     Banner:
       title: Banner
       type: object
@@ -912,11 +1027,7 @@ components:
         code:
           type: string
         severity:
-          type: string
-          enum:
-          - info
-          - warning
-          - error
+          $ref: '#/components/schemas/NoticeSeverity'
         since:
           type: string
           format: date-time
@@ -929,17 +1040,21 @@ components:
       - severity
       - since
       - params
+    ScoreKind:
+      title: ScoreKind
+      type: string
+      enum:
+      - exploit_relevance
+      - blast_radius
+      - license_virality
+      description: Вид оценки systemone (evidence).
     ScoreItem:
       title: ScoreItem
       type: object
       description: 'Оценка systemone (evidence): только ужесточает решение.'
       properties:
         kind:
-          type: string
-          enum:
-          - exploit_relevance
-          - blast_radius
-          - license_virality
+          $ref: '#/components/schemas/ScoreKind'
         value:
           type: number
           minimum: 0
@@ -1410,13 +1525,13 @@ components:
       description: 'Итог по гейтам (P2): коды результата.'
       properties:
         cve:
-          type: string
+          $ref: '#/components/schemas/GateOutcome'
         license:
-          type: string
+          $ref: '#/components/schemas/GateOutcome'
         provenance:
-          type: string
+          $ref: '#/components/schemas/GateOutcome'
         quality:
-          type: string
+          $ref: '#/components/schemas/GateOutcome'
       required:
       - cve
       - license
@@ -1488,7 +1603,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeniedAction'
-          description: Только delete_version, promote, request_approval.
+          description: Только crane:delete, crane:promote, crane:request-approval.
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, crane:package, crane:history, crane:metadata, crane:diff, crane:promotion,
@@ -1593,11 +1708,29 @@ components:
       required:
       - _links
       - _embedded
+    InstallClient:
+      title: InstallClient
+      type: string
+      enum:
+      - npm
+      - pnpm
+      - yarn
+      - pip
+      - uv
+      - poetry
+      - maven
+      - gradle
+      - dotnet
+      - cargo
+      description: 'Клиент пакетного менеджера. Совместимость формата и клиента: npm - npm, pnpm, yarn; pypi - pip, uv, poetry; maven - maven, gradle; nuget - dotnet; cargo - cargo. Несовместимый с форматом клиент даёт 400.'
     InstallInstructions:
       title: InstallInstructions
       type: object
       description: 'Инструкция установки без секрета: токен всегда `${CRANE_TOKEN}`.'
       properties:
+        client:
+          $ref: '#/components/schemas/InstallClient'
+          description: Клиент, для которого сформированы сниппеты.
         setup_steps:
           type: array
           items:
@@ -1610,6 +1743,7 @@ components:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self'
       required:
+      - client
       - setup_steps
       - manual_config
       - install
@@ -1697,13 +1831,19 @@ components:
       required:
       - scope
       - message
+    Justification:
+      title: Justification
+      type: string
+      minLength: 20
+      maxLength: 2000
+      description: Обоснование действия для журнала аудита. Длина считается в кодовых точках после обрезки пробельных символов по краям; сервер обрезает строку сам и отвечает 422, если результат короче 20 или длиннее 2000 символов. JSON Schema minLength ничего не обрезает, поэтому клиент обязан проверять уже обрезанное значение.
     DeleteVersionBody:
       title: DeleteVersionBody
       type: object
       description: Удаление ставит tombstone; номер версии не переиспользуется.
       properties:
         reason:
-          type: string
+          $ref: '#/components/schemas/Justification'
       required:
       - reason
     DistTagBody:
@@ -1919,7 +2059,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeniedAction'
-          description: Только issue_token, promote, request_approval, delete_version.
+          description: Только crane:issue-token, crane:promote, crane:request-approval, crane:delete.
         _embedded:
           type: object
           description: 'Встроено: последняя версия и до 5 последних версий для блока «Последние версии».'
@@ -1948,6 +2088,17 @@ components:
       - stats
       - _embedded
       - _links
+    GateOutcome:
+      title: GateOutcome
+      type: string
+      enum:
+      - passed
+      - denied
+      - review
+      - missing
+      - analysis_error
+      - stale
+      description: 'Исход проверки гейта: passed - пройден, denied - отклонён, review - на проверке (нужно решение человека), missing - нет данных анализа, analysis_error - ошибка анализа, stale - данные устарели.'
     GateResult:
       title: GateResult
       type: object
@@ -1956,21 +2107,12 @@ components:
         kind:
           $ref: '#/components/schemas/GateKind'
         result:
-          type: string
-          enum:
-          - passed
-          - denied
-          - review
-          - missing
-          - analysis_error
-          - stale
+          $ref: '#/components/schemas/GateOutcome'
         required:
           type: boolean
         on_missing:
-          type: string
-          enum:
-          - allow
-          - deny
+          $ref: '#/components/schemas/Decision'
+          description: Решение по политике гейта, когда данных нет.
         reasons:
           type: array
           items:
@@ -2485,9 +2627,11 @@ components:
     RevokeBody:
       title: RevokeBody
       type: object
+      description: Причина необязательна. Отсутствие поля `reason` - причина не указана; пустая строка отклоняется (422).
       properties:
         reason:
-          type: string
+          $ref: '#/components/schemas/Justification'
+          description: Необязательно; если поле передано, действуют правила Justification.
     TokenRevoked:
       title: TokenRevoked
       type: object
@@ -2529,7 +2673,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeniedAction'
-          description: issue_token.
+          description: Только crane:issue-token.
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, crane:issue-token'
@@ -2569,6 +2713,15 @@ components:
       - expires_at
       - acr
       - _links
+    WorkspaceRoleName:
+      title: WorkspaceRoleName
+      type: string
+      enum:
+      - reader
+      - developer
+      - maintainer
+      - owner
+      description: Роль участника в рабочем пространстве.
     WorkspaceRole:
       title: WorkspaceRole
       type: object
@@ -2576,24 +2729,23 @@ components:
         name:
           type: string
         role:
-          type: string
-          enum:
-          - reader
-          - developer
-          - maintainer
-          - owner
+          $ref: '#/components/schemas/WorkspaceRoleName'
       required:
       - name
       - role
+    SodMode:
+      title: SodMode
+      type: string
+      enum:
+      - strict
+      - warn
+      description: 'Режим разделения обязанностей (SoD): strict - конфликт запрещает действие, warn - конфликт только предупреждает.'
     SodState:
       title: SodState
       type: object
       properties:
         mode:
-          type: string
-          enum:
-          - strict
-          - warn
+          $ref: '#/components/schemas/SodMode'
         conflict:
           type: boolean
       required:
@@ -2657,10 +2809,7 @@ components:
       type: object
       properties:
         mode:
-          type: string
-          enum:
-          - strict
-          - warn
+          $ref: '#/components/schemas/SodMode'
         warn_banner:
           type: boolean
           description: Без имён.
@@ -2756,10 +2905,7 @@ components:
           type: string
           format: date-time
         decision:
-          type: string
-          enum:
-          - allow
-          - deny
+          $ref: '#/components/schemas/Decision'
         reason:
           type: string
         rule_id:
@@ -2798,6 +2944,14 @@ components:
       - contacts
       - can_request_access
       - _links
+    NotificationCategory:
+      title: NotificationCategory
+      type: string
+      enum:
+      - access
+      - platform
+      - security
+      description: Категория уведомления.
     Notification:
       title: Notification
       type: object
@@ -2806,17 +2960,9 @@ components:
         id:
           type: string
         category:
-          type: string
-          enum:
-          - security
-          - access
-          - platform
+          $ref: '#/components/schemas/NotificationCategory'
         severity:
-          type: string
-          enum:
-          - info
-          - warning
-          - error
+          $ref: '#/components/schemas/NoticeSeverity'
         code:
           type: string
         params:
@@ -2896,11 +3042,7 @@ components:
       type: object
       properties:
         category:
-          type: string
-          enum:
-          - security
-          - access
-          - platform
+          $ref: '#/components/schemas/NotificationCategory'
     AuditChannel:
       title: AuditChannel
       type: string
@@ -2929,10 +3071,7 @@ components:
         resource:
           type: string
         decision:
-          type: string
-          enum:
-          - allow
-          - deny
+          $ref: '#/components/schemas/Decision'
         rule_ids:
           type: array
           items:
@@ -3020,10 +3159,7 @@ components:
           type: string
           format: date-time
         decision:
-          type: string
-          enum:
-          - allow
-          - deny
+          $ref: '#/components/schemas/Decision'
       required:
       - id
       - action
@@ -3046,10 +3182,7 @@ components:
         resource:
           type: string
         decision:
-          type: string
-          enum:
-          - allow
-          - deny
+          $ref: '#/components/schemas/Decision'
         rule_ids:
           type: array
           items:
@@ -3113,8 +3246,7 @@ components:
       type: object
       properties:
         justification:
-          type: string
-          minLength: 20
+          $ref: '#/components/schemas/Justification'
       required:
       - justification
     RevealedPii:
@@ -3206,7 +3338,7 @@ components:
           - json
           - ocsf
         justification:
-          type: string
+          $ref: '#/components/schemas/Justification'
       required:
       - from
       - to
@@ -3333,10 +3465,7 @@ components:
         resource:
           type: string
         decision:
-          type: string
-          enum:
-          - allow
-          - deny
+          $ref: '#/components/schemas/Decision'
         rule_ids:
           type: array
           items:
@@ -3495,11 +3624,7 @@ components:
       type: object
       properties:
         kind:
-          type: string
-          enum:
-          - exploit_relevance
-          - blast_radius
-          - license_virality
+          $ref: '#/components/schemas/ScoreKind'
         value:
           type: number
           minimum: 0
@@ -3534,17 +3659,13 @@ components:
         priority:
           $ref: '#/components/schemas/Priority'
         priority_source:
-          type: string
-          enum:
-          - rules
-          - score
+          $ref: '#/components/schemas/PrioritySource'
         sla:
           oneOf:
           - $ref: '#/components/schemas/Sla'
           - type: 'null'
         status:
-          type: string
-          description: Машинный код статуса; полный список в docs/product не определён.
+          $ref: '#/components/schemas/FindingStatus'
         advisory:
           $ref: '#/components/schemas/AdvisoryRef'
         purl:
@@ -3577,11 +3698,7 @@ components:
           - string
           - 'null'
         dep_scope:
-          type: string
-          enum:
-          - runtime
-          - dev
-          - test
+          $ref: '#/components/schemas/DepScope'
         deployed:
           type: boolean
         team:
@@ -3740,6 +3857,15 @@ components:
       - emergency_blocks
       - feeds_max_lag_s
       - _links
+    FeedHealth:
+      title: FeedHealth
+      type: string
+      enum:
+      - ok
+      - lagging
+      - failed
+      description: 'Состояние фида данных об уязвимостях: ok - в норме, lagging - отставание больше 30 минут (событие `feed.lagging`), failed - последняя попытка синхронизации завершилась ошибкой.'
+      x-crane-open-question: Набор значений - предложение. lagging определён в docs/product/14-security.md 14.4 шаг 1 (отставание больше 30 минут, событие feed.lagging); failed (последняя попытка синхронизации неуспешна) в docs/product не определён. Вопрос - нужен ли отдельный код failed и как он соотносится с lagging.
     FeedState:
       title: FeedState
       type: object
@@ -3762,7 +3888,7 @@ components:
           - string
           - 'null'
         state:
-          type: string
+          $ref: '#/components/schemas/FeedHealth'
           description: Машинный код состояния фида.
         _links:
           $ref: '#/components/schemas/HalLinks'
@@ -3793,6 +3919,13 @@ components:
       required:
       - _links
       - _embedded
+    EmergencyBlockState:
+      title: EmergencyBlockState
+      type: string
+      enum:
+      - active
+      - lifted
+      description: 'Состояние экстренной блокировки: active - действует, lifted - снята.'
     EmergencyBlock:
       title: EmergencyBlock
       type: object
@@ -3804,10 +3937,7 @@ components:
         advisory_id:
           type: string
         state:
-          type: string
-          enum:
-          - active
-          - lifted
+          $ref: '#/components/schemas/EmergencyBlockState'
         auto:
           type: boolean
           description: true - создана системой (вредоносный пакет), без участия человека.
@@ -3895,7 +4025,7 @@ components:
           type: string
           description: Package URL (pkg:<тип>/<имя>@<версия>).
         reason:
-          type: string
+          $ref: '#/components/schemas/Justification'
         review_at:
           type: string
           format: date-time
@@ -3908,9 +4038,18 @@ components:
       type: object
       properties:
         reason:
-          type: string
+          $ref: '#/components/schemas/Justification'
       required:
       - reason
+    LicenseReviewState:
+      title: LicenseReviewState
+      type: string
+      enum:
+      - pending
+      - allowed
+      - denied
+      description: 'Состояние записи очереди лицензий: pending - ждёт рецензента, allowed и denied - вердикт рецензента.'
+      x-crane-open-question: 'Набор значений - предложение: pending - ожидает рецензента, allowed и denied - вердикт рецензента; в docs/product не определён. Вопрос также в том, что LicenseReviewDecision.decision (LicenseDecision) принимает review, а для рецензента это бессмысленно - предложение сузить до allowed или denied.'
     LicenseReview:
       title: LicenseReview
       type: object
@@ -3929,7 +4068,7 @@ components:
           - $ref: '#/components/schemas/ScoreItem'
           - type: 'null'
         state:
-          type: string
+          $ref: '#/components/schemas/LicenseReviewState'
         created_at:
           type: string
           format: date-time
@@ -3964,6 +4103,21 @@ components:
       required:
       - _links
       - _embedded
+    LicenseReviewSummary:
+      title: LicenseReviewSummary
+      type: object
+      description: Счётчик очереди лицензий (точный агрегат, не total списка).
+      properties:
+        pending:
+          type: integer
+          minimum: 0
+          description: Число записей в состоянии `pending`.
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self, crane:license-reviews'
+      required:
+      - pending
+      - _links
     LicenseReviewDecision:
       title: LicenseReviewDecision
       type: object
@@ -3971,7 +4125,8 @@ components:
         decision:
           $ref: '#/components/schemas/LicenseDecision'
         justification:
-          type: string
+          $ref: '#/components/schemas/Justification'
+          description: Необязательно; если поле передано, действуют правила Justification.
       required:
       - decision
     VexStatus:
@@ -3987,6 +4142,7 @@ components:
       title: VexCreate
       type: object
       description: Нужен `finding_ids` либо `advisory_id` с `version_range`. Находки разных advisory дают 422 `bulk-vex-single-advisory`.
+      x-crane-open-question: Поле `justification` - машинный код обоснования OpenVEX/CycloneDX (кандидат на enum VexJustification) или свободный текст? Сейчас строка без ограничений.
       properties:
         finding_ids:
           type: array
@@ -4021,7 +4177,7 @@ components:
         ttl_days:
           type: integer
         justification:
-          type: string
+          $ref: '#/components/schemas/Justification'
       required:
       - finding_ids
       - ttl_days
@@ -4140,17 +4296,13 @@ components:
         priority:
           $ref: '#/components/schemas/Priority'
         priority_source:
-          type: string
-          enum:
-          - rules
-          - score
+          $ref: '#/components/schemas/PrioritySource'
         sla:
           oneOf:
           - $ref: '#/components/schemas/Sla'
           - type: 'null'
         status:
-          type: string
-          description: Машинный код статуса; полный список в docs/product не определён.
+          $ref: '#/components/schemas/FindingStatus'
         advisory:
           $ref: '#/components/schemas/AdvisoryRef'
         purl:
@@ -4183,11 +4335,7 @@ components:
           - string
           - 'null'
         dep_scope:
-          type: string
-          enum:
-          - runtime
-          - dev
-          - test
+          $ref: '#/components/schemas/DepScope'
         deployed:
           type: boolean
         team:
@@ -4528,18 +4676,22 @@ components:
       - jobs
       - backup
       - mode
+    PlatformWindow:
+      title: PlatformWindow
+      type: string
+      enum:
+      - 1h
+      - 6h
+      - 24h
+      - 7d
+      description: Окно агрегации метрик платформы.
     PlatformOverview:
       title: PlatformOverview
       type: object
       description: Обзор платформы.
       properties:
         window:
-          type: string
-          enum:
-          - 1h
-          - 6h
-          - 24h
-          - 7d
+          $ref: '#/components/schemas/PlatformWindow'
         tiles:
           $ref: '#/components/schemas/PlatformTiles'
         _links:
@@ -4562,16 +4714,20 @@ components:
       required:
       - key
       - bytes
+    UsageGroup:
+      title: UsageGroup
+      type: string
+      enum:
+      - format
+      - workspace
+      description: 'Группировка занятого места: по формату или по рабочему пространству.'
     PlatformUsage:
       title: PlatformUsage
       type: object
       description: Занятое место (топ N и «прочее»).
       properties:
         group:
-          type: string
-          enum:
-          - workspace
-          - format
+          $ref: '#/components/schemas/UsageGroup'
         items:
           type: array
           items:
@@ -4697,7 +4853,7 @@ components:
         rule_id:
           type: string
         reason:
-          type: string
+          $ref: '#/components/schemas/Justification'
       required:
       - rule_id
       - reason
@@ -5299,12 +5455,7 @@ components:
         display:
           type: string
         role:
-          type: string
-          enum:
-          - reader
-          - developer
-          - maintainer
-          - owner
+          $ref: '#/components/schemas/WorkspaceRoleName'
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self'
@@ -5624,7 +5775,7 @@ components:
       type: object
       properties:
         reason:
-          type: string
+          $ref: '#/components/schemas/Justification'
         scope:
           type: string
       required:
@@ -6041,7 +6192,7 @@ components:
           minimum: 1
           maximum: 24
         justification:
-          type: string
+          $ref: '#/components/schemas/Justification'
       required:
       - project
       - purl
@@ -6156,15 +6307,11 @@ components:
         required:
           type: boolean
         on_missing:
-          type: string
-          enum:
-          - allow
-          - deny
+          $ref: '#/components/schemas/Decision'
+          description: Решение по политике гейта, когда данных нет.
         on_stale:
-          type: string
-          enum:
-          - allow
-          - deny
+          $ref: '#/components/schemas/Decision'
+          description: Решение по политике гейта, когда данные устарели.
       required:
       - kind
       - required
@@ -6401,7 +6548,7 @@ components:
       type: object
       properties:
         justification:
-          type: string
+          $ref: '#/components/schemas/Justification'
       required:
       - justification
     SecurityMetrics:
@@ -6455,6 +6602,21 @@ components:
       required:
       - categories
       - min_severity
+    SiemTransport:
+      title: SiemTransport
+      type: string
+      enum:
+      - http
+      - otlp
+      - syslog
+      description: Транспорт доставки событий в SIEM.
+    SiemFormat:
+      title: SiemFormat
+      type: string
+      enum:
+      - cef
+      - ocsf
+      description: Формат событий для SIEM.
     SiemSink:
       title: SiemSink
       type: object
@@ -6462,18 +6624,11 @@ components:
         id:
           type: string
         transport:
-          type: string
-          enum:
-          - syslog
-          - http
-          - otlp
+          $ref: '#/components/schemas/SiemTransport'
         endpoint:
           type: string
         format:
-          type: string
-          enum:
-          - ocsf
-          - cef
+          $ref: '#/components/schemas/SiemFormat'
         filter:
           $ref: '#/components/schemas/SiemFilter'
         enabled:
@@ -6522,18 +6677,11 @@ components:
       description: Изменение уходит в SIEM до применения.
       properties:
         transport:
-          type: string
-          enum:
-          - syslog
-          - http
-          - otlp
+          $ref: '#/components/schemas/SiemTransport'
         endpoint:
           type: string
         format:
-          type: string
-          enum:
-          - ocsf
-          - cef
+          $ref: '#/components/schemas/SiemFormat'
         filter:
           $ref: '#/components/schemas/SiemFilter'
         enabled:
@@ -6883,6 +7031,15 @@ components:
       required:
       - _links
       - _embedded
+    ImpactLevel:
+      title: ImpactLevel
+      type: string
+      enum:
+      - downloads
+      - lockfile
+      - sbom
+      - deployed
+      description: 'Уровень достоверности связи потребителя: загрузки, lock-файл, SBOM, развёрнуто.'
     GraphNode:
       title: GraphNode
       type: object
@@ -6893,12 +7050,7 @@ components:
         depth:
           type: integer
         level:
-          type: string
-          enum:
-          - downloads
-          - lockfile
-          - sbom
-          - deployed
+          $ref: '#/components/schemas/ImpactLevel'
       required:
       - purl
       - depth
