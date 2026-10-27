@@ -150,13 +150,16 @@ fn describe(error: &RegistryError) -> (StatusCode, String) {
     let status = match error {
         RegistryError::RepositoryNotFound
         | RegistryError::VersionNotFound
+        | RegistryError::TagNotFound
         | RegistryError::AssetNotFound => StatusCode::NOT_FOUND,
         RegistryError::NotHosted => StatusCode::METHOD_NOT_ALLOWED,
         RegistryError::VersionExists => StatusCode::CONFLICT,
         RegistryError::Unavailable {
             state: VersionState::Deleted,
         } => StatusCode::GONE,
-        RegistryError::Unavailable { .. } => StatusCode::FORBIDDEN,
+        RegistryError::Unavailable { .. } | RegistryError::DeleteWindowClosed => {
+            StatusCode::FORBIDDEN
+        }
         RegistryError::DigestMismatch { .. } => StatusCode::UNPROCESSABLE_ENTITY,
         RegistryError::Body(_) => StatusCode::BAD_REQUEST,
         RegistryError::Backend(_) => return internal(error),
@@ -183,7 +186,7 @@ mod tests {
     #[test]
     fn registry_errors_map_to_http_statuses() {
         // Arrange
-        let digest = Sha256::from([1; 32]);
+        let digest = Checksum::Sha256(Sha256::from([1; 32]));
         let cases = [
             (RegistryError::RepositoryNotFound, StatusCode::NOT_FOUND),
             (RegistryError::NotHosted, StatusCode::METHOD_NOT_ALLOWED),
@@ -210,11 +213,13 @@ mod tests {
             ),
             (
                 RegistryError::DigestMismatch {
-                    declared: digest,
-                    actual: digest,
+                    declared: Box::new(digest),
+                    actual: Box::new(digest),
                 },
                 StatusCode::UNPROCESSABLE_ENTITY,
             ),
+            (RegistryError::DeleteWindowClosed, StatusCode::FORBIDDEN),
+            (RegistryError::TagNotFound, StatusCode::NOT_FOUND),
             (
                 RegistryError::Body(io::Error::other("обрыв")),
                 StatusCode::BAD_REQUEST,

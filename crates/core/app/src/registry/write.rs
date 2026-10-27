@@ -1,7 +1,12 @@
+use std::time::SystemTime;
+
 use crane_domain::access::Caller;
 use crane_domain::audit::AuditAction;
-use crane_domain::registry::{Asset, PackageVersion, RepositoryKind, VersionId, VersionState};
-use crane_ports::registry::{BlobStore, Catalog, NewVersion};
+use crane_domain::registry::{
+    Asset, Coordinate, DeletePolicy, Format, PackageName, PackageVersion, RepositoryKind,
+    VersionId, VersionState,
+};
+use crane_ports::registry::{BlobStore, Catalog, CatalogError, NewVersion};
 
 use super::{Publish, Registry, RegistryError, Upload};
 
@@ -25,6 +30,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             coordinate,
             file,
             metadata,
+            tags,
         } = request;
         let repository = self
             .find_repository(coordinate.format, &coordinate.repository)
@@ -58,21 +64,23 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
                 published_at: self.clock.now(),
                 assets: vec![asset],
                 metadata,
-                tags: Vec::new(),
+                tags,
             })
             .await?;
         Ok(published)
     }
 
-    /// Складывает тело во временную зону, сверяет заявленный клиентом sha256 и только
+    /// Складывает тело во временную зону, сверяет заявленные клиентом суммы и только
     /// после совпадения коммитит blob в CAS: неверное содержимое в CAS не попадает.
     async fn ingest(&self, upload: Upload) -> Result<Asset, RegistryError> {
         let staged = self.blobs.stage(upload.body).await?;
-        let actual = staged.digests().sha256;
-        if let Some(declared) = upload.declared_sha256
-            && declared != actual
-        {
-            return Err(RegistryError::DigestMismatch { declared, actual });
+        // Проверяется каждая заявленная сумма: клиент мог прислать и sha512, и sha1.
+        let digests = staged.digests();
+        if let Some(declared) = upload.declared.iter().find(|c| !digests.satisfies(c)) {
+            return Err(RegistryError::DigestMismatch {
+                declared: Box::new(*declared),
+                actual: Box::new(digests.of_kind(declared)),
+            });
         }
         let digests = self.blobs.commit(staged).await?;
         Ok(Asset {
@@ -80,5 +88,112 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             sha256: digests.sha256,
             size: digests.size,
         })
+    }
+
+    /// Удаляет версию (tombstone) в окне политики; дальше доступна только блокировка.
+    /// Идемпотентно: удалённая версия — успех (событие пишется и для повтора).
+    pub async fn delete(
+        &self,
+        caller: &Caller,
+        coordinate: &Coordinate,
+        policy: &DeletePolicy,
+    ) -> Result<(), RegistryError> {
+        self.delete_at(caller, coordinate, policy, self.clock.now())
+            .await
+    }
+
+    /// Удаляет все версии пакета. Окно проверяется для всех до первой мутации: если хоть одна
+    /// неудалённая версия вне окна, не меняется ничего и пишется одно событие отказа.
+    /// Повтор после сбоя безопасен: уже удалённые версии пропускаются.
+    /// Неизвестный пакет и не-hosted репозиторий событий не пишут: координаты версии нет.
+    pub async fn delete_package(
+        &self,
+        caller: &Caller,
+        format: Format,
+        repository: &str,
+        package: &PackageName,
+        policy: &DeletePolicy,
+    ) -> Result<(), RegistryError> {
+        let repo = self.find_repository(format, repository).await?;
+        if repo.kind != RepositoryKind::Hosted {
+            return Err(RegistryError::NotHosted);
+        }
+        let versions = self.catalog.versions(repo.id, package).await?;
+        if versions.is_empty() {
+            return Err(RegistryError::VersionNotFound);
+        }
+        // Одно значение `now` на весь вызов: решение «в окне» не должно меняться по ходу цепочки.
+        let now = self.clock.now();
+        let coordinate_of = |v: &PackageVersion| Coordinate {
+            format,
+            repository: repository.to_owned(),
+            package: v.package.clone(),
+            version: v.version.clone(),
+        };
+        let pending: Vec<&PackageVersion> = versions
+            .iter()
+            .filter(|v| v.state != VersionState::Deleted)
+            .collect();
+        if let Some(late) = pending
+            .iter()
+            .find(|v| !policy.permits(v.published_at, now))
+        {
+            let refused: Result<(), RegistryError> = Err(RegistryError::DeleteWindowClosed);
+            self.audited(caller, AuditAction::Delete(coordinate_of(late)), &refused);
+            return refused;
+        }
+        for version in pending {
+            self.delete_at(caller, &coordinate_of(version), policy, now)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn delete_at(
+        &self,
+        caller: &Caller,
+        coordinate: &Coordinate,
+        policy: &DeletePolicy,
+        now: SystemTime,
+    ) -> Result<(), RegistryError> {
+        let result = self.try_delete(coordinate, policy, now).await;
+        self.audited(caller, AuditAction::Delete(coordinate.clone()), &result);
+        result
+    }
+
+    async fn try_delete(
+        &self,
+        coordinate: &Coordinate,
+        policy: &DeletePolicy,
+        now: SystemTime,
+    ) -> Result<(), RegistryError> {
+        let version = self.find_hosted(coordinate).await?;
+        if version.state == VersionState::Deleted {
+            return Ok(());
+        }
+        if !policy.permits(version.published_at, now) {
+            return Err(RegistryError::DeleteWindowClosed);
+        }
+        version
+            .state
+            .ensure(VersionState::Deleted)
+            .map_err(|_| RegistryError::Unavailable {
+                state: version.state,
+            })?;
+        match self
+            .catalog
+            .transition(version.id, version.state, VersionState::Deleted)
+            .await
+        {
+            // Параллельное удаление той же версии даёт тот же итог.
+            Ok(())
+            | Err(CatalogError::StateConflict {
+                actual: VersionState::Deleted,
+            }) => Ok(()),
+            Err(CatalogError::StateConflict { actual }) => {
+                Err(RegistryError::Unavailable { state: actual })
+            }
+            Err(error) => Err(error.into()),
+        }
     }
 }

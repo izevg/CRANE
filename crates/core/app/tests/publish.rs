@@ -13,10 +13,13 @@ use std::io;
 use bytes::Bytes;
 use common::{
     BlindCatalog, HOSTED, RecordingBlobs, Seed, asset_path, caller, commit_log, committed,
-    coordinate, fixed_now, hello_sha256, name, publish_request, read, version,
+    coordinate, fixed_now, hello_sha1, hello_sha256, hello_sha512, name, publish_request, read,
+    version,
 };
 use crane_app::registry::{Publish, Registry, RegistryError, Upload};
-use crane_domain::registry::{Asset, Format, FormatMetadata, PackageVersion, Sha256, VersionState};
+use crane_domain::registry::{
+    Asset, Checksum, Format, FormatMetadata, PackageVersion, Sha1, Sha256, VersionState,
+};
 use crane_ports::registry::{BlobStore, Catalog};
 use futures_executor::block_on;
 use futures_util::stream;
@@ -29,7 +32,7 @@ fn publish_creates_released_record_with_store_digests_and_clock_time() {
     let seed = Seed::new();
     let hosted = seed.hosted;
     let registry = seed.registry();
-    let request = publish_request("foo", "1.0.0", &HELLO, None);
+    let request = publish_request("foo", "1.0.0", &HELLO, Vec::new());
 
     // Act
     let record = block_on(registry.publish(&caller(), request)).unwrap();
@@ -59,7 +62,7 @@ fn publish_creates_released_record_with_store_digests_and_clock_time() {
 fn published_file_is_fetchable_with_uploaded_bytes() {
     // Arrange
     let registry = Seed::new().registry();
-    let request = publish_request("foo", "1.0.0", &HELLO, None);
+    let request = publish_request("foo", "1.0.0", &HELLO, Vec::new());
 
     // Act
     block_on(registry.publish(&caller(), request)).unwrap();
@@ -85,7 +88,7 @@ fn publish_takes_version_id_from_shared_generator() {
     let seed = Seed::new();
     let hosted = seed.hosted;
     let registry = seed.registry();
-    let request = publish_request("foo", "1.0.0", &HELLO, None);
+    let request = publish_request("foo", "1.0.0", &HELLO, Vec::new());
 
     // Act
     let record = block_on(registry.publish(&caller(), request)).unwrap();
@@ -101,7 +104,12 @@ fn publish_takes_version_id_from_shared_generator() {
 fn publish_accepts_matching_declared_sha256() {
     // Arrange
     let registry = Seed::new().registry();
-    let request = publish_request("foo", "1.0.0", &HELLO, Some(hello_sha256()));
+    let request = publish_request(
+        "foo",
+        "1.0.0",
+        &HELLO,
+        vec![Checksum::Sha256(hello_sha256())],
+    );
 
     // Act
     let result = block_on(registry.publish(&caller(), request));
@@ -116,13 +124,13 @@ fn publish_accepts_matching_declared_sha256() {
 #[test]
 fn publish_rejects_mismatching_declared_sha256_leaving_cas_and_catalog_untouched() {
     // Arrange
-    let declared = Sha256::from([9; 32]);
+    let declared = Checksum::Sha256(Sha256::from([9; 32]));
     let log = commit_log();
     let registry = Seed::new().registry_with(
         |catalog| catalog,
         |blobs| RecordingBlobs::recording(blobs, log.clone()),
     );
-    let request = publish_request("foo", "1.0.0", &HELLO, Some(declared));
+    let request = publish_request("foo", "1.0.0", &HELLO, vec![declared]);
 
     // Act
     let error = block_on(registry.publish(&caller(), request)).unwrap_err();
@@ -130,8 +138,8 @@ fn publish_rejects_mismatching_declared_sha256_leaving_cas_and_catalog_untouched
     // Assert
     assert!(
         matches!(
-            error,
-            RegistryError::DigestMismatch { declared: d, actual } if d == declared && actual == hello_sha256()
+            &error,
+            RegistryError::DigestMismatch { declared: d, actual } if **d == declared && **actual == Checksum::Sha256(hello_sha256())
         ),
         "ожидался DigestMismatch с точными значениями: {error:?}"
     );
@@ -149,7 +157,7 @@ fn publish_rejects_mismatching_declared_sha256_leaving_cas_and_catalog_untouched
 fn publish_to_unknown_repository_fails() {
     // Arrange
     let registry = Seed::new().registry();
-    let mut request = publish_request("foo", "1.0.0", &HELLO, None);
+    let mut request = publish_request("foo", "1.0.0", &HELLO, Vec::new());
     request.coordinate.repository = "nope".to_owned();
 
     // Act
@@ -166,7 +174,7 @@ fn publish_to_unknown_repository_fails() {
 fn publish_to_proxy_repository_is_forbidden() {
     // Arrange
     let registry = Seed::new().with_proxy().registry();
-    let mut request = publish_request("foo", "1.0.0", &HELLO, None);
+    let mut request = publish_request("foo", "1.0.0", &HELLO, Vec::new());
     request.coordinate.repository = common::PROXY.to_owned();
 
     // Act
@@ -189,7 +197,7 @@ fn republish_with_other_bytes_is_rejected_leaving_original_untouched() {
         |catalog| catalog,
         |blobs| RecordingBlobs::recording(blobs, log.clone()),
     );
-    let request = publish_request("foo", "1.0.0", &[b"different"], None);
+    let request = publish_request("foo", "1.0.0", &[b"different"], Vec::new());
 
     // Act
     let error = block_on(registry.publish(&caller(), request)).unwrap_err();
@@ -222,7 +230,7 @@ fn republish_over_tombstone_is_rejected() {
     let seed = Seed::new();
     seed.add_version("foo", "1.0.0", VersionState::Deleted, b"gone");
     let registry = seed.registry();
-    let request = publish_request("foo", "1.0.0", &HELLO, None);
+    let request = publish_request("foo", "1.0.0", &HELLO, Vec::new());
 
     // Act
     let error = block_on(registry.publish(&caller(), request)).unwrap_err();
@@ -244,7 +252,7 @@ fn republish_with_other_spelling_of_same_canonical_key_is_rejected_keeping_first
         |catalog| catalog,
         |blobs| RecordingBlobs::recording(blobs, log.clone()),
     );
-    let request = publish_request("foo_bar", "1.0.0+build.1", &HELLO, None);
+    let request = publish_request("foo_bar", "1.0.0+build.1", &HELLO, Vec::new());
 
     // Act
     let error = block_on(registry.publish(&caller(), request)).unwrap_err();
@@ -267,7 +275,7 @@ fn publish_lost_race_maps_catalog_conflict_to_version_exists() {
     let seed = Seed::new();
     seed.add_version("foo", "1.0.0", VersionState::Released, b"winner");
     let registry = seed.registry_with(BlindCatalog, |blobs| blobs);
-    let request = publish_request("foo", "1.0.0", &HELLO, None);
+    let request = publish_request("foo", "1.0.0", &HELLO, Vec::new());
 
     // Act
     let error = block_on(registry.publish(&caller(), request)).unwrap_err();
@@ -295,9 +303,10 @@ fn broken_body_request() -> Publish {
         file: Upload {
             path: asset_path("foo", "1.0.0"),
             body: Box::pin(stream::iter(items)),
-            declared_sha256: None,
+            declared: Vec::new(),
         },
         metadata: FormatMetadata::new(common::METADATA.to_owned()),
+        tags: Vec::new(),
     }
 }
 
@@ -333,7 +342,7 @@ fn publish_reports_backend_error_and_records_nothing_when_blob_commit_fails() {
         |catalog| catalog,
         |blobs| RecordingBlobs::failing_commit(blobs, commit_log()),
     );
-    let request = publish_request("foo", "1.0.0", &HELLO, None);
+    let request = publish_request("foo", "1.0.0", &HELLO, Vec::new());
 
     // Act
     let error = block_on(registry.publish(&caller(), request)).unwrap_err();
@@ -344,4 +353,64 @@ fn publish_reports_backend_error_and_records_nothing_when_blob_commit_fails() {
         listed_foo(&registry).is_empty(),
         "запись каталога не должна ссылаться на незакоммиченный blob"
     );
+}
+
+#[test]
+fn publish_rejects_when_any_declared_checksum_mismatches_leaving_cas_untouched() {
+    // Arrange
+    let declared = [
+        Checksum::Sha256(hello_sha256()),
+        Checksum::Sha1(Sha1::from([9; 20])),
+    ];
+    let log = commit_log();
+    let registry = Seed::new().registry_with(
+        |catalog| catalog,
+        |blobs| RecordingBlobs::recording(blobs, log.clone()),
+    );
+    let request = publish_request("foo", "1.0.0", &HELLO, declared.to_vec());
+
+    // Act
+    let error = block_on(registry.publish(&caller(), request)).unwrap_err();
+
+    // Assert
+    assert!(
+        matches!(&error, RegistryError::DigestMismatch { declared: d, actual }
+            if **d == declared[1] && **actual == Checksum::Sha1(hello_sha1())),
+        "{error:?}"
+    );
+    assert!(committed(&log).is_empty(), "неверный blob не попал в CAS");
+}
+
+#[test]
+fn publish_accepts_all_matching_declared_checksums() {
+    // Arrange
+    let registry = Seed::new().registry();
+    let declared = vec![
+        Checksum::Sha256(hello_sha256()),
+        Checksum::Sha512(hello_sha512()),
+        Checksum::Sha1(hello_sha1()),
+    ];
+    let request = publish_request("foo", "1.0.0", &HELLO, declared);
+
+    // Act
+    let result = block_on(registry.publish(&caller(), request));
+
+    // Assert
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn publish_with_tags_sets_them_on_the_new_version() {
+    // Arrange
+    let registry = Seed::new().registry();
+    let mut request = publish_request("foo", "1.0.0", &HELLO, Vec::new());
+    request.tags = vec!["latest".to_owned()];
+
+    // Act
+    let record = block_on(registry.publish(&caller(), request)).unwrap();
+
+    // Assert
+    let package =
+        block_on(registry.package(&caller(), Format::Cargo, HOSTED, &name("foo"))).unwrap();
+    assert_eq!(package.tags, [("latest".to_owned(), record.id)]);
 }

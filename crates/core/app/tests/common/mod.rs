@@ -18,8 +18,8 @@ use bytes::Bytes;
 use crane_app::registry::{Coordinate, Publish, Registry, Upload};
 use crane_domain::access::{Caller, Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, RepositoryId,
-    RepositoryKind, Sha1, Sha256, Sha512, Version, VersionId, VersionState,
+    Asset, Checksum, Format, FormatMetadata, PackageName, PackageRef, PackageVersion, Repository,
+    RepositoryId, RepositoryKind, Sha1, Sha256, Sha512, Version, VersionId, VersionState,
 };
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::registry::{
@@ -95,6 +95,21 @@ pub(crate) fn coordinate(package: &str, raw_version: &str) -> Coordinate {
     }
 }
 
+pub(crate) fn coordinate_in(repository: &str, package: &str, raw_version: &str) -> Coordinate {
+    Coordinate {
+        repository: repository.to_owned(),
+        ..coordinate(package, raw_version)
+    }
+}
+
+pub(crate) fn package_ref(repository: &str, package: &str) -> PackageRef {
+    PackageRef {
+        format: Format::Cargo,
+        repository: repository.to_owned(),
+        package: name(package),
+    }
+}
+
 pub(crate) fn asset_path(package: &str, raw_version: &str) -> String {
     format!("{package}-{raw_version}.crate")
 }
@@ -111,16 +126,17 @@ pub(crate) fn publish_request(
     package: &str,
     raw_version: &str,
     chunks: &[&'static [u8]],
-    declared_sha256: Option<Sha256>,
+    declared: Vec<Checksum>,
 ) -> Publish {
     Publish {
         coordinate: coordinate(package, raw_version),
         file: Upload {
             path: asset_path(package, raw_version),
             body: body(chunks),
-            declared_sha256,
+            declared,
         },
         metadata: FormatMetadata::new(METADATA.to_owned()),
+        tags: Vec::new(),
     }
 }
 
@@ -197,6 +213,7 @@ impl Seed {
         raw_version: &str,
         state: VersionState,
         asset: Asset,
+        published_at: SystemTime,
     ) -> PackageVersion {
         block_on(self.catalog.publish_version(NewVersion {
             id: VersionId::new(self.ids.generate()),
@@ -204,7 +221,7 @@ impl Seed {
             package: name(package),
             version: version(raw_version),
             state,
-            published_at: fixed_now(),
+            published_at,
             assets: vec![asset],
             metadata: FormatMetadata::new(METADATA.to_owned()),
             tags: Vec::new(),
@@ -224,8 +241,20 @@ impl Seed {
         state: VersionState,
         content: &'static [u8],
     ) -> PackageVersion {
+        self.add_version_at(package, raw_version, state, content, fixed_now())
+    }
+
+    /// То же, но с заданным временем публикации (для окна удаления).
+    pub(crate) fn add_version_at(
+        &self,
+        package: &str,
+        raw_version: &str,
+        state: VersionState,
+        content: &'static [u8],
+        published_at: SystemTime,
+    ) -> PackageVersion {
         let asset = self.put_blob(&asset_path(package, raw_version), content);
-        self.insert(package, raw_version, state, asset)
+        self.insert(package, raw_version, state, asset, published_at)
     }
 
     /// Запись каталога со ссылкой на blob, которого в CAS нет.
@@ -235,7 +264,13 @@ impl Seed {
             sha256: Sha256::from([0xee; 32]),
             size: 1,
         };
-        self.insert(package, raw_version, VersionState::Released, asset)
+        self.insert(
+            package,
+            raw_version,
+            VersionState::Released,
+            asset,
+            fixed_now(),
+        )
     }
 
     pub(crate) fn registry_with<C: Catalog, B: BlobStore>(
@@ -243,10 +278,24 @@ impl Seed {
         wrap_catalog: impl FnOnce(MemoryCatalog) -> C,
         wrap_blobs: impl FnOnce(MemoryBlobStore) -> B,
     ) -> Registry<C, B> {
+        self.registry_at_with(fixed_now(), wrap_catalog, wrap_blobs)
+    }
+
+    /// Реестр с часами, остановленными на `now`.
+    pub(crate) fn registry_at(self, now: SystemTime) -> Registry<MemoryCatalog, MemoryBlobStore> {
+        self.registry_at_with(now, |catalog| catalog, |blobs| blobs)
+    }
+
+    fn registry_at_with<C: Catalog, B: BlobStore>(
+        self,
+        now: SystemTime,
+        wrap_catalog: impl FnOnce(MemoryCatalog) -> C,
+        wrap_blobs: impl FnOnce(MemoryBlobStore) -> B,
+    ) -> Registry<C, B> {
         Registry::new(
             wrap_catalog(self.catalog),
             wrap_blobs(self.blobs),
-            Arc::new(ManualClock::new(fixed_now())),
+            Arc::new(ManualClock::new(now)),
             self.ids,
             self.audit,
         )

@@ -83,9 +83,10 @@ pub(super) async fn publish<C: Catalog + 'static, B: BlobStore + 'static>(
                     path,
                     body: Box::pin(stream::once(ready(crate_file))),
                     // Cargo хэш не присылает: cksum берётся из CAS.
-                    declared_sha256: None,
+                    declared: Vec::new(),
                 },
                 metadata: request.metadata,
+                tags: Vec::new(),
             },
         )
         .await?;
