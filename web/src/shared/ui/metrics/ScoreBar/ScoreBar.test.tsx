@@ -1,7 +1,9 @@
+// biome-ignore-all lint/style/noMagicNumbers: граничные оценки и уверенности — произвольные числа из 0..1
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ScoreBar } from "~/shared/ui/metrics";
 
+const INDICATOR = "[data-tone]";
 const LABEL = "Релевантность эксплуатации";
 const LOW_NOTE = "низкая уверенность, не влияет на политику";
 const SHADOW_NOTE = "не влияет на решения";
@@ -129,5 +131,43 @@ describe("ScoreBar", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(factors.length);
     expect(screen.getByText("модель systemone v3.1")).toBeInTheDocument();
     expect(screen.getByText("уверенность 0,92")).toBeInTheDocument();
+  });
+
+  it.each([
+    [0.49, "info"],
+    [0.5, "warning"],
+    [0.79, "warning"],
+    [0.8, "error"],
+  ])("оценка %s даёт тон полосы %s", (value, expected) => {
+    // Arrange
+    const confidence = 0.9;
+
+    // Act
+    const { container } = render(<ScoreBar label={LABEL} value={value} confidence={confidence} />);
+
+    // Assert
+    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", expected);
+  });
+
+  it("при низкой уверенности полоса приглушена независимо от оценки", () => {
+    // Arrange
+    const confidence = 0.4;
+
+    // Act
+    const { container } = render(<ScoreBar label={LABEL} value={0.9} confidence={confidence} />);
+
+    // Assert
+    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "muted");
+  });
+
+  it("у shadow-оценки полоса приглушена", () => {
+    // Arrange
+    const shadow = true;
+
+    // Act
+    const { container } = render(<ScoreBar label={LABEL} value={0.9} shadow={shadow} />);
+
+    // Assert
+    expect(container.querySelector(INDICATOR)).toHaveAttribute("data-tone", "muted");
   });
 });

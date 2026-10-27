@@ -18,7 +18,11 @@ type ScoreBarProps = WithClassName<{
   shadow?: boolean;
 }>;
 
-/** Пороги тона полосы (общие для кита): ниже LOW — error, ниже HIGH — warning, иначе success. */
+/**
+ * Пороги тона полосы (общие для кита): ниже LOW — info, ниже HIGH — warning, иначе error.
+ * У оценок systemone высокое значение — больший риск, поэтому success не используется вообще:
+ * зелёный сказал бы «безопасно» там, где модель этого не утверждает.
+ */
 const LOW_THRESHOLD = 0.5;
 const HIGH_THRESHOLD = 0.8;
 /** Ниже этой уверенности оценка не участвует в политике (разд. 11.6). */
@@ -35,12 +39,12 @@ const SHADOW_NOTE = "не влияет на решения";
 const LOW_CONFIDENCE_NOTE = "низкая уверенность, не влияет на политику";
 const VALUE_TEXT_SEPARATOR = ", ";
 
-type BarTone = "error" | "warning" | "success" | "muted";
+type BarTone = "info" | "warning" | "error" | "muted";
 
 const FILL = {
-  error: "bg-error-strong",
+  info: "bg-info-strong",
   warning: "bg-warning-strong",
-  success: "bg-success-strong",
+  error: "bg-error-strong",
   muted: "bg-muted-foreground",
 } satisfies Record<BarTone, string>;
 
@@ -57,9 +61,9 @@ function clamp(value: number): number {
 
 function scoreTone(value: number): BarTone {
   if (value < LOW_THRESHOLD) {
-    return "error";
+    return "info";
   }
-  return value < HIGH_THRESHOLD ? "warning" : "success";
+  return value < HIGH_THRESHOLD ? "warning" : "error";
 }
 
 /**
@@ -112,7 +116,7 @@ export function ScoreBar({
           </span>
         </div>
         <Meter.Track className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-          <Meter.Indicator className={cx("h-full rounded-full", FILL[tone])} />
+          <Meter.Indicator data-tone={tone} className={cx("h-full rounded-full", FILL[tone])} />
         </Meter.Track>
       </Meter.Root>
       {confidenceText === null ? null : (
