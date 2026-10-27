@@ -95,7 +95,7 @@
 
 **Анатомия.** Карточка «Установка» · SegmentedControl клиента (npm · pnpm · yarn / pip · uv · poetry / Maven · Gradle / dotnet / cargo), выбор запоминается per-format локально · шаг 1 «Однократная настройка» (CodeBlock `cctl login`, `cctl setup npm`) · сворачиваемое «Настроить вручную (.npmrc)» с CodeBlock, где вместо токена `${CRANE_TOKEN}`, и caption «Токен не показывается: используйте cctl или переменную окружения» · шаг 2 «Установка» (CodeBlock с версией).
 
-**Данные.** `GET …/install?client=…` → шаги-сниппеты без секрета (сервер гарантирует).
+**Данные.** `GET …/install?client=<InstallClient>` → `{client, setup_steps[], manual_config, install}` без секрета (сервер гарантирует). Клиент, несовместимый с форматом пакета, даёт 400; UI показывает в SegmentedControl только клиентов формата (матрица — в схеме `InstallClient`).
 
 **Правила.** MUST: ни в одном сниппете нет значения токена. MUST: кнопка «Копировать» у каждого CodeBlock с доступным именем «Копировать команду установки» и тостом/`aria-live` «Скопировано». Primary «Скопировать команду» в шапке копирует шаг 2 для выбранного клиента.
 
@@ -134,9 +134,9 @@
 
 **Анатомия.** Callout-вердикт сверху: «Продвижение в release заблокировано: 2 причины» + ссылка «Политика гейтов». Ниже ряд из 4 карточек (`repeat(auto-fit, minmax(240px,1fr))`): overline названия гейта · StatusBadge результата · список причин (≤ 3, остальное «ещё N») · ссылка «Подробнее» в соответствующую вкладку.
 
-**Результаты гейта.** passed «Пройдена» (success) · denied «Отказ» (error) · missing «Нет данных» (neutral, пунктирная рамка) · analysis_error «Ошибка анализа» (warning) · stale «Устарела» (warning, «отчёт старше базы на 31 ч»).
+**Результаты гейта.** passed «Пройдена» (success) · denied «Отказ» (error) · review «На проверке» (warning) · missing «Нет данных» (neutral, пунктирная рамка) · analysis_error «Ошибка анализа» (warning) · stale «Устарела» (warning, «отчёт старше базы на 31 ч»).
 
-**Данные.** `GET …/versions/{v}/promotion?target=release` → `verdict{allowed, reasons[]}`, `gates[]`, `approvals{required, granted[], pending_request?}`.
+**Данные.** `GET …/versions/{v}/promotion?target=release` → `stage`, `verdict` (`allow|deny|pending`), `reasons[]`, `_embedded['crane:gates']` (GateResult: `kind`, `result` — GateOutcome, `required`, `on_missing`, `reasons[]`, `evidence_ref?`, `stale_by_s?`), `approvals{required[], granted[], requests[]}`, `denied_actions[]` (`action` — rel кнопки, к которой UI привязывает причину).
 
 **Правила.** MUST: пунктирная рамка у «Нет данных» — не единственный признак (есть текст). MUST: «Пересчитать» показывает результат через тост и обновляет карточки без перестройки страницы. Отклонено: английский чип «Security Gate Fail» (S4), SLA-чип внутри карточки гейта (дублирует вкладку «Находки»).
 
@@ -283,6 +283,8 @@ sonner справа снизу, максимум 3. Успех — 4 с; оши�
 ## 31. Боковая сводка «Топ-3 + ссылка»
 
 Карточка правой колонки очереди: h2 · счётчик-бейдж · ≤ 3 строки (объект · caption · бейдж) · ссылка «Перейти в … (12)». Используется для экстренных блокировок, фидов, лицензий на проверку (S7), ожидающих подтверждения (G1).
+
+**Данные.** Счётчики берутся из отдельных агрегатов, не из `total` списка: экстренные блокировки — `GET /findings/summary` → `emergency_blocks.active`; фиды — считаются клиентом по полному списку `GET /feeds` (состояние не `ok`); лицензии на проверку — `GET /license-reviews/summary` → `pending`.
 
 ## 32. Быстрые действия
 

@@ -90,7 +90,7 @@
 
 **Исправить.** Убрать вторые крошки и строку «Kafka lag: 0 · Скан синхронизирован» (Kafka в продукте нет). «Security Gate Fail» → убрать. «Удалить версию…» из шапки в меню «…». Убрать правую «опасную зону». ScoreBar virality — один тон. «Доверительный интервал» → «уверенность». «SLSA Level 3», «Подпись Cosign валидна» — убрать (нет в продукте). Запрос на одобрение: «Статус: In Review» → «На рассмотрении».
 
-**Данные.** `GET …/versions/{v}/promotion?target=release`, `POST …/promotion/evaluate`, `POST …/promotions`, `GET …/license`, `GET …/evidence`, `GET …/findings` (+ `scan`), `POST …/versions/{v}/deletion {reason}` (rel `crane:delete`).
+**Данные.** `GET …/versions/{v}/promotion?target=release`, `POST …/promotion/evaluations`, `POST …/promotions`, `GET …/license`, `GET …/evidence`, `GET …/findings` (+ `scan`), `POST …/versions/{v}/deletion {reason}` (rel `crane:delete`).
 
 **Приёмка.** Каждая карточка гейта имеет текстовый результат; «Нет данных» различим в forced-colors (рамка + текст); фокус в диалоге удаления на «Отмена»; после «Пересчитать» тост и обновлённые карточки, фокус остаётся на кнопке.
 
@@ -127,7 +127,7 @@
 
 **Исправить.** Убрать «Выгрузить отчёт» как primary (нет в документации для админа; если нужно — I1). Убрать «Журнал инцидентов», «Перезапустить все (3)». Не обрезать названия быстрых действий. Ошибки задач на английском («Timeout connecting to Trivy») — показываем как есть, это сырой текст ошибки, но с подписью «Последняя ошибка».
 
-**Данные.** `GET /platform/overview?window=` (tiles), `GET /status` (components), `GET /platform/series/requests?window`, `GET /platform/series/storage-by-workspace?window` (top-8 + other), `GET /platform/retention/forecast`, `GET /jobs?state=dead&limit=3` (строка несёт `crane:retry`), `GET /integrity/checks/latest`; действия: `GET /retention/preview?rule_id=&limit` (без MFA; из ответа `crane:run` → `POST /retention/runs`, step-up), `POST /cache/warmups` (202), `POST /integrity/checks` (202 + ресурс). Каденс: плитки и компоненты 15 с, графики 60 с.
+**Данные.** `GET /platform/overview?window=` (tiles), `GET /status` (components), `GET /platform/latency?window` (p50/p95/p99 и `slo_ms` для «Запросы и задержки»; ряда числа запросов в спеке нет, поэтому график показывает только задержки), `GET /platform/usage?group=workspace|format&top=8` (`items[]` + `other`, «Объём по командам и форматам»), `GET /retention/preview?limit=` без `rule_id` (`{versions, bytes}` для «Ближайших удалений»; разбивки по правилам в ответе нет, топ-3 правил берётся из `GET /retention/rules`), `GET /jobs?state=dead&limit=3` (строка несёт `crane:retry`), `GET /storage/integrity-checks?limit=1` (`checked`, `mismatches`; доли выборки 1 % в ответе нет, порядок записей истории в спеке не зафиксирован); действия: `GET /retention/preview?rule_id=&limit` (без MFA; из ответа `crane:run` → `POST /retention/runs`, step-up), `POST /cache/warmups` (202), `POST /storage/integrity-checks` (202 + ресурс). Каденс: плитки и компоненты 15 с, графики 60 с.
 
 **Приёмка.** При паузе автообновления сетевых запросов опроса нет; на скрытой вкладке опрос останавливается; плитка без данных показывает «—»; графики не анимируются при обновлении; сводка графика доступна скринридеру.
 
@@ -146,7 +146,7 @@
 
 **Исправить.** Убрать primary «Принять VEX» и «Экспорт в CSV» (не описан), «Настроить гейты» → ссылка. Убрать курсор «cur_sec_…» и «Показано 5 из 221». Убрать цветные чипы экосистем. Плитка «Фиды 4 мин» — без «9 источников онлайн» лейбла-бейджа (в caption). Кнопка «Экспорт» из bulk-панели — убрать.
 
-**Данные.** `GET /findings?priority&kev&malware&overdue&team&ecosystem&scope&q&sort=-priority,sla_due_at&cursor` → строка `{id, priority, priority_source, sla{due_at,state}|null, status, advisory{id,aliases[]}, purl, ecosystem, cvss, epss, epss_percentile, kev, malware, fixed_in?, scores[], dep_scope, deployed, team, issue?}`; `GET /findings/summary` → `by_priority, overdue, kev, emergency_blocks{active}, oldest_unhandled_p0`; `GET /feeds`; `GET /emergency-blocks?state=active`; `GET /license-reviews?sort=-virality&limit=3`. Массовые: `POST /vex-statements|/exceptions|/issues {finding_ids[]…}` → `results[]`. Каденс сводки 30 с; новые строки — пилюля «Новых: N · Показать».
+**Данные.** `GET /findings?priority&kev&malware&overdue&team&ecosystem&scope&status&q&sort=-priority,sla_due_at&cursor` → строка `{id, priority, priority_source, sla{due_at,state}|null, status, advisory{id,aliases[]}, purl, ecosystem, cvss, epss, epss_percentile, kev, malware, fixed_in?, scores[], dep_scope, deployed, team, issue?}`; `GET /findings/summary` → `by_priority, overdue, kev_open, emergency_blocks{active}, oldest_unhandled_p0, feeds_max_lag_s`; `GET /license-reviews/summary` → `pending`; `GET /feeds` (полный список без пагинации; число фидов, требующих внимания, клиент считает по нему: `state` не `ok`); `GET /emergency-blocks?state=active`; `GET /license-reviews?sort=-virality&limit=3`. Массовые: `POST /vex-statements|/exceptions|/issues {finding_ids[]…}` → `results[]`. Каденс сводки 30 с; новые строки — пилюля «Новых: N · Показать».
 
 **Приёмка.** Сегменты приоритета — toggle group с `aria-pressed` и счётчиком в имени; выделение строк клавиатурой (Space на чекбоксе), BulkActionBar объявляется «Выбрано 3»; «Принять VEX» при разных advisory disabled с видимой причиной; при 1440 таблица без горизонтального скролла в наборе P1+P2.
 
@@ -160,7 +160,7 @@
 
 **Исправить.** Убрать вторые крошки, «Контекст: Production-кластер», чип «3,9 мс · кэш», «Колонки» в карточке (переносится в общий механизм). Колонка «Окружение» — не показывается, пока API не отдаёт evidence о развёртывании (решение владельца 27.10.2026). «Critical risk» модели → убрать. «Регламент: подтверждает в течение 30 мин» — убрать (нет в документации). «KEV Exploit Active» → «В KEV».
 
-**Данные.** `GET /findings/{id}` (+ `scores[{kind,value,confidence,factors[],model,model_version,shadow}]`, `priority_source`, `sla`), `GET /impact?finding={id}&level=&cursor` (по ссылке `crane:impact` у находки) → `consumers[{project, version, team, downloads, lockfile, sbom, deployed}]` + `counts`, `GET /findings/{id}/history`, `GET /findings/{id}/explanation` (P3; 503 `ai-unavailable`). Действия: `POST /vex-statements`, `POST /exceptions` (MFA), `POST /issues` — со списком из одной находки; `POST /emergency-blocks` (сразу активна, step-up MFA; снятие — `…/lift`).
+**Данные.** `GET /findings/{id}` (+ `scores[{kind,value,confidence,factors[],model,model_version,shadow}]`, `priority_source`, `sla`), `GET /impact?finding={id}&level=&cursor` (по ссылке `crane:impact` у находки) → `_embedded['crane:consumers'][{project, version, team, levels{downloads, lockfile, sbom, deployed}}]` + `counts{downloads, lockfile, sbom, deployed}`, `GET /findings/{id}/priority-history`, `GET /findings/{id}/explanation` (P3; 503 `ai-unavailable`). Действия: `POST /vex-statements`, `POST /exceptions` (MFA), `POST /issues` — со списком из одной находки; `POST /emergency-blocks` (сразу активна, step-up MFA; снятие — `…/lift`).
 
 **Приёмка.** Каждая ячейка уровня читается скринридером как «Lockfile: да»; при 503 объяснения страница без ошибок, вместо карточки — info-строка; отсчёт SLA не объявляется live region.
 
@@ -246,7 +246,7 @@
 | E4 Upstream | P1 | A | 3, 9 | `{name, status, since, latency_p95_ms, rpm, coalesced_ratio, stale_served_24h, allowlist}` | Последствие для клиентов в caption |
 | E5 Квоты | P1 | A | 2 (RingGauge) | `{workspace, bytes, warn_bytes, hard_bytes, trend}` | RingGauge с текстом %, не только дугой |
 | E6 Retention и GC | P1 | A + результат | 23, 32 | `GET /retention/preview?rule_id=&limit` (`_embedded["crane:candidates"]` + `next`), из ответа `crane:run` → `POST /retention/runs {rule_id, reason}` | «Применить» — деструктивный диалог с причиной, кнопка с бейджем MFA (step-up обязателен); пробный прогон — без MFA |
-| E7 Целостность | P1 | A | 27 | `POST/GET /integrity/checks` | Асинхронный прогресс |
+| E7 Целостность | P1 | A | 27 | `POST/GET /storage/integrity-checks` | Асинхронный прогресс |
 | E8 Готовность и прогрев | P1 | J + A | 2, 32 | `POST /readiness`, `POST /cache/warmups` (202) | MUST: drag-and-drop с альтернативой кнопкой «Выбрать файл» (WCAG 2.2 2.5.7) |
 | E9 Очереди | P1 | A + C | 16, 17 | `{kind, queued, oldest_age_s, running, failed_24h}`, dead jobs, `POST /jobs/{id}/retry` | «Повторить» — только одиночный, по строке и в панели; массового нет |
 | E10 Бэкапы | P1 | D | 16 | ОВ (ресурс не согласован) | Timeline бэкапов, PITR-окно |
