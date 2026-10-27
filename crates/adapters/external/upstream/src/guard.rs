@@ -7,8 +7,8 @@ use crane_domain::proxy::{EgressPolicy, EgressRefusal};
 use reqwest::Url;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
-/// Сколько предыдущих запросов цепочки допускается. crates.io и зеркала редиректят максимум на CDN
-/// (один-два hop); длиннее цепочка — это петля или атака, ответ 3xx станет `Unavailable`.
+/// Сколько redirect допускается (как `Policy::limited` в reqwest). crates.io и зеркала редиректят максимум
+/// на CDN (один-два hop); длиннее цепочка — это петля или атака, ответ 3xx станет `Unavailable`.
 pub(crate) const MAX_REDIRECTS: usize = 5;
 
 /// Решение по очередному redirect-hop.
@@ -22,11 +22,14 @@ pub(crate) enum Hop {
 
 /// Каждый hop проходит те же проверки хоста и схемы, что и исходная база: иначе redirect уводит за allowlist.
 pub(crate) fn hop(policy: &EgressPolicy, url: &Url, previous: usize) -> Hop {
-    if previous >= MAX_REDIRECTS {
+    // `previous` включает исходный запрос, поэтому первый redirect приходит с `previous = 1`.
+    if previous > MAX_REDIRECTS {
         return Hop::Stop;
     }
     let Some(host) = url.host_str() else {
-        return Hop::Refuse(EgressRefusal::HostNotAllowed(String::new()));
+        // Хоста нет; оператору хватает схемы (`data:`, `mailto:`). Остальное URL в журнал не кладём:
+        // в query бывают подписи и токены.
+        return Hop::Refuse(EgressRefusal::HostNotAllowed(format!("{}:", url.scheme())));
     };
     match policy.check_target(url.scheme(), host) {
         Ok(()) => Hop::Follow,
@@ -107,24 +110,24 @@ mod tests {
     fn hop_follows_allowed_hosts_and_refuses_others() {
         // Arrange
         let cases = [
-            ("https://static.crates.io/x", 0, Hop::Follow),
+            ("https://static.crates.io/x", 1, Hop::Follow),
             (
                 "https://evil.example/x",
-                0,
+                1,
                 Hop::Refuse(EgressRefusal::HostNotAllowed("evil.example".to_owned())),
             ),
             (
                 "http://static.crates.io/x",
-                0,
+                1,
                 Hop::Refuse(EgressRefusal::InsecureScheme),
             ),
             (
                 "ftp://static.crates.io/x",
-                0,
+                1,
                 Hop::Refuse(EgressRefusal::UnsupportedScheme("ftp".to_owned())),
             ),
-            ("https://static.crates.io/x", MAX_REDIRECTS - 1, Hop::Follow),
-            ("https://static.crates.io/x", MAX_REDIRECTS, Hop::Stop),
+            ("https://static.crates.io/x", MAX_REDIRECTS, Hop::Follow),
+            ("https://static.crates.io/x", MAX_REDIRECTS + 1, Hop::Stop),
         ];
 
         // Act
@@ -139,15 +142,15 @@ mod tests {
     #[test]
     fn hop_refuses_url_without_host() {
         // Arrange
-        let target = url("data:text/plain,hello");
+        let target = url("data:text/plain,hello?token=secret");
 
         // Act
-        let decision = hop(&policy(), &target, 0);
+        let decision = hop(&policy(), &target, 1);
 
         // Assert
         assert_eq!(
             decision,
-            Hop::Refuse(EgressRefusal::HostNotAllowed(String::new()))
+            Hop::Refuse(EgressRefusal::HostNotAllowed("data:".to_owned()))
         );
     }
 
