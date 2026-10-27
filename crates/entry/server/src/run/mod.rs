@@ -99,6 +99,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         &catalog,
         ids.as_ref(),
         Arc::clone(&blobs),
+        settings.cache,
         &settings.cargo_proxy_repos,
         &cargo,
     )

@@ -298,10 +298,6 @@ pub(crate) struct Settings {
     pub(crate) cargo_proxy_repos: Vec<String>,
     pub(crate) max_publish_bytes: usize,
     pub(crate) storage: Storage,
-    #[allow(
-        dead_code,
-        reason = "сборку ProxyEngine с этим бэкендом делает run/mod.rs (п. 3 v0.2.0); снять при интеграции"
-    )]
     pub(crate) cache: Cache,
 }
 

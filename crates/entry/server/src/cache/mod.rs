@@ -26,10 +26,6 @@ pub(crate) enum Backend {
 }
 
 /// Для режима Valkey требует tokio-рантайм: адаптер запускает фоновые задачи.
-#[allow(
-    dead_code,
-    reason = "сборку ProxyEngine с этим бэкендом делает run/mod.rs (п. 3 v0.2.0); снять при интеграции"
-)]
 pub(crate) fn backend(cache: Cache) -> Backend {
     match cache {
         Cache::Memory => {
