@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { formatNumber, formatPercent } from "~/shared/lib/text";
 import {
@@ -75,13 +75,20 @@ export function ShareBar({
   caption,
   className,
 }: ShareBarProps) {
+  const titleId = useId();
   const segments = toSegments(items, formatOther);
   const total = segments.reduce((sum, segment) => sum + segment.value, 0);
   const share = (value: number) => (total > 0 ? value / total : 0);
 
   return (
-    <figure data-slot="share-bar" className={cx("flex flex-col gap-3", className)}>
-      <figcaption className="text-h3">{title}</figcaption>
+    <figure
+      data-slot="share-bar"
+      aria-labelledby={titleId}
+      className={cx("flex flex-col gap-3", className)}
+    >
+      <figcaption id={titleId} className="text-h3">
+        {title}
+      </figcaption>
       <div aria-hidden="true" className="flex h-3 w-full gap-0.5 overflow-hidden rounded-full">
         {segments.map((segment) => (
           <span

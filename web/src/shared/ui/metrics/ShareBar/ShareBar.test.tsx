@@ -44,7 +44,7 @@ describe("ShareBar", () => {
     render(<ShareBar title={TITLE} columns={COLUMNS} items={items} />);
 
     // Assert
-    expect(screen.getByRole("figure")).toHaveTextContent(TITLE);
+    expect(screen.getByRole("figure", { name: TITLE })).toBeInTheDocument();
   });
 
   it("доли считаются от суммы и форматируются через formatPercent", () => {
