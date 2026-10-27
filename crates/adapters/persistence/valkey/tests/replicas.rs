@@ -15,7 +15,7 @@ use std::time::{Duration, SystemTime};
 use bytes::Bytes;
 use crane_domain::proxy::{ProxyKey, UpstreamPath};
 use crane_domain::registry::RepositoryId;
-use crane_ports::proxy::{Cached, CachedState, Claim, FetchLeases, ProxyCache};
+use crane_ports::proxy::{Cached, CachedState, Claim, FetchLeases, Lease, LeaseError, ProxyCache};
 use crane_valkey::Valkey;
 use futures_util::task::noop_waker_ref;
 use uuid::Uuid;
@@ -74,7 +74,35 @@ async fn get_until(cache: &Valkey, key: &ProxyKey, wanted: &Cached) -> Option<Ca
     }
 }
 
-fn lead(claim: Claim) -> crane_ports::proxy::Lease {
+/// Снимает lease на `releaser` и дожидается, пока `observer` обработает инвалидацию этого снятия.
+/// Сообщения `inv` одного издателя приходят подписчику в порядке публикации, поэтому о приходе
+/// снятия говорит приход следующего за ним маркера: запись маркера вытесняет его старое значение
+/// из L1 `observer`. Без этой синхронизации пробуждение могло бы прийти уже после того, как
+/// ждущий встал в очередь, и тест не отличил бы «зарегистрировался до SET» от «после».
+async fn release_and_sync(
+    releaser: &Valkey,
+    observer: &Valkey,
+    lease: Lease,
+    marker: &ProxyKey,
+) -> Result<(), LeaseError> {
+    let released = releaser.release(lease).await;
+    let updated = document(b"marker-updated");
+    releaser
+        .put(marker, updated.clone(), KEEP)
+        .await
+        .expect("put маркера");
+    get_until(observer, marker, &updated).await;
+    released
+}
+
+fn marker(db: u8) -> ProxyKey {
+    ProxyKey {
+        path: UpstreamPath::parse("marker").expect("путь в тестовых данных валиден"),
+        ..key(db)
+    }
+}
+
+fn lead(claim: Claim) -> Lease {
     match claim {
         Claim::Lead(lease) => lease,
         Claim::Settled => unreachable!("ключ свободен: ожидался Lead"),
@@ -111,6 +139,10 @@ fn release_on_one_replica_wakes_waiting_claim_on_another() {
     support::run(async |server| {
         // Arrange
         let (a, b) = server.replicas(WAKE_DB).await;
+        a.put(&marker(WAKE_DB), document(b"marker"), KEEP)
+            .await
+            .expect("put маркера");
+        b.get(&marker(WAKE_DB)).await.expect("get маркера");
         let leader = lead(
             a.claim(&key(WAKE_DB), LEASE, LONG_PATIENCE)
                 .await
@@ -127,7 +159,7 @@ fn release_on_one_replica_wakes_waiting_claim_on_another() {
         b.get(&waiting_key).await.expect("барьер соединения");
 
         // Act
-        let released = a.release(leader).await;
+        let released = release_and_sync(&a, &b, leader, &marker(WAKE_DB)).await;
 
         // Assert
         released.expect("release");
