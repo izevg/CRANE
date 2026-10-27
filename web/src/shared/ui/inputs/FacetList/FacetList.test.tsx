@@ -60,6 +60,22 @@ describe("FacetList", () => {
     expect(screen.getByRole("button", { name: NPM_NAME })).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("у нажатой строки есть галочка, у ненажатой нет", () => {
+    // Arrange
+    const onToggle = vi.fn();
+
+    // Act
+    render(
+      <FacetList title="По форматам" items={ITEMS} selected={["maven"]} onToggle={onToggle} />,
+    );
+
+    // Assert
+    const pressed = screen.getByRole("button", { name: "Maven 250" });
+    const idle = screen.getByRole("button", { name: NPM_NAME });
+    expect(pressed.querySelector('[data-slot="facet-check"]')).not.toBeNull();
+    expect(idle.querySelector('[data-slot="facet-check"]')).toBeNull();
+  });
+
   it("клик по строке вызывает onToggle со значением", async () => {
     // Arrange
     const user = userEvent.setup();

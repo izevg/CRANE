@@ -1,3 +1,4 @@
+import { CheckIcon } from "lucide-react";
 import { useCallback, useId } from "react";
 import { formatCount } from "~/shared/lib/text";
 import { Card } from "~/shared/ui/primitives";
@@ -41,16 +42,25 @@ function FacetRow({ item, pressed, max, onToggle }: FacetRowProps) {
         type="button"
         aria-pressed={pressed}
         onClick={handleClick}
-        className="group/facet flex min-h-8 w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left text-body transition-colors duration-(--dur-fast) hover:bg-accent aria-pressed:bg-brand-container aria-pressed:text-brand"
+        className="group/facet flex min-h-8 w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left text-body transition-colors duration-(--dur-fast) hover:bg-accent aria-pressed:bg-brand-container aria-pressed:text-brand aria-pressed:inset-ring aria-pressed:inset-ring-brand forced-colors:aria-pressed:bg-[Highlight] forced-colors:aria-pressed:text-[HighlightText]"
       >
         <span className="flex w-full items-baseline justify-between gap-2">
-          <span className="min-w-0 wrap-anywhere">{item.label}</span>
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            {pressed ? (
+              <CheckIcon
+                data-slot="facet-check"
+                aria-hidden="true"
+                className="size-4 shrink-0 self-center"
+              />
+            ) : null}
+            <span className="wrap-anywhere">{item.label}</span>
+          </span>
           {SEPARATOR}
           <span className="shrink-0 tabular-nums">{formatCount(item.count)}</span>
         </span>
         <span aria-hidden="true" className="h-1 w-full overflow-hidden rounded-full bg-muted">
           <span
-            className="block h-full origin-left rounded-full bg-muted-foreground group-aria-pressed/facet:bg-brand"
+            className="block h-full origin-left rounded-full bg-muted-foreground group-aria-pressed/facet:bg-brand forced-colors:bg-[ButtonText] forced-colors:group-aria-pressed/facet:bg-[HighlightText]"
             style={{ transform: `scaleX(${max === 0 ? 0 : item.count.count / max})` }}
           />
         </span>
@@ -61,7 +71,7 @@ function FacetRow({ item, pressed, max, onToggle }: FacetRowProps) {
 
 /**
  * Фасет: строки-кнопки «название · число · доля от максимума». Нажатая строка — активный фильтр
- * (`aria-pressed`). Доля нарисована полосой и скрыта от скринридера: число говорит то же самое.
+ * (`aria-pressed`), отмечена галочкой и рамкой, а не только цветом (WCAG 1.4.1). Доля нарисована полосой и скрыта от скринридера: число говорит то же самое.
  */
 export function FacetList({
   title,
