@@ -12,9 +12,11 @@ pub(crate) mod cargo;
 pub(crate) mod names;
 pub(crate) mod npm;
 pub(crate) mod proxy;
+pub(crate) mod switch;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 use axum::Router;
@@ -41,8 +43,9 @@ use tokio::runtime::{Builder, Runtime};
 use tower::ServiceExt;
 
 use self::cargo::{index_path, publish_body};
+use self::switch::SwitchCatalog;
 /// Реестр фикстуры; proxy-router получает его для защиты имён.
-pub(crate) type TestRegistry = Registry<MemoryCatalog, MemoryBlobStore>;
+pub(crate) type TestRegistry = Registry<SwitchCatalog, MemoryBlobStore>;
 
 pub(crate) const TOKEN: &str = "s3cret-token";
 pub(crate) const PUBLIC_URL: &str = "https://crane.example";
@@ -95,6 +98,7 @@ pub(crate) struct Api {
     clock: Arc<ManualClock>,
     registry: Arc<TestRegistry>,
     ids: Arc<SequentialIdGen>,
+    catalog_down: Arc<AtomicBool>,
 }
 
 impl Api {
@@ -171,8 +175,9 @@ impl Api {
                 .unwrap();
         }
         let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
+        let catalog_down = Arc::new(AtomicBool::new(false));
         let registry = Arc::new(Registry::new(
-            catalog,
+            SwitchCatalog::new(catalog, catalog_down.clone()),
             MemoryBlobStore::default(),
             clock.clone(),
             ids.clone(),
@@ -211,7 +216,13 @@ impl Api {
             clock,
             registry,
             ids,
+            catalog_down,
         }
+    }
+
+    /// Каталог перестаёт отвечать на поиск имён: так недоступная БД выглядит для защиты.
+    pub(crate) fn catalog_down(&self) {
+        self.catalog_down.store(true, Ordering::SeqCst);
     }
 
     /// Сдвигает часы реестра (окно снятия версий).
