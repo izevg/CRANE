@@ -46,6 +46,7 @@ The single entry point is the [Taskfile](Taskfile.yml) (`task --list`).
 | Dependencies and hooks | `task install` (Node ≥ 24, see `.nvmrc`) |
 | All fast checks | `task check` |
 | Rust: fmt, clippy, test, deny | `task rust:check` |
+| PostgreSQL tests | `task rust:test:pg` (needs `.env` from `.env.dist` and Docker) |
 | Web: types, Biome, Steiger, knip, depcruise | `task web:check` · unit tests: `task web:test` |
 | File structure and crate layers | `task structure` |
 | Full gate before a PR to `release/*` | `task gate` (unit tests + cargo-mutants and Stryker mutations + Playwright) |

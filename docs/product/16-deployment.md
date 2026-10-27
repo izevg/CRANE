@@ -143,7 +143,7 @@ CRANE отдаёт телеметрию только в открытых фор�
 | Кэш и proxy | `cache_requests_total`, `singleflight_coalesced_total`, `upstream_requests_total`, `upstream_duration_seconds`, `upstream_up` | `layer` (l1, l2), `result` (hit, miss, stale), `upstream` |
 | Публикация и хранилище | `publish_total`, `publish_bytes_total`, `blob_objects`, `blob_bytes`, `gc_reclaimed_bytes_total`, `integrity_failures_total`, `storage_move_bytes_total`, `quota_usage_ratio` | `format`, `result`, `store`, `class`, `workspace` (top N + `other`) |
 | Доступ | `authz_decisions_total`, `auth_failures_total`, `authz_epoch_invalidations_total`, `credentials_expiring` | `decision`, `method`, `days` (7, 14, 30) |
-| Очереди и события | `jobs_queued`, `job_oldest_age_seconds`, `job_duration_seconds`, `outbox_lag_seconds`, `webhook_deliveries_total` | `kind`, `outcome` |
+| Очереди и события | `jobs_queued`, `job_oldest_age_seconds` (`now() - min(run_at)` среди видимых задач), `job_dead_total` (рост `job_dead`), `job_duration_seconds`, `outbox_lag_seconds` (только внешняя доставка), `webhook_deliveries_total` | `kind`, `outcome` |
 | Уязвимости | `findings_open`, `findings_sla_breached`, `advisories_ingested_total`, `feed_lag_seconds`, `detection_time_seconds` (histogram: advisory → finding), `emergency_blocks_active`, `exceptions_expiring`, `vuln_db_age_seconds` | `priority`, `feed`, `scanner`, `days` |
 | AI и скоринг | `ai_requests_total`, `ai_duration_seconds`, `ai_tokens_total`, `ai_fallback_total`, `score_value` (histogram), `score_overrides_total` | `role` (score, chat, embed, rerank), `provider`, `kind`, `direction` |
 | A2A | `a2a_tasks_total`, `a2a_confirmations_total`, `a2a_task_duration_seconds` | `skill`, `state`, `outcome` |
@@ -176,7 +176,8 @@ SLI считаются из метрик, а алерты строятся по 
 | `CraneReadOnlyMode` | Сервис в режиме read-only больше 5 минут | page |
 | `CraneUpstreamDown` | `upstream_up == 0` 10 минут | ticket |
 | `CraneQueueBacklog` | Возраст старейшей задачи больше 10 минут | ticket |
-| `CraneOutboxLag` | Отставание outbox больше 5 минут | page |
+| `CraneJobDeadGrowth` | Рост `job_dead` за 15 минут | ticket |
+| `CraneOutboxLag` | Отставание outbox внешней доставки (webhooks, SIEM) больше 5 минут | page |
 | `CraneFeedLagging` | Фид уязвимостей не синхронизировался 30 минут | page |
 | `CraneP0WithoutAction` | P0 открыт больше 1 часа без блокировки или решения | page |
 | `CraneVulnDbStale` | База сканера старше 24 часов | ticket |

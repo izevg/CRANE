@@ -66,22 +66,37 @@ crane/
 pub trait FormatProtocol: Send + Sync + 'static {
     const FORMAT: Format;                              // Maven | Npm | PyPi | NuGet | Cargo
     fn routes(&self) -> Router<AppState>;              // пути протокола
-    fn normalize_name(&self, raw: &str) -> Result<PackageName>;   // PEP 503, npm scope, NuGet lower, Cargo: -/_ и регистр
-    fn parse_version(&self, raw: &str) -> Result<VersionKey>;     // сортируемый ключ
     fn version_policy(&self) -> MutabilityRules;       // SNAPSHOT, yank, unlist, deprecate
     async fn parse_upload(&self, req: UploadRequest) -> Result<UploadPlan>;
     fn render_metadata(&self, pkg: &PackageView, base: &BaseUrl) -> Result<Rendered>;
     fn rewrite_upstream(&self, body: Bytes, base: &BaseUrl) -> Result<Bytes>; // ссылки → CRANE
     fn render_error(&self, e: &Diagnosed) -> Response;  // ошибка в форме, понятной клиенту
 }
+// Грамматики имён и версий живут в domain, а не в трейте: формат вызывает
+// PackageName::parse(Self::FORMAT, raw) и Version::parse(Self::FORMAT, raw).
 
 /// Неизменяемое content-addressable хранилище.
 pub trait BlobStore: Send + Sync {
-    async fn put_staging(&self, id: UploadId, body: ByteStream) -> Result<Digests>;
-    async fn commit(&self, id: UploadId, sha256: &Sha256) -> Result<BlobRef>; // идемпотентно
-    async fn get(&self, sha256: &Sha256, range: Option<Range>) -> Result<ByteStream>;
-    async fn presign(&self, sha256: &Sha256, ttl: Duration) -> Result<Option<Url>>;
-    async fn delete(&self, sha256: &Sha256) -> Result<()>;
+    /// Пишет поток во временную зону и считает дайджесты. Обрыв потока: `BlobError::Body`.
+    async fn stage(&self, body: ByteStream) -> Result<Staged, BlobError>;
+    /// Потребляет `Staged`; идемпотентно. Нет ни staged-объекта, ни blob: ошибка.
+    async fn commit(&self, staged: Staged) -> Result<Digests, BlobError>;
+    /// Только закоммиченные blob; staged-объекты недоступны (`NotFound`).
+    async fn open(&self, sha256: &Sha256) -> Result<ByteStream, BlobError>;
+}
+// Staged не Clone (typestate): один объект нельзя закоммитить дважды.
+// Сверка с дайджестом клиента не дело стора, это правило use case.
+// Запланированные расширения (не в v0.1.0): range-чтение, presign, delete (GC).
+
+/// Каталог реестра: крупные атомарные операции, а не CRUD по таблицам.
+pub trait Catalog: Send + Sync {
+    async fn ensure_repository(&self, r: Repository) -> Result<Repository, CatalogError>; // идемпотентно по (format, name)
+    async fn find_repository(&self, format: Format, name: &str) -> Result<Option<Repository>, CatalogError>;
+    async fn publish_version(&self, v: NewVersion) -> Result<PackageVersion, CatalogError>; // пакет, версия, assets, metadata атомарно
+    async fn versions(&self, repo: RepositoryId, pkg: &PackageName) -> Result<Vec<PackageVersion>, CatalogError>; // в порядке публикации
+    async fn find_version(&self, repo: RepositoryId, pkg: &PackageName, v: &Version) -> Result<Option<PackageVersion>, CatalogError>;
+    async fn set_yanked(&self, id: VersionId, yanked: bool) -> Result<(), CatalogError>; // идемпотентно
+    async fn transition(&self, id: VersionId, from: VersionState, to: VersionState) -> Result<(), CatalogError>; // compare-and-set
 }
 
 /// Решение доступа всегда возвращается вместе с объяснением.
@@ -91,11 +106,20 @@ pub trait AccessEvaluator: Send + Sync {
 pub struct Decision { pub allow: bool, pub rules: Vec<PolicyId>, pub reason: ReasonCode,
                       pub remediation: Vec<Remedy> }
 
+/// Очередь только для потребителя (worker). Постановка задач в порт не входит:
+/// задачи приходят данными в атомарные методы каталога.
+///
+/// Задача может выполниться повторно после истечения lease, поэтому обработчики идемпотентны.
 pub trait JobQueue: Send + Sync {
-    async fn enqueue(&self, tx: &mut Tx, job: NewJob) -> Result<JobId>; // в той же транзакции
-    async fn lease(&self, kinds: &[JobKind], n: usize, ttl: Duration) -> Result<Vec<Job>>;
-    async fn complete(&self, id: JobId, outcome: Outcome) -> Result<()>;
+    async fn claim(&self, kinds: &[JobKind], n: usize, lease: Duration) -> Result<Vec<Claimed>>;
+    async fn complete(&self, job: Claimed) -> Result<()>;                // потребляет токен
+    async fn fail(&self, job: Claimed, error: &str) -> Result<()>;       // повтор с backoff или job_dead
 }
+// Claimed не Clone и несёт id, kind, payload и attempt (токен владения): тот же приём, что
+// Staged -> commit(Staged). Перепутать id и attempt или завершить задачу дважды нельзя.
+// Типа транзакции (Tx) в портах нет. Каталог принимает задачи данными:
+// publish_version(new, jobs: &[NewJob]), адаптер пишет данные и строки job в одной транзакции.
+// Параметр jobs появится вместе с первой задачей (не в v0.1.0).
 
 pub trait Scanner: Send + Sync {
     fn id(&self) -> ScannerId;
@@ -156,9 +180,15 @@ classDiagram
   }
   class BlobStore {
     <<trait>>
-    +put_staging()
-    +commit()
-    +get()
+    +stage(body) Staged
+    +commit(Staged) Digests
+    +open(sha256) ByteStream
+  }
+  class Catalog {
+    <<trait>>
+    +publish_version()
+    +find_version()
+    +transition()
   }
   class AccessEvaluator {
     <<trait>>
@@ -166,8 +196,12 @@ classDiagram
   }
   class JobQueue {
     <<trait>>
-    +enqueue()
-    +lease()
+    +claim() Claimed
+    +complete(Claimed)
+    +fail(Claimed, error)
+  }
+  class Worker {
+    +run(kinds)
   }
   class Singleflight {
     +run(key, fut) Shared
@@ -177,16 +211,21 @@ classDiagram
   }
   PublishService --> FormatProtocol
   PublishService --> BlobStore
+  PublishService --> Catalog
   PublishService --> AccessEvaluator
-  PublishService --> JobQueue
   ProxyService --> FormatProtocol
   ProxyService --> BlobStore
+  ProxyService --> Catalog
   ProxyService --> Singleflight
   PromotionService --> PolicyEngine
-  PromotionService --> JobQueue
+  Worker --> JobQueue
 ```
 
 *Рис. 8.1. Use case сервисы зависят только от трейтов.*
+
+### Почему грамматики имён и версий в domain
+
+`PackageName::parse(format, raw)` и `Version::parse(format, raw)` лежат в `domain` и хранят две формы: нормализованную (по ней равенство и хеш, для версии это каноническая строка) и написанную клиентом (её видят клиенты). Причина в слоях: `app` обязан нормализовать имена (namespaces, dependency confusion, v0.2.0) и сравнивать версии (диапазоны advisory), но зависеть от `formats` не может (матрица слоёв `tools/lint-structure/rules.json`). Формат только вызывает общий разбор со своим `FORMAT`.
 
 ## Паттерны
 
@@ -195,7 +234,7 @@ classDiagram
 | Hexagonal (ports & adapters) | Вся граница ядра. Тесты ядра идут на in-memory адаптерах. |
 | Typestate | Жизненный цикл загрузки: `Upload<Staged>` → `Upload<Verified>` → `Version<Committed>`. Пропустить проверку digest невозможно на уровне компилятора. |
 | State machine | Версия пакета, exception, promotion request. |
-| Transactional outbox | События и задачи пишутся в той же транзакции, что и изменение данных. |
+| Задачи как данные | Задачи ставит атомарный метод каталога в той же транзакции, что и изменение данных (`publish_version(new, jobs)`). Транзакционный outbox с relay нужен только для внешней доставки (webhooks, SIEM), решение в P2 / v1.1.0. |
 | Singleflight | Proxy fetch и рендер metadata при промахе кэша. |
 | Strategy | Политики TTL proxy, правила retention, стратегии выдачи blob (stream или presigned redirect). |
 | Specification | Условия политик promotion и retention как композиция предикатов. |

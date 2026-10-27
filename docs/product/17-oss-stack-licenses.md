@@ -8,8 +8,9 @@
 | --- | --- | --- |
 | Rust toolchain, tokio, axum, hyper, tower | MIT / Apache-2.0 | Рантайм и HTTP |
 | rustls | Apache-2.0 / MIT / ISC | TLS без OpenSSL |
-| sqlx | MIT / Apache-2.0 | PostgreSQL с проверкой запросов на этапе компиляции |
+| sqlx | MIT / Apache-2.0 | PostgreSQL; запросы без макросов, во время выполнения («скучный Rust») |
 | object\_store (Apache Arrow) | Apache-2.0 | Абстракция S3, GCS, Azure, локальной ФС |
+| sha2, uuid | MIT / Apache-2.0 | SHA-256 для content-addressable хранилища, идентификаторы UUIDv7 |
 | cedar-policy | Apache-2.0 | Политики доступа с объяснением решений |
 | moka, fred (Valkey-клиент) | MIT / Apache-2.0 | Кэш в процессе и клиент Valkey |
 | utoipa, clap, serde, quick-xml, semver | MIT / Apache-2.0 | OpenAPI, CLI, сериализация, XML для Maven и NuGet, разбор `.crate` и `Cargo.toml` (toml, tar, flate2) |

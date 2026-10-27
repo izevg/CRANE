@@ -21,7 +21,7 @@ fn publish(principal, repo, upload):
       for f: store.commit(upload_id, f.sha256)            // идемпотентный copy в CAS этого хранилища
              insert blob ON CONFLICT DO NOTHING
       insert package ON CONFLICT DO NOTHING; insert package_version(state = initial_state(policy))
-      insert assets; insert outbox('version.published'); enqueue(analyze.package)
+      insert assets; insert job('analyze.package'); NOTIFY job   // задача в той же транзакции, без outbox
       insert audit_event
     tx.commit()                                          // точка видимости
     cache.invalidate(md:{repo}:{name})                    // + pub/sub на все реплики
@@ -217,7 +217,7 @@ fn search(q, principal, filters):
 
 ## 10.11 Outbox и webhooks
 
-Событие записывается в `outbox` в той же транзакции. Relay выбирает пачки через `FOR UPDATE SKIP LOCKED`, создаёт доставки по подпискам и помечает событие. Доставка подписывается заголовком `Crane-Signature: t=<unix>,v1=HMAC-SHA256(secret, t + "." + body)`, несёт `Crane-Event-Id` для дедупликации и повторяется с экспоненциальной задержкой и jitter (10 с … 1 ч) в течение 24 часов, после чего попадает в DLQ с возможностью ручного повтора из UI.
+Outbox служит только внешней доставке (webhooks, SIEM; решается в P2 / v1.1.0); внутренние задачи идут строкой `job` в транзакции данных (раздел 9). Событие записывается в `outbox` в той же транзакции. Relay выбирает пачки через `FOR UPDATE SKIP LOCKED`, создаёт доставки по подпискам и помечает событие. Доставка подписывается заголовком `Crane-Signature: t=<unix>,v1=HMAC-SHA256(secret, t + "." + body)`, несёт `Crane-Event-Id` для дедупликации и повторяется с экспоненциальной задержкой и jitter (10 с … 1 ч) в течение 24 часов, после чего попадает в DLQ с возможностью ручного повтора из UI.
 
 ## 10.12 Rate limiting (GCRA)
 

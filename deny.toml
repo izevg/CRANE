@@ -17,6 +17,18 @@ allow = [
   "MPL-2.0",
 ]
 
+# Корневые сертификаты Mozilla как данные, лицензия пермиссивная. Тянется цепочкой
+# object_store[aws] -> reqwest -> rustls-platform-verifier; глобально лицензию не разрешаем.
+[[licenses.exceptions]]
+crate = "webpki-root-certs"
+allow = ["CDLA-Permissive-2.0"]
+
+# Те же корни Mozilla для TLS sqlx (tls-rustls-aws-lc-rs в crane-pg). Версия >= 1.0.10
+# обязательна: ранние содержат корень emSign из RUSTSEC-2026-0381.
+[[licenses.exceptions]]
+crate = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]
+
 [advisories]
 version = 2
 yanked = "deny"

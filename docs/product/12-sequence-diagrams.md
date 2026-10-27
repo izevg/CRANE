@@ -20,8 +20,8 @@ sequenceDiagram
   A->>S: stream в staging + sha512/sha256
   A->>P: BEGIN, advisory lock, проверка версии
   A->>S: commit в CAS (идемпотентно)
-  A->>P: INSERT version (quarantined), assets, outbox, job, audit
-  A->>P: COMMIT
+  A->>P: INSERT version (quarantined), assets, job, audit
+  A->>P: COMMIT (NOTIFY job)
   A->>V: PUBLISH inv md:npm-hosted:@acme/ui
   A-->>J: 201 Created + request id
   Note over A,P: Worker забирает analyze.package и scan.sbom асинхронно
