@@ -157,10 +157,7 @@ export function CommandPaletteView({
   const showSkeletons = packagesLoading && packages.length === 0;
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className="gap-0! overflow-hidden p-0! sm:max-w-[560px]!"
-      >
+      <DialogContent showCloseButton={false} size="palette" flush className="overflow-hidden">
         <DialogTitle className="sr-only">{TITLE}</DialogTitle>
         <Autocomplete.Root
           inline

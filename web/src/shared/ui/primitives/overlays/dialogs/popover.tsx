@@ -1,6 +1,17 @@
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { cx, type WithClassName } from "~/shared/lib/core";
 
+type PopoverSize = "default" | "wide";
+
+const SIZE = {
+  default: "w-72",
+  wide: "w-[360px]",
+} satisfies Record<PopoverSize, string>;
+
+/** Без отступов и gap: содержимое раскладывается само. */
+const FLUSH = "gap-0 p-0";
+const PADDED = "gap-2.5 p-3";
+
 export function Popover(props: PopoverPrimitive.Root.Props) {
   return <PopoverPrimitive.Root {...props} />;
 }
@@ -14,9 +25,15 @@ export function PopoverContent({
   align = "center",
   side = "bottom",
   sideOffset = 4,
+  size = "default",
+  flush = false,
   ...props
 }: WithClassName<PopoverPrimitive.Popup.Props> &
-  Pick<PopoverPrimitive.Positioner.Props, "align" | "side" | "sideOffset">) {
+  Pick<PopoverPrimitive.Positioner.Props, "align" | "side" | "sideOffset"> & {
+    /** `wide` — 360 px (центр уведомлений). */
+    size?: PopoverSize;
+    flush?: boolean;
+  }) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner
@@ -28,7 +45,9 @@ export function PopoverContent({
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cx(
-            "anim-popup z-50 flex w-72 flex-col gap-2.5 rounded-md bg-popover p-3 text-body text-popover-foreground shadow-card",
+            "anim-popup z-50 flex flex-col rounded-md bg-popover text-body text-popover-foreground shadow-card",
+            SIZE[size],
+            flush ? FLUSH : PADDED,
             className,
           )}
           {...props}

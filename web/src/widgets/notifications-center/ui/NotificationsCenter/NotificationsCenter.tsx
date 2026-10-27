@@ -126,7 +126,7 @@ export function NotificationsCenter({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<NotificationsBell unread={unread} />} />
-      <PopoverContent align="end" className="w-[360px]! max-w-[calc(100vw-2rem)] gap-2! p-0!">
+      <PopoverContent align="end" size="wide" flush className="max-w-[calc(100vw-2rem)]">
         <div className="flex items-center justify-between gap-2 px-3 pt-3">
           <PopoverTitle>{TITLE}</PopoverTitle>
           {onReadAll === undefined ? null : (

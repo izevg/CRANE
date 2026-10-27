@@ -6,6 +6,17 @@ import { Button } from "../../forms/toggle/button";
 
 const CLOSE = "Закрыть";
 
+type DialogSize = "default" | "palette";
+
+const SIZE = {
+  default: "sm:max-w-md",
+  palette: "sm:max-w-[560px]",
+} satisfies Record<DialogSize, string>;
+
+/** Без отступов и gap: содержимое (например, список палитры) раскладывается само. */
+const FLUSH = "gap-0 p-0";
+const PADDED = "gap-4 p-6";
+
 export function Dialog(props: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root {...props} />;
 }
@@ -22,15 +33,24 @@ export function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "default",
+  flush = false,
   ...props
-}: WithClassName<DialogPrimitive.Popup.Props> & { showCloseButton?: boolean }) {
+}: WithClassName<DialogPrimitive.Popup.Props> & {
+  showCloseButton?: boolean;
+  /** `palette` — 560 px для командной палитры. */
+  size?: DialogSize;
+  flush?: boolean;
+}) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop className="anim-scrim fixed inset-0 isolate z-50 bg-(--scrim)" />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cx(
-          "anim-dialog fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-6 text-body text-popover-foreground shadow-card sm:max-w-md",
+          "anim-dialog fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-popover text-body text-popover-foreground shadow-card",
+          SIZE[size],
+          flush ? FLUSH : PADDED,
           className,
         )}
         {...props}
