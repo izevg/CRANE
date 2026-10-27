@@ -85,3 +85,33 @@ export const Dark: Story = {
   globals: { theme: "dark" },
   args: { title: "По форматам", items: FORMATS, initial: ["pypi"] },
 };
+
+/** Фон выбранного пункта равен токену выделения строки таблицы, а не яркому brand. */
+async function expectCalmSelection(canvasElement: HTMLElement) {
+  const pressed = within(canvasElement).getAllByRole("button", { pressed: true })[0] as HTMLElement;
+  const probe = document.createElement("div");
+  probe.style.backgroundColor = "var(--row-selected-bg)";
+  document.body.append(probe);
+  const expected = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  await expect(getComputedStyle(pressed).backgroundColor).toBe(expected);
+}
+
+export const SelectedCalmLight: Story = {
+  name: "Спокойное выбранное состояние",
+  args: { title: "По форматам", items: FORMATS, initial: ["npm", "pypi"] },
+  render: (args) => <Controlled {...args} />,
+  play: async ({ canvasElement }) => {
+    await expectCalmSelection(canvasElement);
+  },
+};
+
+export const SelectedCalmDark: Story = {
+  name: "Спокойное выбранное состояние, тёмная тема",
+  args: { title: "По форматам", items: FORMATS, initial: ["npm", "pypi"] },
+  render: (args) => <Controlled {...args} />,
+  globals: { theme: "dark" },
+  play: async ({ canvasElement }) => {
+    await expectCalmSelection(canvasElement);
+  },
+};

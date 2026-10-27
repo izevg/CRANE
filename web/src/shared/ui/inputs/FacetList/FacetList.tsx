@@ -43,7 +43,7 @@ function FacetRow({ item, pressed, max, onToggle }: FacetRowProps) {
         type="button"
         aria-pressed={pressed}
         onClick={handleClick}
-        className="group/facet flex min-h-8 w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left text-body transition-colors duration-(--dur-fast) hover:bg-accent aria-pressed:bg-brand-container aria-pressed:text-brand aria-pressed:inset-ring aria-pressed:inset-ring-brand forced-colors:aria-pressed:bg-[Highlight] forced-colors:aria-pressed:text-[HighlightText]"
+        className="group/facet flex min-h-8 w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left text-body transition-colors duration-(--dur-fast) hover:bg-accent aria-pressed:bg-(--row-selected-bg) aria-pressed:shadow-[inset_2px_0_0_var(--row-selected-bar)] forced-colors:aria-pressed:bg-[Highlight] forced-colors:aria-pressed:text-[HighlightText]"
       >
         <span className="flex w-full items-baseline justify-between gap-2">
           <span className="flex min-w-0 items-baseline gap-1.5">
@@ -51,7 +51,7 @@ function FacetRow({ item, pressed, max, onToggle }: FacetRowProps) {
               <CheckIcon
                 data-slot="facet-check"
                 aria-hidden="true"
-                className="size-4 shrink-0 self-center"
+                className="size-4 shrink-0 self-center text-brand"
               />
             ) : null}
             <span className="wrap-anywhere">{item.label}</span>
@@ -72,7 +72,7 @@ function FacetRow({ item, pressed, max, onToggle }: FacetRowProps) {
 
 /**
  * Фасет: строки-кнопки «название · число · доля от максимума». Нажатая строка — активный фильтр
- * (`aria-pressed`), отмечена галочкой и рамкой, а не только цветом (WCAG 1.4.1). Доля нарисована полосой и скрыта от скринридера: число говорит то же самое.
+ * (`aria-pressed`), отмечена галочкой и полосой слева, а не только цветом; фон тот же спокойный, что у выбранной строки таблицы (WCAG 1.4.1). Доля нарисована полосой и скрыта от скринридера: число говорит то же самое.
  */
 export function FacetList({
   title,
