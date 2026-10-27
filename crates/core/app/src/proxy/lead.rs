@@ -106,15 +106,6 @@ struct Held<'a, L: FetchLeases> {
     lease: Option<Lease>,
 }
 
-impl<L: FetchLeases> Held<'_, L> {
-    async fn release(mut self) {
-        if let Some(lease) = self.lease.take() {
-            // Ошибка release не влияет на результат: lease истечёт сам.
-            let _ = self.leases.release(lease).await;
-        }
-    }
-}
-
 impl<L: FetchLeases> Drop for Held<'_, L> {
     fn drop(&mut self) {
         if let Some(lease) = self.lease.take() {
@@ -141,7 +132,9 @@ pub(super) async fn lead<U: Upstream, C: ProxyCache, L: FetchLeases, B: BlobStor
                 lease: Some(lease),
             };
             let outcome = fetch(&inner, &job).await;
-            held.release().await;
+            // Снятие — в Drop: единый путь для успеха, ошибки и отмены. Подтверждение не ждём:
+            // по контракту порта снятие начинается при вызове, а ошибка release не влияет на результат.
+            drop(held);
             outcome
         }
         Ok(Claim::Settled) => match settled(&inner, &job).await {
