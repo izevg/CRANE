@@ -1,4 +1,5 @@
 import { useLingui } from "@lingui/react/macro";
+import { useId } from "react";
 import { BLOCK_REASON_KIND, VERSION_STATE, type VersionSummary } from "~/shared/api";
 import { Badge, Tooltip, TooltipContent, TooltipTrigger } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
@@ -18,6 +19,7 @@ export function VersionStatus({ version }: VersionStatusProps) {
   const { t } = useLingui();
   const reason = reasonView(version.state, version.block_reason);
   const fixedIn = reason?.fixedIn;
+  const hintId = useId();
   const reasonText =
     reason === null
       ? null
@@ -28,12 +30,19 @@ export function VersionStatus({ version }: VersionStatusProps) {
       {reason === null ? null : fixedIn === undefined ? (
         <Badge variant="destructive">{reasonText}</Badge>
       ) : (
-        <Tooltip>
-          <TooltipTrigger render={<Badge variant="destructive" tabIndex={0} />}>
-            {reasonText}
-          </TooltipTrigger>
-          <TooltipContent>{t`Исправлено в ${fixedIn}`}</TooltipContent>
-        </Tooltip>
+        <>
+          <Tooltip>
+            <TooltipTrigger
+              render={<Badge variant="destructive" tabIndex={0} aria-describedby={hintId} />}
+            >
+              {reasonText}
+            </TooltipTrigger>
+            <TooltipContent>{t`Исправлено в ${fixedIn}`}</TooltipContent>
+          </Tooltip>
+          <span id={hintId} className="sr-only">
+            {t`Исправлено в ${fixedIn}`}
+          </span>
+        </>
       )}
     </span>
   );

@@ -47,6 +47,15 @@ describe("VersionFlags", () => {
     expect((await screen.findAllByText("Используйте 2.x")).length).toBeGreaterThan(0);
   });
 
+  it("сообщение об устаревании входит в доступное описание флага", () => {
+    // Arrange
+    // Act
+    render(<VersionFlags flags={{ ...NONE, deprecated_message: "Используйте 2.x" }} />);
+
+    // Assert
+    expect(screen.getByText("deprecated")).toHaveAccessibleDescription("Используйте 2.x");
+  });
+
   it("флаги идут в порядке: статусные, затем dist-tags", () => {
     // Arrange
     const flags: Flags = { ...NONE, unlisted: true, yanked: true, dist_tags: ["latest"] };

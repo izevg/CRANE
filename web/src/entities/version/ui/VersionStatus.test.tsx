@@ -68,6 +68,23 @@ describe("VersionStatus", () => {
     expect((await screen.findAllByText("Исправлено в 4.17.21")).length).toBeGreaterThan(0);
   });
 
+  it("исправленная версия входит в доступное описание причины блокировки", () => {
+    // Arrange
+    const version = view("blocked", {
+      kind: "emergency",
+      advisory_id: "CVE-2026-31337",
+      fixed_in: "4.17.21",
+    });
+
+    // Act
+    render(<VersionStatus version={version} />);
+
+    // Assert
+    expect(screen.getByText("Экстренно · CVE-2026-31337")).toHaveAccessibleDescription(
+      "Исправлено в 4.17.21",
+    );
+  });
+
   it("заблокированная без причины показывает только состояние", () => {
     // Arrange
     const version = view("blocked");
