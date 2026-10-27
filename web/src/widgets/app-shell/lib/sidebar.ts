@@ -11,12 +11,3 @@ export function initialsOf(name: string): string {
     .join("")
     .toLocaleUpperCase();
 }
-
-export type ColorMode = "light" | "dark" | "system";
-
-/** Порядок пунктов переключателя темы. */
-export const COLOR_MODES: readonly ColorMode[] = ["light", "dark", "system"];
-
-export function isColorMode(value: unknown): value is ColorMode {
-  return COLOR_MODES.some((mode) => mode === value);
-}

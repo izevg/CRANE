@@ -4,9 +4,8 @@ import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { CheckIcon, type LucideIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useCallback } from "react";
-import { useColorMode } from "~/shared/lib/state";
+import { COLOR_MODES, type ColorMode, isColorMode, useColorMode } from "~/shared/lib/state";
 import { Button, Menu, MenuContent, MenuTrigger } from "~/shared/ui/primitives";
-import { COLOR_MODES, type ColorMode, isColorMode } from "../../lib/sidebar";
 
 const ICONS = {
   light: SunIcon,
