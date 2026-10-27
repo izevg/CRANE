@@ -1,4 +1,4 @@
-// Разбор вывода `cargo --version`.
+// Разбор вывода `cargo --version` и аргументов запуска.
 
 const CARGO_OUTPUT = /^cargo (1\.(\d+)\.\d+)\b/;
 
@@ -18,4 +18,33 @@ export function parseCargo(output: string): CargoVersion {
     throw new Error(`не разобрать вывод cargo --version: ${output.trim()}`);
   }
   return { version, minor };
+}
+
+export type Which = "latest" | "previous";
+
+export interface Args {
+  which: Which[];
+  /** Полный dogfood (публикация CRANE и сборка из реестра) на клиенте latest, после остальных сценариев. */
+  full: boolean;
+}
+
+/** `[--cargo latest|previous|список] [--full]`; по умолчанию latest без полного сценария. */
+export function parseArgs(argv: string[]): Args {
+  const full = argv.includes("--full");
+  const flag = argv.indexOf("--cargo");
+  const which: Which[] = [];
+  if (flag === -1) {
+    which.push("latest");
+  } else {
+    const values = (argv[flag + 1] ?? "").split(",");
+    const known = values.filter((v): v is Which => v === "latest" || v === "previous");
+    if (known.length === 0 || known.length !== values.length) {
+      throw new Error("--cargo принимает latest, previous или их список через запятую");
+    }
+    which.push(...new Set(known));
+  }
+  if (full && !which.includes("latest")) {
+    throw new Error("--full идёт на клиенте latest: добавьте latest в --cargo");
+  }
+  return { which, full };
 }

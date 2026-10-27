@@ -16,7 +16,8 @@ const INDEX = "https://localhost/cargo/internal/index/";
 const READY_SECONDS = 60;
 const YANKED = /yanked/i;
 const TOKEN_ENV = "CARGO_REGISTRIES_CRANE_TOKEN";
-const REGISTRY = "crane";
+/** Имя hosted-реестра в конфигурации клиента: `[registries.crane]` приходит из env. */
+export const REGISTRY = "crane";
 // Cargo не читает токен альтернативного реестра из окружения без явного провайдера учётных данных.
 const CLIENT_ENV = {
   CARGO_HTTP_CAINFO: ROOT_CERT,

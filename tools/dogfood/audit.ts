@@ -42,6 +42,7 @@ interface Line {
   "http_request.user_agent"?: unknown;
   cache?: unknown;
   upstream_failure?: unknown;
+  failure?: unknown;
 }
 
 /** Строка `crane::access`: откуда пришёл ответ proxy (`cache`) и почему upstream отказал. */
@@ -52,6 +53,14 @@ export interface Access {
   failure: string | undefined;
 }
 
+/** Строка `crane::upstream`: одна реальная выборка из upstream (или отказ), по пути без query. */
+export interface Egress {
+  path: string;
+  status: number | undefined;
+  failure: string | undefined;
+}
+
+const HTTP_OK = 200;
 const API_ACTIVITY = 6003;
 const AUTHENTICATION = 3002;
 const HTTP_OK_FROM = 200;
@@ -191,6 +200,75 @@ export function accessLines(craneNdjson: string): Access[] {
       { path, status: line.status, cache: text(line.cache), failure: text(line.upstream_failure) },
     ];
   });
+}
+
+/** Строки egress-журнала `crane::upstream` по порядку. */
+export function egressLines(craneNdjson: string): Egress[] {
+  return parse(craneNdjson, []).flatMap((line) => {
+    const path = text(line.path);
+    if (line.target !== "crane::upstream" || path === undefined) {
+      return [];
+    }
+    const status = typeof line.status === "number" ? line.status : undefined;
+    return [{ path, status, failure: text(line.failure) }];
+  });
+}
+
+export interface Collapse {
+  /** Путь запроса к crane (в access-журнале). */
+  accessPath: string;
+  /** Путь того же ключа у upstream (в egress-журнале). */
+  upstreamPath: string;
+  requests: number;
+}
+
+/**
+ * Схлопывание холодного ключа: все запросы получили 200 с `cache=miss` (ведомые полёта видят тот же Miss,
+ * что и ведущий; опоздавший получил бы hit, то есть без перекрытия условие не выполнится), а в egress-журнале
+ * ровно одна выборка этого пути. Пустой результат — сошлось.
+ */
+export function checkCollapse(access: Access[], egress: Egress[], expected: Collapse): string[] {
+  const mine = access.filter((line) => line.path === expected.accessPath);
+  const fetches = egress.filter((line) => line.path === expected.upstreamPath);
+  const problems: string[] = [];
+  if (mine.length !== expected.requests) {
+    problems.push(`access-строк ${mine.length}, ожидалось ${expected.requests}`);
+  }
+  const wrong = mine.filter((line) => line.status !== HTTP_OK || line.cache !== "miss");
+  if (wrong.length > 0) {
+    const seen = wrong.map((line) => `${line.status}/${line.cache ?? "-"}`).join(", ");
+    problems.push(`ожидались 200 и cache=miss, получено: ${seen}`);
+  }
+  if (fetches.length !== 1) {
+    problems.push(`выборок из upstream ${fetches.length}, ожидалась ровно одна`);
+  }
+  return problems;
+}
+
+const SERVED_FROM_CACHE = new Set(["hit", "stale", "stale-on-error"]);
+const SERVER_ERROR_FROM = 500;
+
+/**
+ * Офлайн-фаза: строки access без единого промаха и без 5xx, все ответы из кэша. Пустая фаза — отказ:
+ * сборка без запросов ничего не доказывает.
+ */
+export function checkOffline(lines: Access[]): string[] {
+  if (lines.length === 0) {
+    return ["в офлайн-фазе нет ни одной access-строки"];
+  }
+  return lines
+    .filter(
+      (line) =>
+        line.status >= SERVER_ERROR_FROM ||
+        line.cache === undefined ||
+        !SERVED_FROM_CACHE.has(line.cache),
+    )
+    .map((line) => `${line.path}: status ${line.status}, cache ${line.cache ?? "-"}`);
+}
+
+/** Распределение значений `cache` для лога; строки без значения считаются как «-». */
+export function cacheDistribution(lines: Access[]): Record<string, number> {
+  return Object.fromEntries(counts(lines.map((line) => line.cache ?? "-")));
 }
 
 /** Сверяет журнал crane (NDJSON) с ожиданиями сценария. Пустой результат — всё сошлось. */

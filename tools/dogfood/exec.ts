@@ -62,6 +62,16 @@ export function runOk(file: string, args: string[], options: Options = {}): stri
 export const docker = (args: string[], options: Options = {}): string =>
   runOk("docker", args, options);
 
+/** Выполняет шаг и пишет в лог, сколько он длился; ошибку шага не глотает. */
+export function timed<T>(name: string, step: () => T): T {
+  const started = Date.now();
+  try {
+    return step();
+  } finally {
+    log(`время: ${name}: ${Math.round((Date.now() - started) / MS_PER_SECOND)} с`);
+  }
+}
+
 export function log(message: string): void {
   process.stdout.write(`${message}\n`);
 }
