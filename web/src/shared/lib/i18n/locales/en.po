@@ -79,6 +79,9 @@ msgstr "Main menu"
 msgid "Готово"
 msgstr "Done"
 
+msgid "Действие «{actionLabel}» требует подтверждения вторым фактором"
+msgstr "The \"{actionLabel}\" action needs second-factor confirmation"
+
 msgid "Действия"
 msgstr "Actions"
 
@@ -229,6 +232,9 @@ msgstr "Go to, find a package or an action…"
 msgid "Платформа"
 msgstr "Platform"
 
+msgid "Подтвердите вход"
+msgstr "Confirm sign-in"
+
 msgid "Поиск и переходы"
 msgstr "Search and navigate"
 
@@ -241,6 +247,9 @@ msgstr "Show as table"
 msgid "Поле"
 msgstr "Field"
 
+msgid "После подтверждения вы вернётесь к действию, данные формы сохранятся"
+msgstr "After confirming, you return to the action and your form data is kept"
+
 msgid "Правило: {ruleId}"
 msgstr "Rule: {ruleId}"
 
@@ -249,6 +258,9 @@ msgstr "Check the address or package name"
 
 msgid "Проверьте сеть — данные обновятся, когда связь вернётся"
 msgstr "Check your network — data will refresh when the connection returns"
+
+msgid "Продолжить в Keycloak"
+msgstr "Continue in Keycloak"
 
 msgid "Прочие ({count})"
 msgstr "Other ({count})"
