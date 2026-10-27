@@ -49,13 +49,13 @@ services:
     networks: [scan]                            # изолированная сеть только с trivy
     read_only: true
     security_opt: ["no-new-privileges:true"]
-  postgres: { image: pgvector/pgvector:pg17, volumes: [pg:/var/lib/postgresql/data] }   # тег фиксируется в v0.2.0
-  valkey:   { image: valkey/valkey:8, command: ["--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"] }
+  postgres: { image: "pgvector/pgvector:0.8.7-pg17-bookworm@sha256:ac08538c…", volumes: [pg:/var/lib/postgresql/data] }   # точный digest — в `.env.dist`
+  valkey:   { image: "valkey/valkey:8.1.11@sha256:8f836008…", command: ["--save", "", "--appendonly", "no", "--maxmemory", "${VALKEY_MAXMEMORY}", "--maxmemory-policy", "allkeys-lru"] }
 ```
 
-Ключи артефактов в Valkey живут без TTL, поэтому ему нужны `maxmemory` и `maxmemory-policy allkeys-lru`: без них кэш растёт, пока не упрётся в память хоста.
+Ключи артефактов в Valkey живут без TTL, поэтому ему нужны `maxmemory` и `maxmemory-policy allkeys-lru`: без них кэш растёт, пока не упрётся в память хоста. Предел задаёт переменная `VALKEY_MAXMEMORY` (по умолчанию `512mb`), политика `allkeys-lru` зафиксирована в compose-файлах. Для внешнего Valkey обе настройки нужно задать самостоятельно.
 
-**Требования к PostgreSQL.** PostgreSQL 17+, pgvector ≥ 0.8 (итеративные сканы индекса HNSW, раздел 10.10), pg_trgm. Плавающие теги (`pgvector/pgvector:pg17` в `.env.dist`, на dogfood-стенде и в документации) заменяются точными версиями и digest в v0.2.0. С этого релиза `crane migrate` проверяет расширения `vector` и `pg_trgm` и при их отсутствии сразу завершается с понятным сообщением.
+**Требования к PostgreSQL.** PostgreSQL 17+, pgvector ≥ 0.8 (итеративные сканы индекса HNSW, раздел 10.10), pg_trgm. Образы в `.env.dist`, Dockerfile и Helm закреплены тегом и digest мульти-арх индекса (`тег@sha256:…`; тег для человека, образ выбирает digest). Перед миграциями `crane migrate` гарантирует расширения `vector` (≥ 0.8) и `pg_trgm`: создаёт недостающие, если хватает прав, и применяет миграции только после этого. Если расширения нет и прав на его создание нет, команда сразу завершается с сообщением, где названо расширение и готов SQL для администратора; миграции при этом не применяются. Если `vector` старше 0.8, сообщение подсказывает `ALTER EXTENSION vector UPDATE;`. В управляемом PostgreSQL `vector` не помечено доверенным и требует суперпользователя, `pg_trgm` доверенное и требует лишь права `CREATE` на базе, поэтому администратор заранее выполняет в базе каталога `CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;`; с уже созданными расширениями `crane migrate` работает под ролью без этих прав.
 
 **Конфигурация (v0.1.0).** Источники: переменные окружения и необязательный файл TOML, путь к которому задаёт только `CRANE_CONFIG`. Приоритет: переменная окружения, затем файл, затем значение по умолчанию. Ключ файла — имя переменной без префикса `CRANE_` в нижнем регистре (`CRANE_HTTP_PORT` — `http_port`); значение — строка или целое число, а для любого ключа допустим ещё и массив строк (склеивается запятыми). Неизвестный ключ — ошибка запуска. Значения `memory` пишутся явно.
 
