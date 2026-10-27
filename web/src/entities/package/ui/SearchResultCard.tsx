@@ -4,18 +4,15 @@ import { useId } from "react";
 import {
   FORMAT,
   LIFECYCLE_STATE,
+  PRIORITY,
   REPOSITORY_KIND,
   type SearchItem,
+  type SearchRisk,
+  type Typosquat,
   VERSION_STATE,
 } from "~/shared/api";
 import { Badge, Callout, Link } from "~/shared/ui/primitives";
 import { RelativeTime, StatusBadge } from "~/shared/ui/status";
-import {
-  type RiskPill as RiskPillData,
-  riskPill,
-  showsLifecycleBadge,
-  typosquatOf,
-} from "../lib/card";
 
 type SearchResultCardProps = {
   item: SearchItem;
@@ -25,16 +22,9 @@ type SearchResultCardProps = {
   typosquatHref?: string;
 };
 
-function TyposquatNotice({
-  similarTo,
-  distance,
-  href,
-}: {
-  similarTo: string;
-  distance: number;
-  href: string | undefined;
-}) {
+function TyposquatNotice({ typosquat, href }: { typosquat: Typosquat; href: string | undefined }) {
   const { t } = useLingui();
+  const { similar_to: similarTo, distance } = typosquat;
   return (
     <Callout tone="warning" className="py-1 text-caption">
       {t`${plural(distance, {
@@ -52,11 +42,13 @@ function TyposquatNotice({
   );
 }
 
-function RiskPill({ priority, count, tone }: RiskPillData) {
+function RiskPill({ risk }: { risk: SearchRisk }) {
   const { t } = useLingui();
+  const priority = risk.max_open_priority;
+  const count = risk.open_count;
   return (
     <StatusBadge
-      tone={tone}
+      {...PRIORITY[priority]}
       label={t`${plural(count, {
         one: `${priority} · # находка`,
         few: `${priority} · # находки`,
@@ -74,8 +66,6 @@ function RiskPill({ priority, count, tone }: RiskPillData) {
 export function SearchResultCard({ item, href, typosquatHref }: SearchResultCardProps) {
   const { t } = useLingui();
   const titleId = useId();
-  const risk = riskPill(item);
-  const typosquat = typosquatOf(item);
   const { latest, downloads_30d: downloads, owner_team: team, last_release_at: released } = item;
   return (
     <article
@@ -83,13 +73,7 @@ export function SearchResultCard({ item, href, typosquatHref }: SearchResultCard
       className="flex min-w-0 flex-col gap-1.5 rounded-xl bg-card p-4 shadow-card"
     >
       {item.exact_match ? <p className="text-overline text-brand">{t`Точное совпадение`}</p> : null}
-      {typosquat === null ? null : (
-        <TyposquatNotice
-          similarTo={typosquat.similarTo}
-          distance={typosquat.distance}
-          href={typosquatHref}
-        />
-      )}
+      {item.typosquat ? <TyposquatNotice typosquat={item.typosquat} href={typosquatHref} /> : null}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <h3 id={titleId} className="min-w-0 text-h3 wrap-anywhere">
           <Link href={href} className="text-foreground hover:text-brand">
@@ -99,14 +83,14 @@ export function SearchResultCard({ item, href, typosquatHref }: SearchResultCard
         <Badge variant="outline">{FORMAT[item.format]}</Badge>
         <Badge variant="secondary">{`${item.repository.name} · ${item.repository.workspace}`}</Badge>
         <Badge variant="outline">{REPOSITORY_KIND[item.repository.kind]}</Badge>
-        {showsLifecycleBadge(item) ? (
+        {item.lifecycle.state === "deprecated" ? (
           <StatusBadge {...LIFECYCLE_STATE[item.lifecycle.state]} />
         ) : null}
-        {risk === null ? null : (
+        {item.risk ? (
           <span className="ml-auto">
-            <RiskPill priority={risk.priority} count={risk.count} tone={risk.tone} />
+            <RiskPill risk={item.risk} />
           </span>
-        )}
+        ) : null}
       </div>
       {item.description === null ? null : (
         <p className="truncate text-body text-muted-foreground">{item.description}</p>
