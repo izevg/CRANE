@@ -1,1 +1,3 @@
-//! Use cases ядра: publish, fetch, promote, evaluate, search.
+//! Use cases ядра. Зависят только от `domain` и портов: адаптеры подставляет `entry`.
+
+pub mod registry;
