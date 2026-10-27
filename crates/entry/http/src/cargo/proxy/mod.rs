@@ -1,6 +1,5 @@
 //! Proxy-репозитории: маршруты `/cargo/<имя>` отдают crates.io через движок с кэшем и проверкой sha256.
 
-mod respond;
 mod routes;
 
 use std::sync::Arc;

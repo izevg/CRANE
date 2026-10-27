@@ -15,6 +15,7 @@ crane-app = { path = "../../core/app" }
 crane-domain = { path = "../../core/domain" }
 crane-ports = { path = "../../core/ports" }
 crane-format-cargo = { path = "../../formats/cargo" }
+crane-format-npm = { path = "../../formats/npm" }
 axum = { version = "0.8", default-features = false, features = ["tokio"] }
 axum-extra = { version = "0.12", default-features = false, features = ["typed-header"] }
 bytes = "1"

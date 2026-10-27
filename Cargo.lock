@@ -422,6 +422,7 @@ dependencies = [
  "crane-app",
  "crane-domain",
  "crane-format-cargo",
+ "crane-format-npm",
  "crane-memory",
  "crane-ports",
  "crane-siem",

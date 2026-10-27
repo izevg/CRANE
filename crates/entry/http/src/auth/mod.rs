@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 use crate::context::Actor;
-use crate::error::CargoError;
+use crate::error::{ClientError, Dialect};
 
 /// Статический токен: в памяти хранится только его SHA-256 и личность, которой он принадлежит.
 pub struct StaticToken {
@@ -45,15 +45,38 @@ impl fmt::Debug for StaticToken {
     }
 }
 
-/// Состояние слоя аутентификации.
-pub(super) struct Auth {
-    pub(super) token: StaticToken,
-    pub(super) audit: Arc<dyn AuditSink>,
+const BEARER: &[u8] = b"Bearer ";
+
+impl Dialect {
+    fn challenge(self) -> HeaderValue {
+        match self {
+            Self::Cargo => HeaderValue::from_static("Cargo"),
+            Self::Npm => HeaderValue::from_static("Bearer realm=\"crane\""),
+        }
+    }
+
+    /// Cargo присылает токен без схемы; npm — `Bearer <токен>` (схема без учёта регистра, один пробел).
+    /// Чужая схема даёт пустой токен: он отвергается, а не принимается «как есть».
+    fn token(self, header: &[u8]) -> &[u8] {
+        match self {
+            Self::Cargo => header,
+            Self::Npm => match header.split_at_checked(BEARER.len()) {
+                Some((scheme, token)) if scheme.eq_ignore_ascii_case(BEARER) => token,
+                _ => &[],
+            },
+        }
+    }
 }
 
-/// Cargo присылает токен в `Authorization` без схемы и не обязан слать валидный UTF-8,
-/// поэтому заголовок читается как байты. Значение заголовка нигде не логируется.
-pub(super) async fn require_token(
+/// Состояние слоя аутентификации одного диалекта.
+pub(crate) struct Auth {
+    pub(crate) token: Arc<StaticToken>,
+    pub(crate) audit: Arc<dyn AuditSink>,
+    pub(crate) dialect: Dialect,
+}
+
+/// Заголовок читается как байты: cargo не обязан слать валидный UTF-8. Значение нигде не логируется.
+pub(crate) async fn require_token(
     State(auth): State<Arc<Auth>>,
     Extension(context): Extension<RequestContext>,
     mut request: Request,
@@ -63,13 +86,16 @@ pub(super) async fn require_token(
         // Cargo всегда начинает с запроса без токена и повторяет его после 401: это
         // рукопожатие протокола, а не попытка входа, поэтому события аудита нет.
         let mut response =
-            CargoError::new(StatusCode::UNAUTHORIZED, "требуется токен").into_response();
+            ClientError::new(StatusCode::UNAUTHORIZED, "требуется токен").into_response();
         response
             .headers_mut()
-            .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Cargo"));
+            .insert(header::WWW_AUTHENTICATE, auth.dialect.challenge());
         return response;
     };
-    let Some(principal) = auth.token.authenticate(presented.as_bytes()) else {
+    let Some(principal) = auth
+        .token
+        .authenticate(auth.dialect.token(presented.as_bytes()))
+    else {
         auth.audit.record(AuditEvent {
             actor: None,
             request: context,
@@ -78,7 +104,7 @@ pub(super) async fn require_token(
                 reason: "токен отвергнут".to_owned(),
             },
         });
-        return CargoError::new(StatusCode::FORBIDDEN, "токен отвергнут").into_response();
+        return ClientError::new(StatusCode::FORBIDDEN, "токен отвергнут").into_response();
     };
     // Успешный вход не аудируется: 3002 Success — на настоящем событии входа в v0.4.0.
     let actor = Actor(principal.id.clone());
@@ -105,6 +131,46 @@ mod tests {
                 kind: PrincipalKind::Robot,
             },
         )
+    }
+
+    #[test]
+    fn dialect_extracts_token_from_authorization_value() {
+        // Arrange
+        let cases: [(Dialect, &[u8]); 8] = [
+            (Dialect::Cargo, b"tok"),
+            (Dialect::Cargo, b"Bearer tok"),
+            (Dialect::Npm, b"Bearer tok"),
+            (Dialect::Npm, b"bearer tok"),
+            (Dialect::Npm, b"BEARER tok"),
+            (Dialect::Npm, b"tok"),
+            (Dialect::Npm, b"Basic tok"),
+            (Dialect::Npm, b"Bearer"),
+        ];
+
+        // Act
+        let actual = cases.map(|(dialect, header)| dialect.token(header));
+
+        // Assert
+        let expected: [&[u8]; 8] = [b"tok", b"Bearer tok", b"tok", b"tok", b"tok", b"", b"", b""];
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn dialect_challenge_names_the_scheme_of_the_format() {
+        // Arrange
+        let dialects = [Dialect::Cargo, Dialect::Npm];
+
+        // Act
+        let actual = dialects.map(Dialect::challenge);
+
+        // Assert
+        assert_eq!(
+            actual,
+            [
+                HeaderValue::from_static("Cargo"),
+                HeaderValue::from_static("Bearer realm=\"crane\"")
+            ]
+        );
     }
 
     #[test]

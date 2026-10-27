@@ -14,8 +14,9 @@ use crane_format_cargo::{parse_index_path, render_config, render_index};
 use crane_ports::registry::{BlobStore, Catalog};
 
 use super::Shared;
-use crate::cargo::{CARGO_PREFIX, index_response};
-use crate::error::CargoError;
+use crate::cargo::{CARGO_PREFIX, INDEX_TYPE};
+use crate::error::ClientError;
+use crate::serve::document_response;
 
 const JSON: &str = "application/json";
 
@@ -23,7 +24,7 @@ pub(super) async fn config<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
     Extension(caller): Extension<Caller>,
     Path(repo): Path<String>,
-) -> Result<Response, CargoError> {
+) -> Result<Response, ClientError> {
     // Клиент по 404 на config.json понимает, что адрес реестра неверен, а не получает
     // рабочий конфиг для репозитория, которого нет.
     shared
@@ -39,16 +40,16 @@ pub(super) async fn sparse<C: Catalog + 'static, B: BlobStore + 'static>(
     Extension(caller): Extension<Caller>,
     Path((repo, path)): Path<(String, String)>,
     if_none_match: Option<TypedHeader<IfNoneMatch>>,
-) -> Result<Response, CargoError> {
-    let name = parse_index_path(&path).ok_or_else(CargoError::not_found)?;
+) -> Result<Response, ClientError> {
+    let name = parse_index_path(&path).ok_or_else(ClientError::not_found)?;
     let versions = shared
         .registry
         .versions(&caller, Format::Cargo, &repo, &name)
         .await?;
     // Пустой индекс — это «крейта нет», а не крейт без версий.
     if versions.is_empty() {
-        return Err(CargoError::not_found());
+        return Err(ClientError::not_found());
     }
-    let body = render_index(&versions).map_err(|error| CargoError::internal(&error))?;
-    index_response(Bytes::from(body), if_none_match)
+    let body = render_index(&versions).map_err(|error| ClientError::internal(&error))?;
+    document_response(Bytes::from(body), if_none_match, INDEX_TYPE, false)
 }

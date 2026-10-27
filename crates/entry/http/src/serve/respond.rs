@@ -6,7 +6,7 @@ use crane_app::proxy::{CacheResult, ProxyError, Revalidation, Served};
 use tracing::{Instrument, Span, debug, warn};
 
 use crate::context::CacheFacts;
-use crate::error::{CargoError, chain};
+use crate::error::{ClientError, chain};
 
 // Warning отменён RFC 9111 и оставлен по требованию; основной сигнал — `Age` и поле `cache` журнала.
 const STALE: HeaderValue = HeaderValue::from_static("110 - \"Response is Stale\"");
@@ -14,9 +14,9 @@ const REVALIDATION_FAILED: HeaderValue = HeaderValue::from_static("111 - \"Reval
 
 /// Превращает итог движка в ответ. Здесь же: запуск фоновой ревалидации, `Age`, `Warning`,
 /// `CacheFacts` для успеха и для ошибки. `ok` строит тело из полученного значения.
-pub(super) fn respond<T>(
+pub(crate) fn respond<T>(
     result: Result<Served<T>, ProxyError>,
-    ok: impl FnOnce(T) -> Result<Response, CargoError>,
+    ok: impl FnOnce(T) -> Result<Response, ClientError>,
 ) -> Response {
     match result {
         Ok(served) => {
@@ -48,12 +48,12 @@ pub(super) fn respond<T>(
 }
 
 /// Ответ на ошибку движка: тело для клиента без деталей, факты для журнала.
-pub(super) fn failure(error: ProxyError) -> Response {
+pub(crate) fn failure(error: ProxyError) -> Response {
     let facts = CacheFacts::failed(&error);
-    with_facts(CargoError::from(error).into_response(), facts)
+    with_facts(ClientError::from(error).into_response(), facts)
 }
 
-pub(super) fn with_facts(mut response: Response, facts: CacheFacts) -> Response {
+pub(crate) fn with_facts(mut response: Response, facts: CacheFacts) -> Response {
     response.extensions_mut().insert(facts);
     response
 }
