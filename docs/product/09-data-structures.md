@@ -132,8 +132,8 @@ CREATE TABLE evidence (
   id uuid PRIMARY KEY,               -- UUIDv7
   version_id uuid NOT NULL REFERENCES package_version,
   subject_sha256 bytea NOT NULL,     -- digest файла версии, о котором утверждение; при приёме сверяется с blob
-  kind text NOT NULL,                -- attestation | signature | report
-  predicate_type text,               -- URI типа содержимого; NULL только у kind = signature
+  kind text NOT NULL,                -- dsse | sigstore | pgp | jwt | none: чем проверять; gate не читает
+  predicate_type text NOT NULL,      -- URI типа содержимого; вид доказательства для gates и UI
   trust text NOT NULL,               -- upstream | publisher | integration | crane: откуда пришло
   signer_issuer text, signer_subject text, signer_san text,  -- кто подписал; NULL у неподписанного report
   facts jsonb NOT NULL DEFAULT '{}', -- извлечённое для gates и карточки: builder, repo, commit, run; для скана — версия сканера и базы
@@ -141,28 +141,28 @@ CREATE TABLE evidence (
   verify_detail jsonb,               -- причина отказа, версия trust root
   verified_at timestamptz,
   tlog jsonb,                        -- запись Rekor: log id, index, integrated time; NULL без журнала
-  object_key text NOT NULL,          -- исходный документ в S3 как есть: bundle, SBOM, отчёт
+  object_key text NOT NULL,          -- исходный документ в S3 как есть (bundle, SBOM, отчёт); ключ по sha256 самого документа
   media_type text NOT NULL,
   created_at timestamptz NOT NULL,
-  CHECK ((kind = 'signature') = (predicate_type IS NULL)));
+  CHECK ((kind = 'none') = (verify_result = 'unsigned')));
 CREATE INDEX evidence_by_type ON evidence (version_id, predicate_type, created_at DESC);  -- evidence.latest(version, types)
 ```
 
-Evidence расширяется строками, а не колонками. Новый вид доказательства означает новую строку с новым URI в `predicate_type`; ни колонка, ни enum не добавляются. Gates и UI читают evidence по `predicate_type`. Подписанное и неподписанное лежат в одной модели и различаются `kind` и `trust`: отчёт Trivy и SLSA provenance из npm одинаково доходят до gate, а политика решает, чему доверять.
+Evidence расширяется строками, а не колонками. Новый вид доказательства означает новую строку с новым URI в `predicate_type`; ни колонка, ни enum не добавляются. Gates и UI читают evidence только по `predicate_type`. Подписанность выражена в `verify_result`, а `kind` (формат конверта) нужен лишь верификатору: отчёт Trivy и SLSA provenance из npm одинаково доходят до gate, а политика решает по `trust` и `verify_result`, чему доверять. Голая подпись файла (PGP, Sigstore без предиката) тоже получает свой URI, поэтому `predicate_type` всегда заполнен и NULL в ключе индекса нет.
 
 Известные predicate type:
 
-| Вид содержимого | `predicate_type` | `kind` | Кто производит |
+| Вид содержимого | `predicate_type` | Конверт (`kind`) | Кто производит |
 | --- | --- | --- | --- |
-| SLSA Provenance | `https://slsa.dev/provenance/v1` | attestation | npm provenance, PyPI, свой CI |
-| PyPI Publish | `https://docs.pypi.org/attestations/publish/v1` | attestation | PyPI (Trusted Publishing) |
-| SBOM CycloneDX | `https://cyclonedx.org/bom` | attestation или report | свой CI, upstream |
-| SBOM SPDX 2.x и 3 | `https://spdx.dev/Document`, `https://spdx.dev/Document/v3` | attestation или report | свой CI, upstream |
-| Скан уязвимостей | `https://in-toto.io/attestation/vulns/v0.2` | report | Trivy в CRANE (без подписи) |
-| VEX | `https://openvex.dev/ns/v0.2.0` | attestation или report | издатель пакета, security |
-| Quality gate SonarQube | `urn:crane:quality-gate:v1` (внутренний URI CRANE) | report | SonarQube через интеграцию |
-| Подпись PGP (Maven `.asc`) | NULL | signature | издатель Maven |
-| Подпись Sigstore без предиката (`.sigstore.json`, messageSignature) | NULL | signature | издатель Maven, upstream |
+| SLSA Provenance | `https://slsa.dev/provenance/v1` | sigstore, dsse | npm provenance, PyPI, свой CI |
+| PyPI Publish | `https://docs.pypi.org/attestations/publish/v1` | sigstore, dsse | PyPI (Trusted Publishing) |
+| SBOM CycloneDX | `https://cyclonedx.org/bom` | sigstore, dsse, none | свой CI, upstream |
+| SBOM SPDX 2.x и 3 | `https://spdx.dev/Document`, `https://spdx.dev/Document/v3` | sigstore, dsse, none | свой CI, upstream |
+| Скан уязвимостей | `https://in-toto.io/attestation/vulns/v0.2` | none | Trivy в CRANE |
+| VEX | `https://openvex.dev/ns/v0.2.0` | sigstore, dsse, none | издатель пакета, security |
+| Quality gate SonarQube | `urn:crane:quality-gate:v1` (внутренний URI CRANE) | none | SonarQube через интеграцию |
+| Подпись файла (Maven `.asc`; `.sigstore.json` с messageSignature) | `urn:crane:file-signature:v1` (внутренний URI CRANE) | pgp, sigstore | издатель Maven, upstream |
+| Claims публикации из CI | `urn:crane:publish-claims:v1` (внутренний URI CRANE) | jwt | CRANE при обмене токена (`trust = crane`) |
 
 Требование действует с P0: таблицы пока нет, но когда она появится (v1.1.0, см. «Отложено»), она сразу в этой форме. Менять тип колонок после накопления evidence дороже, чем зафиксировать форму сейчас.
 
@@ -356,7 +356,7 @@ stateDiagram-v2
 ```
 blobs/sha256/9f/86/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 staging/0192c1a4-7d2e-7c3b-9a51-6f0d3e4b8a11                (lifecycle: удалить через 24 ч)
-evidence/9f86.../0192c1b0-....json.zst                      (subject digest / id evidence; вид — в строке БД, не в пути)
+evidence/5c1e....json.zst                                   (sha256 документа; вид — в строке БД, не в пути)
 backup/pg/...  backup/manifests/...
 ```
 

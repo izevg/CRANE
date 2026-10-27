@@ -105,18 +105,17 @@ fn exchange(id_token):
     return issue("crci_", scopes, ttl, provenance = {project, commit, pipeline, job})
 ```
 
-Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Это закрывает требование связи публикации с project, commit, pipeline и job.
+Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Эти claims пишутся и как evidence (`predicate_type = urn:crane:publish-claims:v1`, `kind = jwt`, `trust = crane`, `facts` = project, commit, pipeline, job), поэтому gate provenance и правило регрессии (10.6.1) читают один источник и для hosted. Это закрывает требование связи публикации с project, commit, pipeline и job.
 
 ## 10.6 Promotion и gates
 
 ```rust
 fn evaluate(version, target_stage):
-    gates = policy.gates_for(version.repo, target_stage)  // cve, license, provenance, quality, attestation
+    gates = policy.gates_for(version.repo, target_stage)  // cve, license, provenance, quality
     results = gates.map(|g| match evidence.latest(version.id, g.predicate_types):
         None                      => Missing             // «проверка отсутствует»
         Some(e) if e.invalid      => Deny                // подпись или subject не сошлись
-        Some(e) if e.unverifiable => g.on_unverifiable   // нет trust root, нет сети: как Missing или по политике gate
-        Some(e) if e.failed       => AnalysisError       // «ошибка анализа»
+        Some(e) if e.unverifiable => AnalysisError       // «ошибка анализа»: сбой скана, нет trust root, нет сети
         Some(e) if stale(e, g)    => Stale
         Some(e)                   => g.judge(e, exceptions.active(version)))
     verdict = combine(results)      // любой Deny → Deny; Missing/Stale → по политике gate
@@ -125,7 +124,7 @@ fn evaluate(version, target_stage):
     return verdict                   // всегда с перечнем причин для UI
 ```
 
-Gate не знает видов доказательств: он объявляет, какие `predicate_types` читает (раздел 9). Provenance читает SLSA Provenance; cve читает vulns и VEX; license читает CycloneDX и SPDX; quality читает quality gate SonarQube. Отдельный gate «без валидной attestation не продвигать» настраивается по репозиторию и стадии: версия без `valid` attestation нужного типа не уходит дальше quarantine.
+Gate не знает видов доказательств: он объявляет, какие `predicate_types` читает (раздел 9). Provenance читает SLSA Provenance и publish-claims; cve читает vulns и VEX; license читает CycloneDX и SPDX; quality читает quality gate SonarQube. Требование «без валидной attestation не продвигать» — настройка gate provenance по репозиторию и стадии: какие `trust` он принимает (`publisher`, `upstream`, `crane` для claims) и требует ли `valid`. Версия без подходящего evidence не уходит дальше quarantine.
 
 Promotion меняет только строку в БД: digest и байты те же. Повторная оценка запускается событиями «новое evidence», «новая версия базы уязвимостей», «истекло исключение», «изменилась политика».
 
@@ -141,25 +140,25 @@ Promotion меняет только строку в БД: digest и байты �
 
 NuGet и Cargo в v1.1.0 не проверяются.
 
-Общий шаг 1: `subject` digest (у `.asc` и подписи без предиката — подписанный файл) равен SHA-256 blob; иначе `invalid`. Остальное зависит от вида подписи.
+Общий шаг 1: `subject` digest (у подписи файла — сам подписанный файл) равен SHA-256 blob; иначе `invalid`. Остальное зависит от вида подписи.
 
-Sigstore bundle (npm, PyPI, `.sigstore.json` в Maven):
+Sigstore bundle (`kind = sigstore`: npm, PyPI, `.sigstore.json` в Maven):
 
 2. Цепочка сертификата Fulcio и его SAN и issuer; они кладутся в `signer_*` и в `facts` (builder, repo, commit, run).
 3. Inclusion proof и signed entry timestamp Rekor берутся из самого bundle, без обращения к журналу: проверка работает офлайн.
 4. Trust root — `trusted_root.json` Sigstore, обновляется через TUF; версия корня пишется в `verify_detail`.
 
-PGP (Maven `.asc`): подпись проверяется по публичному ключу издателя, отпечаток ключа ложится в `signer_subject`, `tlog` NULL; Fulcio, Rekor и TUF не участвуют.
+PGP (`kind = pgp`, Maven `.asc`): подпись проверяется по публичному ключу издателя, отпечаток ключа ложится в `signer_subject`, `tlog` NULL; Fulcio, Rekor и TUF не участвуют. `valid` означает, что подпись сходится с ключом, который берётся из того же места, что и файл; доверие к ключу даёт история версий, а смену ключа ловит правило регрессии.
 
 Ошибка самой проверки (нет trust root, upstream недоступен, незнакомый формат bundle) даёт `unverifiable`, а не `invalid`: иначе сбой инфраструктуры блокировал бы чужие релизы.
 
 ```rust
 on attestation_verified(new_version):                     // attestation.verify → правило регрессии
     past = previous_versions(new_version.package)
-    signer(x) = if x.signer_san.is_some() { (x.signer_issuer, x.signer_san) }   // Sigstore (Fulcio)
-                else { x.signer_subject }                                       // PGP: отпечаток ключа
-    for prev in evidence.latest_valid_per_type(past):      // каждый (kind, predicate_type), что был valid раньше
-        e = evidence.latest(new_version.id, prev.kind, prev.predicate_type)
+    signer(x) = match x.kind { pgp => x.signer_subject,                  // отпечаток ключа
+                               _   => (x.signer_issuer, x.signer_san) }  // Sigstore, jwt
+    for prev in evidence.latest_valid_per_type(past):      // каждый predicate_type, что был valid раньше
+        e = evidence.latest(new_version.id, [prev.predicate_type])
         if e.is_none() or e.invalid or signer(e) != signer(prev) or e.facts.repo != prev.facts.repo:
             hold(new_version, quarantine | blocked)        // по политике репозитория
             siem(SupplyChainSignal(new_version, prev, e)); break   // сигнал захвата аккаунта maintainer'а

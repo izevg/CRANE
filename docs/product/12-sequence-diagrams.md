@@ -119,7 +119,7 @@ sequenceDiagram
   participant SQ as SonarQube
   participant P as PostgreSQL
   SQ->>A: webhook quality gate (commit SHA)
-  A->>P: evidence report, predicate quality-gate, trust = integration
+  A->>P: evidence quality-gate, trust = integration
   W->>P: promotion.evaluate(version)
   P-->>W: cve ok, license review, provenance ok, quality ok
   W->>P: verdict pending approval (license review)

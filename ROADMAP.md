@@ -161,7 +161,7 @@ gantt
 
 1. Evidence, SBOM, Trivy, песочница анализа.
 2. Проверка upstream attestations в proxy: npm provenance, PyPI (PEP 740), Maven Central (PGP, Sigstore); карточка «собрано в … из …»; правило регрессии.
-3. Приём attestations из своего CI (in-toto/SLSA) как evidence, gate «без валидной attestation не продвигать» по репозиторию и стадии; цель SLSA Build L2.
+3. Приём attestations из своего CI (in-toto/SLSA) как evidence, gate provenance требует валидную attestation (настройка по репозиторию и стадии); цель SLSA Build L2.
 4. Фиды уязвимостей, сопоставление по PURL, приоритеты P0–P4, VEX, экстренный режим.
 5. Лицензии: SPDX, политика, вирусность; скоринг systemone.
 6. Promotion, approvals, исключения.
