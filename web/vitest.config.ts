@@ -52,6 +52,9 @@ export default mergeConfig(
             // Локальная машина, оба проекта идут в одном `task web:test`: каждый воркер в browser-режиме
             // держит свою вкладку Chromium, поэтому лимит воркеров = лимит одновременных вкладок.
             maxWorkers: 2,
+            // Разные maxWorkers требуют разного groupOrder: иначе Vitest отказывается стартовать. Заодно проекты идут
+            // последовательно (сначала unit, потом Chromium), и пик нагрузки на машину ниже.
+            sequence: { groupOrder: 1 },
             browser: {
               enabled: true,
               headless: true,
