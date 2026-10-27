@@ -72,6 +72,13 @@ const compliant = [
     ),
   },
   {
+    name: "продолжение на отступе тела: . и ?",
+    path: RS,
+    src: rustTest(
+      GOOD.map((l) => (l === "    let y = f(x);" ? "    let y = f(x)\n    .g()\n    ?;" : l)),
+    ),
+  },
+  {
     name: "block_on с многострочным future в аргументе",
     path: RS,
     src: rustTest([
