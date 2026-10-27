@@ -9,3 +9,9 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+crane-domain = { path = "../../../core/domain" }
+crane-ports = { path = "../../../core/ports" }
+tracing = "0.1"
+uuid = "1"

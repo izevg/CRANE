@@ -12,8 +12,8 @@ use std::io;
 
 use bytes::Bytes;
 use common::{
-    BlindCatalog, HOSTED, RecordingBlobs, Seed, asset_path, commit_log, committed, coordinate,
-    fixed_now, hello_sha256, name, publish_request, read, version,
+    BlindCatalog, HOSTED, RecordingBlobs, Seed, asset_path, caller, commit_log, committed,
+    coordinate, fixed_now, hello_sha256, name, publish_request, read, version,
 };
 use crane_app::registry::{Publish, Registry, RegistryError, Upload};
 use crane_domain::registry::{Asset, Format, FormatMetadata, PackageVersion, Sha256, VersionState};
@@ -32,7 +32,7 @@ fn publish_creates_released_record_with_store_digests_and_clock_time() {
     let request = publish_request("foo", "1.0.0", &HELLO, None);
 
     // Act
-    let record = block_on(registry.publish(request)).unwrap();
+    let record = block_on(registry.publish(&caller(), request)).unwrap();
 
     // Assert
     let expected = PackageVersion {
@@ -61,11 +61,15 @@ fn published_file_is_fetchable_with_uploaded_bytes() {
     let request = publish_request("foo", "1.0.0", &HELLO, None);
 
     // Act
-    block_on(registry.publish(request)).unwrap();
+    block_on(registry.publish(&caller(), request)).unwrap();
 
     // Assert
-    let download =
-        block_on(registry.fetch(&coordinate("foo", "1.0.0"), &asset_path("foo", "1.0.0"))).unwrap();
+    let download = block_on(registry.fetch(
+        &caller(),
+        &coordinate("foo", "1.0.0"),
+        &asset_path("foo", "1.0.0"),
+    ))
+    .unwrap();
     assert_eq!(
         read(download.body),
         b"hello",
@@ -83,7 +87,7 @@ fn publish_takes_version_id_from_shared_generator() {
     let request = publish_request("foo", "1.0.0", &HELLO, None);
 
     // Act
-    let record = block_on(registry.publish(request)).unwrap();
+    let record = block_on(registry.publish(&caller(), request)).unwrap();
 
     // Assert
     assert_eq!(
@@ -99,7 +103,7 @@ fn publish_accepts_matching_declared_sha256() {
     let request = publish_request("foo", "1.0.0", &HELLO, Some(hello_sha256()));
 
     // Act
-    let result = block_on(registry.publish(request));
+    let result = block_on(registry.publish(&caller(), request));
 
     // Assert
     assert!(
@@ -120,7 +124,7 @@ fn publish_rejects_mismatching_declared_sha256_leaving_cas_and_catalog_untouched
     let request = publish_request("foo", "1.0.0", &HELLO, Some(declared));
 
     // Act
-    let error = block_on(registry.publish(request)).unwrap_err();
+    let error = block_on(registry.publish(&caller(), request)).unwrap_err();
 
     // Assert
     assert!(
@@ -148,7 +152,7 @@ fn publish_to_unknown_repository_fails() {
     request.coordinate.repository = "nope".to_owned();
 
     // Act
-    let error = block_on(registry.publish(request)).unwrap_err();
+    let error = block_on(registry.publish(&caller(), request)).unwrap_err();
 
     // Assert
     assert!(
@@ -165,7 +169,7 @@ fn publish_to_proxy_repository_is_forbidden() {
     request.coordinate.repository = common::PROXY.to_owned();
 
     // Act
-    let error = block_on(registry.publish(request)).unwrap_err();
+    let error = block_on(registry.publish(&caller(), request)).unwrap_err();
 
     // Assert
     assert!(
@@ -187,7 +191,7 @@ fn republish_with_other_bytes_is_rejected_leaving_original_untouched() {
     let request = publish_request("foo", "1.0.0", &[b"different"], None);
 
     // Act
-    let error = block_on(registry.publish(request)).unwrap_err();
+    let error = block_on(registry.publish(&caller(), request)).unwrap_err();
 
     // Assert
     assert!(
@@ -198,8 +202,12 @@ fn republish_with_other_bytes_is_rejected_leaving_original_untouched() {
         committed(&log).is_empty(),
         "предпроверка должна отказать до commit: нет blob-сироты"
     );
-    let download =
-        block_on(registry.fetch(&coordinate("foo", "1.0.0"), &asset_path("foo", "1.0.0"))).unwrap();
+    let download = block_on(registry.fetch(
+        &caller(),
+        &coordinate("foo", "1.0.0"),
+        &asset_path("foo", "1.0.0"),
+    ))
+    .unwrap();
     assert_eq!(
         read(download.body),
         b"original",
@@ -216,7 +224,7 @@ fn republish_over_tombstone_is_rejected() {
     let request = publish_request("foo", "1.0.0", &HELLO, None);
 
     // Act
-    let error = block_on(registry.publish(request)).unwrap_err();
+    let error = block_on(registry.publish(&caller(), request)).unwrap_err();
 
     // Assert
     assert!(
@@ -238,7 +246,7 @@ fn republish_with_other_spelling_of_same_canonical_key_is_rejected_keeping_first
     let request = publish_request("foo_bar", "1.0.0+build.1", &HELLO, None);
 
     // Act
-    let error = block_on(registry.publish(request)).unwrap_err();
+    let error = block_on(registry.publish(&caller(), request)).unwrap_err();
 
     // Assert
     assert!(
@@ -246,7 +254,8 @@ fn republish_with_other_spelling_of_same_canonical_key_is_rejected_keeping_first
         "ключ сравнивается по канонической форме: {error:?}"
     );
     assert!(committed(&log).is_empty(), "blob-сироты в CAS нет");
-    let listed = block_on(registry.versions(Format::Cargo, HOSTED, &name("foo-bar"))).unwrap();
+    let listed =
+        block_on(registry.versions(&caller(), Format::Cargo, HOSTED, &name("foo-bar"))).unwrap();
     let spellings: Vec<_> = listed.iter().map(|v| v.package.as_written()).collect();
     assert_eq!(spellings, ["Foo-Bar"], "сохранено только первое написание");
 }
@@ -260,7 +269,7 @@ fn publish_lost_race_maps_catalog_conflict_to_version_exists() {
     let request = publish_request("foo", "1.0.0", &HELLO, None);
 
     // Act
-    let error = block_on(registry.publish(request)).unwrap_err();
+    let error = block_on(registry.publish(&caller(), request)).unwrap_err();
 
     // Assert
     assert!(
@@ -271,7 +280,7 @@ fn publish_lost_race_maps_catalog_conflict_to_version_exists() {
 
 /// Наблюдение для Assert: версии пакета `foo`, видимые клиентам.
 fn listed_foo<C: Catalog, B: BlobStore>(registry: &Registry<C, B>) -> Vec<PackageVersion> {
-    block_on(registry.versions(Format::Cargo, HOSTED, &name("foo"))).unwrap()
+    block_on(registry.versions(&caller(), Format::Cargo, HOSTED, &name("foo"))).unwrap()
 }
 
 /// Запрос, тело которого обрывается ошибкой ввода-вывода.
@@ -302,7 +311,7 @@ fn publish_with_broken_body_reports_body_error_and_publishes_nothing() {
     let request = broken_body_request();
 
     // Act
-    let error = block_on(registry.publish(request)).unwrap_err();
+    let error = block_on(registry.publish(&caller(), request)).unwrap_err();
 
     // Assert
     assert!(
@@ -326,7 +335,7 @@ fn publish_reports_backend_error_and_records_nothing_when_blob_commit_fails() {
     let request = publish_request("foo", "1.0.0", &HELLO, None);
 
     // Act
-    let error = block_on(registry.publish(request)).unwrap_err();
+    let error = block_on(registry.publish(&caller(), request)).unwrap_err();
 
     // Assert
     assert!(matches!(error, RegistryError::Backend(_)), "{error:?}");

@@ -8,7 +8,7 @@
 
 mod common;
 
-use common::{HOSTED, Seed, asset_path, coordinate, name, read};
+use common::{HOSTED, Seed, asset_path, caller, coordinate, name, read};
 use crane_app::registry::RegistryError;
 use crane_domain::registry::{Format, VersionState};
 use futures_executor::block_on;
@@ -21,8 +21,12 @@ fn fetch_returns_released_asset_with_uploaded_bytes() {
     let registry = seed.registry();
 
     // Act
-    let download =
-        block_on(registry.fetch(&coordinate("foo", "1.0.0"), &asset_path("foo", "1.0.0"))).unwrap();
+    let download = block_on(registry.fetch(
+        &caller(),
+        &coordinate("foo", "1.0.0"),
+        &asset_path("foo", "1.0.0"),
+    ))
+    .unwrap();
 
     // Assert
     assert_eq!(
@@ -41,8 +45,12 @@ fn fetch_serves_yanked_version() {
     let registry = seed.registry();
 
     // Act
-    let download =
-        block_on(registry.fetch(&coordinate("foo", "1.0.0"), &asset_path("foo", "1.0.0"))).unwrap();
+    let download = block_on(registry.fetch(
+        &caller(),
+        &coordinate("foo", "1.0.0"),
+        &asset_path("foo", "1.0.0"),
+    ))
+    .unwrap();
 
     // Assert
     assert_eq!(
@@ -64,12 +72,16 @@ fn fetch_hides_deleted_blocked_and_quarantined_versions() {
 
     // Act
     let actual = cases.map(|package| {
-        block_on(registry.fetch(&coordinate(package, "1.0.0"), &asset_path(package, "1.0.0")))
-            .err()
-            .and_then(|error| match error {
-                RegistryError::Unavailable { state } => Some(state),
-                _ => None,
-            })
+        block_on(registry.fetch(
+            &caller(),
+            &coordinate(package, "1.0.0"),
+            &asset_path(package, "1.0.0"),
+        ))
+        .err()
+        .and_then(|error| match error {
+            RegistryError::Unavailable { state } => Some(state),
+            _ => None,
+        })
     });
 
     // Assert
@@ -90,8 +102,8 @@ fn fetch_unknown_version_is_not_found() {
     let registry = Seed::new().registry();
 
     // Act
-    let error =
-        block_on(registry.fetch(&coordinate("foo", "1.0.0"), "foo-1.0.0.crate")).unwrap_err();
+    let error = block_on(registry.fetch(&caller(), &coordinate("foo", "1.0.0"), "foo-1.0.0.crate"))
+        .unwrap_err();
 
     // Assert
     assert!(matches!(error, RegistryError::VersionNotFound), "{error:?}");
@@ -105,7 +117,7 @@ fn fetch_from_unknown_repository_is_not_found() {
     target.repository = "nope".to_owned();
 
     // Act
-    let error = block_on(registry.fetch(&target, "foo-1.0.0.crate")).unwrap_err();
+    let error = block_on(registry.fetch(&caller(), &target, "foo-1.0.0.crate")).unwrap_err();
 
     // Assert
     assert!(
@@ -122,7 +134,8 @@ fn fetch_of_unknown_path_is_asset_not_found() {
     let registry = seed.registry();
 
     // Act
-    let error = block_on(registry.fetch(&coordinate("foo", "1.0.0"), "other.crate")).unwrap_err();
+    let error = block_on(registry.fetch(&caller(), &coordinate("foo", "1.0.0"), "other.crate"))
+        .unwrap_err();
 
     // Assert
     assert!(matches!(error, RegistryError::AssetNotFound), "{error:?}");
@@ -136,8 +149,12 @@ fn fetch_with_record_but_missing_blob_is_backend_error() {
     let registry = seed.registry();
 
     // Act
-    let error = block_on(registry.fetch(&coordinate("foo", "1.0.0"), &asset_path("foo", "1.0.0")))
-        .unwrap_err();
+    let error = block_on(registry.fetch(
+        &caller(),
+        &coordinate("foo", "1.0.0"),
+        &asset_path("foo", "1.0.0"),
+    ))
+    .unwrap_err();
 
     // Assert
     assert!(
@@ -160,7 +177,8 @@ fn versions_lists_only_released_in_publication_order_including_yanked() {
     let registry = seed.registry();
 
     // Act
-    let listed = block_on(registry.versions(Format::Cargo, HOSTED, &name("foo"))).unwrap();
+    let listed =
+        block_on(registry.versions(&caller(), Format::Cargo, HOSTED, &name("foo"))).unwrap();
 
     // Assert
     let shown: Vec<_> = listed
@@ -184,7 +202,8 @@ fn versions_of_unknown_package_is_empty() {
     let registry = Seed::new().registry();
 
     // Act
-    let listed = block_on(registry.versions(Format::Cargo, HOSTED, &name("ghost"))).unwrap();
+    let listed =
+        block_on(registry.versions(&caller(), Format::Cargo, HOSTED, &name("ghost"))).unwrap();
 
     // Assert
     assert!(
@@ -199,7 +218,8 @@ fn versions_of_unknown_repository_is_not_found() {
     let registry = Seed::new().registry();
 
     // Act
-    let error = block_on(registry.versions(Format::Cargo, "nope", &name("foo"))).unwrap_err();
+    let error =
+        block_on(registry.versions(&caller(), Format::Cargo, "nope", &name("foo"))).unwrap_err();
 
     // Assert
     assert!(

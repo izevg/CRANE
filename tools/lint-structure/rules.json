@@ -26,6 +26,6 @@
     "access": ["domain", "ports"],
     "formats": ["domain", "ports"],
     "adapters": ["domain", "ports"],
-    "entry": ["domain", "ports", "app", "access", "formats", "adapters"]
+    "entry": ["entry", "domain", "ports", "app", "access", "formats", "adapters"]
   }
 }

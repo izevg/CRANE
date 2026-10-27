@@ -1,0 +1,124 @@
+//! События аудита: что пишет слой auth и что пишут use cases.
+
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "в тестах падение unwrap — это падение теста"
+)]
+
+mod common;
+
+use axum::http::Method;
+use common::{Api, PRINCIPAL, REPO};
+use crane_domain::access::{Principal, PrincipalKind, RequestContext, RequestId};
+use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
+
+const CONFIG_URL: &str = "/cargo/internal/index/config.json";
+const CRATE: &[u8] = b"bytes";
+const TRACEPARENT: &str = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+
+#[test]
+fn rejected_token_records_one_failed_authentication_with_request_context() {
+    // Arrange
+    let api = Api::with_proxies("127.0.0.1");
+    let headers = [
+        ("authorization", "SECRET-wrong"),
+        ("user-agent", "cargo/1.90"),
+        ("traceparent", TRACEPARENT),
+        ("x-forwarded-for", "203.0.113.9"),
+        ("x-request-id", "abc-1"),
+    ];
+
+    // Act
+    let reply = api.get_from("127.0.0.1:40000", CONFIG_URL, &headers);
+
+    // Assert
+    assert_eq!(reply.status, 403);
+    assert_eq!(
+        api.audit_events(),
+        [AuditEvent {
+            actor: None,
+            request: RequestContext {
+                request_id: RequestId::parse("abc-1").unwrap(),
+                trace_id: Some("4bf92f3577b34da6a3ce929d0e0e4736".to_owned()),
+                client_ip: "203.0.113.9".parse().ok(),
+                user_agent: Some("cargo/1.90".to_owned()),
+            },
+            action: AuditAction::Authenticate,
+            outcome: Outcome::Failure {
+                reason: "токен отвергнут".to_owned()
+            },
+        }]
+    );
+}
+
+#[test]
+fn missing_token_records_no_event() {
+    // Arrange
+    let api = Api::new();
+
+    // Act
+    let reply = api.with_headers(Method::GET, CONFIG_URL, &[], Vec::new());
+
+    // Assert
+    assert_eq!(reply.status, 401);
+    assert_eq!(api.audit_events(), []);
+}
+
+#[test]
+fn accepted_token_records_no_authentication_event() {
+    // Arrange
+    let api = Api::new();
+
+    // Act
+    let reply = api.get(CONFIG_URL);
+
+    // Assert
+    assert_eq!(reply.status, 200);
+    assert_eq!(api.audit_events(), []);
+}
+
+#[test]
+fn publish_records_one_success_attributed_to_the_configured_principal() {
+    // Arrange
+    let api = Api::new();
+
+    // Act
+    let reply = api.publish(REPO, "demo-crate", "1.0.0", CRATE);
+
+    // Assert
+    assert_eq!(reply.status, 200);
+    let events = api.audit_events();
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        (
+            events[0].actor.clone(),
+            matches!(events[0].action, AuditAction::Publish(_)),
+            events[0].outcome.clone(),
+            events[0].request.request_id.as_str() == reply.header("x-request-id"),
+        ),
+        (
+            Some(Principal {
+                id: PRINCIPAL.to_owned(),
+                kind: PrincipalKind::Robot
+            }),
+            true,
+            Outcome::Success,
+            true
+        )
+    );
+}
+
+#[test]
+fn reads_add_no_events_to_the_journal() {
+    // Arrange
+    let api = Api::new();
+    api.publish(REPO, "demo-crate", "1.0.0", CRATE);
+
+    // Act
+    let reply = api.index_text("demo-crate");
+
+    // Assert
+    assert_eq!(reply.status, 200);
+    assert_eq!(api.audit_events().len(), 1, "только событие публикации");
+}

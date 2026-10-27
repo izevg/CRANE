@@ -9,3 +9,14 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+crane-domain = { path = "../../core/domain" }
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+# Только для построения VersionId/RepositoryId в тестах; в рабочий код не попадает.
+uuid = "1"

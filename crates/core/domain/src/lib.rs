@@ -2,4 +2,6 @@
 //!
 //! Слой не зависит ни от одного другого крейта проекта и не выполняет IO.
 
+pub mod access;
+pub mod audit;
 pub mod registry;
