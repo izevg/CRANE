@@ -12,7 +12,8 @@ use std::pin::pin;
 use std::task::Poll;
 
 use common::hello_sha256;
-use common::proxy::{FakeUpstream, Step, World, bytes_of, key, path, policy, poll_once, secs};
+use common::proxy::upstream::{FakeUpstream, Step};
+use common::proxy::{World, bytes_of, key, path, policy, poll_once, secs};
 use crane_app::proxy::{CacheResult, ProxyError, UpstreamFailure};
 use crane_domain::proxy::NegativePolicy;
 use crane_domain::registry::{Checksum, Sha256};

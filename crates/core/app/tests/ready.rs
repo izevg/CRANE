@@ -8,7 +8,8 @@
 
 mod common;
 
-use common::{DownCatalog, OpenFailsBlobs, Seed};
+use common::Seed;
+use common::faults::{DownCatalog, OpenFailsBlobs};
 use crane_app::registry::RegistryError;
 use crane_domain::registry::{Format, Sha256};
 use crane_ports::registry::BlobError;
