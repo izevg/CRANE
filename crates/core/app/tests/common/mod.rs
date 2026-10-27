@@ -94,8 +94,6 @@ pub(crate) fn read(stream: ByteStream) -> Vec<u8> {
         .collect()
 }
 
-pub(crate) fn assert_send<T: Send>(_: &T) {}
-
 /// Мир, собранный до `Registry::new`: Registry владеет портами, достучаться до них потом нельзя.
 pub(crate) struct Seed {
     pub(crate) catalog: MemoryCatalog,
