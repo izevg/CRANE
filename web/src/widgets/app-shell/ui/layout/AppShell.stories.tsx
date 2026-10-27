@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   ActivityIcon,
   BellIcon,
+  BuildingIcon,
   HistoryIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
@@ -19,10 +20,12 @@ import { StatusBadge } from "~/shared/ui/status";
 import { AppShell, type Banner } from "~/widgets/app-shell";
 
 const COLLAPSE = /Свернуть:/;
+const AVATAR = /аккаунт/;
 
 const VIEWPORTS = {
   desktop: { name: "Десктоп 1440", styles: { width: "1440px", height: "900px" } },
   mobile: { name: "Телефон 390", styles: { width: "390px", height: "844px" } },
+  mobile320: { name: "Телефон 320", styles: { width: "320px", height: "640px" } },
 };
 
 const READ_ONLY: Banner = {
@@ -103,7 +106,8 @@ const meta = {
       onOpenPalette: fn(),
       workspace: (
         <Button variant="secondary" size="sm">
-          Workspace: platform
+          <BuildingIcon aria-hidden="true" className="sm:hidden" />
+          <span className="max-sm:sr-only">Workspace: platform</span>
         </Button>
       ),
       status: <StatusBadge tone="success" label="Режим: норма" />,
@@ -197,6 +201,32 @@ export const UrgentP0: Story = {
   args: { banners: [P0, READ_ONLY] },
   play: async ({ canvasElement }) => {
     await expect(within(canvasElement).getByRole("alert")).toHaveTextContent(P0.text);
+  },
+};
+
+/** Страница не шире окна: горизонтального скролла нет, а аккаунт целиком в области просмотра (WCAG 1.4.10). */
+async function expectNoHorizontalScroll(canvasElement: HTMLElement) {
+  const root = canvasElement.ownerDocument.documentElement;
+  await expect(root.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  const avatar = within(canvasElement).getByRole("button", { name: AVATAR });
+  await expect(avatar.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+}
+
+export const Mobile390Geometry: Story = {
+  name: "Телефон 390: topbar помещается, скролла нет",
+  globals: { viewport: { value: "mobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(window.innerWidth).toBe(390));
+    await expectNoHorizontalScroll(canvasElement);
+  },
+};
+
+export const Mobile320Geometry: Story = {
+  name: "Телефон 320: topbar помещается, скролла нет",
+  globals: { viewport: { value: "mobile320", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(window.innerWidth).toBe(320));
+    await expectNoHorizontalScroll(canvasElement);
   },
 };
 

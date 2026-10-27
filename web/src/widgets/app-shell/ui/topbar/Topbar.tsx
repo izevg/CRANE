@@ -71,10 +71,14 @@ export function Topbar({
     <header className="sticky top-0 z-20 flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-border bg-background px-4 sm:gap-3 lg:px-6 2xl:px-8">
       {sidebarToggle}
       <Crumbs {...breadcrumbs} />
-      <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+      {/*
+        Правая группа не shrink-0: на телефоне она уступает крошкам. Поиск там уже иконка, статус режима скрыт
+        (он есть в баннерах и на странице), а переключатель workspace должен сам стать иконкой с именем.
+      */}
+      <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-3">
         <SearchButton onOpen={onOpenPalette} />
         {workspace}
-        {status}
+        {status === undefined ? null : <div className="hidden sm:block">{status}</div>}
         {notifications}
         {account}
       </div>

@@ -1,6 +1,7 @@
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import {
+  BuildingIcon,
   DatabaseIcon,
   FileCheckIcon,
   HistoryIcon,
@@ -148,7 +149,8 @@ export function ScreenFrame({ active, breadcrumbs, banners, children }: Props) {
     onOpenPalette: () => undefined,
     workspace: (
       <Button variant="secondary" size="sm">
-        {t`Workspace: ${workspace}`}
+        <BuildingIcon aria-hidden="true" className="sm:hidden" />
+        <span className="max-sm:sr-only">{t`Workspace: ${workspace}`}</span>
       </Button>
     ),
     notifications: <NotificationsBell unread={UNREAD} />,
