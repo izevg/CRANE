@@ -53,7 +53,7 @@ function SecretDialogBody({ secret, title, onDone }: BodyProps) {
   };
   return (
     <AlertDialog open onOpenChange={handleOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent size="wide">
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
         </AlertDialogHeader>
