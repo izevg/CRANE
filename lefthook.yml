@@ -16,7 +16,7 @@ pre-commit:
       glob: "*.{ts,tsx,js,json,css}"
       run: pnpm exec biome check --error-on-warnings --no-errors-on-unmatched {staged_files}
     sonarjs:
-      glob: "web/**/*.{ts,tsx}"
+      glob: ["web/*.{ts,tsx}", "web/**/*.{ts,tsx}"]
       run: task web:lint
 
 pre-push:
