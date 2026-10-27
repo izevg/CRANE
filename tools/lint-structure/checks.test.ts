@@ -16,6 +16,7 @@ const rules: Rules = {
   testFiles: ["*.test.*"],
   entryFiles: ["lib.rs", "index.ts"],
   rustLayers: { domain: [], ports: ["domain"], adapters: ["domain", "ports"] },
+  aaa: { roots: [], exemptDirs: [] },
 };
 
 const tree = (spec: Record<string, 0 | 1>): string => {

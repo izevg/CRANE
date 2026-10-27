@@ -14,6 +14,7 @@ export interface Rules {
   testFiles: string[];
   entryFiles: string[];
   rustLayers: Record<string, string[]>;
+  aaa: { roots: string[]; exemptDirs: string[] };
 }
 
 export interface CargoPackage {
@@ -31,7 +32,7 @@ type Matcher = (name: string) => boolean;
 const globToRegExp = (glob: string): RegExp =>
   new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
 
-const matcher = (globs: string[]): Matcher => {
+export const matcher = (globs: string[]): Matcher => {
   const regs = globs.map(globToRegExp);
   return (name) => regs.some((r) => r.test(name));
 };
