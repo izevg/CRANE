@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { type Expected, leaks, verify } from "./audit.ts";
 import { hostedName, scenario, startCargo } from "./cargo.ts";
 import { docker, log, MS_PER_SECOND, timed, warn } from "./exec.ts";
+import { failuresScenario } from "./failures.ts";
 import { fullScenario } from "./full.ts";
 import { npmScenario } from "./npm.scenario.ts";
 import { startNpm } from "./npm.ts";
@@ -76,6 +77,13 @@ function exercise(stand: Stand, targets: Target[], root: string, full: boolean):
   const npm = exerciseNpm(stand);
   expected.push(...npm.events);
   const latest = targets.find((target) => target.which === "latest");
+  if (latest !== undefined) {
+    // Отказы идут на latest один раз (свойство сервера, не клиента) и до полного сценария: он ждёт здоровый стенд.
+    expected.push(
+      ...timed("отказы Valkey, PostgreSQL и S3", () => failuresScenario(stand, latest.image)),
+    );
+    log("сценарии отказов пройдены");
+  }
   if (full && latest !== undefined) {
     // Последним: офлайн необратим, после него стенд пригоден только для сверки журналов.
     expected.push(
@@ -88,7 +96,7 @@ function exercise(stand: Stand, targets: Target[], root: string, full: boolean):
   const mismatches = verify(stand.craneLogs(), expected, {
     principal: stand.principal,
     loopback: LOOPBACK,
-    configReservations: NAMESPACES.length,
+    configReservations: NAMESPACES.length * stand.craneStarts,
   });
   const leaked = leaks(stand.allLogs(), stand.secrets);
   for (const m of mismatches) {

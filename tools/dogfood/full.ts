@@ -15,7 +15,6 @@ import {
   checkUpstreamDown,
   type Expected,
   egressLines,
-  parseObjectCount,
 } from "./audit.ts";
 import {
   authorizedCurl,
@@ -290,19 +289,6 @@ function cutUpstream(stand: Stand): void {
   ]);
 }
 
-/** Число объектов CAS в бакете: `fs.tree` каталога `blobs/` бакета через `weed shell` внутри контейнера SeaweedFS. */
-function bucketObjects(stand: Stand): number {
-  const output = docker(
-    ["exec", "-i", stand.seaweedfs, "weed", "shell", "-master=127.0.0.1:9333"],
-    { input: `fs.tree /buckets/${stand.bucket}/blobs\n` },
-  );
-  const count = parseObjectCount(output);
-  if (count === undefined) {
-    throw new Error(`не разобрать число объектов бакета: ${tail(output)}`);
-  }
-  return count;
-}
-
 function offline(context: Context): void {
   const { client, stand, base, proxyUrl } = context;
   // Обе отметки берутся сразу после прогрева install, ДО рестарта и отключения: окно проверок включает и
@@ -319,7 +305,7 @@ function offline(context: Context): void {
   // рестарта `up --wait` ждёт /healthz/ready, который ходит в бакет. Поэтому hit `.crate` в офлайне — это
   // чтение с S3 новым процессом без памяти. Число объектов бакета показывает, что CAS действительно на S3:
   // SeaweedFS не перезапускается, и «выжить» объекты могут тривиально, так что доказательством рестарта оно не служит.
-  const objectsBefore = bucketObjects(stand);
+  const objectsBefore = stand.bucketObjects();
   log(`офлайн: объектов в бакете до рестарта ${objectsBefore}`);
   // Рестарт пересоздаёт netns, поэтому маршруты снимаются строго после него.
   stand.restartCrane();
@@ -356,7 +342,7 @@ function offline(context: Context): void {
   if (down.length > 0) {
     throw new Error(`upstream недоступен: ${down.join("; ")}`);
   }
-  const objectsAfter = bucketObjects(stand);
+  const objectsAfter = stand.bucketObjects();
   log(`офлайн: объектов в бакете после офлайна ${objectsAfter}`);
   const bucket = checkBucketObjects(objectsBefore, objectsAfter);
   if (bucket.length > 0) {

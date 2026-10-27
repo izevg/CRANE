@@ -6,6 +6,16 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { initSecrets } from "../secrets-init.ts";
 import { docker, log, MS_PER_SECOND, run, SECONDS_PER_MINUTE, warn } from "./exec.ts";
+import {
+  countObjects,
+  craneReady,
+  DOWN_TIMEOUT_SECONDS,
+  type Outage,
+  type Service,
+  UP_TIMEOUT_SECONDS,
+  upService,
+  withOutage,
+} from "./stand.outage.ts";
 
 export interface Stand {
   /** Случайный идентификатор прогона: суффикс имён проекта, образа и крейтов. */
@@ -31,6 +41,18 @@ export interface Stand {
    * и журнал остаются прежними. Сетевое пространство пересоздаётся, поэтому снятые маршруты возвращаются.
    */
   restartCrane(): void;
+  /** Сколько раз процесс crane стартовал: каждый старт заново аудирует резервирования из `CRANE_NAMESPACES`. */
+  readonly craneStarts: number;
+  /**
+   * Отказ сервиса на время `during`: `stop` останавливает контейнер, `pause` замораживает его
+   * процессы (соединения открыты, ответов нет). Сервис возвращается и crane ждётся до готовности и после сбоя
+   * `during`, чтобы упавший сценарий не оставил стенд без зависимости.
+   */
+  outage<T>(service: Service, kind: Outage, during: () => T): T;
+  /** `crane healthcheck` в контейнере crane: та же проба, что /healthz/ready (admin-порт наружу не проброшен). */
+  ready(): boolean;
+  /** Число объектов CAS в бакете (каталог `blobs/`; хвосты `staging/` не считаются). */
+  bucketObjects(): number;
   /** Журнал сервиса crane (NDJSON) без префиксов compose. */
   craneLogs(): string;
   allLogs(): string;
@@ -49,8 +71,6 @@ const HEX_BYTES_SECRET = 32;
 const HEX_BYTES_ID = 4;
 const BUILD_TIMEOUT_MINUTES = 45;
 const BUILD_TIMEOUT_MS = BUILD_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
-const UP_TIMEOUT_SECONDS = 240;
-const DOWN_TIMEOUT_SECONDS = 5;
 // Второй октет подсети: 10.200–10.254, третий — любой.
 const SUBNET_SECOND_MIN = 200;
 const SUBNET_SECOND_SPAN = 55;
@@ -110,6 +130,7 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
   const principal = `dogfood-${id}`;
   // Секреты создаёт secrets-init в start(); до него токена и списка нет.
   let token = "";
+  let starts = 1;
   const secrets: { name: string; value: string }[] = [
     { name: WRONG_TOKEN_NAME, value: wrongToken },
   ];
@@ -159,7 +180,17 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
         composeRun,
       );
     },
-    restartCrane: () => restartCrane(composeRun),
+    restartCrane() {
+      restartCrane(composeRun);
+      starts += 1;
+    },
+    get craneStarts() {
+      return starts;
+    },
+    outage: (service, kind, during) =>
+      withOutage(composeRun, () => craneReady(`${project}-crane-1`), { service, kind }, during),
+    ready: () => craneReady(`${project}-crane-1`),
+    bucketObjects: () => countObjects(`${project}-seaweedfs-1`, names.bucket),
     craneLogs: () => logs(["crane"]),
     allLogs: () => logs([]),
     saveLogs(path) {
@@ -190,17 +221,7 @@ function restartCrane(composeRun: (args: string[]) => string): void {
   // обнулена. Клиент не делает запросов до `healthy`: пока crane не готов, Caddy отвечает 502.
   composeRun(["restart", "--timeout", String(DOWN_TIMEOUT_SECONDS), "crane"]);
   // После restart docker сбрасывает статус healthcheck в `starting`, поэтому `--wait` ждёт новую проверку.
-  // `--no-recreate --no-deps` не дают up тронуть контейнер и соседние сервисы.
-  composeRun([
-    "up",
-    "-d",
-    "--wait",
-    "--wait-timeout",
-    String(UP_TIMEOUT_SECONDS),
-    "--no-recreate",
-    "--no-deps",
-    "crane",
-  ]);
+  upService(composeRun, "crane");
 }
 
 /** Журнал без секретов: значение каждого заменено на `<имя>`. */

@@ -31,6 +31,13 @@ export const craneCredentials = (token: string): Record<string, string> => ({
   [TOKEN_ENV]: token,
 });
 
+/** Окружение cargo в контейнере: свой CARGO_HOME и CARGO_TARGET_DIR рядом, токен hosted-реестра. */
+export const cargoEnv = (home: string, token: string): Record<string, string> => ({
+  CARGO_HOME: home,
+  CARGO_TARGET_DIR: `${home}-target`,
+  ...craneCredentials(token),
+});
+
 /**
  * curl с токеном через stdin (`-K -`): секрет не виден в `ps`. `args` — всё остальное, включая URL.
  * `scheme` — схема заголовка (npm: `Bearer`); без неё токен идёт как есть, как у cargo.
@@ -77,7 +84,7 @@ export function startCargo(stand: Stand, image: string): CargoClient {
 }
 
 /** Крейт данными: манифест плюс файлы относительно его каталога. */
-interface Crate {
+export interface Crate {
   name: string;
   version: string;
   /** Строки секции [dependencies]. */
@@ -85,7 +92,7 @@ interface Crate {
   files: Record<string, string>;
 }
 
-const manifest = (crate: Crate): string =>
+export const manifest = (crate: Crate): string =>
   [
     "[package]",
     `name = "${crate.name}"`,
@@ -141,7 +148,7 @@ function scenarioKit(stand: Stand, client: CargoClient, minor: number): Kit {
   const cargo = (dir: string, home: string, args: string[], token = stand.token): Result =>
     client.exec(["cargo", ...args], {
       cwd: `/work/${dir}`,
-      env: { CARGO_HOME: home, CARGO_TARGET_DIR: `${home}-target`, ...craneCredentials(token) },
+      env: cargoEnv(home, token),
     });
   const must = (dir: string, home: string, args: string[]): Result => {
     const result = cargo(dir, home, args);

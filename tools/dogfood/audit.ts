@@ -70,8 +70,8 @@ export interface Egress {
 const HTTP_OK = 200;
 const API_ACTIVITY = 6003;
 const AUTHENTICATION = 3002;
-const HTTP_OK_FROM = 200;
-const HTTP_OK_TO = 299;
+export const HTTP_OK_FROM = 200;
+export const HTTP_OK_TO = 299;
 const SNIPPET_CHARS = 120;
 interface Route {
   method: string;
@@ -273,7 +273,7 @@ export function checkCollapse(access: Access[], egress: Egress[], expected: Coll
 }
 
 const SERVED_FROM_CACHE = new Set(["hit", "stale", "stale-on-error"]);
-const SERVER_ERROR_FROM = 500;
+export const SERVER_ERROR_FROM = 500;
 
 // config.json индекса crane собирает сам, upstream и кэш в нём не участвуют: поля `cache` у него нет.
 const isConfig = (line: Access): boolean => line.path.endsWith("/index/config.json");
