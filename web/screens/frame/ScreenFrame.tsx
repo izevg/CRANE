@@ -1,5 +1,5 @@
-// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
-import { t } from "@lingui/core/macro";
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import {
   DatabaseIcon,
   FileCheckIcon,
@@ -16,6 +16,7 @@ import {
   StarIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { i18n } from "~/shared/lib/i18n";
 import { Button } from "~/shared/ui/primitives";
 import { AppShell, type Banner, type SidebarProps, type TopbarProps } from "~/widgets/app-shell";
 import { NotificationsBell } from "~/widgets/notifications-center";
@@ -29,44 +30,78 @@ function navGroups(active: string): SidebarProps["groups"] {
   return [
     {
       id: "catalog",
-      label: t`Каталог`,
+      label: i18n._(msg`Каталог`),
       items: [
-        mark({ id: "search", label: t`Поиск`, href: "/search", icon: SearchIcon }),
-        mark({ id: "favorites", label: t`Избранное`, href: "/favorites", icon: StarIcon }),
+        mark({ id: "search", label: i18n._(msg`Поиск`), href: "/search", icon: SearchIcon }),
+        mark({
+          id: "favorites",
+          label: i18n._(msg`Избранное`),
+          href: "/favorites",
+          icon: StarIcon,
+        }),
       ],
     },
     {
       id: "mine",
-      label: t`Мои пакеты`,
-      items: [mark({ id: "packages", label: t`Мои пакеты`, href: "/packages", icon: PackageIcon })],
+      label: i18n._(msg`Мои пакеты`),
+      items: [
+        mark({
+          id: "packages",
+          label: i18n._(msg`Мои пакеты`),
+          href: "/packages",
+          icon: PackageIcon,
+        }),
+      ],
     },
     {
       id: "security",
-      label: t`Безопасность`,
+      label: i18n._(msg`Безопасность`),
       items: [
-        mark({ id: "findings", label: t`Находки`, href: "/findings", icon: ShieldAlertIcon }),
-        mark({ id: "exceptions", label: t`Исключения`, href: "/exceptions", icon: ShieldOffIcon }),
-        mark({ id: "vex", label: t`VEX`, href: "/vex", icon: FileCheckIcon }),
+        mark({
+          id: "findings",
+          label: i18n._(msg`Находки`),
+          href: "/findings",
+          icon: ShieldAlertIcon,
+        }),
+        mark({
+          id: "exceptions",
+          label: i18n._(msg`Исключения`),
+          href: "/exceptions",
+          icon: ShieldOffIcon,
+        }),
+        mark({ id: "vex", label: i18n._(msg`VEX`), href: "/vex", icon: FileCheckIcon }),
       ],
     },
     {
       id: "platform",
-      label: t`Платформа`,
+      label: i18n._(msg`Платформа`),
       items: [
-        mark({ id: "overview", label: t`Обзор`, href: "/platform", icon: LayoutDashboardIcon }),
+        mark({
+          id: "overview",
+          label: i18n._(msg`Обзор`),
+          href: "/platform",
+          icon: LayoutDashboardIcon,
+        }),
         mark({
           id: "storages",
-          label: t`Хранилища`,
+          label: i18n._(msg`Хранилища`),
           href: "/platform/storages",
           icon: DatabaseIcon,
         }),
-        mark({ id: "queues", label: t`Очереди`, href: "/platform/queues", icon: ListChecksIcon }),
+        mark({
+          id: "queues",
+          label: i18n._(msg`Очереди`),
+          href: "/platform/queues",
+          icon: ListChecksIcon,
+        }),
       ],
     },
     {
       id: "journal",
-      label: t`Журнал`,
-      items: [mark({ id: "audit", label: t`Журнал`, href: "/audit", icon: ScrollTextIcon })],
+      label: i18n._(msg`Журнал`),
+      items: [
+        mark({ id: "audit", label: i18n._(msg`Журнал`), href: "/audit", icon: ScrollTextIcon }),
+      ],
     },
   ];
 }
@@ -74,9 +109,14 @@ function navGroups(active: string): SidebarProps["groups"] {
 function footerItems(active: string): SidebarProps["footerItems"] {
   const mark = <T extends { id: string }>(item: T) => ({ ...item, active: item.id === active });
   return [
-    mark({ id: "tokens", label: t`Мои токены`, href: "/me/tokens", icon: KeyRoundIcon }),
-    mark({ id: "actions", label: t`Мои действия`, href: "/me/actions", icon: HistoryIcon }),
-    mark({ id: "settings", label: t`Настройки`, href: "/settings", icon: SettingsIcon }),
+    mark({ id: "tokens", label: i18n._(msg`Мои токены`), href: "/me/tokens", icon: KeyRoundIcon }),
+    mark({
+      id: "actions",
+      label: i18n._(msg`Мои действия`),
+      href: "/me/actions",
+      icon: HistoryIcon,
+    }),
+    mark({ id: "settings", label: i18n._(msg`Настройки`), href: "/settings", icon: SettingsIcon }),
   ];
 }
 
@@ -99,6 +139,7 @@ function sidebarFor(active: string): SidebarProps {
 
 /** Рамка экрана на реальном AppShell: сайдбар CRANE, topbar с палитрой, колокольчиком и аккаунтом. */
 export function ScreenFrame({ active, breadcrumbs, banners, children }: Props) {
+  const { t } = useLingui();
   const workspace = WORKSPACES[0];
   const initials = CURRENT_USER.initials;
   const name = CURRENT_USER.name;

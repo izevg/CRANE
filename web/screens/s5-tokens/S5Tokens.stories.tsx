@@ -1,8 +1,9 @@
-// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
-import { plural, t } from "@lingui/core/macro";
+import { msg, plural } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useCallback, useId, useMemo, useState } from "react";
 import { expect, within } from "storybook/test";
+import { i18n } from "~/shared/lib/i18n";
 import { type Action, CopyableId } from "~/shared/ui/actions";
 import { CodeBlock, columnHelper, DataTable } from "~/shared/ui/data-display";
 import { SecretOnceDialog } from "~/shared/ui/dialogs";
@@ -46,17 +47,17 @@ function segments() {
   return [
     {
       value: "active",
-      label: t`Активные`,
+      label: i18n._(msg`Активные`),
       count: ACTIVE_TOKENS,
     },
     {
       value: "revoked",
-      label: t`Отозванные`,
+      label: i18n._(msg`Отозванные`),
       count: REVOKED_TOKENS,
     },
     {
       value: "all",
-      label: t`Все`,
+      label: i18n._(msg`Все`),
       count: TOKENS.length,
     },
   ] as const;
@@ -66,15 +67,15 @@ function ttlSegments() {
   return [
     {
       value: "7",
-      label: t`7 дней`,
+      label: i18n._(msg`7 дней`),
     },
     {
       value: "30",
-      label: t`30 дней`,
+      label: i18n._(msg`30 дней`),
     },
     {
       value: "90",
-      label: t`90 дней`,
+      label: i18n._(msg`90 дней`),
     },
   ] as const;
 }
@@ -85,22 +86,26 @@ const MUTED = "text-muted-foreground";
 
 function expiryCell(row: TokenRow) {
   if (row.revoked !== undefined) {
-    return <span className={MUTED}>{t`Отозван ${row.revoked}`}</span>;
+    return <span className={MUTED}>{i18n._(msg`Отозван ${row.revoked}`)}</span>;
   }
   if (row.expiresInDays === null) {
-    return <span>{t`Не истекает`}</span>;
+    return <span>{i18n._(msg`Не истекает`)}</span>;
   }
   if (row.expiresInDays <= EXPIRY_WARNING_DAYS) {
     return (
       <StatusBadge
         tone="warning"
-        label={t`${plural(row.expiresInDays, { one: "через # день", few: "через # дня", many: "через # дней", other: "через # дня" })}`}
+        label={i18n._(
+          msg`${plural(row.expiresInDays, { one: "через # день", few: "через # дня", many: "через # дней", other: "через # дня" })}`,
+        )}
       />
     );
   }
   return (
     <span>
-      {t`${plural(row.expiresInDays, { one: "через # день", few: "через # дня", many: "через # дней", other: "через # дня" })}`}
+      {i18n._(
+        msg`${plural(row.expiresInDays, { one: "через # день", few: "через # дня", many: "через # дней", other: "через # дня" })}`,
+      )}
     </span>
   );
 }
@@ -109,21 +114,25 @@ function lastUsedCell(row: TokenRow) {
   const days = row.lastUsedDaysAgo;
   const muted = row.revoked === undefined ? "" : MUTED;
   if (days === null) {
-    return <span className={muted || MUTED}>{t`Не использовался`}</span>;
+    return <span className={muted || MUTED}>{i18n._(msg`Не использовался`)}</span>;
   }
   if (days >= UNUSED_WARNING_DAYS && row.revoked === undefined) {
     return (
       <StatusBadge
         tone="warning"
-        label={t`${plural(days, { one: "не использовался # день", few: "не использовался # дня", many: "не использовался # дней", other: "не использовался # дня" })}`}
+        label={i18n._(
+          msg`${plural(days, { one: "не использовался # день", few: "не использовался # дня", many: "не использовался # дней", other: "не использовался # дня" })}`,
+        )}
       />
     );
   }
   return (
     <span className={muted}>
       {days === 0
-        ? t`Сегодня`
-        : t`${plural(days, { one: "# день назад", few: "# дня назад", many: "# дней назад", other: "# дня назад" })}`}
+        ? i18n._(msg`Сегодня`)
+        : i18n._(
+            msg`${plural(days, { one: "# день назад", few: "# дня назад", many: "# дней назад", other: "# дня назад" })}`,
+          )}
     </span>
   );
 }
@@ -140,7 +149,7 @@ function scopesCell(row: TokenRow) {
         {row.scopes}
       </PopoverTrigger>
       <PopoverContent>
-        <PopoverTitle>{t`Права токена ${row.name}`}</PopoverTitle>
+        <PopoverTitle>{i18n._(msg`Права токена ${row.name}`)}</PopoverTitle>
         <ul className="list-disc space-y-0.5 pl-4 text-body">
           {row.scopeList.map((scope) => (
             <li key={scope}>{scope}</li>
@@ -155,7 +164,7 @@ const helper = columnHelper<TokenRow>();
 
 const columns = helper.columns([
   helper.accessor("name", {
-    header: () => t`Название`,
+    header: () => i18n._(msg`Название`),
     meta: { priority: 1 },
     cell: (info) => (
       <span className={info.row.original.revoked === undefined ? "font-semibold" : MUTED}>
@@ -164,28 +173,28 @@ const columns = helper.columns([
     ),
   }),
   helper.accessor("kind", {
-    header: () => t`Тип`,
+    header: () => i18n._(msg`Тип`),
     meta: { priority: 2 },
     cell: (info) => (
       <span className={info.row.original.revoked === undefined ? "" : MUTED}>
-        {info.getValue() === "session" ? t`Сессионный · 12 ч` : t`Долгоживущий`}
+        {info.getValue() === "session" ? i18n._(msg`Сессионный · 12 ч`) : i18n._(msg`Долгоживущий`)}
       </span>
     ),
   }),
   helper.accessor("prefix", {
-    header: () => t`Префикс`,
+    header: () => i18n._(msg`Префикс`),
     meta: { priority: 1 },
     cell: (info) => (
-      <CopyableId value={info.getValue()} full label={t`Скопировать префикс токена`} />
+      <CopyableId value={info.getValue()} full label={i18n._(msg`Скопировать префикс токена`)} />
     ),
   }),
   helper.accessor("scopes", {
-    header: () => t`Права`,
+    header: () => i18n._(msg`Права`),
     meta: { priority: 2 },
     cell: (info) => scopesCell(info.row.original),
   }),
   helper.accessor("created", {
-    header: () => t`Создан`,
+    header: () => i18n._(msg`Создан`),
     meta: { priority: 2 },
     cell: (info) => (
       <span className={info.row.original.revoked === undefined ? "" : MUTED}>
@@ -195,13 +204,13 @@ const columns = helper.columns([
   }),
   helper.display({
     id: "expires",
-    header: () => t`Истекает`,
+    header: () => i18n._(msg`Истекает`),
     meta: { priority: 2 },
     cell: (info) => expiryCell(info.row.original),
   }),
   helper.display({
     id: "lastUsed",
-    header: () => t`Последнее использование`,
+    header: () => i18n._(msg`Последнее использование`),
     meta: { priority: 2 },
     cell: (info) => lastUsedCell(info.row.original),
   }),
@@ -230,6 +239,7 @@ function NewTokenSheet({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const { t } = useLingui();
   const [ttl, setTtl] = useState("30");
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
   const rightsId = useId();
@@ -299,13 +309,14 @@ function NewTokenSheet({
 
 // Спека волны 2: screens S5 — будущий pages/tokens + widgets/tokens-table
 function TokensTable({ scope, query }: { scope: Scope; query: string }) {
+  const { t } = useLingui();
   const data = useMemo(() => TOKENS.filter((row) => matches(row, scope, query)), [scope, query]);
   const actions = useCallback(
     (row: TokenRow): readonly Action[] =>
       row.revoked === undefined
         ? [{ label: t`Отозвать`, run: { onSelect: () => undefined }, destructive: true }]
         : [],
-    [],
+    [t],
   );
   return (
     <DataTable
@@ -320,12 +331,15 @@ function TokensTable({ scope, query }: { scope: Scope; query: string }) {
 }
 
 function EmptyTokens({ onIssue }: { onIssue: () => void }) {
+  const { t } = useLingui();
   return (
     <div className="flex flex-col items-center gap-4 rounded-xl bg-card py-6 shadow-card">
       <EmptyState
         variant="first-run"
         title={t`Токенов пока нет`}
-        description={t`Токен нужен пакетным менеджерам и CLI. Для входа из терминала хватит cctl login.`}
+        description={i18n._(
+          msg`Токен нужен пакетным менеджерам и CLI. Для входа из терминала хватит cctl login.`,
+        )}
         primary={{ label: t`Выпустить токен`, run: { onSelect: onIssue } }}
       />
       <div className="w-full max-w-md px-4">
@@ -342,6 +356,7 @@ function EmptyTokens({ onIssue }: { onIssue: () => void }) {
 type Props = { empty?: boolean; sheet?: boolean; secret?: boolean };
 
 function S5Page({ empty = false, sheet = false, secret = false }: Props) {
+  const { t } = useLingui();
   const [scope, setScope] = useState<Scope>("all");
   const [query, setQuery] = useState("");
   const [sheetOpen, setSheetOpen] = useState(sheet);
@@ -401,6 +416,7 @@ function S5Page({ empty = false, sheet = false, secret = false }: Props) {
 }
 
 function Screen(props: Props) {
+  const { t } = useLingui();
   return (
     <ScreenFrame
       active="tokens"

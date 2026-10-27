@@ -1,5 +1,5 @@
-// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
-import { t } from "@lingui/core/macro";
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   FlameIcon,
@@ -60,11 +60,11 @@ function dimensions() {
   return {
     team: {
       rows: BY_TEAM,
-      column: t`Команда`,
+      column: i18n._(msg`Команда`),
     },
     format: {
       rows: BY_FORMAT,
-      column: t`Формат`,
+      column: i18n._(msg`Формат`),
     },
   } as const;
 }
@@ -107,7 +107,9 @@ const summary = () => {
   const peakTime = timeOf(P95_PEAK.t);
   const overMinutes = activeFormat().number(OVER_SLO * 5);
   const totalMinutes = activeFormat().number(POINTS * 5);
-  return t`Задержки за 24 ч, шаг 5 мин. p95: в среднем ${average} мс, максимум ${peak} мс в ${peakTime}. p99 выше SLO ${SLO_MS} мс ${overMinutes} мин из ${totalMinutes}.`;
+  return i18n._(
+    msg`Задержки за 24 ч, шаг 5 мин. p95: в среднем ${average} мс, максимум ${peak} мс в ${peakTime}. p99 выше SLO ${SLO_MS} мс ${overMinutes} мин из ${totalMinutes}.`,
+  );
 };
 
 // ---------------------------------------------------------------- inline-блоки
@@ -127,43 +129,43 @@ function components(): readonly Health[] {
     {
       name: "Upstream npmjs",
       tone: "error",
-      label: t`Недоступен`,
-      caption: t`с 13:42 · клиенты получают кэш до 7 дней`,
+      label: i18n._(msg`Недоступен`),
+      caption: i18n._(msg`с 13:42 · клиенты получают кэш до 7 дней`),
       href: "/platform/upstreams",
     },
     {
-      name: t`LLM-шлюз`,
+      name: i18n._(msg`LLM-шлюз`),
       tone: "warning",
-      label: t`Деградация`,
-      caption: t`таймаут 12 с · включена резервная модель`,
+      label: i18n._(msg`Деградация`),
+      caption: i18n._(msg`таймаут 12 с · включена резервная модель`),
       href: "/platform/integrations",
     },
     {
       name: "PostgreSQL",
       tone: "success",
-      label: t`Работает`,
-      caption: t`p95 1,8 мс`,
+      label: i18n._(msg`Работает`),
+      caption: i18n._(msg`p95 1,8 мс`),
       href: "/status",
     },
     {
       name: "Valkey",
       tone: "success",
-      label: t`Работает`,
-      caption: t`p95 0,4 мс`,
+      label: i18n._(msg`Работает`),
+      caption: i18n._(msg`p95 0,4 мс`),
       href: "/status",
     },
     {
       name: "S3 main",
       tone: "success",
-      label: t`Работает`,
-      caption: t`p95 22 мс`,
+      label: i18n._(msg`Работает`),
+      caption: i18n._(msg`p95 22 мс`),
       href: "/status",
     },
     {
       name: "Trivy",
       tone: "success",
-      label: t`Работает`,
-      caption: t`база v2026.10.27`,
+      label: i18n._(msg`Работает`),
+      caption: i18n._(msg`база v2026.10.27`),
       href: "/platform/integrations",
     },
   ];
@@ -198,35 +200,35 @@ function quick(): readonly Quick[] {
     {
       icon: FlaskConicalIcon,
       action: {
-        label: t`Пробный прогон retention`,
+        label: i18n._(msg`Пробный прогон retention`),
         run: { onSelect: fn() },
       },
-      caption: t`Покажет кандидатов на удаление; ничего не удаляет`,
+      caption: i18n._(msg`Покажет кандидатов на удаление; ничего не удаляет`),
     },
     {
       icon: Trash2Icon,
       action: {
-        label: t`Применить retention`,
+        label: i18n._(msg`Применить retention`),
         run: { onSelect: fn() },
         stepUp: true,
       },
-      caption: t`Удалит 1 284 версии (212 ГБ) без возможности отката`,
+      caption: i18n._(msg`Удалит 1 284 версии (212 ГБ) без возможности отката`),
     },
     {
       icon: FlameIcon,
       action: {
-        label: t`Прогреть кэш по lockfile`,
+        label: i18n._(msg`Прогреть кэш по lockfile`),
         run: { href: "/platform/readiness" },
       },
-      caption: t`Поставит загрузку зависимостей в очередь`,
+      caption: i18n._(msg`Поставит загрузку зависимостей в очередь`),
     },
     {
       icon: ShieldCheckIcon,
       action: {
-        label: t`Проверить целостность`,
+        label: i18n._(msg`Проверить целостность`),
         run: { onSelect: fn() },
       },
-      caption: t`Запустит асинхронную проверку, откроется E7`,
+      caption: i18n._(msg`Запустит асинхронную проверку, откроется E7`),
     },
   ];
 }
@@ -313,21 +315,21 @@ function retentionRows(): readonly TopRow[] {
   return [
     {
       id: "r1",
-      title: t`Версии без загрузок 18 мес · ${npmRepository}`,
-      caption: t`612 версий · 94 ГБ`,
-      badge: t`правило 1`,
+      title: i18n._(msg`Версии без загрузок 18 мес · ${npmRepository}`),
+      caption: i18n._(msg`612 версий · 94 ГБ`),
+      badge: i18n._(msg`правило 1`),
     },
     {
       id: "r2",
-      title: t`Snapshot-сборки старше 30 дн · ${mavenRepository}`,
-      caption: t`498 версий · 71 ГБ`,
-      badge: t`правило 2`,
+      title: i18n._(msg`Snapshot-сборки старше 30 дн · ${mavenRepository}`),
+      caption: i18n._(msg`498 версий · 71 ГБ`),
+      badge: i18n._(msg`правило 2`),
     },
     {
       id: "r3",
-      title: t`Образы без тега старше 14 дн · oci-hosted`,
-      caption: t`174 версии · 47 ГБ`,
-      badge: t`правило 3`,
+      title: i18n._(msg`Образы без тега старше 14 дн · oci-hosted`),
+      caption: i18n._(msg`174 версии · 47 ГБ`),
+      badge: i18n._(msg`правило 3`),
     },
   ];
 }
@@ -340,8 +342,8 @@ const deadJobs = (): readonly TopRow[] =>
   ].map((job) => ({
     id: job.id,
     title: `${job.kind} · ${job.id}`,
-    caption: t`попыток ${job.attempts} · Последняя ошибка: ${job.error}`,
-    action: { label: t`Повторить ${job.id}`, run: { onSelect: fn() } },
+    caption: i18n._(msg`попыток ${job.attempts} · Последняя ошибка: ${job.error}`),
+    action: { label: i18n._(msg`Повторить ${job.id}`), run: { onSelect: fn() } },
   }));
 
 function integrityRows(): readonly TopRow[] {
@@ -349,18 +351,18 @@ function integrityRows(): readonly TopRow[] {
   return [
     {
       id: "i1",
-      title: t`Последняя проверка`,
-      caption: t`27 окт. 2026, 03:10 · 12 мин · запустил ${runBy}`,
+      title: i18n._(msg`Последняя проверка`),
+      caption: i18n._(msg`27 окт. 2026, 03:10 · 12 мин · запустил ${runBy}`),
     },
     {
       id: "i2",
-      title: t`Проверено`,
-      caption: t`1 % объектов: 4 812 из 481 200`,
+      title: i18n._(msg`Проверено`),
+      caption: i18n._(msg`1 % объектов: 4 812 из 481 200`),
     },
     {
       id: "i3",
-      title: t`Следующая`,
-      caption: t`28 окт. 2026, 03:10 по расписанию`,
+      title: i18n._(msg`Следующая`),
+      caption: i18n._(msg`28 окт. 2026, 03:10 по расписанию`),
     },
   ];
 }
@@ -370,6 +372,7 @@ function integrityRows(): readonly TopRow[] {
 type Mode = "normal" | "degraded";
 
 function Tiles({ mode }: { mode: Mode }) {
+  const { t } = useLingui();
   const degraded = mode === "degraded";
   return (
     <div className="grid grid-cols-1 gap-4 @xl/page:grid-cols-2 @3xl/page:grid-cols-5">
@@ -418,6 +421,7 @@ function Tiles({ mode }: { mode: Mode }) {
 }
 
 function Usage() {
+  const { t } = useLingui();
   const [dimension, setDimension] = useState<Dimension>("team");
   const { rows, column } = dimensions()[dimension];
   const pick = useCallback((next: readonly string[]) => {
@@ -455,6 +459,7 @@ function Usage() {
 }
 
 function Header() {
+  const { t } = useLingui();
   const [window, setWindow] = useState("24h");
   const pickWindow = useCallback(
     (next: readonly string[]) => setWindow((prev) => next[0] ?? prev),
@@ -495,6 +500,7 @@ function Header() {
 }
 
 function S6Platform({ mode = "normal" }: { mode?: Mode }) {
+  const { t } = useLingui();
   return (
     <ScreenFrame
       active="overview"

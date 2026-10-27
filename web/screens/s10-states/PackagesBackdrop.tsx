@@ -1,6 +1,7 @@
-// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
-import { t } from "@lingui/core/macro";
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import { type ReactNode, useMemo } from "react";
+import { i18n } from "~/shared/lib/i18n";
 import type { Action } from "~/shared/ui/actions";
 import { columnHelper, DataTable } from "~/shared/ui/data-display";
 import { PageHeader } from "~/shared/ui/layout";
@@ -70,37 +71,37 @@ function buildRows(): PackageRow[] {
 const helper = columnHelper<PackageRow>();
 const columns = helper.columns([
   helper.accessor("name", {
-    header: () => t`Пакет`,
+    header: () => i18n._(msg`Пакет`),
     meta: { priority: 1 },
     cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
   }),
   helper.accessor("format", {
-    header: () => t`Формат`,
+    header: () => i18n._(msg`Формат`),
     meta: { priority: 1 },
     cell: (info) => <Badge variant="outline">{info.getValue()}</Badge>,
   }),
   helper.accessor("latest", {
-    header: () => t`Последняя`,
+    header: () => i18n._(msg`Последняя`),
     meta: { priority: 1 },
     cell: (info) => <span className="font-mono">{info.getValue()}</span>,
   }),
   helper.accessor("state", {
-    header: () => t`Состояние`,
+    header: () => i18n._(msg`Состояние`),
     meta: { priority: 2 },
     cell: (info) => <StatusBadge {...versionBadge(info.getValue())} />,
   }),
-  helper.accessor("repository", { header: () => t`Репозиторий`, meta: { priority: 2 } }),
+  helper.accessor("repository", { header: () => i18n._(msg`Репозиторий`), meta: { priority: 2 } }),
   helper.accessor("downloads", {
-    header: () => t`Загрузок за 30 дн`,
+    header: () => i18n._(msg`Загрузок за 30 дн`),
     meta: { priority: 3, numeric: true },
     cell: (info) => activeFormat().number(info.getValue()),
   }),
-  helper.accessor("owner", { header: () => t`Владелец`, meta: { priority: 3 } }),
+  helper.accessor("owner", { header: () => i18n._(msg`Владелец`), meta: { priority: 3 } }),
 ]);
 
 const getRowId = (row: PackageRow) => row.id;
 const publishAction = (): Action => ({
-  label: t`Опубликовать пакет`,
+  label: i18n._(msg`Опубликовать пакет`),
   run: { href: "/help/publish" },
 });
 
@@ -115,6 +116,7 @@ type Props = {
  * Спека волны 2: composition §4A — будущий widgets/packages-table.
  */
 export function PackagesBackdrop({ loading = false, children }: Props) {
+  const { t } = useLingui();
   const rows = useMemo(buildRows, []);
   return (
     <div className="flex flex-col gap-6 p-4 lg:p-6">

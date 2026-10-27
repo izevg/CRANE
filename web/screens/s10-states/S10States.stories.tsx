@@ -1,8 +1,9 @@
-// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
-import { t } from "@lingui/core/macro";
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ComponentProps } from "react";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
+import { i18n } from "~/shared/lib/i18n";
 import { showToast } from "~/shared/lib/state";
 import { ConfirmDialog } from "~/shared/ui/dialogs";
 import { EmptyState, ProblemState } from "~/shared/ui/status";
@@ -19,13 +20,14 @@ const BODY = () => within(document.body);
 const REQUEST_ID = "req_01JBX7Q4M2K9T5V8N3PZ6H1WRD";
 function home() {
   return {
-    label: t`На главную`,
+    label: i18n._(msg`На главную`),
     run: { href: "/" },
   } as const;
 }
 
 /** Крошки строятся при рендере: текст зависит от активной локали, а `args` читаются при загрузке модуля. */
 function Frame(props: ComponentProps<typeof ScreenFrame>) {
+  const { t } = useLingui();
   const breadcrumbs = {
     trail: [{ label: t`Каталог`, href: "/search" }],
     current: t`Мои пакеты`,
@@ -77,10 +79,12 @@ const empty: Story = {
       <PackagesBackdrop>
         <EmptyState
           variant="first-run"
-          title={t`Пакетов пока нет`}
-          description={t`Опубликуйте первый пакет в репозиторий вашего workspace или перенесите существующие из Nexus.`}
-          primary={{ label: t`Как опубликовать`, run: { href: "/help/publish" } }}
-          secondary={{ label: t`Импорт из Nexus`, run: { href: "/import/nexus" } }}
+          title={i18n._(msg`Пакетов пока нет`)}
+          description={i18n._(
+            msg`Опубликуйте первый пакет в репозиторий вашего workspace или перенесите существующие из Nexus.`,
+          )}
+          primary={{ label: i18n._(msg`Как опубликовать`), run: { href: "/help/publish" } }}
+          secondary={{ label: i18n._(msg`Импорт из Nexus`), run: { href: "/import/nexus" } }}
         />
       </PackagesBackdrop>
     </Frame>
@@ -104,19 +108,21 @@ const error: Story = {
           headingLevel={1}
           problem={{
             kind: "error",
-            title: t`Не удалось опубликовать`,
-            detail: t`Превышен размер публикации: 14 МБ при лимите 10 МБ`,
+            title: i18n._(msg`Не удалось опубликовать`),
+            detail: i18n._(msg`Превышен размер публикации: 14 МБ при лимите 10 МБ`),
             ruleId: "max-publish-size",
             requestId: REQUEST_ID,
             remediation: [
-              t`Уменьшите пакет: уберите артефакты сборки и тестовые данные из файлов публикации`,
-              t`Попросите владельца репозитория npm-hosted поднять лимит размера`,
+              i18n._(
+                msg`Уменьшите пакет: уберите артефакты сборки и тестовые данные из файлов публикации`,
+              ),
+              i18n._(msg`Попросите владельца репозитория npm-hosted поднять лимит размера`),
             ],
             diagnostics: {
-              label: t`Открыть диагностику`,
+              label: i18n._(msg`Открыть диагностику`),
               run: { href: `/diagnostics/${REQUEST_ID}` },
             },
-            retry: { label: t`Повторить`, run: { onSelect: fn() } },
+            retry: { label: i18n._(msg`Повторить`), run: { onSelect: fn() } },
           }}
         />
       </div>
@@ -145,12 +151,12 @@ const forbidden: Story = {
             kind: "forbidden",
             ruleId: "ws-billing-readers",
             requestId: REQUEST_ID,
-            contact: t`Петрова А. (владелец workspace billing)`,
+            contact: i18n._(msg`Петрова А. (владелец workspace billing)`),
             remediation: [
-              t`Запросите роль maintainer у владельца workspace`,
-              t`Повторите действие после подтверждения доступа`,
+              i18n._(msg`Запросите роль maintainer у владельца workspace`),
+              i18n._(msg`Повторите действие после подтверждения доступа`),
             ],
-            requestAccess: { label: t`Запросить доступ`, run: { onSelect: fn() } },
+            requestAccess: { label: i18n._(msg`Запросить доступ`), run: { onSelect: fn() } },
             home: home(),
           }}
         />
@@ -180,8 +186,8 @@ const notFound: Story = {
             search: (
               <input
                 type="search"
-                aria-label={t`Поиск пакета`}
-                placeholder={t`Имя пакета`}
+                aria-label={i18n._(msg`Поиск пакета`)}
+                placeholder={i18n._(msg`Имя пакета`)}
                 className="h-9 w-full rounded-md border border-input bg-card px-3 text-body"
               />
             ),
@@ -207,19 +213,19 @@ function paletteNav() {
   return [
     {
       id: "acme-pkgs",
-      label: t`Пакеты workspace acme-platform`,
+      label: i18n._(msg`Пакеты workspace acme-platform`),
       href: "/packages?ws=acme-platform",
-      hint: t`Раздел`,
+      hint: i18n._(msg`Раздел`),
     },
     {
       id: "acme-tokens",
-      label: t`Токены acme-platform`,
+      label: i18n._(msg`Токены acme-platform`),
       href: "/me/tokens?ws=acme-platform",
-      hint: t`Доступ`,
+      hint: i18n._(msg`Доступ`),
     },
     {
       id: "audit",
-      label: t`Журнал`,
+      label: i18n._(msg`Журнал`),
       href: "/audit",
     },
   ] as const;
@@ -253,15 +259,15 @@ const PALETTE_PACKAGES = [
 function paletteActions() {
   return [
     {
-      label: t`Выпустить токен для acme-ci`,
+      label: i18n._(msg`Выпустить токен для acme-ci`),
       run: { onSelect: fn() },
     },
     {
-      label: t`Открыть диагностику по request_id`,
+      label: i18n._(msg`Открыть диагностику по request_id`),
       run: { href: "/diagnostics" },
     },
     {
-      label: t`Отозвать токены acme-platform`,
+      label: i18n._(msg`Отозвать токены acme-platform`),
       run: { onSelect: fn() },
       stepUp: true,
       destructive: true,
@@ -310,9 +316,9 @@ function notificationItems(): readonly NotificationItem[] {
       id: "n1",
       category: "security",
       tone: "error",
-      title: t`P0 без действия: CVE-2026-31337 в @acme/ui 1.4.2`,
+      title: i18n._(msg`P0 без действия: CVE-2026-31337 в @acme/ui 1.4.2`),
       time: ago(12),
-      caption: t`@acme/ui · npm · SLA истёк`,
+      caption: i18n._(msg`@acme/ui · npm · SLA истёк`),
       href: "/findings/CVE-2026-31337",
       unread: true,
     },
@@ -320,7 +326,7 @@ function notificationItems(): readonly NotificationItem[] {
       id: "n2",
       category: "access",
       tone: "warning",
-      title: t`Токен crp_9f8e7d6c истекает через 3 дня`,
+      title: i18n._(msg`Токен crp_9f8e7d6c истекает через 3 дня`),
       time: ago(95),
       caption: "ci-deploy · acme-platform",
       href: "/me/tokens/crp_9f8e7d6c",
@@ -330,9 +336,9 @@ function notificationItems(): readonly NotificationItem[] {
       id: "n3",
       category: "platform",
       tone: "warning",
-      title: t`Квота billing: 85% хранилища`,
+      title: i18n._(msg`Квота billing: 85% хранилища`),
       time: ago(180),
-      caption: t`workspace billing · 34 из 40 ГБ`,
+      caption: i18n._(msg`workspace billing · 34 из 40 ГБ`),
       href: "/platform/storages",
       unread: true,
     },
@@ -340,9 +346,9 @@ function notificationItems(): readonly NotificationItem[] {
       id: "n4",
       category: "platform",
       tone: "warning",
-      title: t`Upstream npmjs недоступен`,
+      title: i18n._(msg`Upstream npmjs недоступен`),
       time: ago(240),
-      caption: t`Данные от 25 окт, stale-if-error`,
+      caption: i18n._(msg`Данные от 25 окт, stale-if-error`),
       href: "/platform",
       unread: false,
     },
@@ -350,7 +356,7 @@ function notificationItems(): readonly NotificationItem[] {
       id: "n5",
       category: "security",
       tone: "success",
-      title: t`lodash 4.17.21 выпущена из карантина`,
+      title: i18n._(msg`lodash 4.17.21 выпущена из карантина`),
       time: ago(60 * 26),
       caption: "lodash · npm",
       href: "/packages/lodash",
@@ -360,7 +366,7 @@ function notificationItems(): readonly NotificationItem[] {
       id: "n6",
       category: "access",
       tone: "info",
-      title: t`Петрова А. одобрила запрос доступа к acme-billing-client`,
+      title: i18n._(msg`Петрова А. одобрила запрос доступа к acme-billing-client`),
       time: ago(60 * 30),
       href: "/me/actions",
       unread: false,
@@ -386,7 +392,7 @@ const notifications: Story = {
           onCategoryChange={fn()}
           onMarkRead={fn()}
           onReadAll={fn()}
-          loadMore={{ label: t`Загрузить ещё`, run: { onSelect: fn() } }}
+          loadMore={{ label: i18n._(msg`Загрузить ещё`), run: { onSelect: fn() } }}
         />
       </div>
     </>
@@ -419,12 +425,14 @@ const stepUp: Story = {
       <ConfirmDialog
         open
         onOpenChange={fn()}
-        title={t`Подтвердите вход`}
-        description={t`Действие «Раскрыть данные события» требует подтверждения вторым фактором`}
-        confirm={{ label: t`Продолжить в Keycloak`, run: { onSelect: fn() } }}
+        title={i18n._(msg`Подтвердите вход`)}
+        description={i18n._(
+          msg`Действие «Раскрыть данные события» требует подтверждения вторым фактором`,
+        )}
+        confirm={{ label: i18n._(msg`Продолжить в Keycloak`), run: { onSelect: fn() } }}
       >
         <p className="text-caption text-muted-foreground">
-          {t`После подтверждения вы вернётесь к действию, данные формы сохранятся`}
+          {i18n._(msg`После подтверждения вы вернётесь к действию, данные формы сохранятся`)}
         </p>
       </ConfirmDialog>
     </>
@@ -447,30 +455,36 @@ function bannerItems(): readonly Banner[] {
       id: "p0",
       tone: "error",
       urgent: true,
-      text: t`P0 без действия более 1 часа: CVE-2026-31337 в @acme/ui 1.4.2`,
+      text: i18n._(msg`P0 без действия более 1 часа: CVE-2026-31337 в @acme/ui 1.4.2`),
       action: {
-        label: t`Открыть находку`,
+        label: i18n._(msg`Открыть находку`),
         run: { href: "/findings/CVE-2026-31337" },
       },
     },
     {
       id: "read-only",
       tone: "warning",
-      text: t`Только чтение: основная БД недоступна, публикация отключена. Повторите через 2 мин`,
+      text: i18n._(
+        msg`Только чтение: основная БД недоступна, публикация отключена. Повторите через 2 мин`,
+      ),
       action: {
-        label: t`Статус платформы`,
+        label: i18n._(msg`Статус платформы`),
         run: { href: "/platform" },
       },
     },
     {
       id: "sod",
       tone: "warning",
-      text: t`Включён режим разделения обязанностей: действия требуют второго подтверждения`,
+      text: i18n._(
+        msg`Включён режим разделения обязанностей: действия требуют второго подтверждения`,
+      ),
     },
     {
       id: "upstream",
       tone: "warning",
-      text: t`Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)`,
+      text: i18n._(
+        msg`Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)`,
+      ),
     },
   ];
 }

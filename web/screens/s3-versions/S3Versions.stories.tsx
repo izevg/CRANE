@@ -1,8 +1,9 @@
-// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
-import { t } from "@lingui/core/macro";
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { expect, within } from "storybook/test";
+import { i18n } from "~/shared/lib/i18n";
 import { type Action, ActionButton, CopyableId } from "~/shared/ui/actions";
 import {
   columnHelper,
@@ -51,6 +52,7 @@ const helper = columnHelper<VersionRow>();
 
 /** Состояние + причина в одной ячейке (patterns §9): причина блокировки не прячется в флагах. */
 function StateCell({ row }: { row: VersionRow }) {
+  const { t } = useLingui();
   return (
     <span className="flex flex-wrap items-center gap-2">
       <StatusBadge {...versionBadge(row.state)} />
@@ -68,13 +70,13 @@ function StateCell({ row }: { row: VersionRow }) {
 
 const columns = helper.columns([
   helper.accessor("version", {
-    header: () => t`Версия`,
+    header: () => i18n._(msg`Версия`),
     meta: { priority: 1 },
     cell: (info) =>
       info.row.original.state === "deleted" ? (
         <s
           className="font-mono text-muted-foreground"
-          title={t`Номер версии нельзя использовать повторно`}
+          title={i18n._(msg`Номер версии нельзя использовать повторно`)}
         >
           {info.getValue()}
         </s>
@@ -83,12 +85,12 @@ const columns = helper.columns([
       ),
   }),
   helper.accessor("state", {
-    header: () => t`Состояние`,
+    header: () => i18n._(msg`Состояние`),
     meta: { priority: 1 },
     cell: (info) => <StateCell row={info.row.original} />,
   }),
   helper.accessor("flags", {
-    header: () => t`Флаги`,
+    header: () => i18n._(msg`Флаги`),
     meta: { priority: 2 },
     cell: (info) => (
       <span className="flex gap-1">
@@ -101,12 +103,12 @@ const columns = helper.columns([
     ),
   }),
   helper.accessor("publishedAt", {
-    header: () => t`Опубликована`,
+    header: () => i18n._(msg`Опубликована`),
     meta: { priority: 2 },
     cell: (info) => <Moment iso={info.getValue()} />,
   }),
   helper.accessor("by", {
-    header: () => t`Кем`,
+    header: () => i18n._(msg`Кем`),
     meta: { priority: 2 },
     cell: (info) => {
       const by = info.getValue();
@@ -114,7 +116,7 @@ const columns = helper.columns([
     },
   }),
   helper.accessor("source", {
-    header: () => t`Источник`,
+    header: () => i18n._(msg`Источник`),
     meta: { priority: 3 },
     cell: (info) => <Moment iso={info.getValue()} />,
   }),
@@ -126,27 +128,27 @@ function segments() {
   return [
     {
       value: "all",
-      label: t`Все`,
+      label: i18n._(msg`Все`),
       count: STATE_COUNTS.all,
     },
     {
       value: "released",
-      label: t`Выпущенные`,
+      label: i18n._(msg`Выпущенные`),
       count: STATE_COUNTS.released,
     },
     {
       value: "quarantined",
-      label: t`Карантин`,
+      label: i18n._(msg`Карантин`),
       count: STATE_COUNTS.quarantined,
     },
     {
       value: "blocked",
-      label: t`Заблокированные`,
+      label: i18n._(msg`Заблокированные`),
       count: STATE_COUNTS.blocked,
     },
     {
       value: "deleted",
-      label: t`Удалённые`,
+      label: i18n._(msg`Удалённые`),
       count: STATE_COUNTS.deleted,
     },
   ] as const;
@@ -156,12 +158,12 @@ type Segment = ReturnType<typeof segments>[number]["value"];
 
 const rowActions = (row: VersionRow): readonly Action[] =>
   row.state === "deleted"
-    ? [{ label: t`Открыть`, run: { href: `/packages/acme-ui/versions/${row.version}` } }]
+    ? [{ label: i18n._(msg`Открыть`), run: { href: `/packages/acme-ui/versions/${row.version}` } }]
     : [
-        { label: t`Открыть`, run: { href: `/packages/acme-ui/versions/${row.version}` } },
-        { label: t`Скачать SBOM`, run: { onSelect: () => undefined } },
+        { label: i18n._(msg`Открыть`), run: { href: `/packages/acme-ui/versions/${row.version}` } },
+        { label: i18n._(msg`Скачать SBOM`), run: { onSelect: () => undefined } },
         {
-          label: t`Удалить…`,
+          label: i18n._(msg`Удалить…`),
           run: { onSelect: () => undefined },
           destructive: true,
           stepUp: true,
@@ -193,24 +195,24 @@ const lifecycle = () =>
     {
       id: "published",
       time: SELECTED_AT,
-      title: t`Опубликована`,
+      title: i18n._(msg`Опубликована`),
       actor: "crr_9f8e7d6c · ui-release",
       source: "pipeline #4521",
     },
     {
       id: "sha",
       time: "2026-10-27T13:42:10Z",
-      title: t`SHA-256 подтверждён`,
-      detail: <CopyableId value={SHA256} label={t`Скопировать SHA-256`} />,
+      title: i18n._(msg`SHA-256 подтверждён`),
+      detail: <CopyableId value={SHA256} label={i18n._(msg`Скопировать SHA-256`)} />,
     },
     {
       id: "scan",
       time: "2026-10-27T13:48:00Z",
-      title: t`Скан: найдена 1 уязвимость`,
+      title: i18n._(msg`Скан: найдена 1 уязвимость`),
       tone: "warning",
       status: {
         tone: "warning",
-        label: t`Карантин`,
+        label: i18n._(msg`Карантин`),
       },
       source: "Trivy",
       link: { label: "CVE-2026-31337", run: { href: "/findings/CVE-2026-31337" } },
@@ -218,23 +220,23 @@ const lifecycle = () =>
     {
       id: "gates",
       time: "2026-10-27T13:49:00Z",
-      title: t`Гейт безопасности: отказ`,
+      title: i18n._(msg`Гейт безопасности: отказ`),
       tone: "error",
       status: {
         tone: "error",
-        label: t`Не пройден`,
+        label: i18n._(msg`Не пройден`),
       },
     },
     {
       id: "request",
       time: "2026-10-27T14:07:00Z",
-      title: t`Запрос на продвижение в release`,
+      title: i18n._(msg`Запрос на продвижение в release`),
       tone: "info",
       status: {
         tone: "info",
-        label: t`Ждёт AppSec`,
+        label: i18n._(msg`Ждёт AppSec`),
       },
-      actor: t`Иванов И.`,
+      actor: i18n._(msg`Иванов И.`),
     },
   ] as const;
 
@@ -271,6 +273,7 @@ const METADATA = {
 
 // Спека волны 2: S3 «Сводка» (screens.md) — будущий widget версии `VersionSummary`.
 function SummaryTab() {
+  const { t } = useLingui();
   return (
     <div className="flex flex-col gap-6">
       <Callout tone="warning">
@@ -317,6 +320,7 @@ function SummaryTab() {
 }
 
 function FilesTab() {
+  const { t } = useLingui();
   return (
     <Table aria-label={t`Файлы версии 1.4.2`}>
       <TableHeader>
@@ -346,16 +350,17 @@ function FilesTab() {
 
 function panelTabs() {
   return [
-    ["summary", t`Сводка`],
-    ["files", t`Файлы`],
-    ["history", t`История`],
-    ["metadata", t`Метаданные`],
+    ["summary", i18n._(msg`Сводка`)],
+    ["files", i18n._(msg`Файлы`)],
+    ["history", i18n._(msg`История`)],
+    ["metadata", i18n._(msg`Метаданные`)],
   ] as const;
 }
 
 type PanelTab = ReturnType<typeof panelTabs>[number][0];
 
 function PanelContent({ tab }: { tab: PanelTab }) {
+  const { t } = useLingui();
   if (tab === "files") {
     return <FilesTab />;
   }
@@ -384,6 +389,7 @@ function VersionPanel({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useLingui();
   const [tab, setTab] = useState<PanelTab>("summary");
   const changeTab = useCallback((value: unknown) => setTab(value as PanelTab), []);
   return (
@@ -392,7 +398,12 @@ function VersionPanel({
       onOpenChange={onOpenChange}
       title={t`Версия 1.4.2`}
       status={<StatusBadge {...versionBadge("quarantined")} />}
-      menu={[{ label: t`Открыть полностью`, run: { href: "/packages/acme-ui/versions/1.4.2" } }]}
+      menu={[
+        {
+          label: t`Открыть полностью`,
+          run: { href: "/packages/acme-ui/versions/1.4.2" },
+        },
+      ]}
       tabs={
         <Tabs value={tab} onValueChange={changeTab}>
           <TabsList variant="line" aria-label={t`Разделы версии`}>
@@ -409,7 +420,12 @@ function VersionPanel({
         secondary: [{ label: "Yank", run: { onSelect: noop } }],
         menu: [
           { label: t`Скачать SBOM и evidence`, run: { onSelect: noop } },
-          { label: t`Удалить…`, run: { onSelect: noop }, destructive: true, stepUp: true },
+          {
+            label: t`Удалить…`,
+            run: { onSelect: noop },
+            destructive: true,
+            stepUp: true,
+          },
         ],
       }}
     >
@@ -429,6 +445,7 @@ type ScreenProps = { initialPanelOpen?: boolean };
 
 // Спека волны 2: архетипы A + C (composition §4) — будущий widget `PackageVersions`.
 function S3Screen({ initialPanelOpen = true }: ScreenProps) {
+  const { t } = useLingui();
   const [segment, setSegment] = useState<Segment>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>("v-1.4.2");
@@ -470,7 +487,9 @@ function S3Screen({ initialPanelOpen = true }: ScreenProps) {
               <Badge variant="outline">npm-hosted · hosted</Badge>
             </>
           }
-          caption={t`Библиотека интерфейсных компонентов команды web. Владелец: Иванов И.`}
+          caption={i18n._(
+            msg`Библиотека интерфейсных компонентов команды web. Владелец: Иванов И.`,
+          )}
           stats={
             <>
               <StatChip label={t`Версий`} value={STATE_COUNTS.all} />

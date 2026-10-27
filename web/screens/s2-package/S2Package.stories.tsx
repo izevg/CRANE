@@ -1,10 +1,11 @@
-// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
-import { t } from "@lingui/core/macro";
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ChevronDownIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { expect, within } from "storybook/test";
 import { copyToClipboard } from "~/shared/lib/core";
+import { i18n } from "~/shared/lib/i18n";
 import { CopyableId } from "~/shared/ui/actions";
 import { CodeBlock, columnHelper, DataTable, KeyValueList } from "~/shared/ui/data-display";
 import { SegmentedControl } from "~/shared/ui/inputs";
@@ -108,17 +109,17 @@ const rowId = (row: VersionRow) => row.id;
 const helper = columnHelper<VersionRow>();
 const COLUMNS = helper.columns([
   helper.accessor("version", {
-    header: () => t`Версия`,
+    header: () => i18n._(msg`Версия`),
     meta: { priority: 1 },
     cell: (info) => <span className="font-mono font-semibold">{info.getValue()}</span>,
   }),
   helper.accessor("state", {
-    header: () => t`Состояние`,
+    header: () => i18n._(msg`Состояние`),
     meta: { priority: 1 },
     cell: (info) => <StatusBadge {...versionBadge(info.getValue())} />,
   }),
   helper.accessor("flags", {
-    header: () => t`Флаги`,
+    header: () => i18n._(msg`Флаги`),
     meta: { priority: 2 },
     cell: (info) => (
       <span className="flex gap-1">
@@ -131,11 +132,11 @@ const COLUMNS = helper.columns([
     ),
   }),
   helper.accessor("publishedAt", {
-    header: () => t`Опубликована`,
+    header: () => i18n._(msg`Опубликована`),
     meta: { priority: 2 },
     cell: (info) => <Moment iso={info.getValue()} />,
   }),
-  helper.accessor("by", { header: () => t`Кем`, meta: { priority: 3 } }),
+  helper.accessor("by", { header: () => i18n._(msg`Кем`), meta: { priority: 3 } }),
 ]);
 
 const DAY = 86_400_000;
@@ -149,7 +150,9 @@ function stale(): Banner {
   return {
     id: "stale",
     tone: "warning",
-    text: t`Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)`,
+    text: i18n._(
+      msg`Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)`,
+    ),
   };
 }
 
@@ -166,6 +169,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 // Спека волны 2: patterns §7 — будущий shared/ui/install-block (InstallBlock)
 function InstallSection() {
+  const { t } = useLingui();
   const [client, setClient] = useState<Client>("npm");
   const [manual, setManual] = useState(false);
   const toggleManual = useCallback(() => setManual((value) => !value), []);
@@ -220,6 +224,7 @@ function InstallSection() {
 }
 
 function RightColumn({ proxy }: { proxy: boolean }) {
+  const { t } = useLingui();
   return (
     <div className="flex flex-col gap-6">
       <Section title={t`Метаданные`}>
@@ -228,7 +233,11 @@ function RightColumn({ proxy }: { proxy: boolean }) {
             {
               label: "PURL",
               value: (
-                <CopyableId marked={false} value="pkg:npm/%40acme/ui@1.4.2" label={t`Скопировать PURL`} />
+                <CopyableId
+                  marked={false}
+                  value="pkg:npm/%40acme/ui@1.4.2"
+                  label={t`Скопировать PURL`}
+                />
               ),
             },
             {
@@ -301,6 +310,7 @@ function RightColumn({ proxy }: { proxy: boolean }) {
 }
 
 function S2Package({ proxy = false }: { proxy?: boolean }) {
+  const { t } = useLingui();
   const copy = useCallback(() => {
     void copyToClipboard(INSTALL.npm);
   }, []);
@@ -379,7 +389,9 @@ function S2Package({ proxy = false }: { proxy?: boolean }) {
             <Section title={t`Динамика скачиваний`}>
               <TimeSeriesChart
                 title={t`Скачивания за 30 дней`}
-                summary={t`За 30 дней: 12 340 скачиваний, рост к началу периода, максимум 912 в сутки 27 окт`}
+                summary={i18n._(
+                  msg`За 30 дней: 12 340 скачиваний, рост к началу периода, максимум 912 в сутки 27 окт`,
+                )}
                 series={[{ id: "downloads", label: t`Скачивания`, points: DOWNLOADS }]}
                 area
               />

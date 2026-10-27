@@ -6,8 +6,8 @@ import { isLocale, LOCALES, type Locale, setLocale, useLocale } from "~/shared/l
 import { Button, Menu, MenuContent, MenuTrigger } from "~/shared/ui/primitives";
 
 // Название языка пишется на нём самом и не переводится: человек должен найти свой язык при любом выбранном.
+// i18n-fixture: эндонимы языков не переводятся
 const ENDONYMS = {
-  // i18n-ignore: эндоним языка
   ru: "Русский",
   en: "English",
 } satisfies Record<Locale, string>;

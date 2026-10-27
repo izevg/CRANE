@@ -1,8 +1,9 @@
-// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
-import { t } from "@lingui/core/macro";
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type ChangeEvent, useCallback, useId, useState } from "react";
 import { expect, within } from "storybook/test";
+import { i18n } from "~/shared/lib/i18n";
 import { type Action, CopyableId } from "~/shared/ui/actions";
 import { columnHelper, DataTable, JsonViewer, KeyValueList } from "~/shared/ui/data-display";
 import { ConfirmDialog } from "~/shared/ui/dialogs";
@@ -34,7 +35,7 @@ import { desktop, mobile, screenParameters } from "../frame/screen";
 function copyJson(): readonly [Action] {
   return [
     {
-      label: t`Копировать JSON`,
+      label: i18n._(msg`Копировать JSON`),
       run: { onSelect: () => undefined },
     },
   ];
@@ -42,11 +43,11 @@ function copyJson(): readonly [Action] {
 function headerActions(): readonly [Action, Action] {
   return [
     {
-      label: t`Проверить целостность`,
+      label: i18n._(msg`Проверить целостность`),
       run: { onSelect: () => undefined },
     },
     {
-      label: t`Экспорт`,
+      label: i18n._(msg`Экспорт`),
       run: { onSelect: () => undefined },
       stepUp: true,
     },
@@ -59,12 +60,12 @@ const noop = () => undefined;
 const helper = columnHelper<AuditEvent>();
 const columns = helper.columns([
   helper.accessor("time", {
-    header: () => t`Время UTC`,
+    header: () => i18n._(msg`Время UTC`),
     meta: { priority: 1 },
     cell: (info) => <span className="font-mono text-caption tabular-nums">{info.getValue()}</span>,
   }),
   helper.accessor("actor", {
-    header: () => t`Актор`,
+    header: () => i18n._(msg`Актор`),
     meta: { priority: 1 },
     cell: (info) => (
       <span className="flex flex-col leading-tight">
@@ -74,7 +75,7 @@ const columns = helper.columns([
     ),
   }),
   helper.accessor("action", {
-    header: () => t`Действие`,
+    header: () => i18n._(msg`Действие`),
     meta: { priority: 1 },
     cell: (info) => (
       <span className="flex flex-col leading-tight">
@@ -83,22 +84,24 @@ const columns = helper.columns([
       </span>
     ),
   }),
-  helper.accessor("resource", { header: () => t`Ресурс`, meta: { priority: 2 } }),
+  helper.accessor("resource", { header: () => i18n._(msg`Ресурс`), meta: { priority: 2 } }),
   helper.accessor("decision", {
-    header: () => t`Решение`,
+    header: () => i18n._(msg`Решение`),
     meta: { priority: 1 },
     cell: (info) => <StatusBadge {...decisionBadge(info.getValue())} />,
   }),
   helper.accessor("rule", {
-    header: () => t`Правило`,
+    header: () => i18n._(msg`Правило`),
     meta: { priority: 2 },
     cell: (info) => <span className="font-mono text-caption">{info.getValue()}</span>,
   }),
-  helper.accessor("channel", { header: () => t`Канал`, meta: { priority: 3 } }),
+  helper.accessor("channel", { header: () => i18n._(msg`Канал`), meta: { priority: 3 } }),
   helper.accessor("requestId", {
     header: "request_id",
     meta: { priority: 3 },
-    cell: (info) => <CopyableId value={info.getValue()} label={t`Скопировать request_id`} />,
+    cell: (info) => (
+      <CopyableId value={info.getValue()} label={i18n._(msg`Скопировать request_id`)} />
+    ),
   }),
 ]);
 
@@ -108,15 +111,15 @@ function periods() {
   return [
     {
       value: "24h",
-      label: t`Последние 24 часа`,
+      label: i18n._(msg`Последние 24 часа`),
     },
     {
       value: "7d",
-      label: t`Последние 7 дней`,
+      label: i18n._(msg`Последние 7 дней`),
     },
     {
       value: "30d",
-      label: t`Последние 30 дней`,
+      label: i18n._(msg`Последние 30 дней`),
     },
   ] as const;
 }
@@ -130,15 +133,15 @@ function decisions() {
   return [
     {
       value: "allow",
-      label: t`Разрешено`,
+      label: i18n._(msg`Разрешено`),
     },
     {
       value: "deny",
-      label: t`Отказ`,
+      label: i18n._(msg`Отказ`),
     },
     {
       value: "challenge",
-      label: t`Нужен MFA`,
+      label: i18n._(msg`Нужен MFA`),
     },
   ] as const;
 }
@@ -150,20 +153,20 @@ function actorKinds() {
   return [
     {
       value: "all",
-      label: t`Все`,
+      label: i18n._(msg`Все`),
     },
     {
       value: "human",
-      label: t`Человек`,
+      label: i18n._(msg`Человек`),
     },
     {
       value: "robot",
-      label: t`Робот`,
+      label: i18n._(msg`Робот`),
     },
     { value: "workload", label: "Workload" },
     {
       value: "agent",
-      label: t`Агент`,
+      label: i18n._(msg`Агент`),
     },
   ] as const;
 }
@@ -171,6 +174,7 @@ type ActorKind = ReturnType<typeof actorKinds>[number]["value"];
 
 // Спека волны 2: S9 фильтры (screens.md) — будущий feature `AuditFilters` (DateRangePicker с пресетами ещё нет).
 function Filters() {
+  const { t } = useLingui();
   const [period, setPeriod] = useState<string | null>("24h");
   const [action, setAction] = useState<string | null>(null);
   const [decision, setDecision] = useState<string | null>(null);
@@ -243,6 +247,7 @@ function Filters() {
 const SPARK = [310, 332, 298, 405, 388, 421, 377, 450, 436, 468, 441, 492] as const;
 
 function Tiles({ auditor }: { auditor: boolean }) {
+  const { t } = useLingui();
   return (
     <div className="grid grid-cols-1 gap-4 @xl/page:grid-cols-2 @4xl/page:grid-cols-4">
       {auditor ? null : (
@@ -275,6 +280,7 @@ function Tiles({ auditor }: { auditor: boolean }) {
 
 // Спека волны 2: patterns §19 «Цепочка» — будущий feature-блок `HashChain`.
 function ChainBlock() {
+  const { t } = useLingui();
   return (
     <section className="flex flex-col gap-2">
       <h3 className="text-h3">{t`Цепочка`}</h3>
@@ -313,9 +319,9 @@ function eventJson(event: AuditEvent) {
 
 function panelTabs() {
   return [
-    ["summary", t`Сводка`],
-    ["context", t`Контекст`],
-    ["json", t`JSON`],
+    ["summary", i18n._(msg`Сводка`)],
+    ["context", i18n._(msg`Контекст`)],
+    ["json", i18n._(msg`JSON`)],
   ] as const;
 }
 type PanelTab = ReturnType<typeof panelTabs>[number][0];
@@ -327,6 +333,7 @@ const RELATED = [
 ] as const;
 
 function SummaryTab({ event }: { event: AuditEvent }) {
+  const { t } = useLingui();
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -405,6 +412,7 @@ function EventPanel({
   onOpenChange: (open: boolean) => void;
   onReveal: () => void;
 }) {
+  const { t } = useLingui();
   const [tab, setTab] = useState<PanelTab>("summary");
   const changeTab = useCallback((value: unknown) => setTab(value as PanelTab), []);
   const footer = auditor
@@ -460,6 +468,7 @@ function RevealDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useLingui();
   const [text, setText] = useState("");
   const counterId = useId();
   const change = useCallback(
@@ -501,6 +510,7 @@ type ScreenProps = { auditor?: boolean; revealOpen?: boolean };
 
 // Спека волны 2: архетипы F + C (composition §4) — будущий widget `AuditJournal`.
 function S9Screen({ auditor = false, revealOpen = false }: ScreenProps) {
+  const { t } = useLingui();
   const [selectedId, setSelectedId] = useState<string | null>("evt-3");
   const [panelOpen, setPanelOpen] = useState(true);
   const [reveal, setReveal] = useState(revealOpen);

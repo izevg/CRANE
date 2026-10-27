@@ -1,9 +1,10 @@
-// biome-ignore-all lint/suspicious/noDeprecatedImports: помечена устаревшей только перегрузка t(i18n); форма ``t`…` `` из макроса Lingui 6 актуальна
-import { t } from "@lingui/core/macro";
+import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useCallback, useId, useState } from "react";
 import { expect, within } from "storybook/test";
+import { i18n } from "~/shared/lib/i18n";
 import { FacetList, FilterSelect, SegmentedControl } from "~/shared/ui/inputs";
 import { PageHeader } from "~/shared/ui/layout";
 import {
@@ -44,7 +45,7 @@ function formatSegments() {
   return [
     {
       value: "all",
-      label: t`Все`,
+      label: i18n._(msg`Все`),
       count: 38,
     },
     { value: "npm", label: "npm", count: 21 },
@@ -63,9 +64,9 @@ function degraded(): readonly Banner[] {
     {
       id: "semantic",
       tone: "warning",
-      text: t`Ассистенты недоступны: поиск работает без семантики`,
+      text: i18n._(msg`Ассистенты недоступны: поиск работает без семантики`),
       action: {
-        label: t`Статус платформы`,
+        label: i18n._(msg`Статус платформы`),
         run: { href: "/status" },
       },
     },
@@ -74,6 +75,7 @@ function degraded(): readonly Banner[] {
 
 // Спека волны 2: patterns §6 — будущий widgets/search-results/ResultCard
 function ResultCard({ item }: { item: SearchResult }) {
+  const { t } = useLingui();
   const titleId = useId();
   return (
     <article
@@ -126,6 +128,7 @@ function ResultCard({ item }: { item: SearchResult }) {
 }
 
 function Facets() {
+  const { t } = useLingui();
   const [formats, setFormats] = useState<readonly string[]>([]);
   const [spaces, setSpaces] = useState<readonly string[]>([]);
   const toggleFormat = useCallback((value: string) => setFormats((prev) => flip(prev, value)), []);
@@ -154,6 +157,7 @@ function flip(list: readonly string[], value: string): readonly string[] {
 
 // Спека волны 2: screens S1 — будущий pages/search + features/search-filters
 function FiltersRow() {
+  const { t } = useLingui();
   const [format, setFormat] = useState("all");
   const [repository, setRepository] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<string | null>(null);
@@ -189,6 +193,7 @@ function FiltersRow() {
 }
 
 function MobileFilters() {
+  const { t } = useLingui();
   return (
     <Sheet>
       <SheetTrigger
@@ -213,6 +218,7 @@ function MobileFilters() {
 }
 
 function SearchBar({ query }: { query: string }) {
+  const { t } = useLingui();
   return (
     <search className="flex gap-2">
       <Input type="search" aria-label={t`Поиск пакетов`} defaultValue={query} className="flex-1" />
@@ -222,6 +228,7 @@ function SearchBar({ query }: { query: string }) {
 }
 
 function ResultsList() {
+  const { t } = useLingui();
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
@@ -239,6 +246,7 @@ function ResultsList() {
 }
 
 function NothingFound({ query }: { query: string }) {
+  const { t } = useLingui();
   return (
     <div className="flex flex-col items-center gap-4 rounded-xl bg-card py-4 shadow-card">
       <EmptyState
@@ -261,6 +269,7 @@ function NothingFound({ query }: { query: string }) {
 }
 
 function SearchTab({ empty }: { empty: boolean }) {
+  const { t } = useLingui();
   const query = empty ? "acme-uu-lib" : "acme ui";
   return (
     <div className="flex flex-col gap-4">
@@ -281,6 +290,7 @@ function SearchTab({ empty }: { empty: boolean }) {
 
 // Спека волны 2: screens S1 — будущий pages/search
 function S1Page({ empty = false }: { empty?: boolean }) {
+  const { t } = useLingui();
   return (
     <Tabs defaultValue="search" className="gap-4">
       <PageHeader
@@ -306,6 +316,7 @@ function S1Page({ empty = false }: { empty?: boolean }) {
 type Props = { empty?: boolean; assistantsDown?: boolean };
 
 function Screen({ empty = false, assistantsDown = false }: Props) {
+  const { t } = useLingui();
   return (
     <ScreenFrame
       active="search"
