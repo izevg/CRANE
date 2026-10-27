@@ -154,16 +154,15 @@ PGP (Maven `.asc`): подпись проверяется по публично�
 Ошибка самой проверки (нет trust root, upstream недоступен, незнакомый формат bundle) даёт `unverifiable`, а не `invalid`: иначе сбой инфраструктуры блокировал бы чужие релизы.
 
 ```rust
-on attestation_verified(new_version, e):                  // attestation.verify → правило регрессии
-    prev = evidence.latest_valid(previous_versions(new_version.package), e.kind, e.predicate_type)
-    // тот же вид evidence, что был у прошлых версий: predicate type или kind = signature
-    same_signer(a, b) = (a.signer_issuer, a.signer_san) == (b.signer_issuer, b.signer_san)   // Sigstore
-                        or a.signer_subject == b.signer_subject                              // PGP
-    regressed = prev.is_some() and (e.is_none() or e.invalid
-                or !same_signer(prev, e) or prev.facts.repo != e.facts.repo)   // repo, если есть
-    if regressed:
-        hold(new_version, quarantine | blocked)           // по политике репозитория
-        siem(SupplyChainSignal(new_version, prev, e))     // сигнал захвата аккаунта maintainer'а
+on attestation_verified(new_version):                     // attestation.verify → правило регрессии
+    past = previous_versions(new_version.package)
+    signer(x) = if x.signer_san.is_some() { (x.signer_issuer, x.signer_san) }   // Sigstore (Fulcio)
+                else { x.signer_subject }                                       // PGP: отпечаток ключа
+    for prev in evidence.latest_valid_per_type(past):      // каждый (kind, predicate_type), что был valid раньше
+        e = evidence.latest(new_version.id, prev.kind, prev.predicate_type)
+        if e.is_none() or e.invalid or signer(e) != signer(prev) or e.facts.repo != prev.facts.repo:
+            hold(new_version, quarantine | blocked)        // по политике репозитория
+            siem(SupplyChainSignal(new_version, prev, e)); break   // сигнал захвата аккаунта maintainer'а
 ```
 
 Регрессия — главный практический сигнал: у прошлых версий была валидная attestation или подпись, а у новой её нет, она `invalid` или сменились издатель и репозиторий. Так может выглядеть публикация с украденным токеном мимо CI. Карточка версии показывает «собрано в <CI> из <repo>@<commit>» из `facts`.
