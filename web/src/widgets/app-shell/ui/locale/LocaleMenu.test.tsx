@@ -64,4 +64,17 @@ describe("LocaleMenu", () => {
     // Assert
     expect(await screen.findByRole("button", { name: "Language: English" })).toBeInTheDocument();
   });
+
+  it("названия языков помечены собственным lang для скринридера", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    render(<LocaleMenu collapsed={false} />);
+
+    // Act
+    await user.click(screen.getByRole("button", { name: "Язык: Русский" }));
+
+    // Assert
+    expect(await screen.findByText("English")).toHaveAttribute("lang", "en");
+    expect(screen.getByText("Русский")).toHaveAttribute("lang", "ru");
+  });
 });

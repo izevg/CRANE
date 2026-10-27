@@ -27,7 +27,7 @@ import {
 } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { AUDIT_EVENTS, type AuditEvent, EVENT_HASH, PREV_HASH } from "../data/audit";
-import { decisionBadge } from "../data/states";
+import { actorKindLabel, decisionBadge } from "../data/states";
 import { activeFormat } from "../frame/format";
 import { ScreenFrame } from "../frame/ScreenFrame";
 import { desktop, mobile, screenParameters } from "../frame/screen";
@@ -70,7 +70,9 @@ const columns = helper.columns([
     cell: (info) => (
       <span className="flex flex-col leading-tight">
         <span className="font-semibold">{info.getValue().alias}</span>
-        <span className="text-caption text-muted-foreground">{info.getValue().kind}</span>
+        <span className="text-caption text-muted-foreground">
+          {actorKindLabel(info.getValue().kind)}
+        </span>
       </span>
     ),
   }),
@@ -647,5 +649,7 @@ export const English: Story = {
   play: async ({ canvasElement }) => {
     const body = within(canvasElement.ownerDocument.body);
     await expect(await body.findByRole("dialog", { name: "Event" })).toBeVisible();
+    // Тип актора в таблице — подпись интерфейса, а не контент: по-английски
+    await expect(body.getAllByText("Human").length).toBeGreaterThan(0);
   },
 };

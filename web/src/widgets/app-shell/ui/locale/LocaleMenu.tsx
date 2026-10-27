@@ -52,7 +52,9 @@ export function LocaleMenu({ collapsed }: { collapsed: boolean }) {
         >
           {LOCALES.map((value) => (
             <MenuPrimitive.RadioItem key={value} value={value} className={RADIO_ITEM}>
-              <span className="flex-1">{ENDONYMS[value]}</span>
+              <span lang={value} className="flex-1">
+                {ENDONYMS[value]}
+              </span>
               <MenuPrimitive.RadioItemIndicator>
                 <CheckIcon aria-hidden="true" />
               </MenuPrimitive.RadioItemIndicator>

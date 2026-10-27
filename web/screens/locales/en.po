@@ -156,6 +156,9 @@ msgstr "Upstreams available"
 msgid "VEX"
 msgstr "VEX"
 
+msgid "Workload"
+msgstr "Workload"
+
 msgid "workspace billing · 34 из 40 ГБ"
 msgstr "workspace billing · 34 of 40 GB"
 

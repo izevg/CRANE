@@ -1,6 +1,6 @@
 // biome-ignore-all lint/style/noMagicNumbers: детерминированные данные макетов, не продуктовый код
-// i18n-fixture: события и виды акторов журнала — контент витрины, а не текст интерфейса
-type ActorKind = "Человек" | "Робот" | "Workload" | "Агент";
+/** Код вида актора; подпись берётся из словаря интерфейса (`states.ts`). */
+export type ActorKind = "human" | "robot" | "workload" | "agent";
 export type Decision = "allow" | "deny" | "challenge";
 type Channel = "UI" | "CLI" | "API" | "CI" | "A2A" | "SOAR";
 
@@ -17,7 +17,7 @@ export type AuditEvent = {
   requestId: string;
 };
 
-// i18n-fixture: события и виды акторов журнала — контент витрины, а не текст интерфейса
+// i18n-fixture: подписи событий журнала — контент витрины, а не текст интерфейса
 const ACTIONS = [
   { code: "package.version.blocked", label: "Версия заблокирована" },
   { code: "package.version.published", label: "Версия опубликована" },
@@ -29,17 +29,16 @@ const ACTIONS = [
   { code: "audit.revealed", label: "Данные раскрыты" },
 ] as const;
 
-// i18n-fixture: события и виды акторов журнала — контент витрины, а не текст интерфейса
 const ACTORS = [
-  { alias: "user-7f3a", kind: "Человек" },
-  { alias: "user-c912", kind: "Человек" },
-  { alias: "robot-ui-release", kind: "Робот" },
-  { alias: "wl-ingest-eu1", kind: "Workload" },
-  { alias: "agent-triage-02", kind: "Агент" },
-  { alias: "user-04be", kind: "Человек" },
+  { alias: "user-7f3a", kind: "human" },
+  { alias: "user-c912", kind: "human" },
+  { alias: "robot-ui-release", kind: "robot" },
+  { alias: "wl-ingest-eu1", kind: "workload" },
+  { alias: "agent-triage-02", kind: "agent" },
+  { alias: "user-04be", kind: "human" },
 ] as const satisfies readonly { alias: string; kind: ActorKind }[];
 
-// i18n-fixture: события и виды акторов журнала — контент витрины, а не текст интерфейса
+// i18n-fixture: ресурсы событий журнала — контент витрины, а не текст интерфейса
 const RESOURCES = [
   "@acme/ui@1.4.2",
   "lodash@4.17.20",
