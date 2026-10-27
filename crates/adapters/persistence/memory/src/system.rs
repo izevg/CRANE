@@ -32,3 +32,20 @@ impl IdGen for SequentialIdGen {
         Uuid::from_u128(u128::from(next))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generator_yields_distinct_sequential_ids() {
+        // Arrange
+        let ids = SequentialIdGen::default();
+
+        // Act
+        let generated = [ids.generate(), ids.generate(), ids.generate()];
+
+        // Assert
+        assert_eq!(generated, [1, 2, 3].map(Uuid::from_u128));
+    }
+}
