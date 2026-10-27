@@ -247,10 +247,7 @@ function NewTokenSheet({
           </div>
           <Field name="description">
             <FieldLabel>Описание</FieldLabel>
-            <Textarea
-              rows={3}
-              defaultValue="Публикация npm-пакетов из GitLab CI проекта platform/ui"
-            />
+            <Textarea defaultValue="Публикация npm-пакетов из GitLab CI проекта platform/ui" />
           </Field>
         </SheetBody>
         <SheetFooter>
