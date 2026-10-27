@@ -1,7 +1,7 @@
 // Сценарий hosted: публикация, dist-теги, deprecate, установка, unpublish по политике. Сценарий proxy:
 // установка пакета с npmjs дважды (промах, затем попадание). Клиент и разбор вывода npm - в npm.ts.
 import { accessLines, type Expected, egressLines } from "./audit.ts";
-import { type Result, tail } from "./exec.ts";
+import { type Result, step, tail } from "./exec.ts";
 import {
   HOSTED_REPO,
   hasDeprecationWarning,
@@ -67,14 +67,6 @@ function tools(stand: Stand, client: NpmClient): Tools {
     },
   };
 }
-
-const step = (name: string, body: () => void): void => {
-  try {
-    body();
-  } catch (error) {
-    throw new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
 
 const expectEqual = (what: string, got: string, want: string): void => {
   if (got !== want) {

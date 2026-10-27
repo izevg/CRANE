@@ -2,7 +2,7 @@
 // на своей машине. Сценарий: публикация, индекс, сборка, yank, разрешение, unyank.
 import type { Expected } from "./audit.ts";
 import { type Client, startClient } from "./client.ts";
-import { log, type Result, tail } from "./exec.ts";
+import { log, type Result, step, tail } from "./exec.ts";
 import type { Stand } from "./stand.ts";
 import { parseCargo } from "./versions.ts";
 
@@ -105,14 +105,6 @@ const dep = (name: string, requirement: string): string =>
 const fn = (name: string, body: string): string =>
   `pub fn ${name}() -> &'static str {\n    ${body}\n}\n`;
 
-const step = (name: string, body: () => void): void => {
-  try {
-    body();
-  } catch (error) {
-    throw new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
 /** Всё, что нужно шагам сценария: запуск cargo, запись крейтов и учёт ожидаемых событий аудита. */
 interface Kit {
   agent: string;
@@ -206,88 +198,85 @@ function scenarioKit(stand: Stand, client: CargoClient, minor: number): Kit {
   };
 }
 
-/** Выполняет сценарий и возвращает события аудита, которые он обязан породить. */
-export function scenario(stand: Stand, client: CargoClient, minor: number): Expected[] {
-  const {
-    agent,
-    a,
-    b,
-    main,
-    events,
-    freshHome,
-    cargo,
-    must,
-    expectOutput,
-    app,
-    audited,
-    publish,
-    libA,
-  } = scenarioKit(stand, client, minor);
-
+/** Шаги 1-3: публикация трёх версий, поиск в индексе, сборка app из транзитивной зависимости. */
+function publishAndBuild(k: Kit): void {
   step("1 публикация a@0.1.0, a@0.1.1, b@0.1.0", () => {
-    publish(libA("0.1.0"));
-    publish(libA("0.1.1"));
-    publish({
-      name: b,
+    k.publish(k.libA("0.1.0"));
+    k.publish(k.libA("0.1.1"));
+    k.publish({
+      name: k.b,
       version: "0.1.0",
-      deps: [dep(a, "0.1")],
-      files: { "src/lib.rs": fn("a_version", `${a}::version()`) },
+      deps: [dep(k.a, "0.1")],
+      files: { "src/lib.rs": fn("a_version", `${k.a}::version()`) },
     });
   });
 
   step("2 поиск в индексе", () => {
-    const info = must(".", main, ["info", a, "--registry", REGISTRY]);
+    const info = k.must(".", k.main, ["info", k.a, "--registry", REGISTRY]);
     if (!`${info.stdout}${info.stderr}`.includes("0.1.1")) {
       throw new Error(`cargo info не показал 0.1.1\n${tail(info.stdout)}`);
     }
   });
 
   step("3 сборка app из b (транзитивно a@0.1.1)", () => {
-    app("app", dep(b, "0.1"), `${b}::a_version()`);
-    expectOutput(must("app", main, ["run", "-q"]), "0.1.1");
+    k.app("app", dep(k.b, "0.1"), `${k.b}::a_version()`);
+    k.expectOutput(k.must("app", k.main, ["run", "-q"]), "0.1.1");
   });
+}
 
+/** Шаги 4-8: yank чужим токеном и своим, как он виден разрешению зависимостей и Cargo.lock. */
+function yankFlow(k: Kit, stand: Stand): void {
   step("4 yank чужим токеном отклонён", () => {
-    const denied = cargo(
-      a,
-      main,
-      ["yank", "--registry", REGISTRY, "--version", "0.1.0", a],
+    const denied = k.cargo(
+      k.a,
+      k.main,
+      ["yank", "--registry", REGISTRY, "--version", "0.1.0", k.a],
       stand.wrongToken,
     );
     if (denied.status === 0) {
       throw new Error("yank с неверным токеном прошёл");
     }
-    events.push({ kind: "authFailure", agent });
+    k.events.push({ kind: "authFailure", agent: k.agent });
   });
 
   step("5 yank a@0.1.1", () => {
-    must(a, main, ["yank", "--registry", REGISTRY, "--version", "0.1.1", a]);
-    audited("yank", a, "0.1.1");
+    k.must(k.a, k.main, ["yank", "--registry", REGISTRY, "--version", "0.1.1", k.a]);
+    k.audited("yank", k.a, "0.1.1");
   });
 
   step("6 разрешение обходит yanked: app2 получает a@0.1.0", () => {
-    app("app2", dep(b, "0.1"), `${b}::a_version()`);
-    expectOutput(must("app2", freshHome(), ["run", "-q"]), "0.1.0");
+    k.app("app2", dep(k.b, "0.1"), `${k.b}::a_version()`);
+    k.expectOutput(k.must("app2", k.freshHome(), ["run", "-q"]), "0.1.0");
   });
 
   step("7 прямая зависимость от yanked версии не разрешается", () => {
-    app("app3", dep(a, "=0.1.1"), `${a}::version()`);
-    const locked = cargo("app3", freshHome(), ["generate-lockfile"]);
+    k.app("app3", dep(k.a, "=0.1.1"), `${k.a}::version()`);
+    const locked = k.cargo("app3", k.freshHome(), ["generate-lockfile"]);
     if (locked.status === 0 || !YANKED.test(locked.stderr)) {
       throw new Error(`generate-lockfile -> ${locked.status}\n${tail(locked.stderr)}`);
     }
   });
 
   step("8 Cargo.lock с yanked версией собирается из пустого кэша", () => {
-    expectOutput(must("app", freshHome(), ["run", "-q", "--locked"]), "0.1.1");
+    k.expectOutput(k.must("app", k.freshHome(), ["run", "-q", "--locked"]), "0.1.1");
   });
+}
 
+/** Шаг 9: unyank возвращает версию в разрешение. */
+function unyank(k: Kit): void {
   step("9 unyank a@0.1.1", () => {
-    must(a, main, ["yank", "--registry", REGISTRY, "--undo", "--version", "0.1.1", a]);
-    audited("unyank", a, "0.1.1");
-    app("app4", dep(b, "0.1"), `${b}::a_version()`);
-    expectOutput(must("app4", freshHome(), ["run", "-q"]), "0.1.1");
+    k.must(k.a, k.main, ["yank", "--registry", REGISTRY, "--undo", "--version", "0.1.1", k.a]);
+    k.audited("unyank", k.a, "0.1.1");
+    k.app("app4", dep(k.b, "0.1"), `${k.b}::a_version()`);
+    k.expectOutput(k.must("app4", k.freshHome(), ["run", "-q"]), "0.1.1");
   });
+}
 
-  return events;
+/** Выполняет сценарий и возвращает события аудита, которые он обязан породить. */
+export function scenario(stand: Stand, client: CargoClient, minor: number): Expected[] {
+  const k = scenarioKit(stand, client, minor);
+  publishAndBuild(k);
+  yankFlow(k, stand);
+  unyank(k);
+  return k.events;
 }
