@@ -45,3 +45,15 @@ export const Closed: Story = {
     await expect(within(document.body).queryByRole("alertdialog")).toBeNull();
   },
 };
+
+export const EscapeBlocked: Story = {
+  name: "Esc до отметки не закрывает",
+  play: async () => {
+    await within(document.body).findByRole("alertdialog");
+    await userEvent.keyboard("{Escape}");
+    await expect(within(document.body).getByRole("alertdialog")).toBeVisible();
+    await expect(onDone).not.toHaveBeenCalled();
+  },
+};
+
+export const Dark: Story = { globals: { theme: "dark" } };

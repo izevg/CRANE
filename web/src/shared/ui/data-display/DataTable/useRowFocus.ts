@@ -139,7 +139,7 @@ function pinWidth(scroller: HTMLElement, side: "start" | "end"): number {
  * - ширина закреплённых колонок пишется в `--pin-start` и `--pin-end`, на них опирается `scroll-padding-inline`
  *   (иначе закреплённые колонки перекрывают элемент в фокусе, WCAG 2.4.11). Ширину первой колонки данных и колонки
  *   действий задаёт содержимое, поэтому фиксированные токены не подходят, и её приходится измерять;
- * - область получает `tabindex=0` только при переполнении и только если строки не фокусируются сами
+ * - область получает `tabindex=0` только при переполнении (по любой оси) и только если строки не фокусируются сами
  *   (иначе лишняя Tab-остановка, WCAG 2.1.1).
  */
 export function useScrollerLayout(
@@ -154,7 +154,9 @@ export function useScrollerLayout(
     const sync = () => {
       scroller.style.setProperty("--pin-start", `${pinWidth(scroller, "start")}px`);
       scroller.style.setProperty("--pin-end", `${pinWidth(scroller, "end")}px`);
-      const overflows = scroller.scrollWidth > scroller.clientWidth;
+      const overflows =
+        scroller.scrollWidth > scroller.clientWidth ||
+        scroller.scrollHeight > scroller.clientHeight;
       if (overflows && !rowsFocusable) {
         scroller.setAttribute("tabindex", "0");
       } else {
