@@ -36,7 +36,7 @@ impl Version {
         }
     }
 
-    /// Строгий SemVer 2.0: общая схема версий Cargo и npm (то, что реально бывает в реестре).
+    /// Строгий `SemVer` 2.0: общая схема версий Cargo и npm (то, что реально бывает в реестре).
     fn parse_semver(raw: &str) -> Result<Self, VersionError> {
         let mut parsed = semver::Version::parse(raw).map_err(|e| VersionError::Invalid {
             raw: raw.to_owned(),

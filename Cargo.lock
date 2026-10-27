@@ -389,6 +389,16 @@ version = "0.1.0"
 [[package]]
 name = "crane-format-npm"
 version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "crane-domain",
+ "humantime",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "uuid",
+]
 
 [[package]]
 name = "crane-format-nuget"
