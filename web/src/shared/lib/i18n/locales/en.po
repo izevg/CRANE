@@ -13,6 +13,15 @@ msgstr "{count, plural, one {# unread} other {# unread}}"
 msgid "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
 msgstr "{count, plural, one {# row selected} other {# rows selected}}"
 
+msgid "{label}: {shown}"
+msgstr "{label}: {shown}"
+
+msgid "{label}: {shown}, {toneLabel}"
+msgstr "{label}: {shown}, {toneLabel}"
+
+msgid "{shown}, уверенность {confidenceText}"
+msgstr "{shown}, confidence {confidenceText}"
+
 msgid "{size, plural, one {# ключ} few {# ключа} many {# ключей} other {# ключа}}"
 msgstr "{size, plural, one {# key} other {# keys}}"
 
@@ -30,6 +39,9 @@ msgstr "CRANE, Artifact registry: go to home"
 
 msgid "Безопасность"
 msgstr "Security"
+
+msgid "Время"
+msgstr "Time"
 
 msgid "Все"
 msgstr "All"
@@ -52,6 +64,9 @@ msgstr "{hidden} more"
 msgid "закрыть"
 msgstr "close"
 
+msgid "Изменение: {change}"
+msgstr "Change: {change}"
+
 msgid "Ищем пакеты…"
 msgstr "Searching packages…"
 
@@ -67,6 +82,9 @@ msgstr "Personal and help"
 msgid "Массовые действия"
 msgstr "Bulk actions"
 
+msgid "модель {model}"
+msgstr "model {model}"
+
 msgid "Навигация по разделам реестра"
 msgstr "Navigate the registry sections"
 
@@ -76,11 +94,20 @@ msgstr "Could not copy. Select the text and copy it manually"
 msgid "Непрочитано."
 msgstr "Unread."
 
+msgid "нет данных"
+msgstr "no data"
+
+msgid "Нет данных"
+msgstr "No data"
+
 msgid "Ничего не найдено"
 msgstr "Nothing found"
 
 msgid "Новых уведомлений нет"
 msgstr "No new notifications"
+
+msgid "обновлено"
+msgstr "updated"
 
 msgid "Основное меню"
 msgstr "Primary menu"
@@ -105,6 +132,15 @@ msgstr "Platform"
 
 msgid "Поиск и переходы"
 msgstr "Search and navigate"
+
+msgid "Показать графиком"
+msgstr "Show as chart"
+
+msgid "Показать таблицей"
+msgstr "Show as table"
+
+msgid "Прочие ({count})"
+msgstr "Other ({count})"
 
 msgid "Прочитать все"
 msgstr "Mark all as read"
@@ -147,3 +183,6 @@ msgstr "Dark"
 
 msgid "Уведомления"
 msgstr "Notifications"
+
+msgid "уверенность {confidenceText}"
+msgstr "confidence {confidenceText}"

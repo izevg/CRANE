@@ -85,3 +85,16 @@ export const Dark: Story = {
   name: "Тёмная тема",
   globals: { theme: "dark" },
 };
+
+export const English: Story = {
+  name: "EN: подписи на английском",
+  globals: { locale: "en" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("meter")).toHaveAttribute(
+      "aria-valuetext",
+      "0.88, confidence 0.92",
+    );
+    await expect(canvas.getByText("model systemone v3.1")).toBeInTheDocument();
+  },
+};

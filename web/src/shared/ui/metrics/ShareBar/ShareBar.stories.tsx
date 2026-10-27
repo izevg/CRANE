@@ -71,3 +71,13 @@ export const Dark: Story = {
   name: "Тёмная тема",
   globals: { theme: "dark" },
 };
+
+const OTHER_EN = /Other \(2\)/;
+
+export const English: Story = {
+  name: "EN: подписи на английском",
+  globals: { locale: "en" },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByRole("row", { name: OTHER_EN })).toBeInTheDocument();
+  },
+};

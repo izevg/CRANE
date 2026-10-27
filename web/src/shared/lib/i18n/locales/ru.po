@@ -13,6 +13,15 @@ msgstr "{count, plural, one {# непрочитанное} few {# непрочи
 msgid "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
 msgstr "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
 
+msgid "{label}: {shown}"
+msgstr "{label}: {shown}"
+
+msgid "{label}: {shown}, {toneLabel}"
+msgstr "{label}: {shown}, {toneLabel}"
+
+msgid "{shown}, уверенность {confidenceText}"
+msgstr "{shown}, уверенность {confidenceText}"
+
 msgid "{size, plural, one {# ключ} few {# ключа} many {# ключей} other {# ключа}}"
 msgstr "{size, plural, one {# ключ} few {# ключа} many {# ключей} other {# ключа}}"
 
@@ -30,6 +39,9 @@ msgstr "CRANE, Реестр артефактов: на главную"
 
 msgid "Безопасность"
 msgstr "Безопасность"
+
+msgid "Время"
+msgstr "Время"
 
 msgid "Все"
 msgstr "Все"
@@ -52,6 +64,9 @@ msgstr "Ещё {hidden}"
 msgid "закрыть"
 msgstr "закрыть"
 
+msgid "Изменение: {change}"
+msgstr "Изменение: {change}"
+
 msgid "Ищем пакеты…"
 msgstr "Ищем пакеты…"
 
@@ -67,6 +82,9 @@ msgstr "Личное и справка"
 msgid "Массовые действия"
 msgstr "Массовые действия"
 
+msgid "модель {model}"
+msgstr "модель {model}"
+
 msgid "Навигация по разделам реестра"
 msgstr "Навигация по разделам реестра"
 
@@ -76,11 +94,20 @@ msgstr "Не удалось скопировать — выделите текс
 msgid "Непрочитано."
 msgstr "Непрочитано."
 
+msgid "нет данных"
+msgstr "нет данных"
+
+msgid "Нет данных"
+msgstr "Нет данных"
+
 msgid "Ничего не найдено"
 msgstr "Ничего не найдено"
 
 msgid "Новых уведомлений нет"
 msgstr "Новых уведомлений нет"
+
+msgid "обновлено"
+msgstr "обновлено"
 
 msgid "Основное меню"
 msgstr "Основное меню"
@@ -105,6 +132,15 @@ msgstr "Платформа"
 
 msgid "Поиск и переходы"
 msgstr "Поиск и переходы"
+
+msgid "Показать графиком"
+msgstr "Показать графиком"
+
+msgid "Показать таблицей"
+msgstr "Показать таблицей"
+
+msgid "Прочие ({count})"
+msgstr "Прочие ({count})"
 
 msgid "Прочитать все"
 msgstr "Прочитать все"
@@ -147,3 +183,6 @@ msgstr "Тёмная"
 
 msgid "Уведомления"
 msgstr "Уведомления"
+
+msgid "уверенность {confidenceText}"
+msgstr "уверенность {confidenceText}"

@@ -1,4 +1,4 @@
-// i18n: не мигрирован
+import { useLingui } from "@lingui/react/macro";
 import { lazy, Suspense, useCallback, useId, useState } from "react";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { useTextFormat } from "~/shared/lib/i18n";
@@ -31,21 +31,19 @@ type TimeSeriesChartProps = WithClassName<{
   area?: boolean;
 }>;
 
-const SHOW_TABLE = "Показать таблицей";
-const SHOW_CHART = "Показать графиком";
-const TIME_COLUMN = "Время";
 const NO_VALUE = "—";
 /** Высота графика одна для заглушки и самого графика: раскладка не прыгает при загрузке чанка. */
 const PLOT_HEIGHT = "h-60";
 
 function DataTable({ series, unit }: { series: readonly Series[]; unit: string | undefined }) {
+  const { t } = useLingui();
   const format = useTextFormat();
   const rows = mergeSeries(series);
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>{TIME_COLUMN}</TableHead>
+          <TableHead>{t`Время`}</TableHead>
           {series.map((item) => (
             <TableHead key={item.id} className="text-right">
               {item.label}
@@ -85,9 +83,10 @@ export function TimeSeriesChart({
   area = false,
   className,
 }: TimeSeriesChartProps) {
+  const { t } = useLingui();
   const titleId = useId();
   const [tabular, setTabular] = useState(false);
-  const toggleLabel = tabular ? SHOW_CHART : SHOW_TABLE;
+  const toggleLabel = tabular ? t`Показать графиком` : t`Показать таблицей`;
   const toggle = useCallback(() => setTabular((value) => !value), []);
 
   return (

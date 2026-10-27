@@ -151,3 +151,14 @@ export const TooltipDark: Story = {
     await expectTokenTooltip(canvasElement);
   },
 };
+
+export const English: Story = {
+  name: "EN: подписи на английском",
+  globals: { locale: "en" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Show as table" }));
+    await expect(await canvas.findByRole("columnheader", { name: "Time" })).toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "Show as chart" })).toBeInTheDocument();
+  },
+};
