@@ -47,8 +47,11 @@ export const Typosquat: Story = {
       typosquat: {
         similar_to: "@acme/ui",
         similar_to_purl: "pkg:npm/%40acme/ui",
-        similar_to_href: "/packages/npm/npm-hosted/%40acme%2Fui",
         distance: 1,
+      },
+      _links: {
+        self: { href: "/api/packages/acme-uii" },
+        "crane:similar-to": { href: "/packages/npm/npm-hosted/%40acme%2Fui" },
       },
     },
     typosquatHref: "/packages/acme-ui",
@@ -99,7 +102,6 @@ export const LongName: Story = {
       typosquat: {
         similar_to: "com.fasterxml.jackson.core:jackson-databind",
         similar_to_purl: "pkg:maven/com.fasterxml.jackson.core/jackson-databind",
-        similar_to_href: null,
         distance: 2,
       },
     },

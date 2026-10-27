@@ -114,8 +114,11 @@ describe("SearchResultCard", () => {
         typosquat: {
           similar_to: "@acme/ui",
           similar_to_purl: "pkg:npm/%40acme/ui",
-          similar_to_href: "/packages/npm/npm-hosted/%40acme%2Fui",
           distance: 1,
+        },
+        _links: {
+          self: { href: "/api/packages/acme-ui" },
+          "crane:similar-to": { href: "/packages/npm/npm-hosted/%40acme%2Fui" },
         },
       },
       "/packages/real-acme-ui",
@@ -136,7 +139,6 @@ describe("SearchResultCard", () => {
       typosquat: {
         similar_to: "@acme/ui",
         similar_to_purl: "pkg:npm/%40acme/ui",
-        similar_to_href: null,
         distance: 1,
       },
     });

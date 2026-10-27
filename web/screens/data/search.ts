@@ -26,6 +26,7 @@ const LEADING_AT = /^@/;
 const TYPOSQUAT_DISTANCE = 1;
 
 function toItem(draft: Draft): SearchItem {
+  const original = originalOf(draft);
   return {
     purl_base: `pkg:${draft.format}/${draft.name}`,
     name: { display: draft.name, normalized: draft.name.toLowerCase() },
@@ -52,12 +53,14 @@ function toItem(draft: Draft): SearchItem {
           typosquat: {
             similar_to: draft.typosquatOf,
             similar_to_purl: `pkg:${draft.format}/${draft.typosquatOf.replace(LEADING_AT, "%40")}`,
-            similar_to_href: typosquatCardPath(draft),
             distance: TYPOSQUAT_DISTANCE,
           },
         }
       : {}),
-    _links: { self: { href: `/api/packages/${draft.id}` } },
+    _links: {
+      self: { href: `/api/packages/${draft.id}` },
+      ...(original === undefined ? {} : { "crane:similar-to": { href: cardPath(original) } }),
+    },
   };
 }
 
@@ -235,15 +238,16 @@ const DRAFTS: readonly Draft[] = [
   },
 ];
 
-function typosquatCardPath(draft: Draft): string | null {
-  const original = DRAFTS.find((candidate) => candidate.name === draft.typosquatOf);
-  return original === undefined
-    ? null
-    : `/packages/${original.format}/${original.repository}/${encodeURIComponent(original.name)}`;
+function originalOf(draft: Draft): Draft | undefined {
+  return DRAFTS.find((candidate) => candidate.name === draft.typosquatOf);
+}
+
+function cardPath(draft: Draft): string {
+  return `/packages/${draft.format}/${draft.repository}/${encodeURIComponent(draft.name)}`;
 }
 
 function typosquatHref(draft: Draft): string | undefined {
-  const original = DRAFTS.find((candidate) => candidate.name === draft.typosquatOf);
+  const original = originalOf(draft);
   return original === undefined ? undefined : `/packages/${original.id}`;
 }
 
