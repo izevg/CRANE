@@ -55,7 +55,7 @@ export function SegmentedControl<V extends string>({
       size="sm"
       value={[value]}
       onValueChange={handleChange}
-      className={cx(className)}
+      className={cx("max-w-full flex-wrap", className)}
     >
       {items.map((item) => (
         <ToggleGroupItem key={item.value} value={item.value}>
