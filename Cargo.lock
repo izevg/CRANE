@@ -472,6 +472,7 @@ dependencies = [
  "crane-domain",
  "crane-ports",
  "sqlx",
+ "thiserror",
  "time",
  "tokio",
  "uuid",

@@ -23,8 +23,8 @@ services:
 
   valkey:
     image: ${VALKEY_IMAGE:?}
-    # Кэш эфемерный: персистентность не нужна.
-    command: ["--save", "", "--appendonly", "no"]
+    # Кэш эфемерный: персистентность не нужна. Ключи без TTL, поэтому память ограничена, вытесняется LRU.
+    command: ["--save", "", "--appendonly", "no", "--maxmemory", "${VALKEY_MAXMEMORY:?}", "--maxmemory-policy", "allkeys-lru"]
     ports: ["${DEV_BIND:?}:${VALKEY_PORT:?}:6379"]
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
