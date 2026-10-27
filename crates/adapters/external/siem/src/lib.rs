@@ -8,4 +8,4 @@ mod ocsf;
 mod sink;
 
 pub use ocsf::{OcsfRecord, OcsfUser, ocsf};
-pub use sink::OcsfLogSink;
+pub use sink::{AUDIT_TARGET, OcsfLogSink};

@@ -68,8 +68,21 @@ fn execute(role: &Role) -> Result<(), run::RunError> {
     }
 }
 
+/// Цели журнала ИБ v0.1.0 (раздел 14.9): аудит и лог доступа. Уровень логов их не глушит:
+/// оператор, снизивший шум через `RUST_LOG`, не должен молча потерять журнал безопасности.
+const SECURITY_TARGETS: [&str; 2] = [crane_siem::AUDIT_TARGET, crane_http::ACCESS_TARGET];
+
+/// Директивы целей ИБ идут последними и перекрывают те же цели из `RUST_LOG`.
+fn log_filter(env: Option<&str>) -> EnvFilter {
+    let base = env
+        .filter(|value| EnvFilter::try_new(value).is_ok())
+        .unwrap_or("info");
+    let pinned = SECURITY_TARGETS.map(|target| format!("{target}=info"));
+    EnvFilter::new(format!("{base},{}", pinned.join(",")))
+}
+
 fn init_logging() {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = log_filter(std::env::var("RUST_LOG").ok().as_deref());
     tracing_subscriber::fmt()
         .json()
         // Поля событий (в том числе плоские пути OCSF `class_uid`, `actor.user.uid`) лежат
@@ -151,6 +164,63 @@ mod tests {
 
         // Assert
         assert_eq!(roles, [None, None, None, None, None]);
+    }
+
+    /// Включена ли запись `info` для цели под заданным фильтром.
+    fn info_enabled(filter: EnvFilter, target: &'static str) -> bool {
+        let subscriber = tracing_subscriber::fmt().with_env_filter(filter).finish();
+        tracing::subscriber::with_default(subscriber, || match target {
+            crane_siem::AUDIT_TARGET => {
+                tracing::enabled!(target: crane_siem::AUDIT_TARGET, tracing::Level::INFO)
+            }
+            crane_http::ACCESS_TARGET => {
+                tracing::enabled!(target: crane_http::ACCESS_TARGET, tracing::Level::INFO)
+            }
+            _ => tracing::enabled!(target: "crane::other", tracing::Level::INFO),
+        })
+    }
+
+    #[test]
+    fn security_journal_survives_any_rust_log() {
+        // Arrange
+        let envs = [
+            Some("warn"),
+            Some("crane::audit=off,crane::access=off"),
+            Some("off"),
+            Some("неразборчиво=="),
+            None,
+        ];
+
+        // Act
+        let enabled =
+            envs.map(|env| SECURITY_TARGETS.map(|target| info_enabled(log_filter(env), target)));
+
+        // Assert
+        assert_eq!(enabled, [[true, true]; 5]);
+    }
+
+    #[test]
+    fn rust_log_still_controls_other_targets() {
+        // Arrange
+        let env = Some("warn");
+
+        // Act
+        let enabled = info_enabled(log_filter(env), "crane::other");
+
+        // Assert
+        assert!(!enabled);
+    }
+
+    #[test]
+    fn unparsable_rust_log_falls_back_to_info_instead_of_silencing_logs() {
+        // Arrange
+        let env = Some("неразборчиво==");
+
+        // Act
+        let enabled = info_enabled(log_filter(env), "crane::other");
+
+        // Assert
+        assert!(enabled);
     }
 
     #[test]

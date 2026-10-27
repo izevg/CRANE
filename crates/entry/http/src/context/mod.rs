@@ -36,6 +36,10 @@ fn text<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers.get(name)?.to_str().ok()
 }
 
+/// Цель `tracing` лога доступа: единственный след чтений с `actor`, часть журнала ИБ
+/// (раздел 14.9). Сборка сервера держит её включённой при любом `RUST_LOG`.
+pub const ACCESS_TARGET: &str = "crane::access";
+
 fn user_agent(headers: &HeaderMap) -> Option<String> {
     text(headers, "user-agent").map(|ua| ua.chars().take(USER_AGENT_MAX_CHARS).collect())
 }
@@ -99,7 +103,7 @@ pub(crate) async fn request_context(
         .get::<Actor>()
         .map(|actor| actor.0.as_str());
     tracing::info!(
-        target: "crane::access",
+        target: ACCESS_TARGET,
         method = %method,
         path = %path,
         status = response.status().as_u16(),
