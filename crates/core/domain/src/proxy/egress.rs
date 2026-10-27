@@ -6,7 +6,7 @@ use super::path::{PathError, UpstreamPath};
 
 /// Схема исходящего запроса. `Http` допускается только явным разрешением в политике.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Scheme {
+enum Scheme {
     Https,
     Http,
 }
@@ -125,21 +125,6 @@ impl EgressPolicy {
 }
 
 impl UpstreamBase {
-    #[must_use]
-    pub const fn scheme(&self) -> Scheme {
-        self.scheme
-    }
-
-    #[must_use]
-    pub fn host(&self) -> &str {
-        &self.host
-    }
-
-    #[must_use]
-    pub const fn port(&self) -> Option<u16> {
-        self.port
-    }
-
     /// `{scheme}://{host}[:port]/{prefix}{path}`. Префикс пуст или оканчивается `/` и не начинается с `/`,
     /// поэтому путь всегда остаётся после authority и не может сменить хост.
     #[must_use]
@@ -581,23 +566,6 @@ mod tests {
 
         // Assert
         assert_eq!(url, "https://[2606:4700::1111]:8443/p/a");
-    }
-
-    #[test]
-    fn admit_exposes_normalized_parts() {
-        // Arrange
-        let policy = policy();
-
-        // Act
-        let base = policy
-            .admit("HTTPS", "Index.Crates.IO.", Some(443), "")
-            .unwrap();
-
-        // Assert
-        assert_eq!(
-            (base.scheme(), base.host(), base.port()),
-            (Scheme::Https, "index.crates.io", Some(443))
-        );
     }
 
     #[test]

@@ -33,22 +33,17 @@ pub struct Cached {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CachedState {
-    /// Ответ upstream есть. `unchanged` — сколько обновлений подряд тело не менялось (адаптивный TTL).
-    Found {
-        body: CachedBody,
+    /// Сырое тело metadata upstream; переписывание ссылок — дело формата при отдаче.
+    /// `unchanged` — сколько обновлений подряд тело не менялось (адаптивный TTL).
+    Document {
+        body: Bytes,
         etag: Option<ETag>,
         unchanged: u32,
     },
+    /// Артефакт лежит в CAS; запись хранит только дайджесты. Неизменяем: `ETag` и счётчик не нужны.
+    Blob(Digests),
     /// Upstream ответил 404. `misses` — сколько раз подряд (рост negative TTL).
     Missing { misses: u32 },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CachedBody {
-    /// Сырое тело metadata upstream; переписывание ссылок — дело формата при отдаче.
-    Document(Bytes),
-    /// Артефакт лежит в CAS; запись хранит только дайджесты.
-    Blob(Digests),
 }
 
 #[derive(Debug, thiserror::Error)]

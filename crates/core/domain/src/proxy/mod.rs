@@ -7,7 +7,7 @@ mod egress;
 mod path;
 mod policy;
 
-pub use egress::{EgressPolicy, EgressRefusal, Scheme, UpstreamBase};
+pub use egress::{EgressPolicy, EgressRefusal, UpstreamBase};
 pub use path::{PathError, ProxyKey, UpstreamPath};
 pub use policy::{Freshness, MetadataPolicy, NegativePolicy, age};
 

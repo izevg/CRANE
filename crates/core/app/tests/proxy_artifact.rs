@@ -15,11 +15,11 @@ use common::proxy::{
     just_before, key, origin, path, secs,
 };
 use common::{OpenFailsBlobs, hello_sha256};
-use crane_app::proxy::{CacheResult, ProxyEngine, ProxyError, ProxyLimits};
+use crane_app::proxy::{CacheResult, ProxyEngine, ProxyError, ProxyLimits, UpstreamFailure};
 use crane_domain::proxy::{EgressRefusal, NegativePolicy};
 use crane_domain::registry::Sha256;
 use crane_memory::{ManualClock, MemoryBlobStore};
-use crane_ports::proxy::{Cached, CachedBody, CachedState, ProxyCache};
+use crane_ports::proxy::{Cached, CachedState, ProxyCache};
 use crane_ports::registry::{BlobError, BlobStore, Digests};
 use futures_executor::block_on;
 
@@ -186,7 +186,10 @@ fn unavailable_upstream_fails_without_stale_fallback() {
     let outcome = world.artifact(CRATE, None);
 
     // Assert
-    assert!(matches!(outcome, Err(ProxyError::UpstreamUnavailable)));
+    assert!(matches!(
+        outcome,
+        Err(ProxyError::Upstream(UpstreamFailure::Unavailable))
+    ));
 }
 
 #[test]
@@ -199,7 +202,9 @@ fn refused_upstream_is_reported() {
     let outcome = world.artifact(CRATE, None);
 
     // Assert
-    assert!(matches!(outcome, Err(ProxyError::Refused(reason)) if reason == refusal));
+    assert!(
+        matches!(outcome, Err(ProxyError::Upstream(UpstreamFailure::Refused(reason))) if reason == refusal)
+    );
 }
 
 #[test]
@@ -211,7 +216,10 @@ fn broken_artifact_stream_is_upstream_unavailable() {
     let outcome = world.artifact(CRATE, None);
 
     // Assert
-    assert!(matches!(outcome, Err(ProxyError::UpstreamUnavailable)));
+    assert!(matches!(
+        outcome,
+        Err(ProxyError::Upstream(UpstreamFailure::Unavailable))
+    ));
 }
 
 #[test]
@@ -220,14 +228,10 @@ fn cas_backend_failure_on_hit_is_a_backend_error() {
     let cache = SharedCache::default();
     let record = Cached {
         fetched_at: epoch(),
-        state: CachedState::Found {
-            body: CachedBody::Blob(Digests {
-                sha256: hello_sha256(),
-                size: 5,
-            }),
-            etag: None,
-            unchanged: 0,
-        },
+        state: CachedState::Blob(Digests {
+            sha256: hello_sha256(),
+            size: 5,
+        }),
     };
     block_on(cache.put(&key(CRATE), record, secs(1))).unwrap();
     let clock = Arc::new(ManualClock::new(epoch()));

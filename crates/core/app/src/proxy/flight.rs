@@ -1,50 +1,23 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use crane_domain::proxy::{EgressRefusal, ProxyKey};
-use crane_domain::registry::Sha256;
+use crane_domain::proxy::ProxyKey;
 use crane_ports::proxy::Cached;
 use futures_util::FutureExt;
 use futures_util::future::{BoxFuture, Shared, WeakShared};
 
 use super::ProxyError;
 
+pub(super) type Outcome = Result<Cached, ProxyError>;
+
 /// Общий итог выборки: `Shared` отдаёт его клон каждому ждущему.
-pub(super) type Flight = Shared<BoxFuture<'static, Result<Cached, Failure>>>;
+pub(super) type Flight = Shared<BoxFuture<'static, Outcome>>;
 
 /// В карте слабые ссылки: полёт живёт, пока его кто-то ждёт. Отменённый всеми ждущими полёт
 /// уничтожается вместе с upstream-соединением и staging, а не ждёт следующего запроса.
-type Map = Mutex<HashMap<ProxyKey, WeakShared<BoxFuture<'static, Result<Cached, Failure>>>>>;
+type Slots = HashMap<ProxyKey, WeakShared<BoxFuture<'static, Outcome>>>;
 
-/// Исход неудачной выборки. `Clone`, потому что один итог получают все присоединившиеся.
-#[derive(Debug, Clone)]
-pub(super) enum Failure {
-    Refused(EgressRefusal),
-    Unavailable,
-    DigestMismatch { expected: Sha256, actual: Sha256 },
-    TooLarge { limit: u64 },
-    Backend(Arc<dyn std::error::Error + Send + Sync>),
-}
-
-impl Failure {
-    pub(super) fn backend(error: impl std::error::Error + Send + Sync + 'static) -> Self {
-        Self::Backend(Arc::new(error))
-    }
-}
-
-impl From<Failure> for ProxyError {
-    fn from(failure: Failure) -> Self {
-        match failure {
-            Failure::Refused(refusal) => Self::Refused(refusal),
-            Failure::Unavailable => Self::UpstreamUnavailable,
-            Failure::DigestMismatch { expected, actual } => {
-                Self::DigestMismatch { expected, actual }
-            }
-            Failure::TooLarge { limit } => Self::TooLarge { limit },
-            Failure::Backend(source) => Self::Backend(source),
-        }
-    }
-}
+type Map = Mutex<Slots>;
 
 /// Нарушенный инвариант данных (запись не того вида под ключом): для клиента это 500.
 #[derive(Debug, thiserror::Error)]
@@ -55,10 +28,7 @@ pub(super) struct Invariant(pub(super) &'static str);
 #[derive(Debug, Default)]
 pub(super) struct Flights(Arc<Map>);
 
-type Slots<'a> =
-    MutexGuard<'a, HashMap<ProxyKey, WeakShared<BoxFuture<'static, Result<Cached, Failure>>>>>;
-
-fn lock(map: &Map) -> Slots<'_> {
+fn lock(map: &Map) -> MutexGuard<'_, Slots> {
     // Отравление не портит карту: каждая операция над ней одно вставка/удаление.
     map.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -71,7 +41,7 @@ impl Flights {
     pub(super) fn join(
         &self,
         key: ProxyKey,
-        start: impl FnOnce() -> BoxFuture<'static, Result<Cached, Failure>>,
+        start: impl FnOnce() -> BoxFuture<'static, Outcome>,
     ) -> Flight {
         let mut flights = lock(&self.0);
         if let Some(running) = flights.get(&key).and_then(WeakShared::upgrade) {

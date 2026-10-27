@@ -61,8 +61,10 @@ pub struct MetadataPolicy {
 pub enum Freshness {
     /// Отдать как есть.
     Fresh,
-    /// Отдать и обновить в фоне (refresh-ahead в последних 10% TTL, затем stale-while-revalidate).
-    Revalidate,
+    /// Последние 10% TTL: отдать как свежее и обновить в фоне (refresh-ahead).
+    RefreshAhead,
+    /// После TTL, но в окне: отдать как устаревшее и обновить в фоне (stale-while-revalidate).
+    Stale,
     /// Идти в upstream блокирующим запросом.
     Expired,
 }
@@ -75,15 +77,17 @@ impl MetadataPolicy {
         self.ttl.saturating_mul(1 << doublings)
     }
 
-    /// Зоны по возрасту записи. Границы целочисленные (без f64): нижняя — `eff − eff/10`, то есть последние 10% TTL.
+    /// Зоны по возрасту записи. Границы целочисленные (без f64): `eff − eff/10` (последние 10% TTL) и `eff`.
     #[must_use]
     pub fn assess(&self, unchanged: u32, fetched_at: SystemTime, now: SystemTime) -> Freshness {
         let effective = self.effective_ttl(unchanged);
         let age = age(fetched_at, now);
         if age < effective.saturating_sub(effective / 10) {
             Freshness::Fresh
+        } else if age < effective {
+            Freshness::RefreshAhead
         } else if age < effective.saturating_add(self.revalidate_window) {
-            Freshness::Revalidate
+            Freshness::Stale
         } else {
             Freshness::Expired
         }
@@ -177,12 +181,15 @@ mod tests {
         // Arrange
         let policy = policy();
         let fresh_until = Duration::from_secs(90);
+        let stale_from = Duration::from_secs(100);
         let expired_from = Duration::from_secs(200);
         let cases = [
             (Duration::ZERO, Freshness::Fresh),
             (ms_before(fresh_until), Freshness::Fresh),
-            (fresh_until, Freshness::Revalidate),
-            (ms_before(expired_from), Freshness::Revalidate),
+            (fresh_until, Freshness::RefreshAhead),
+            (ms_before(stale_from), Freshness::RefreshAhead),
+            (stale_from, Freshness::Stale),
+            (ms_before(expired_from), Freshness::Stale),
             (expired_from, Freshness::Expired),
             (Duration::from_secs(100_000), Freshness::Expired),
         ];
@@ -201,8 +208,10 @@ mod tests {
         let unchanged = 3; // eff = 200 с: Fresh до 180 с, Expired с 300 с
         let cases = [
             (Duration::from_secs(179), Freshness::Fresh),
-            (Duration::from_secs(180), Freshness::Revalidate),
-            (Duration::from_secs(299), Freshness::Revalidate),
+            (Duration::from_secs(180), Freshness::RefreshAhead),
+            (Duration::from_secs(199), Freshness::RefreshAhead),
+            (Duration::from_secs(200), Freshness::Stale),
+            (Duration::from_secs(299), Freshness::Stale),
             (Duration::from_secs(300), Freshness::Expired),
         ];
 
@@ -228,7 +237,7 @@ mod tests {
         // Assert
         assert_eq!(
             (before_ttl, at_ttl),
-            (Freshness::Revalidate, Freshness::Expired)
+            (Freshness::RefreshAhead, Freshness::Expired)
         );
     }
 

@@ -8,7 +8,7 @@ use crane_domain::registry::{RepositoryId, Sha256};
 use futures_util::task::noop_waker_ref;
 use uuid::Uuid;
 
-use crate::proxy::{Cached, CachedBody, CachedState, Claim, ETag, FetchLeases, ProxyCache};
+use crate::proxy::{Cached, CachedState, Claim, ETag, FetchLeases, ProxyCache};
 use crate::registry::Digests;
 
 const LEASE: Duration = Duration::from_secs(30);
@@ -32,8 +32,8 @@ fn at(secs: u64) -> SystemTime {
 fn document(text: &'static [u8], etag: Option<&str>) -> Cached {
     Cached {
         fetched_at: at(1_000),
-        state: CachedState::Found {
-            body: CachedBody::Document(Bytes::from_static(text)),
+        state: CachedState::Document {
+            body: Bytes::from_static(text),
             etag: etag.map(|raw| ETag::new(raw.to_owned())),
             unchanged: 2,
         },
@@ -159,14 +159,10 @@ async fn blob_entry_survives_round_trip<C: ProxyCache>(cache: &C) {
     // Arrange
     let entry = Cached {
         fetched_at: at(3_000),
-        state: CachedState::Found {
-            body: CachedBody::Blob(Digests {
-                sha256: Sha256::from([0x5a; 32]),
-                size: 42,
-            }),
-            etag: None,
-            unchanged: 0,
-        },
+        state: CachedState::Blob(Digests {
+            sha256: Sha256::from([0x5a; 32]),
+            size: 42,
+        }),
     };
     cache.put(&key(), entry.clone(), KEEP).await.expect("put");
 

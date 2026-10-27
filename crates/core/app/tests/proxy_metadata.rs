@@ -262,7 +262,10 @@ fn stale_if_error_window_ends_exactly_at_ttl_plus_window() {
     let outcome = world.metadata(DOC);
 
     // Assert
-    assert!(matches!(outcome, Err(ProxyError::UpstreamUnavailable)));
+    assert!(matches!(
+        outcome,
+        Err(ProxyError::Upstream(UpstreamFailure::Unavailable))
+    ));
 }
 
 #[test]
@@ -311,7 +314,9 @@ fn refusal_without_entry_is_an_error() {
     let outcome = world.metadata(DOC);
 
     // Assert
-    assert!(matches!(outcome, Err(ProxyError::Refused(reason)) if reason == refusal));
+    assert!(
+        matches!(outcome, Err(ProxyError::Upstream(UpstreamFailure::Refused(reason))) if reason == refusal)
+    );
 }
 
 #[test]
@@ -456,7 +461,10 @@ fn broken_body_stream_is_upstream_unavailable() {
     let outcome = world.metadata(DOC);
 
     // Assert
-    assert!(matches!(outcome, Err(ProxyError::UpstreamUnavailable)));
+    assert!(matches!(
+        outcome,
+        Err(ProxyError::Upstream(UpstreamFailure::Unavailable))
+    ));
 }
 
 #[test]
@@ -468,7 +476,10 @@ fn not_modified_without_stored_document_is_upstream_unavailable() {
     let outcome = world.metadata(DOC);
 
     // Assert
-    assert!(matches!(outcome, Err(ProxyError::UpstreamUnavailable)));
+    assert!(matches!(
+        outcome,
+        Err(ProxyError::Upstream(UpstreamFailure::Unavailable))
+    ));
 }
 
 #[test]

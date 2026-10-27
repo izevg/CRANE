@@ -225,17 +225,10 @@ impl ProxyCache for BrokenCache {
     }
 }
 
-#[derive(Debug, Default)]
-struct LeaseCounters {
-    led: Mutex<usize>,
-    released: Mutex<usize>,
-}
-
-/// Общие leases с учётом захватов и снятий; `down` моделирует недоступный координатор.
+/// Общие leases; `down` моделирует недоступный координатор.
 #[derive(Debug, Clone)]
 pub(crate) struct SharedLeases {
     inner: Arc<MemoryFetchLeases>,
-    counters: Arc<LeaseCounters>,
     down: bool,
 }
 
@@ -243,7 +236,6 @@ impl SharedLeases {
     pub(crate) fn new(clock: Arc<ManualClock>) -> Self {
         Self {
             inner: Arc::new(MemoryFetchLeases::new(clock)),
-            counters: Arc::default(),
             down: false,
         }
     }
@@ -253,14 +245,6 @@ impl SharedLeases {
             down: true,
             ..Self::new(clock)
         }
-    }
-
-    pub(crate) fn led(&self) -> usize {
-        *locked(&self.counters.led)
-    }
-
-    pub(crate) fn released(&self) -> usize {
-        *locked(&self.counters.released)
     }
 }
 
@@ -274,15 +258,10 @@ impl FetchLeases for SharedLeases {
         if self.down {
             return Err(LeaseError::Backend("координатор лежит".into()));
         }
-        let claim = self.inner.claim(key, lease, patience).await?;
-        if matches!(claim, Claim::Lead(_)) {
-            *locked(&self.counters.led) += 1;
-        }
-        Ok(claim)
+        self.inner.claim(key, lease, patience).await
     }
 
     async fn release(&self, lease: Lease) -> Result<(), LeaseError> {
-        *locked(&self.counters.released) += 1;
         self.inner.release(lease).await
     }
 }

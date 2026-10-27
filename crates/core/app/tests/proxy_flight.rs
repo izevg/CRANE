@@ -9,10 +9,11 @@
 mod common;
 
 use std::pin::pin;
+use std::task::Poll;
 
 use common::hello_sha256;
 use common::proxy::{FakeUpstream, Step, World, bytes_of, key, path, policy, poll_once, secs};
-use crane_app::proxy::{CacheResult, ProxyError};
+use crane_app::proxy::{CacheResult, ProxyError, UpstreamFailure};
 use crane_domain::proxy::NegativePolicy;
 use crane_domain::registry::Sha256;
 use crane_ports::proxy::{Cached, CachedState, Claim, FetchLeases, ProxyCache};
@@ -127,7 +128,10 @@ fn follower_fetches_itself_when_the_leader_left_nothing_in_cache() {
     let (leader, follower) = block_on(join(leader, follower));
 
     // Assert
-    assert!(matches!(leader, Err(ProxyError::UpstreamUnavailable)));
+    assert!(matches!(
+        leader,
+        Err(ProxyError::Upstream(UpstreamFailure::Unavailable))
+    ));
     assert_eq!(follower.unwrap().body, "v1");
     assert_eq!(upstream_b.call_count(), 1);
 }
@@ -161,29 +165,31 @@ fn unreachable_lease_coordinator_does_not_fail_the_request() {
 }
 
 #[test]
-fn leader_releases_its_lease_after_a_successful_fetch() {
+fn key_is_free_for_the_next_leader_after_a_successful_fetch() {
     // Arrange
     let world = World::new([Step::Found(b"v1", None)]);
+    world.metadata(DOC).unwrap();
+    let wanted = key(DOC);
 
     // Act
-    let served = world.metadata(DOC);
+    let claim = poll_once(pin!(world.leases.claim(&wanted, secs(30), secs(25))));
 
     // Assert
-    assert!(served.is_ok());
-    assert_eq!((world.leases.led(), world.leases.released()), (1, 1));
+    assert!(matches!(claim, Poll::Ready(Ok(Claim::Lead(_)))));
 }
 
 #[test]
-fn leader_releases_its_lease_after_a_failed_fetch() {
+fn key_is_free_for_the_next_leader_after_a_failed_fetch() {
     // Arrange
     let world = World::new([Step::Unavailable]);
+    let _ = world.metadata(DOC);
+    let wanted = key(DOC);
 
     // Act
-    let served = world.metadata(DOC);
+    let claim = poll_once(pin!(world.leases.claim(&wanted, secs(30), secs(25))));
 
     // Assert
-    assert!(served.is_err());
-    assert_eq!((world.leases.led(), world.leases.released()), (1, 1));
+    assert!(matches!(claim, Poll::Ready(Ok(Claim::Lead(_)))));
 }
 
 #[test]
