@@ -1,5 +1,21 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "project": ["src/**/*.{ts,tsx}"],
-  "ignoreDependencies": ["@feature-sliced/steiger-plugin"]
+  "project": ["src/**/*.{ts,tsx}", "*.config.ts"],
+  "treatConfigHintsAsErrors": true,
+  "rules": {
+    "files": "error",
+    "dependencies": "error",
+    "devDependencies": "error",
+    "optionalPeerDependencies": "error",
+    "unlisted": "error",
+    "binaries": "error",
+    "unresolved": "error",
+    "exports": "error",
+    "nsExports": "error",
+    "types": "error",
+    "nsTypes": "error",
+    "enumMembers": "error",
+    "duplicates": "error"
+  },
+  "entry": ["steiger.config.ts"]
 }

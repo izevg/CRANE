@@ -4,6 +4,11 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const WORKSPACE_VERSION = /(\[workspace\.package\][^[]*?\nversion = ")[^"]+(")/s;
+const JSON_VERSION = /("version":\s*")[^"]+(")/;
+const CHART_VERSION = /^version:.*$/m;
+const CHART_APP_VERSION = /^appVersion:.*$/m;
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const tag = process.argv[2] ?? "";
 const match = /^v(\d+\.\d+\.\d+)$/.exec(tag);
@@ -15,7 +20,9 @@ const version = match[1] ?? "";
 
 const edit = (path: string, fn: (text: string) => string): void => {
   const file = join(root, path);
-  if (!existsSync(file)) return;
+  if (!existsSync(file)) {
+    return;
+  }
   const before = readFileSync(file, "utf8");
   const after = fn(before);
   if (before === after && !before.includes(version)) {
@@ -25,19 +32,17 @@ const edit = (path: string, fn: (text: string) => string): void => {
   process.stdout.write(`${path} → ${version}\n`);
 };
 
-edit("Cargo.toml", (s) =>
-  s.replace(/(\[workspace\.package\][^[]*?\nversion = ")[^"]+(")/s, `$1${version}$2`),
-);
+edit("Cargo.toml", (s) => s.replace(WORKSPACE_VERSION, `$1${version}$2`));
 for (const pkg of ["package.json", "web/package.json"]) {
-  edit(pkg, (s) => s.replace(/("version":\s*")[^"]+(")/, `$1${version}$2`));
+  edit(pkg, (s) => s.replace(JSON_VERSION, `$1${version}$2`));
 }
 const helm = join(root, "deploy/helm");
 if (existsSync(helm)) {
   for (const chart of readdirSync(helm)) {
     edit(`deploy/helm/${chart}/Chart.yaml`, (s) =>
       s
-        .replace(/^version:.*$/m, `version: ${version}`)
-        .replace(/^appVersion:.*$/m, `appVersion: "${version}"`),
+        .replace(CHART_VERSION, `version: ${version}`)
+        .replace(CHART_APP_VERSION, `appVersion: "${version}"`),
     );
   }
 }

@@ -3,6 +3,8 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 
+const SHORT_SHA_LENGTH = 7;
+
 export interface Worktree {
   path: string;
   head: string;
@@ -51,13 +53,25 @@ const isTarget = (base: string): boolean => base === "main" || base.startsWith("
 
 /** Удалять можно только worktree, чья ветка полностью влита PR в main или release/*. */
 export function decide(wt: Worktree, prs: PullRequest[], ctx: Context): Verdict {
-  if (ctx.isMain) return { remove: false, reason: "основной каталог" };
-  if (ctx.isCurrent) return { remove: false, reason: "текущий worktree" };
-  if (wt.branch === null) return { remove: false, reason: "detached HEAD" };
-  if (isProtected(wt.branch)) return { remove: false, reason: "защищённая ветка" };
-  if (ctx.dirty) return { remove: false, reason: "есть незакоммиченные изменения" };
+  if (ctx.isMain) {
+    return { remove: false, reason: "основной каталог" };
+  }
+  if (ctx.isCurrent) {
+    return { remove: false, reason: "текущий worktree" };
+  }
+  if (wt.branch === null) {
+    return { remove: false, reason: "detached HEAD" };
+  }
+  if (isProtected(wt.branch)) {
+    return { remove: false, reason: "защищённая ветка" };
+  }
+  if (ctx.dirty) {
+    return { remove: false, reason: "есть незакоммиченные изменения" };
+  }
   const merged = prs.filter((pr) => pr.state === "MERGED" && isTarget(pr.baseRefName));
-  if (merged.length === 0) return { remove: false, reason: "PR не влит в main или release/*" };
+  if (merged.length === 0) {
+    return { remove: false, reason: "PR не влит в main или release/*" };
+  }
   if (!merged.some((pr) => pr.headRefOid === wt.head)) {
     return { remove: false, reason: "после слияния PR в ветке есть новые коммиты" };
   }
@@ -99,7 +113,7 @@ function main(): void {
     };
     const prs = wt.branch && !ctx.isMain && !ctx.isCurrent ? mergedPulls(wt.branch) : [];
     const verdict = decide(wt, prs, ctx);
-    const label = wt.branch ?? wt.head.slice(0, 7);
+    const label = wt.branch ?? wt.head.slice(0, SHORT_SHA_LENGTH);
     process.stdout.write(
       `${verdict.remove ? "удалить" : "оставить"}  ${label}  (${verdict.reason})\n`,
     );
@@ -108,7 +122,11 @@ function main(): void {
       git(["branch", "-D", wt.branch]);
     }
   }
-  if (!apply) process.stdout.write("dry-run: для удаления добавьте --apply\n");
+  if (!apply) {
+    process.stdout.write("dry-run: для удаления добавьте --apply\n");
+  }
 }
 
-if (import.meta.main) main();
+if (import.meta.main) {
+  main();
+}

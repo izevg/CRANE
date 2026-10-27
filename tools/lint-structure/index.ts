@@ -14,7 +14,9 @@ const violations = [
 
 if (violations.length > 0) {
   process.stderr.write(`lint-structure: ${violations.length} нарушений\n`);
-  for (const v of violations) process.stderr.write(`  - ${v}\n`);
+  for (const v of violations) {
+    process.stderr.write(`  - ${v}\n`);
+  }
   process.exit(1);
 }
 process.stdout.write("lint-structure: ок\n");
