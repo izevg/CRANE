@@ -88,6 +88,9 @@ msgstr "Active"
 msgid "Безопасность"
 msgstr "Security"
 
+msgid "Блокирующий"
+msgstr "Blocking"
+
 msgid "Было"
 msgstr "Before"
 
@@ -450,9 +453,6 @@ msgstr "Deprecated"
 
 msgid "Файл {path}"
 msgstr "File {path}"
-
-msgid "Чрезвычайный"
-msgstr "Extreme"
 
 msgid "Шаг 1. Однократная настройка"
 msgstr "Step 1. One-time setup"

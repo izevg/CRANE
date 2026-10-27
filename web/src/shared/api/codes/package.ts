@@ -28,7 +28,7 @@ export const REPOSITORY_KIND = {
  * Слово рядом с кодом («P1 Критично») собирает потребитель.
  */
 export const PRIORITY = {
-  P0: { tone: "error", label: msg`Чрезвычайный` },
+  P0: { tone: "error", label: msg`Блокирующий` },
   P1: { tone: "error", label: msg`Критично` },
   P2: { tone: "warning", label: msg`Высокий` },
   P3: { tone: "info", label: msg`Средний` },
