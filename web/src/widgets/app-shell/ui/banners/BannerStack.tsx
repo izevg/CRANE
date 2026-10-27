@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { announce } from "~/shared/lib/a11y";
 import { type Action, ActionButton } from "~/shared/ui/actions";
 import { Button, Callout } from "~/shared/ui/primitives";
 
@@ -6,6 +7,7 @@ import { Button, Callout } from "~/shared/ui/primitives";
 const MAX_VISIBLE = 2;
 const COLLAPSE = "Свернуть";
 const MORE_PREFIX = "Ещё";
+const TEXT_SEPARATOR = ". ";
 const HIDE_REST = "Скрыть остальные";
 
 export type Banner = {
@@ -58,9 +60,27 @@ function BannerItem({ banner, onCollapse }: { banner: Banner; onCollapse: Props[
   );
 }
 
+/**
+ * Новый обычный баннер объявляется один раз через общий live-регион (WCAG 4.1.3, patterns §25): сами баннеры
+ * без live-роли, иначе скринридер читал бы их при каждом монтировании. Срочные (P0) объявляет `role="alert"`
+ * у Callout, поэтому сюда они не попадают. Id, пропавший из набора, забывается и при возвращении объявится снова.
+ */
+function useAnnounceNew(banners: readonly Banner[]) {
+  const seen = useRef(new Set<string>());
+  useEffect(() => {
+    const fresh = banners.filter((banner) => !seen.current.has(banner.id));
+    seen.current = new Set(banners.map((banner) => banner.id));
+    const texts = fresh.filter((banner) => banner.urgent !== true).map((banner) => banner.text);
+    if (texts.length > 0) {
+      announce(texts.join(TEXT_SEPARATOR));
+    }
+  }, [banners]);
+}
+
 /** Глобальные баннеры под topbar: видно не больше двух, остальные раскрываются кнопкой «Ещё N». */
 export function BannerStack({ banners, onCollapse }: Props) {
   const [expanded, setExpanded] = useState(false);
+  useAnnounceNew(banners);
   const toggle = useCallback(() => setExpanded((value) => !value), []);
   if (banners.length === 0) {
     return null;

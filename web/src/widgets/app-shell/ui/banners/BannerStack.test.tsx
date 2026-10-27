@@ -1,7 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { announce } from "~/shared/lib/a11y";
 import { type Banner, BannerStack } from "./BannerStack";
+
+vi.mock("~/shared/lib/a11y", () => ({ announce: vi.fn() }));
+
+beforeEach(() => {
+  vi.mocked(announce).mockClear();
+});
 
 const MORE = /Ещё/;
 const COLLAPSE = /Свернуть/;
@@ -131,5 +138,66 @@ describe("BannerStack", () => {
 
     // Assert
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  describe("объявление новых баннеров", () => {
+    it("новый обычный баннер объявляется один раз его текстом", () => {
+      // Arrange
+      // Act
+      render(<BannerStack banners={[banner("a")]} />);
+
+      // Assert
+      expect(announce).toHaveBeenCalledTimes(1);
+      expect(announce).toHaveBeenCalledWith("Сообщение a");
+    });
+
+    it("повторный рендер с тем же набором не объявляет", () => {
+      // Arrange
+      const banners = [banner("a")];
+      const { rerender } = render(<BannerStack banners={banners} />);
+      vi.mocked(announce).mockClear();
+
+      // Act
+      rerender(<BannerStack banners={[banner("a")]} />);
+
+      // Assert
+      expect(announce).not.toHaveBeenCalled();
+    });
+
+    it("появление нового id объявляет только его", () => {
+      // Arrange
+      const { rerender } = render(<BannerStack banners={[banner("a")]} />);
+      vi.mocked(announce).mockClear();
+
+      // Act
+      rerender(<BannerStack banners={[banner("a"), banner("b")]} />);
+
+      // Assert
+      expect(announce).toHaveBeenCalledTimes(1);
+      expect(announce).toHaveBeenCalledWith("Сообщение b");
+    });
+
+    it("раскрытие «Ещё N» ничего не объявляет", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      render(<BannerStack banners={four} />);
+      vi.mocked(announce).mockClear();
+
+      // Act
+      await user.click(screen.getByRole("button", { name: MORE }));
+
+      // Assert
+      expect(announce).not.toHaveBeenCalled();
+    });
+
+    it("срочный баннер не дублируется в announce: его объявляет role=alert", () => {
+      // Arrange
+      // Act
+      render(<BannerStack banners={[banner("p0", { tone: "error", urgent: true })]} />);
+
+      // Assert
+      expect(announce).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert")).toHaveTextContent("Сообщение p0");
+    });
   });
 });
