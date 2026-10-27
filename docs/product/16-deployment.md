@@ -63,7 +63,7 @@ services:
 | --- | --- | --- |
 | `CRANE_CONFIG` | нет файла | путь к файлу TOML; только из окружения |
 | `CRANE_DATABASE_URL` или `CRANE_DATABASE_URL_FILE` | одна из двух | каталог: `memory` (данные теряются при рестарте) или `postgres://…` (`postgresql://…`); файл читается без завершающего перевода строки |
-| `CRANE_CACHE` или `CRANE_CACHE_FILE` | `memory` | кэш proxy: `memory` (ограничен по байтам, в процессе) или Valkey: `valkey://`, `valkeys://` (TLS), варианты `valkey-cluster://`, `valkey-sentinel://` (и `valkeys-…`); URL может содержать пароль, поэтому есть `_FILE` (читается без завершающего перевода строки, как `CRANE_DATABASE_URL_FILE`) |
+| `CRANE_CACHE` или `CRANE_CACHE_FILE` | `memory` | кэш proxy и координатор выборок: `memory` (ограничен по байтам, в процессе) или Valkey; схемы `valkey`, `valkeys` (TLS), `valkey-cluster`, `valkeys-cluster`, `valkey-sentinel`, `valkeys-sentinel` (`redis://` не принимается). Необязательна, в отличие от хранилищ: кэш не источник истины, его потеря данных не теряет, поэтому правило «`memory` пишется явно» выше на неё не распространяется. URL может содержать пароль, поэтому есть `_FILE` (читается без завершающего перевода строки, как `CRANE_DATABASE_URL_FILE`) |
 | `CRANE_BLOBS` | обязательна | хранилище blob: `memory`, `file:///абсолютный/путь` или `s3://bucket[/prefix]?endpoint=…` |
 | `CRANE_PUBLIC_URL` | обязательна | внешний адрес (`http://` или `https://`), попадает в `config.json` cargo |
 | `CRANE_TOKEN` или `CRANE_TOKEN_FILE` | одна из двух | временный статический токен до v0.4.0; файл читается без завершающего перевода строки |

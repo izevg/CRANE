@@ -504,6 +504,7 @@ dependencies = [
  "crane-ports",
  "crane-siem",
  "crane-upstream",
+ "crane-valkey",
  "futures-util",
  "http-body-util",
  "serde_json",
