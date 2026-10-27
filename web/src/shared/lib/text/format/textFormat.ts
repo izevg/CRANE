@@ -23,6 +23,8 @@ export type TextFormat = {
   relative(ts: Timestamp, now: number): string;
   /** Полная дата и время для `title`: «20 октября 2026 г. в 14:03:07». */
   dateTime(ts: Timestamp): string;
+  /** Короткие дата и время для подсказок графиков: «9 окт., 03:00»; год не показывается. */
+  dateTimeShort(ts: Timestamp): string;
 };
 
 const SECOND = 1000;
@@ -121,6 +123,10 @@ function build(locale: string): TextFormat {
     dateTime(ts) {
       const time = toMillis(ts);
       return Number.isNaN(time) ? NO_VALUE : full.format(new Date(time));
+    },
+    dateTimeShort(ts) {
+      const time = toMillis(ts);
+      return Number.isNaN(time) ? NO_VALUE : sameYear.format(new Date(time));
     },
   };
 }

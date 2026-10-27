@@ -168,4 +168,28 @@ describe("textFormat", () => {
     expect(result).toContain("20 октября 2026");
     expect(result).toContain("14:03:07");
   });
+
+  it("dateTimeShort возвращает день, короткий месяц и время без года", () => {
+    // Arrange
+    const ts = new Date(2026, 9, 9, 3, 0, 0);
+
+    // Act
+    const result = ru.dateTimeShort(ts);
+
+    // Assert
+    expect(result).toContain("9 окт.");
+    expect(result).toContain("03:00");
+    expect(result).not.toContain("2026");
+  });
+
+  it("dateTimeShort зависит от локали", () => {
+    // Arrange
+    const ts = new Date(2026, 9, 9, 3, 0, 0);
+
+    // Act
+    const result = en.dateTimeShort(ts);
+
+    // Assert
+    expect(result).toContain("Oct");
+  });
 });
