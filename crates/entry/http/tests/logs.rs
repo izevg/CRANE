@@ -14,7 +14,7 @@ use std::time::SystemTime;
 use axum::body::Body;
 use axum::http::{Method, Request};
 use common::{Api, REPO, Reply, SharedBuf, TOKEN, request};
-use crane_memory::{FixedClock, MemoryAudit, SequentialIdGen};
+use crane_memory::{ManualClock, MemoryAudit, SequentialIdGen};
 use crane_siem::OcsfLogSink;
 use tracing_subscriber::fmt;
 
@@ -25,7 +25,7 @@ const BASIC: &str = "Basic dXNlcjpQQVNTV09SRA==";
 
 fn real_sink_api() -> Api {
     let sink = Arc::new(OcsfLogSink::new(
-        Arc::new(FixedClock::new(SystemTime::UNIX_EPOCH)),
+        Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH)),
         Arc::new(SequentialIdGen::default()),
     ));
     Api::build("", sink, Arc::new(MemoryAudit::default()))

@@ -1,0 +1,65 @@
+//! Порты bounded context «proxy»: upstream, кэш записей, межрепликовые lease.
+
+mod cache;
+mod leases;
+
+use std::fmt;
+
+use crane_domain::proxy::{EgressRefusal, UpstreamBase, UpstreamPath};
+
+use crate::registry::ByteStream;
+
+pub use cache::{CacheError, Cached, CachedState, ETag, ProxyCache};
+pub use leases::{Claim, FetchLeases, Lease, LeaseError};
+
+#[derive(Debug)]
+pub struct UpstreamRequest<'a> {
+    pub base: &'a UpstreamBase,
+    pub path: &'a UpstreamPath,
+    pub if_none_match: Option<&'a ETag>,
+}
+
+pub enum UpstreamResponse {
+    NotModified,
+    Found {
+        body: ByteStream,
+        etag: Option<ETag>,
+    },
+    NotFound,
+}
+
+// Поток не Debug (как `Download` в app), поэтому вручную и без тела.
+impl fmt::Debug for UpstreamResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotModified => f.write_str("NotModified"),
+            Self::Found { etag, .. } => f
+                .debug_struct("Found")
+                .field("etag", etag)
+                .finish_non_exhaustive(),
+            Self::NotFound => f.write_str("NotFound"),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum UpstreamError {
+    /// SSRF guard отказал (redirect-hop или адрес после DNS): событие для `SecOps`.
+    #[error("upstream отклонён политикой egress")]
+    Refused(#[source] EgressRefusal),
+    /// Сеть, таймаут, 5xx и любой ответ, кроме 200/304/404.
+    #[error("upstream недоступен")]
+    Unavailable(#[source] Box<dyn std::error::Error + Send + Sync>),
+}
+
+/// Транспорт к upstream. Адаптер (reqwest) обязан применять `EgressPolicy::check_address`
+/// в своём DNS-резолвере (до connect) и `check_target` к каждому redirect-hop: только так
+/// проверяется адрес, к которому реально подключаются.
+///
+/// Контракта нет: поведение задаёт удалённая сторона; `app` тестируется скриптованным фейком.
+pub trait Upstream: Send + Sync {
+    fn fetch(
+        &self,
+        request: UpstreamRequest<'_>,
+    ) -> impl Future<Output = Result<UpstreamResponse, UpstreamError>> + Send;
+}
