@@ -156,10 +156,10 @@ Evidence расширяется строками, а не колонками. Н
 | --- | --- | --- | --- |
 | SLSA Provenance | `https://slsa.dev/provenance/v1` | attestation | npm provenance, PyPI, свой CI |
 | PyPI Publish | `https://docs.pypi.org/attestations/publish/v1` | attestation | PyPI (Trusted Publishing) |
-| SBOM CycloneDX | `https://cyclonedx.org/bom` | attestation | свой CI, upstream |
-| SBOM SPDX 2.x и 3 | `https://spdx.dev/Document`, `https://spdx.dev/Document/v3` | attestation | свой CI, upstream |
+| SBOM CycloneDX | `https://cyclonedx.org/bom` | attestation или report | свой CI, upstream |
+| SBOM SPDX 2.x и 3 | `https://spdx.dev/Document`, `https://spdx.dev/Document/v3` | attestation или report | свой CI, upstream |
 | Скан уязвимостей | `https://in-toto.io/attestation/vulns/v0.2` | report | Trivy в CRANE (без подписи) |
-| VEX | `https://openvex.dev/ns/v0.2.0` | attestation | издатель пакета, security |
+| VEX | `https://openvex.dev/ns/v0.2.0` | attestation или report | издатель пакета, security |
 | Quality gate SonarQube | `urn:crane:quality-gate:v1` (внутренний URI CRANE) | report | SonarQube через интеграцию |
 | Подпись PGP (Maven `.asc`) | NULL | signature | издатель Maven |
 | Подпись Sigstore без предиката (`.sigstore.json`, messageSignature) | NULL | signature | издатель Maven, upstream |

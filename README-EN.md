@@ -201,7 +201,7 @@ The documentation is currently in Russian; an English translation is planned.
 
 ## Roadmap
 
-Effort is estimated in agent-hours, calibrated against a measured real project ([section 18](docs/product/18-plan-team-budget.md)); the baseline scenario is about 760 agent-hours.
+Effort is estimated in agent-hours, calibrated against a measured real project ([section 18](docs/product/18-plan-team-budget.md)); the baseline scenario is about 770 agent-hours.
 
 - [x] Solution architecture and guidebook
 - [x] Effort estimate and roadmap

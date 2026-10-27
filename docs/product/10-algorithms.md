@@ -141,26 +141,32 @@ Promotion меняет только строку в БД: digest и байты �
 
 NuGet и Cargo в v1.1.0 не проверяются.
 
-Проверка одинакова для всех источников:
+Общий шаг 1: `subject` digest (у `.asc` и подписи без предиката — подписанный файл) равен SHA-256 blob; иначе `invalid`. Остальное зависит от вида подписи.
 
-1. `subject` digest в attestation равен SHA-256 blob; иначе `invalid`.
+Sigstore bundle (npm, PyPI, `.sigstore.json` в Maven):
+
 2. Цепочка сертификата Fulcio и его SAN и issuer; они кладутся в `signer_*` и в `facts` (builder, repo, commit, run).
 3. Inclusion proof и signed entry timestamp Rekor берутся из самого bundle, без обращения к журналу: проверка работает офлайн.
 4. Trust root — `trusted_root.json` Sigstore, обновляется через TUF; версия корня пишется в `verify_detail`.
+
+PGP (Maven `.asc`): подпись проверяется по публичному ключу издателя, отпечаток ключа ложится в `signer_subject`, `tlog` NULL; Fulcio, Rekor и TUF не участвуют.
 
 Ошибка самой проверки (нет trust root, upstream недоступен, незнакомый формат bundle) даёт `unverifiable`, а не `invalid`: иначе сбой инфраструктуры блокировал бы чужие релизы.
 
 ```rust
 on attestation_verified(new_version, e):                  // attestation.verify → правило регрессии
-    prev = evidence.latest_valid(previous_versions(new_version.package), SLSA_PROVENANCE)
+    prev = evidence.latest_valid(previous_versions(new_version.package), e.kind, e.predicate_type)
+    // тот же вид evidence, что был у прошлых версий: predicate type или kind = signature
+    same_signer(a, b) = (a.signer_issuer, a.signer_san) == (b.signer_issuer, b.signer_san)   // Sigstore
+                        or a.signer_subject == b.signer_subject                              // PGP
     regressed = prev.is_some() and (e.is_none() or e.invalid
-                or prev.facts.repo != e.facts.repo or prev.signer_san != e.signer_san)
+                or !same_signer(prev, e) or prev.facts.repo != e.facts.repo)   // repo, если есть
     if regressed:
         hold(new_version, quarantine | blocked)           // по политике репозитория
         siem(SupplyChainSignal(new_version, prev, e))     // сигнал захвата аккаунта maintainer'а
 ```
 
-Регрессия — главный практический сигнал: у прошлых версий была валидная attestation, а у новой её нет, она `invalid` или сменились издатель и репозиторий. Так может выглядеть публикация с украденным токеном мимо CI. Карточка версии показывает «собрано в <CI> из <repo>@<commit>» из `facts`.
+Регрессия — главный практический сигнал: у прошлых версий была валидная attestation или подпись, а у новой её нет, она `invalid` или сменились издатель и репозиторий. Так может выглядеть публикация с украденным токеном мимо CI. Карточка версии показывает «собрано в <CI> из <repo>@<commit>» из `facts`.
 
 **Attestations из своего CI (hosted).** CI прикладывает in-toto/SLSA provenance и другие attestations к версии рядом с SBOM. Их проверяет тот же верификатор; они ложатся в evidence с `trust = publisher`, а `subject` сверяется с blob при приёме. Цель — SLSA Build L2 (hosted build platform, подписанная provenance); L3 при hardened builders остаётся документированной целью, а не гарантией.
 
