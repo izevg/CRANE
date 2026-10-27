@@ -921,8 +921,8 @@ paths:
       - $ref: ./common.yaml#/components/parameters/Name
       - name: client
         in: query
-        description: Клиент.
-        required: true
+        description: Предпочитаемый клиент. Без него сервер отдаёт инструкции клиента по умолчанию (первого в `available_clients`); фактический клиент указан в `InstallInstructions.client`.
+        required: false
         schema:
           $ref: ./common.yaml#/components/schemas/InstallClient
       - $ref: ./common.yaml#/components/parameters/IfNoneMatch
