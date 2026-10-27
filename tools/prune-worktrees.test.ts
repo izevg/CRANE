@@ -19,36 +19,52 @@ const merged = (over: Partial<PullRequest> = {}): PullRequest => ({
 });
 
 it("ветка влитого в релиз PR удаляется", () => {
-  assert.equal(decide(wt, [merged()], ctx).remove, true);
+  // Arrange
+  const prs = [merged()];
+
+  // Act
+  const decision = decide(wt, prs, ctx);
+
+  // Assert
+  assert.equal(decision.remove, true);
 });
 
-it("открытый или закрытый без слияния PR не удаляется", () => {
-  assert.equal(decide(wt, [merged({ state: "OPEN" })], ctx).remove, false);
-  assert.equal(decide(wt, [merged({ state: "CLOSED" })], ctx).remove, false);
-  assert.equal(decide(wt, [], ctx).remove, false);
-});
+const kept = [
+  { name: "открытый PR", wt, prs: [merged({ state: "OPEN" })], ctx },
+  { name: "закрытый без слияния PR", wt, prs: [merged({ state: "CLOSED" })], ctx },
+  { name: "ветка без PR", wt, prs: [], ctx },
+  { name: "PR, влитый в чужую ветку", wt, prs: [merged({ baseRefName: "feat/other" })], ctx },
+  { name: "новые коммиты после слияния", wt: { ...wt, head: "def" }, prs: [merged()], ctx },
+  { name: "грязное дерево", wt, prs: [merged()], ctx: { ...ctx, dirty: true } },
+  { name: "текущий worktree", wt, prs: [merged()], ctx: { ...ctx, isCurrent: true } },
+  { name: "основной worktree", wt, prs: [merged()], ctx: { ...ctx, isMain: true } },
+  { name: "detached HEAD", wt: { ...wt, branch: null }, prs: [merged()], ctx },
+  { name: "ветка релиза", wt: { ...wt, branch: "release/v0.1.0" }, prs: [merged()], ctx },
+  { name: "ветка main", wt: { ...wt, branch: "main" }, prs: [merged()], ctx },
+];
 
-it("PR, влитый в чужую ветку, не считается релизом", () => {
-  assert.equal(decide(wt, [merged({ baseRefName: "feat/other" })], ctx).remove, false);
-});
+for (const c of kept) {
+  it(`worktree не удаляется: ${c.name}`, () => {
+    // Arrange
 
-it("новые коммиты после слияния сохраняют worktree", () => {
-  assert.equal(decide({ ...wt, head: "def" }, [merged()], ctx).remove, false);
-});
+    // Act
+    const decision = decide(c.wt, c.prs, c.ctx);
 
-it("грязный, текущий, основной, detached и защищённые не удаляются", () => {
-  assert.equal(decide(wt, [merged()], { ...ctx, dirty: true }).remove, false);
-  assert.equal(decide(wt, [merged()], { ...ctx, isCurrent: true }).remove, false);
-  assert.equal(decide(wt, [merged()], { ...ctx, isMain: true }).remove, false);
-  assert.equal(decide({ ...wt, branch: null }, [merged()], ctx).remove, false);
-  assert.equal(decide({ ...wt, branch: "release/v0.1.0" }, [merged()], ctx).remove, false);
-  assert.equal(decide({ ...wt, branch: "main" }, [merged()], ctx).remove, false);
-});
+    // Assert
+    assert.equal(decision.remove, false);
+  });
+}
 
 it("porcelain разбирается в worktree", () => {
+  // Arrange
   const out =
     "worktree /r\nHEAD 111\nbranch refs/heads/main\n\nworktree /r/w\nHEAD 222\ndetached\n";
-  assert.deepEqual(parseWorktrees(out), [
+
+  // Act
+  const actual = parseWorktrees(out);
+
+  // Assert
+  assert.deepEqual(actual, [
     { path: "/r", head: "111", branch: "main" },
     { path: "/r/w", head: "222", branch: null },
   ]);

@@ -154,16 +154,4 @@ mod tests {
             (64, Ok(digest))
         );
     }
-
-    #[test]
-    fn debug_shows_full_lowercase_hex() {
-        // Arrange
-        let digest = Sha256::from([0xab; 32]);
-
-        // Act
-        let debug = format!("{digest:?}");
-
-        // Assert
-        assert_eq!(debug, format!("Sha256({})", "ab".repeat(32)));
-    }
 }

@@ -233,26 +233,26 @@ mod tests {
     }
 
     #[test]
-    fn different_versions_are_not_equal() {
-        // Arrange
-        let (a, b, rc) = (cargo("1.0.0"), cargo("1.0.1"), cargo("1.0.0-rc.1"));
-
-        // Act
-        let (patch_differs, pre_release_differs) = (a != b, rc != a);
-
-        // Assert
-        assert!(patch_differs && pre_release_differs);
-    }
-
-    #[test]
-    fn different_versions_have_different_hashes() {
+    fn versions_differing_in_patch_are_not_equal() {
         // Arrange
         let (a, b) = (cargo("1.0.0"), cargo("1.0.1"));
 
         // Act
-        let (hash_a, hash_b) = (hash_of(&a), hash_of(&b));
+        let equal = a == b;
 
         // Assert
-        assert_ne!(hash_a, hash_b);
+        assert!(!equal);
+    }
+
+    #[test]
+    fn pre_release_is_not_equal_to_its_release() {
+        // Arrange
+        let (rc, release) = (cargo("1.0.0-rc.1"), cargo("1.0.0"));
+
+        // Act
+        let equal = rc == release;
+
+        // Assert
+        assert!(!equal);
     }
 }

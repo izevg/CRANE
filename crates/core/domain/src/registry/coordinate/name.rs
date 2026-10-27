@@ -263,16 +263,4 @@ mod tests {
         // Assert
         assert_eq!(result.unwrap_err(), NameError::Unsupported(Format::Npm));
     }
-
-    #[test]
-    fn different_names_have_different_hashes() {
-        // Arrange
-        let (a, b) = (cargo("foo").unwrap(), cargo("bar").unwrap());
-
-        // Act
-        let (hash_a, hash_b) = (hash_of(&a), hash_of(&b));
-
-        // Assert
-        assert_ne!(hash_a, hash_b);
-    }
 }

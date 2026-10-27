@@ -23,7 +23,7 @@ tasks:
       - task: deploy:check
 
   structure:
-    desc: Правило четырёх и слои крейтов
+    desc: Правило четырёх, слои крейтов, AAA в тестах
     cmds: [node tools/lint-structure/index.ts]
 
   lint:
@@ -34,7 +34,7 @@ tasks:
     desc: Типы и тесты tools/ и конфигов в корне
     cmds:
       - pnpm exec tsc -p tsconfig.json
-      - node --test tools/lint-structure/checks.test.ts tools/prune-worktrees.test.ts
+      - node --test tools/lint-structure/checks.test.ts tools/lint-structure/aaa.test.ts tools/prune-worktrees.test.ts
 
   rust:fmt:
     desc: cargo fmt --check

@@ -23,41 +23,53 @@ fn yanked_flags<C: Catalog, B: BlobStore>(registry: &Registry<C, B>) -> Vec<bool
 }
 
 #[test]
-fn yank_then_unyank_toggles_flag_visible_to_clients() {
+fn yank_sets_flag_visible_to_clients() {
     // Arrange
     let seed = Seed::new();
     seed.add_version("foo", "1.0.0", VersionState::Released, b"x");
     let registry = seed.registry();
-    let target = coordinate("foo", "1.0.0");
 
     // Act
-    block_on(registry.set_yanked(&target, true)).unwrap();
-    let after_yank = yanked_flags(&registry);
-    block_on(registry.set_yanked(&target, false)).unwrap();
-    let after_unyank = yanked_flags(&registry);
+    block_on(registry.set_yanked(&coordinate("foo", "1.0.0"), true)).unwrap();
 
     // Assert
-    assert_eq!(after_yank, [true], "yank виден в списке версий");
-    assert_eq!(after_unyank, [false], "unyank снимает флаг");
+    assert_eq!(
+        yanked_flags(&registry),
+        [true],
+        "yank виден в списке версий"
+    );
 }
 
 #[test]
-fn yank_is_idempotent() {
+fn unyank_clears_flag() {
     // Arrange
     let seed = Seed::new();
     seed.add_version("foo", "1.0.0", VersionState::Released, b"x");
     let registry = seed.registry();
     let target = coordinate("foo", "1.0.0");
+    block_on(registry.set_yanked(&target, true)).unwrap();
 
     // Act
-    let first = block_on(registry.set_yanked(&target, true));
+    block_on(registry.set_yanked(&target, false)).unwrap();
+
+    // Assert
+    assert_eq!(yanked_flags(&registry), [false], "unyank снимает флаг");
+}
+
+#[test]
+fn repeated_yank_is_not_an_error_and_keeps_flag() {
+    // Arrange
+    let seed = Seed::new();
+    seed.add_version("foo", "1.0.0", VersionState::Released, b"x");
+    let registry = seed.registry();
+    let target = coordinate("foo", "1.0.0");
+    block_on(registry.set_yanked(&target, true)).unwrap();
+
+    // Act
     let second = block_on(registry.set_yanked(&target, true));
 
     // Assert
-    assert!(
-        first.is_ok() && second.is_ok(),
-        "повторный yank не ошибка: {first:?} {second:?}"
-    );
+    assert!(second.is_ok(), "повторный yank не ошибка: {second:?}");
     assert_eq!(yanked_flags(&registry), [true], "версия остаётся yanked");
 }
 

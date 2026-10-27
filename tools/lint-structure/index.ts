@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkAaaTree } from "./aaa.ts";
 import { cargoMetadata, checkRustLayers, checkStructure, type Rules } from "./checks.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -10,6 +11,7 @@ const rules = JSON.parse(readFileSync(resolve(here, "rules.json"), "utf8")) as R
 const violations = [
   ...checkStructure(root, rules),
   ...checkRustLayers(root, rules, cargoMetadata(root)),
+  ...checkAaaTree(root, rules),
 ];
 
 if (violations.length > 0) {

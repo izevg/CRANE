@@ -60,26 +60,25 @@ fn fetch_hides_deleted_blocked_and_quarantined_versions() {
     seed.add_version("blk", "1.0.0", VersionState::Blocked, b"x");
     seed.add_version("qrn", "1.0.0", VersionState::Quarantined, b"x");
     let registry = seed.registry();
+    let cases = ["del", "blk", "qrn"];
 
     // Act
-    let outcomes = ["del", "blk", "qrn"].map(|package| {
+    let actual = cases.map(|package| {
         block_on(registry.fetch(&coordinate(package, "1.0.0"), &asset_path(package, "1.0.0")))
+            .err()
+            .and_then(|error| match error {
+                RegistryError::Unavailable { state } => Some(state),
+                _ => None,
+            })
     });
 
     // Assert
-    let states: Vec<_> = outcomes
-        .into_iter()
-        .map(|outcome| match outcome.unwrap_err() {
-            RegistryError::Unavailable { state } => state,
-            other => panic!("ожидался Unavailable: {other:?}"),
-        })
-        .collect();
     assert_eq!(
-        states,
+        actual,
         [
-            VersionState::Deleted,
-            VersionState::Blocked,
-            VersionState::Quarantined
+            Some(VersionState::Deleted),
+            Some(VersionState::Blocked),
+            Some(VersionState::Quarantined)
         ],
         "не-Released версия недоступна, состояние попадает в ошибку"
     );

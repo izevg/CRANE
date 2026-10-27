@@ -82,6 +82,33 @@ Not counted: manifests and configs (`Cargo.toml`, `package.json`, `tsconfig*.jso
 ## Testing
 
 - Unit tests: Rust uses `#[cfg(test)]` next to the code and `tests/` for integration tests; web uses Vitest + Testing Library. AAA structure; a test checks behavior, not implementation.
+- **Strict AAA, logic only (all non-e2e tests; checked by `task structure`, see `tools/lint-structure/aaa.ts`).**
+  - Each test has the line comments `// Arrange`, `// Act`, `// Assert` exactly once, in this order. Act is exactly one top-level statement. No assertions before `// Assert`. Assert observes the outcome through read-only queries and never calls the operation under test again. Several assertions are allowed only when they are facets of one outcome (for example, the error plus "state unchanged"); split tests by action, not by assertion. When a runner wraps the test in a closure, the markers may sit inside it, but all three must be at the same nesting level.
+  - Table-driven tests: in Rust the cases live in Arrange, Act is `let actual = cases.map(f);` and Assert is one comparison with the expected collection (no loops with act/assert); in TS each case is its own `it` (`it.each` or a loop at module top level with one AAA body per case).
+  - Contract scenarios in `crates/core/ports/src/contract/` are tests and follow the same rules. The only exception is the binding test of an adapter: one statement calling `*_contract(`, without markers.
+  - `#[should_panic]` is forbidden; assert on the returned error instead.
+  - Test logic, not code. Do not write tests for getters and accessors, `Debug`/`Display`-only output, restatements of the implementation, interaction-only spies, test doubles, or tests whose only purpose is to kill a mutant. Secret-redaction tests stay.
+  - A mutant in non-logic code is excluded in `.cargo/mutants.toml` with a Russian "why" comment; it is never killed by a tautological test.
+
+  ```rust
+  #[test]
+  fn ensure_reports_both_states_of_forbidden_transition() {
+      // Arrange
+      let (from, to) = (Deleted, Released);
+
+      // Act
+      let result = from.ensure(to);
+
+      // Assert
+      assert_eq!(
+          result,
+          Err(TransitionError {
+              from: Deleted,
+              to: Released
+          })
+      );
+  }
+  ```
 - Mutation testing: `cargo-mutants` and Stryker. The critical path (format protocols, access control, CAS and publishing, tokens) must hold the threshold. The full gate runs **locally** (`task gate`) before a PR to `release/*`; it is not run in CI. Playwright and Storybook tests are also local.
 
 ## Git flow

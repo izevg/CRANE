@@ -18,6 +18,7 @@
   ],
   "testFiles": ["*.test.*", "*.spec.*"],
   "entryFiles": ["lib.rs", "main.rs", "mod.rs", "index.ts", "index.tsx"],
+  "aaa": { "roots": ["crates", "web", "cli", "tools"], "exemptDirs": ["e2e"] },
   "rustLayers": {
     "domain": [],
     "ports": ["domain"],

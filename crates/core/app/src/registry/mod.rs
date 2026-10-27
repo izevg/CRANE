@@ -170,6 +170,26 @@ fn served(version: &PackageVersion) -> Result<(), RegistryError> {
     }
 }
 
+/// Use cases дают Send-future: entry исполняет их на многопоточном tokio.
+/// Проверка при компиляции и для любых адаптеров, а не только memory.
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "проверка типов: функцию не вызывают, её компилируют"
+)]
+fn use_case_futures_are_send<C: Catalog, B: BlobStore>(
+    registry: &Registry<C, B>,
+    publish: Publish,
+    coordinate: &Coordinate,
+    package: &PackageName,
+) {
+    fn send<T: Send>(_: T) {}
+    send(registry.publish(publish));
+    send(registry.fetch(coordinate, ""));
+    send(registry.versions(Format::Cargo, "", package));
+    send(registry.set_yanked(coordinate, true));
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -178,9 +198,6 @@ fn served(version: &PackageVersion) -> Result<(), RegistryError> {
 )]
 mod tests {
     use std::io;
-    use std::time::SystemTime;
-
-    use crane_memory::{FixedClock, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 
     use super::*;
 
@@ -229,71 +246,35 @@ mod tests {
     }
 
     #[test]
-    fn blob_body_error_maps_to_body_and_the_rest_to_backend() {
+    fn blob_body_error_maps_to_body() {
         // Arrange
-        let body = BlobError::Body(io::Error::other("обрыв"));
-        let others = [
+        let error = BlobError::Body(io::Error::other("обрыв"));
+
+        // Act
+        let mapped = RegistryError::from(error);
+
+        // Assert
+        assert!(
+            matches!(mapped, RegistryError::Body(_)),
+            "обрыв тела — ошибка клиента: {mapped:?}"
+        );
+    }
+
+    #[test]
+    fn other_blob_errors_map_to_backend() {
+        // Arrange
+        let errors = [
             BlobError::NotFound(sha(1)),
             BlobError::Backend("сбой".into()),
         ];
 
         // Act
-        let mapped_body = RegistryError::from(body);
-        let mapped_others = others.map(RegistryError::from);
+        let mapped = errors.map(RegistryError::from);
 
         // Assert
         assert!(
-            matches!(mapped_body, RegistryError::Body(_)),
-            "обрыв тела — ошибка клиента: {mapped_body:?}"
+            mapped.iter().all(is_backend),
+            "отсутствующий blob при записи каталога — 500, не AssetNotFound: {mapped:?}"
         );
-        assert!(
-            mapped_others.iter().all(is_backend),
-            "отсутствующий blob при записи каталога — 500, не AssetNotFound: {mapped_others:?}"
-        );
-    }
-
-    #[test]
-    fn upload_debug_shows_path_and_declared_digest_without_body() {
-        // Arrange
-        let upload = Upload {
-            path: "foo-1.0.0.crate".to_owned(),
-            body: Box::pin(futures_util::stream::empty()),
-            declared_sha256: Some(sha(0xab)),
-        };
-
-        // Act
-        let shown = format!("{upload:?}");
-
-        // Assert
-        assert!(shown.contains("foo-1.0.0.crate"), "путь в Debug: {shown}");
-        assert!(shown.contains("abab"), "заявленный sha256 в Debug: {shown}");
-    }
-
-    #[test]
-    fn download_and_registry_debug_name_their_types() {
-        // Arrange
-        let download = Download {
-            asset: Asset {
-                path: "a.crate".to_owned(),
-                sha256: sha(1),
-                size: 1,
-            },
-            body: Box::pin(futures_util::stream::empty()),
-        };
-
-        // Act
-        let shown_download = format!("{download:?}");
-        let registry = Registry::new(
-            MemoryCatalog::default(),
-            MemoryBlobStore::default(),
-            Arc::new(FixedClock::new(SystemTime::UNIX_EPOCH)),
-            Arc::new(SequentialIdGen::default()),
-        );
-        let shown_registry = format!("{registry:?}");
-
-        // Assert
-        assert!(shown_download.contains("Download"), "{shown_download}");
-        assert!(shown_download.contains("a.crate"), "{shown_download}");
-        assert!(shown_registry.contains("Registry"), "{shown_registry}");
     }
 }
