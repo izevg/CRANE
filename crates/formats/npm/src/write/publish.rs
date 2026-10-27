@@ -112,14 +112,14 @@ pub(super) fn publish(package: &PackageName, body: Body<'_>) -> Result<NpmPublis
     check_dependencies(&manifest)?;
 
     let tarball = decode_attachment(&attachment)?;
-    let sent = declared_sums(&manifest)?;
-    let metadata = stored_metadata(manifest, &sent)?;
+    let declared = declared_sums(&manifest)?;
+    let metadata = stored_metadata(manifest, &declared)?;
 
     Ok(NpmPublish {
         version,
         file: expected_file,
         tarball: Bytes::from(tarball),
-        declared: sent.sums,
+        declared: declared.sums,
         tag,
         metadata,
     })
@@ -171,11 +171,11 @@ fn declared_sums(manifest: &Fields<'_>) -> Result<DeclaredSums, WriteError> {
 /// Манифест для хранения: служебные поля убраны, `dist` сведён к суммам.
 fn stored_metadata(
     mut manifest: Fields<'_>,
-    sent: &DeclaredSums,
+    declared: &DeclaredSums,
 ) -> Result<FormatMetadata, WriteError> {
     let stored = StoredDist {
-        integrity: &sent.integrity,
-        shasum: sent.shasum.as_deref(),
+        integrity: &declared.integrity,
+        shasum: declared.shasum.as_deref(),
     };
     manifest.retain(|key, _| {
         (!key.starts_with('_') || key == KEPT_UNDERSCORE) && !DROPPED.contains(&key.as_ref())
