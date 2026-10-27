@@ -8,8 +8,8 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { cx } from "~/shared/lib/core";
-import type { Action } from "~/shared/ui/actions";
-import { ActionRow, ContactLine, RemediationList, RequestIdLine, RuleLine } from "./ProblemParts";
+import { type Action, ActionBar, type ActionGroup } from "~/shared/ui/actions";
+import { ContactLine, RemediationList, RequestIdLine, RuleLine } from "./ProblemParts";
 
 /**
  * Разобранная проблема. Разбор problem+json в эту модель — забота слоя API: компонент получает готовое.
@@ -108,6 +108,38 @@ function headOf(problem: ProblemView): Head {
   }
 }
 
+/**
+ * Группа действий проблемы: главное (если есть) и до двух вторичных. Отсутствующий `Action` просто пропускается,
+ * поэтому кнопки без действия не бывает (правило HAL).
+ */
+function problemActions(
+  primary: Action | undefined,
+  ...secondary: readonly (Action | undefined)[]
+): ActionGroup {
+  const [first, second] = secondary.filter((action): action is Action => action !== undefined);
+  const rest =
+    first === undefined
+      ? undefined
+      : second === undefined
+        ? ([first] as const)
+        : ([first, second] as const);
+  return {
+    ...(primary ? { primary } : {}),
+    ...(rest ? { secondary: rest } : {}),
+  };
+}
+
+/** Действия по центру блока; без `Action` не рисуется ничего. */
+function ProblemActions({
+  primary,
+  secondary,
+}: {
+  primary: Action | undefined;
+  secondary?: Action | undefined;
+}) {
+  return <ActionBar actions={problemActions(primary, secondary)} className="mt-4 justify-center" />;
+}
+
 type Of<K extends ProblemView["kind"]> = Extract<ProblemView, { kind: K }>;
 
 function NotFoundDetails({ problem }: { problem: Of<"not-found"> }) {
@@ -115,7 +147,7 @@ function NotFoundDetails({ problem }: { problem: Of<"not-found"> }) {
     <>
       {problem.search ? <div className="mt-4 w-full max-w-sm">{problem.search}</div> : null}
       {problem.requestId ? <RequestIdLine requestId={problem.requestId} /> : null}
-      <ActionRow slots={[{ action: problem.home, variant: "secondary" }]} />
+      <ProblemActions primary={problem.home} />
     </>
   );
 }
@@ -127,12 +159,7 @@ function ForbiddenDetails({ problem }: { problem: Of<"forbidden"> }) {
       <RequestIdLine requestId={problem.requestId} />
       {problem.contact ? <ContactLine contact={problem.contact} /> : null}
       <RemediationList steps={problem.remediation} />
-      <ActionRow
-        slots={[
-          { action: problem.requestAccess, variant: "primary" },
-          { action: problem.home, variant: "ghost" },
-        ]}
-      />
+      <ProblemActions primary={problem.requestAccess} secondary={problem.home} />
     </>
   );
 }
@@ -143,12 +170,7 @@ function ErrorDetails({ problem }: { problem: Of<"error"> }) {
       {problem.ruleId ? <RuleLine ruleId={problem.ruleId} /> : null}
       <RequestIdLine requestId={problem.requestId} />
       <RemediationList steps={problem.remediation} />
-      <ActionRow
-        slots={[
-          { action: problem.diagnostics, variant: "ghost" },
-          { action: problem.retry, variant: "secondary" },
-        ]}
-      />
+      <ProblemActions primary={problem.retry} secondary={problem.diagnostics} />
     </>
   );
 }
@@ -162,9 +184,9 @@ function Details({ problem }: { problem: ProblemView }) {
     case "error":
       return <ErrorDetails problem={problem} />;
     case "offline":
-      return <ActionRow slots={[{ action: problem.retry, variant: "secondary" }]} />;
+      return <ProblemActions primary={problem.retry} />;
     case "session":
-      return <ActionRow slots={[{ action: problem.signIn, variant: "primary" }]} />;
+      return <ProblemActions primary={problem.signIn} />;
   }
 }
 

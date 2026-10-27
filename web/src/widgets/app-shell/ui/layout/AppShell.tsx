@@ -101,7 +101,7 @@ export function AppShell({
           ref={mainRef}
           id={MAIN_ID}
           tabIndex={-1}
-          className="@container/page mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 outline-none focus-visible:shadow-none lg:px-6 2xl:px-8"
+          className="@container/page mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 outline-none lg:px-6 2xl:px-8"
         >
           {children}
         </main>

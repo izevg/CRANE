@@ -1,8 +1,7 @@
 import { type ReactNode, type Ref, useId } from "react";
-import { PageActionBar } from "./PageActionBar";
-import type { PageActions } from "./pageActions";
+import { ActionBar, type ActionGroup } from "../../actions";
 
-type PageHeaderProps = PageActions & {
+type PageHeaderProps = ActionGroup & {
   /** Единственный h1 страницы: цель фокуса при смене маршрута (фокус переводит приложение, не кит). */
   title: string;
   /** Нужен, когда приложению известен id заранее (например, для `aria-labelledby`); иначе генерируется. */
@@ -43,7 +42,7 @@ export function PageHeader({
               ref={headingRef}
               id={headingId ?? generatedId}
               tabIndex={-1}
-              className="text-balance wrap-anywhere text-h1 outline-none focus-visible:shadow-none"
+              className="text-balance wrap-anywhere text-h1 outline-none"
             >
               {title}
             </h1>
@@ -56,7 +55,7 @@ export function PageHeader({
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {aside}
-          <PageActionBar {...actions} />
+          <ActionBar actions={actions} />
         </div>
       </div>
       {stats ? <div className="flex flex-wrap gap-2">{stats}</div> : null}

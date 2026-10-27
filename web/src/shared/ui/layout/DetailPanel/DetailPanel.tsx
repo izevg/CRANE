@@ -9,13 +9,11 @@ import {
   useRef,
 } from "react";
 import { useBreakpoint } from "~/shared/lib/core";
-import { type Action, ActionMenu } from "../../actions";
+import { type Action, ActionBar, type ActionGroup, ActionMenu } from "../../actions";
 import { Button, DialogClose, Sheet, SheetContent, SheetTitle } from "../../primitives";
-import { PageActionBar } from "../PageHeader/PageActionBar";
-import { hasPageActions, type PageActions } from "../PageHeader/pageActions";
 
 const CLOSE = "Закрыть";
-const HEADING_CLASS = "min-w-0 flex-1 truncate text-h2 outline-none focus-visible:shadow-none";
+const HEADING_CLASS = "min-w-0 flex-1 truncate text-h2 outline-none";
 
 type DetailPanelProps = {
   open: boolean;
@@ -28,7 +26,7 @@ type DetailPanelProps = {
   tabs?: ReactNode;
   children: ReactNode;
   /** Закреплённый подвал: те же правила, что у действий PageHeader. */
-  footer?: PageActions;
+  footer?: ActionGroup;
   /** Строка таблицы (или другой элемент), на которую возвращается фокус после закрытия. */
   returnFocusRef?: RefObject<HTMLElement | null>;
 };
@@ -57,9 +55,10 @@ function PanelBody({ heading, closeButton, status, menu, tabs, children, footer 
         scroll-pb даёт ему запас до края.
       */}
       <div className="min-h-0 flex-1 scroll-pb-4 overflow-y-auto p-4">{children}</div>
-      {footer && hasPageActions(footer) ? (
-        <div data-slot="detail-panel-footer" className="shrink-0 border-t bg-card p-4">
-          <PageActionBar {...footer} />
+      {/* empty:hidden — подвал без действий (ActionBar вернул null) не оставляет рамку и отступы */}
+      {footer ? (
+        <div data-slot="detail-panel-footer" className="shrink-0 border-t bg-card p-4 empty:hidden">
+          <ActionBar actions={footer} />
         </div>
       ) : null}
     </>

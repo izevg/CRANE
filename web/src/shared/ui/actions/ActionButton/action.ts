@@ -13,3 +13,13 @@ export type Action = {
   /** Опасное действие: текст error-тона без заливки; в меню идёт последним, за разделителем. */
   destructive?: true;
 };
+
+/**
+ * Группа действий одного места (шапка страницы, подвал панели, пустое состояние): одна primary,
+ * не больше двух secondary, остальное в меню «…». Больше двух secondary тип не выражает.
+ */
+export type ActionGroup = {
+  primary?: Action;
+  secondary?: readonly [Action] | readonly [Action, Action];
+  menu?: readonly Action[];
+};

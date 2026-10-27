@@ -1,4 +1,4 @@
-import { type Action, ActionButton, CopyableId } from "~/shared/ui/actions";
+import { CopyableId } from "~/shared/ui/actions";
 
 const RULE = "Правило";
 const REQUEST_ID = "Идентификатор запроса";
@@ -37,24 +37,5 @@ export function RemediationList({ steps }: { steps: readonly string[] }) {
         </li>
       ))}
     </ol>
-  );
-}
-
-type ActionSlot = { action: Action | undefined; variant: "primary" | "secondary" | "ghost" };
-
-/** Ряд действий; слот без `Action` не даёт кнопки, ряд без кнопок не рисуется (правило HAL). */
-export function ActionRow({ slots }: { slots: readonly ActionSlot[] }) {
-  const present = slots.filter(
-    (slot): slot is { action: Action; variant: ActionSlot["variant"] } => slot.action !== undefined,
-  );
-  if (present.length === 0) {
-    return null;
-  }
-  return (
-    <div className="mt-4 flex flex-wrap justify-center gap-2">
-      {present.map((slot) => (
-        <ActionButton key={slot.action.label} action={slot.action} variant={slot.variant} />
-      ))}
-    </div>
   );
 }

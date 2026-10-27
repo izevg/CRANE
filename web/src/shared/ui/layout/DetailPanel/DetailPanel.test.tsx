@@ -3,13 +3,13 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useCallback, useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { Action } from "~/shared/ui/actions";
-import { DetailPanel, type PageActions } from "~/shared/ui/layout";
+import type { Action, ActionGroup } from "~/shared/ui/actions";
+import { DetailPanel } from "~/shared/ui/layout";
 import { stubMatchMedia } from "~test/matchMedia";
 
 const DOCKED_QUERY = "(min-width: 1536px)";
 
-function Harness({ footer, menu }: { footer?: PageActions; menu?: readonly Action[] }) {
+function Harness({ footer, menu }: { footer?: ActionGroup; menu?: readonly Action[] }) {
   const [open, setOpen] = useState(false);
   const rowRef = useRef<HTMLButtonElement>(null);
   const show = useCallback(() => setOpen(true), []);

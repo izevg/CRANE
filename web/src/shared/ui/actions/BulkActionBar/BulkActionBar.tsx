@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { announce } from "~/shared/lib/a11y";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { Button } from "../../primitives";
-import { ActionButton } from "../ActionButton/ActionButton";
+import { ActionBar } from "../ActionBar/ActionBar";
 import type { Action } from "../ActionButton/action";
 import { useScrollPaddingBottom } from "./useScrollPaddingBottom";
 
@@ -58,11 +58,7 @@ export function BulkActionBar({ count, actions, onClear, className }: BulkAction
         {SELECTED_PREFIX}
         {count}
       </span>
-      <div className="flex flex-wrap items-center gap-2">
-        {actions.map((action) => (
-          <ActionButton key={action.label} action={action} variant="secondary" />
-        ))}
-      </div>
+      <ActionBar actions={actions} />
       <Button variant="ghost" size="icon-sm" aria-label={CLEAR_LABEL} onClick={onClear}>
         <XIcon aria-hidden="true" />
       </Button>
