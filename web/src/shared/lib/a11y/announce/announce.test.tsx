@@ -29,18 +29,36 @@ describe("announce", () => {
     expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
   });
 
-  it("повтор того же текста сначала очищает регион, чтобы скринридер объявил его снова", async () => {
+  it("повтор того же текста сразу очищает регион", async () => {
     // Arrange
     render(<LiveRegion />);
-    act(() => announce(MESSAGE));
-    await act(() => vi.advanceTimersByTimeAsync(REWRITE_MS));
+    await act(async () => {
+      announce(MESSAGE);
+      await vi.advanceTimersByTimeAsync(REWRITE_MS);
+    });
 
     // Act
     act(() => announce(MESSAGE));
 
     // Assert
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
-    await act(() => vi.advanceTimersByTimeAsync(REWRITE_MS));
+  });
+
+  it("после паузы повторённый текст снова попадает в регион", async () => {
+    // Arrange
+    render(<LiveRegion />);
+    await act(async () => {
+      announce(MESSAGE);
+      await vi.advanceTimersByTimeAsync(REWRITE_MS);
+    });
+
+    // Act
+    await act(async () => {
+      announce(MESSAGE);
+      await vi.advanceTimersByTimeAsync(REWRITE_MS);
+    });
+
+    // Assert
     expect(screen.getByRole("status")).toHaveTextContent(MESSAGE);
   });
 });
