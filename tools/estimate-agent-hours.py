@@ -44,6 +44,14 @@ MODULES = [
     ("CLI: diag, warm, readiness, export", "P1", 2, "rust", 0.9),
     ("SPA: рабочие столы ролей, диагностика", "P1", 7, "ts", 1.0),
     ("Evidence, SBOM, Trivy, песочница анализа", "P2", 7, "rust", 1.3),
+    # ~3 KLOC: три источника upstream (npm, PyPI, Maven) ~0,8 + проверка bundle, DSSE, цепочки Fulcio
+    # и inclusion proof Rekor ~1 + trust root по TUF и офлайн-режим ~0,5 + PGP для Maven ~0,3
+    # + приём из CI, хранение, gate ~0,4. Сложность 1,4 как у уязвимостей: криптография, три формата,
+    # офлайн-режим, а ошибка ведёт к ложным блокировкам.
+    # Источники: docs.npmjs.com/generating-provenance-statements, peps.python.org/pep-0740 и docs.pypi.org/api/integrity,
+    # central.sonatype.org (новость 2025-01-28: Sigstore опционален, PGP обязателен), docs.sigstore.dev/about/bundle,
+    # slsa.dev/spec/v1.0/levels.
+    ("Attestations: Sigstore, in-toto/SLSA, проверка upstream", "P2", 3, "rust", 1.4),
     ("Лицензии: SPDX, политика, вирусность", "P2", 4, "rust", 1.2),
     ("Promotion, approvals, исключения", "P2", 4, "rust", 1.0),
     ("Уязвимости: фиды, сопоставление, P0–P4, VEX, экстренный режим", "P2", 9, "rust", 1.4),
@@ -104,7 +112,7 @@ RELEASES = [
      [("GitLab", 1), ("Диагностика", 1), ("Импорт", 1), ("Классы", 1), ("CLI: diag", 1),
       ("SPA: рабочие столы ролей", 1), ("Интеграция с реальными", 1)]),
     ("v1.1.0", "P2", "Безопасность цепочки поставки",
-     [("Evidence", 1), ("Лицензии", 1), ("Promotion", 1), ("Уязвимости", 1), ("Скоринг", 1),
+     [("Evidence", 1), ("Attestations", 1), ("Лицензии", 1), ("Promotion", 1), ("Уязвимости", 1), ("Скоринг", 1),
       ("События безопасности", 1), ("Журнал действий", 1), ("SPA: рабочие столы AppSec", 1),
       ("Исправление замечаний", 1), ("Подключение SIEM", 1)]),
     ("v1.2.0", "P3", "Развитие: граф, поиск и LLM, A2A",
