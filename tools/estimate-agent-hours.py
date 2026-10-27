@@ -38,12 +38,15 @@ MODULES = [
     ("SPA: каркас, каталог, карточка, администрирование", "P0", 14, "ts", 1.0),
     ("CLI: login, setup шести клиентов, NuGet и Cargo credential provider, robots, publish", "P0", 3, "rust", 0.9),
     ("GitLab workload identity, trust policy, provenance", "P1", 2, "rust", 1.3),
+    # ~0,5 KLOC: таблица evidence и миграция, запись provenance из claims при publish из CI,
+    # чтение для карточки версии. Остальные виды (SBOM, сканы) остаются в P2 и миграции не требуют.
+    ("Evidence: таблица и provenance из claims", "P1", 0.5, "rust", 1.0),
     ("Диагностика отказов, CI templates", "P1", 2, "rust", 1.0),
     ("Импорт из Nexus", "P1", 2, "rust", 1.0),
     ("Классы хранения, размещение, онлайн-перенос", "P1", 2, "rust", 1.3),
     ("CLI: diag, warm, readiness, export", "P1", 2, "rust", 0.9),
     ("SPA: рабочие столы ролей, диагностика", "P1", 7, "ts", 1.0),
-    ("Evidence, SBOM, Trivy, песочница анализа", "P2", 7, "rust", 1.3),
+    ("Evidence, SBOM, Trivy, песочница анализа", "P2", 6.5, "rust", 1.3),
     # ~3 KLOC: три источника upstream (npm, PyPI, Maven) ~0,8 + проверка bundle, DSSE, цепочки Fulcio
     # и inclusion proof Rekor ~1 + trust root по TUF и офлайн-режим ~0,5 + PGP для Maven ~0,3
     # + приём из CI, хранение, gate ~0,4. Сложность 1,4 как у уязвимостей: криптография, три формата,
@@ -109,10 +112,10 @@ RELEASES = [
      [("Матрица реальных клиентов", 1), ("Нагрузочный стенд", 1),
       ("Ядро:", 0.65), ("CAS", 0.97), ("Протоколы:", 0.17)]),
     ("v0.6.0", "P1", "Удобство: GitLab, диагностика, классы хранения, импорт из других реестров",
-     [("GitLab", 1), ("Диагностика", 1), ("Импорт", 1), ("Классы", 1), ("CLI: diag", 1),
+     [("GitLab", 1), ("Evidence: таблица", 1), ("Диагностика", 1), ("Импорт", 1), ("Классы", 1), ("CLI: diag", 1),
       ("SPA: рабочие столы ролей", 1), ("Интеграция с реальными", 1)]),
     ("v1.1.0", "P2", "Безопасность цепочки поставки",
-     [("Evidence", 1), ("Attestations", 1), ("Лицензии", 1), ("Promotion", 1), ("Уязвимости", 1), ("Скоринг", 1),
+     [("Evidence, SBOM", 1), ("Attestations", 1), ("Лицензии", 1), ("Promotion", 1), ("Уязвимости", 1), ("Скоринг", 1),
       ("События безопасности", 1), ("Журнал действий", 1), ("SPA: рабочие столы AppSec", 1),
       ("Исправление замечаний", 1), ("Подключение SIEM", 1)]),
     ("v1.2.0", "P3", "Развитие: граф, поиск и LLM, A2A",
@@ -137,7 +140,7 @@ def estimate(scn):
 def main():
     print(f"Эталон: {REF_AGENT_H:.0f} агент-ч, {RATE:.2f} агент-ч/KLOC, оператор {OPERATOR_RATIO:.2f} ч на агент-ч")
     rust = sum(m[2] for m in MODULES if m[3] == "rust"); ts = sum(m[2] for m in MODULES if m[3] == "ts")
-    print(f"CRANE: Rust {rust} KLOC, TypeScript {ts} KLOC")
+    print(f"CRANE: Rust {rust:g} KLOC, TypeScript {ts} KLOC")
     for scn in ("low", "base", "high"):
         st = estimate(scn); total = sum(st.values())
         cal = {s: d for _, s, d in CALENDAR}

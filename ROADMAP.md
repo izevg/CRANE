@@ -137,9 +137,9 @@ gantt
 
 ## v0.6.0 · Удобство (P1)
 
-**12 – 17 ноября** · ~87 агент-ч.
+**12 – 17 ноября** · ~89 агент-ч.
 
-1. GitLab workload identity, trust policy, provenance; другие OIDC-платформы.
+1. GitLab workload identity, trust policy; provenance из claims пишется в evidence (минимальная таблица по модели раздела 9), карточка читает её; другие OIDC-платформы.
 2. Диагностика отказов (`cctl diag`), CI templates.
 3. Классы хранения, размещение, онлайн-перенос.
 4. Импорт из других реестров; CLI `warm`, `readiness`, `export`.
@@ -157,9 +157,9 @@ gantt
 
 ## v1.1.0 · Безопасность цепочки поставки (P2)
 
-Разработка с **17 ноября** параллельно release candidate, релиз **7 декабря** после security review · ~234 агент-ч.
+Разработка с **17 ноября** параллельно release candidate, релиз **7 декабря** после security review · ~232 агент-ч.
 
-1. Evidence, SBOM, Trivy, песочница анализа.
+1. Новые виды evidence: SBOM, сканы Trivy; песочница анализа.
 2. Проверка upstream attestations в proxy: npm provenance, PyPI (PEP 740), Maven Central (PGP, Sigstore); карточка «собрано в … из …»; правило регрессии.
 3. Приём attestations из своего CI (in-toto/SLSA) как evidence, gate provenance требует валидную attestation (настройка по репозиторию и стадии); цель SLSA Build L2.
 4. Фиды уязвимостей, сопоставление по PURL, приоритеты P0–P4, VEX, экстренный режим.

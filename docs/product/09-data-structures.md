@@ -71,7 +71,6 @@ CREATE TABLE package_version (
   state ver_state NOT NULL, mutable boolean NOT NULL DEFAULT false,
   yanked boolean NOT NULL DEFAULT false, deprecated_msg text,
   published_by uuid NOT NULL, published_at timestamptz NOT NULL,
-  source jsonb,                      -- project, commit, pipeline, job, ref
   metadata json NOT NULL,            -- metadata формата как есть; json, не jsonb (см. ниже)
   UNIQUE (package_id, version));
 
@@ -154,7 +153,7 @@ Evidence расширяется строками, а не колонками. Н
 
 | Вид содержимого | `predicate_type` | Конверт (`kind`) | Кто производит |
 | --- | --- | --- | --- |
-| SLSA Provenance | `https://slsa.dev/provenance/v1` | sigstore, dsse | npm provenance, PyPI, свой CI |
+| SLSA Provenance | `https://slsa.dev/provenance/v1` | sigstore, dsse; jwt | npm provenance, PyPI, свой CI; CRANE из claims ID token (`trust = crane`, с v0.6.0) |
 | PyPI Publish | `https://docs.pypi.org/attestations/publish/v1` | sigstore, dsse | PyPI (Trusted Publishing) |
 | SBOM CycloneDX | `https://cyclonedx.org/bom` | sigstore, dsse, none | свой CI, upstream |
 | SBOM SPDX 2.x и 3 | `https://spdx.dev/Document`, `https://spdx.dev/Document/v3` | sigstore, dsse, none | свой CI, upstream |
@@ -162,9 +161,8 @@ Evidence расширяется строками, а не колонками. Н
 | VEX | `https://openvex.dev/ns/v0.2.0` | sigstore, dsse, none | издатель пакета, security |
 | Quality gate SonarQube | `urn:crane:quality-gate:v1` (внутренний URI CRANE) | none | SonarQube через интеграцию |
 | Подпись файла (Maven `.asc`; `.sigstore.json` с messageSignature) | `urn:crane:file-signature:v1` (внутренний URI CRANE) | pgp, sigstore | издатель Maven, upstream |
-| Claims публикации из CI | `urn:crane:publish-claims:v1` (внутренний URI CRANE) | jwt | CRANE при обмене токена (`trust = crane`) |
 
-Требование действует с P0: таблицы пока нет, но когда она появится (v1.1.0, см. «Отложено»), она сразу в этой форме. Менять тип колонок после накопления evidence дороже, чем зафиксировать форму сейчас.
+Требование действует с P0: таблица появляется в v0.6.0 (см. «Отложено») сразу в этой форме, с одним видом — provenance из claims. Provenance хранится в одном месте, карточка версии читает её из evidence с самого начала, а v1.1.0 добавляет виды без миграции. Менять тип колонок после накопления evidence дороже, чем зафиксировать форму сейчас.
 
 Порядок версий в схеме не хранится: `sort_key` убран из таблицы. Порядко-сохраняющее кодирование для Maven и PEP 440 — отдельная задача на появление потребителя; индекс Cargo упорядочен по публикации `(published_at, id)`.
 
@@ -212,10 +210,10 @@ CREATE TABLE asset (
 | Отложено | Когда добавляется |
 | --- | --- |
 | `namespace`, `package.namespace_id`, `workspace_id` | Защита от dependency confusion и workspaces (v0.2.0 и позже) |
-| `purl`, `sort_key`, `mutable`, `published_by`, `source` | Появление потребителя (граф, сортировка, аудит публикаций) |
+| `purl`, `sort_key`, `mutable`, `published_by` | Появление потребителя (граф, сортировка, аудит публикаций) |
 | `sha512`, `sha1`, `md5`, `media_type` | Форматы, которым нужны эти дайджесты и типы |
 | таблица `blob_store` | Второе физическое хранилище; пока `store_id` — текст без FK |
-| таблица `evidence` | v1.1.0; форма зафиксирована сейчас (см. выше), чтобы SBOM, сканы и attestations не потребовали переделки |
+| таблица `evidence` | v0.6.0 (P1): таблица целиком, первый вид — provenance из claims; v1.1.0 добавляет виды без миграции |
 
 ## Масштаб L: каталог
 

@@ -105,7 +105,7 @@ fn exchange(id_token):
     return issue("crci_", scopes, ttl, provenance = {project, commit, pipeline, job})
 ```
 
-Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Эти claims пишутся и как evidence (`predicate_type = urn:crane:publish-claims:v1`, `kind = jwt`, `trust = crane`, `signer_issuer` = `iss` токена, `signer_san` = `project_path` без ref (ref законно меняется от версии к версии), `facts` = `repo` (тот же `project_path`), commit, pipeline, job), поэтому gate provenance и правило регрессии (10.6.1) читают один источник и для hosted. Это закрывает требование связи публикации с project, commit, pipeline и job.
+Тот же алгоритм обслуживает любого доверенного издателя: Kubernetes (projected ServiceAccount token), GitHub Actions, сервисный аккаунт Keycloak; trust policy задаёт издателя и допустимые claims. Каждая публикация из CI получает provenance из claims токена, а не из того, что сообщил клиент. Эти claims пишутся и как evidence (`predicate_type = https://slsa.dev/provenance/v1`, `kind = jwt`, `trust = crane`, `signer_issuer` = `iss` токена, `signer_san` = `project_path` без ref (ref законно меняется от версии к версии), `facts` = `repo` (тот же `project_path`), commit, pipeline, job), поэтому gate provenance и правило регрессии (10.6.1) читают один источник и для hosted. Такая provenance выпущена CRANE, а не подписана сборочной платформой, поэтому сама по себе не означает SLSA Build L2; L2 дают attestations из CI (`trust = publisher`). Это закрывает требование связи публикации с project, commit, pipeline и job.
 
 ## 10.6 Promotion и gates
 
@@ -124,7 +124,7 @@ fn evaluate(version, target_stage):
     return verdict                   // всегда с перечнем причин для UI
 ```
 
-Gate не знает видов доказательств: он объявляет, какие `predicate_types` читает (раздел 9). Provenance читает SLSA Provenance и publish-claims; cve читает vulns и VEX; license читает CycloneDX и SPDX; quality читает quality gate SonarQube. Требование «без валидной attestation не продвигать» — настройка gate provenance по репозиторию и стадии: какие `trust` он принимает (`publisher`, `upstream`, `crane` для claims) и требует ли `valid`. Версия без подходящего evidence не уходит дальше quarantine.
+Gate не знает видов доказательств: он объявляет, какие `predicate_types` читает (раздел 9). Provenance читает SLSA Provenance, а `trust` отличает claims CRANE от подписанной provenance CI и upstream; cve читает vulns и VEX; license читает CycloneDX и SPDX; quality читает quality gate SonarQube. Требование «без валидной attestation не продвигать» — настройка gate provenance по репозиторию и стадии: какие `trust` он принимает (`publisher`, `upstream`, `crane` для claims) и требует ли `valid`. Версия без подходящего evidence не уходит дальше quarantine.
 
 Promotion меняет только строку в БД: digest и байты те же. Повторная оценка запускается событиями «новое evidence», «новая версия базы уязвимостей», «истекло исключение», «изменилась политика».
 
