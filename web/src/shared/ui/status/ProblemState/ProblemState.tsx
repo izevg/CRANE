@@ -6,7 +6,7 @@ import {
   ShieldAlertIcon,
   WifiOffIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 import { cx } from "~/shared/lib/core";
 import type { Action } from "~/shared/ui/actions";
 import { ActionRow, ContactLine, RemediationList, RequestIdLine, RuleLine } from "./ProblemParts";
@@ -170,7 +170,7 @@ function Details({ problem }: { problem: ProblemView }) {
 
 /**
  * Единый рендер проблемных состояний. Машинный `reason` сюда не попадает: сырой код — только в диагностике.
- * Ошибки сообщаются как `alert`, остальное — как `status`.
+ * Блок не live-регион: объявление для скринридера (например, ошибка внутри списка) — забота вызывающего через `announce()`.
  */
 export function ProblemState({
   problem,
@@ -178,12 +178,13 @@ export function ProblemState({
   compact = false,
   className,
 }: ProblemStateProps) {
+  const headingId = useId();
   const head = headOf(problem);
   const Heading = HEADINGS[headingLevel];
   const { Icon } = head;
   return (
-    <div
-      role={problem.kind === "error" ? "alert" : "status"}
+    <section
+      aria-labelledby={headingId}
       className={cx(
         "flex flex-col items-center px-6 text-center",
         compact ? "py-8" : "py-12",
@@ -199,7 +200,7 @@ export function ProblemState({
       >
         <Icon className={cx(head.iconTone, compact ? "size-5" : "size-7")} aria-hidden="true" />
       </span>
-      <Heading className="mt-4 max-w-[48ch] text-balance text-h3 wrap-anywhere">
+      <Heading id={headingId} className="mt-4 max-w-[48ch] text-balance text-h3 wrap-anywhere">
         {head.title}
       </Heading>
       {head.hint ? (
@@ -208,6 +209,6 @@ export function ProblemState({
         </p>
       ) : null}
       <Details problem={problem} />
-    </div>
+    </section>
   );
 }

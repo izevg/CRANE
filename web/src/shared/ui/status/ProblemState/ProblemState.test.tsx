@@ -143,7 +143,7 @@ describe("ProblemState", () => {
     render(<ProblemState problem={problem} />);
 
     // Assert
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Файл слишком большой" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Файл слишком большой" })).toBeInTheDocument();
     expect(screen.getByText("Лимит артефакта — 5 ГБ")).toBeInTheDocument();
     expect(screen.getByText("Правило: limits.artifact.size")).toBeInTheDocument();
@@ -256,5 +256,22 @@ describe("ProblemState", () => {
 
     // Assert
     expect(screen.getByRole("heading", { level: 2 })).toBeInTheDocument();
+  });
+
+  it("блок не является live-регионом: нет ни alert, ни status", () => {
+    // Arrange
+    const problem = {
+      kind: "error",
+      title: "Сбой",
+      requestId: REQUEST_ID,
+      remediation: [],
+    } as const;
+
+    // Act
+    render(<ProblemState problem={problem} />);
+
+    // Assert
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });
