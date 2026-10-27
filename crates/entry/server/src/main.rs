@@ -212,6 +212,18 @@ mod tests {
     }
 
     #[test]
+    fn unparsable_rust_log_falls_back_to_info_instead_of_silencing_logs() {
+        // Arrange
+        let env = Some("неразборчиво==");
+
+        // Act
+        let enabled = info_enabled(log_filter(env), "crane::other");
+
+        // Assert
+        assert!(enabled);
+    }
+
+    #[test]
     fn chain_lists_causes() {
         // Arrange
         let error = std::io::Error::other("корень");
