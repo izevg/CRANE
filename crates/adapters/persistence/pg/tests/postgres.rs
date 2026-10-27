@@ -240,7 +240,8 @@ fn migrate_reports_outdated_vector_extension() {
         assert!(
             matches!(
                 &result,
-                Err(SchemaError::ExtensionOutdated { name: "vector", installed, .. }) if installed == "0.7.4"
+                Err(SchemaError::ExtensionOutdated { name: "vector", installed, minimum })
+                    if installed == "0.7.4" && minimum == "0.8"
             ),
             "{result:?}"
         );
