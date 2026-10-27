@@ -47,6 +47,10 @@ const TONE_SEPARATOR = ", ";
 const PERCENT = 100;
 
 // min-height, а не height: при увеличенных интервалах текста (WCAG 1.4.12) подпись не обрезается.
+const HEAD_GRID = "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2";
+/** Растянутая ссылка: клик по всей плитке, фокус рисуется на псевдоэлементе по периметру плитки. */
+const STRETCHED =
+  "outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-ring";
 const SIZE = "min-h-28 @3xl/page:min-h-[168px]";
 const PADDING = "px-4 py-3 @3xl/page:py-4";
 
@@ -132,7 +136,12 @@ function Value({ value, unit }: { value: TileValue; unit: string | undefined }) 
       >
         {formatValue(value)}
       </span>
-      {unit ? <span className="ml-1 text-body text-muted-foreground">{unit}</span> : null}
+      {unit ? (
+        <span className="ml-1 text-body text-muted-foreground">
+          {UNIT_SEPARATOR}
+          {unit}
+        </span>
+      ) : null}
     </>
   );
 }
@@ -186,6 +195,30 @@ function linkName(
   return toneLabel === undefined ? name : `${name}${TONE_SEPARATOR}${toneLabel}`;
 }
 
+type LinkedHead = { href: string; name: string; describedBy: string };
+
+/**
+ * Шапка плитки: подпись, значение и тон в сетке (бейдж встаёт вправо вверх, порядок в DOM — как в имени).
+ * У плитки-ссылки это и есть `<a>`: его псевдоэлемент растягивается на всю плитку, а подпись, значение и тон —
+ * весь видимый текст ссылки, поэтому имя «P0 открыто: 1, требует действия» содержит его целиком (WCAG 2.5.3).
+ * Подпись под значением остаётся вне ссылки и читается как её описание.
+ */
+function Head({ linked, children }: { linked: LinkedHead | null; children: ReactNode }) {
+  if (linked === null) {
+    return <div className={HEAD_GRID}>{children}</div>;
+  }
+  return (
+    <Link
+      href={linked.href}
+      aria-label={linked.name}
+      aria-describedby={linked.describedBy}
+      className={cx(HEAD_GRID, STRETCHED)}
+    >
+      {children}
+    </Link>
+  );
+}
+
 export function MetricTile(props: MetricTileProps) {
   const { label, value, unit, caption, delta, spark, reference, href, stale, className } = props;
   const labelId = useId();
@@ -199,26 +232,37 @@ export function MetricTile(props: MetricTileProps) {
       data-tone={tone?.tone}
       {...(linked ? {} : { role: "group", "aria-labelledby": labelId })}
       className={cx(
-        "@container/tile gap-0",
+        "@container/tile relative gap-0",
         PADDING,
         SIZE,
         tone && RING[tone.tone],
-        linked ? undefined : className,
+        linked && "hover:shadow-md",
+        className,
       )}
     >
-      <div className="flex items-start justify-between gap-2">
+      <Head
+        linked={
+          linked
+            ? { href, name: linkName(label, value, unit, tone?.label), describedBy: footerId }
+            : null
+        }
+      >
         <span
           id={labelId}
           title={label}
-          className="min-w-0 flex-1 truncate text-overline text-muted-foreground"
+          className="col-start-1 row-start-1 min-w-0 truncate text-overline text-muted-foreground"
         >
           {label}
         </span>
-        {tone ? <ToneBadge tone={tone.tone} label={tone.label} /> : null}
-      </div>
-      <div className="mt-1 flex min-w-0 items-baseline @3xl/page:mt-2">
-        <Value value={value} unit={unit} />
-      </div>
+        <div className="col-span-2 row-start-2 mt-1 flex min-w-0 items-baseline @3xl/page:mt-2">
+          <Value value={value} unit={unit} />
+        </div>
+        {tone ? (
+          <div className="col-start-2 row-start-1">
+            <ToneBadge tone={tone.tone} label={tone.label} />
+          </div>
+        ) : null}
+      </Head>
       <Footer id={footerId} empty={empty} delta={delta} caption={caption} stale={stale} />
       <div className="mt-auto hidden h-12 @3xl/page:block">
         {spark !== undefined || empty ? (
@@ -228,19 +272,7 @@ export function MetricTile(props: MetricTileProps) {
     </Card>
   );
 
-  if (!linked) {
-    return card;
-  }
-  return (
-    <Link
-      href={href}
-      aria-label={linkName(label, value, unit, tone?.label)}
-      aria-describedby={footerId}
-      className={cx("block rounded-xl transition-shadow hover:shadow-md", className)}
-    >
-      {card}
-    </Link>
-  );
+  return card;
 }
 
 /** Скелет той же геометрии, что и плитка. */
