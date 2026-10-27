@@ -9,3 +9,16 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+crane-domain = { path = "../../../core/domain" }
+crane-ports = { path = "../../../core/ports" }
+# Без TLS, json и макросов: TLS добавит entry вместе с конфигурацией, запросы пишутся вручную.
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "migrate", "uuid", "time"] }
+time = "0.3"
+uuid = "1"
+
+[dev-dependencies]
+crane-ports = { path = "../../../core/ports", features = ["contract"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+uuid = { version = "1", features = ["v4"] }
