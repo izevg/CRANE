@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cx } from "~/shared/lib/core";
+import { cx, type WithClassName } from "~/shared/lib/core";
 
 describe("cx", () => {
   it("склеивает строки через пробел", () => {
@@ -33,5 +33,19 @@ describe("cx", () => {
 
     // Assert
     expect(result).toBe("p-2 p-4");
+  });
+});
+
+describe("WithClassName", () => {
+  it("сохраняет дискриминированный union: поля ветки остаются доступными", () => {
+    // Arrange
+    type Props = WithClassName<{ kind: "icon"; label: string } | { kind: "text" }>;
+    const props: Props = { kind: "icon", label: "Закрыть", className: "ml-2" };
+
+    // Act
+    const label = props.kind === "icon" ? props.label : null;
+
+    // Assert
+    expect(label).toBe("Закрыть");
   });
 });

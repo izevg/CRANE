@@ -8,5 +8,10 @@ export function cx(...parts: readonly (string | false | null | undefined)[]): st
   return parts.filter((part): part is string => typeof part === "string" && part !== "").join(" ");
 }
 
-/** Пропсы обёртки Base UI с `className` только строкой: функция от состояния в ките не нужна. */
-export type WithClassName<P> = Omit<P, "className"> & { className?: string };
+/**
+ * Пропсы обёртки Base UI с `className` только строкой: функция от состояния в ките не нужна.
+ * Дистрибутивен по объединениям: `Omit` без этого схлопнул бы дискриминированный union пропсов в один тип.
+ */
+export type WithClassName<P> = P extends unknown
+  ? Omit<P, "className"> & { className?: string }
+  : never;
