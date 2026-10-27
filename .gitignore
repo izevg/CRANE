@@ -12,7 +12,8 @@ mutants.out*/
 reports/
 
 # Зависимости
-node_modules/
+# Без косой черты: Orca подключает node_modules в worktree символической ссылкой, а не каталогом.
+node_modules
 .pnpm-store/
 
 # Окружение и секреты
