@@ -134,12 +134,14 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             .iter()
             .filter(|v| v.state != VersionState::Deleted)
             .collect();
-        if let Some(late) = pending
+        // Те же отказы, что у `delete`, но для всех версий до первой мутации: цепочка не должна
+        // оставлять пакет наполовину удалённым.
+        let refusal = pending
             .iter()
-            .find(|v| !policy.permits(v.published_at, now))
-        {
-            let refused: Result<(), RegistryError> = Err(RegistryError::DeleteWindowClosed);
-            self.audited(caller, AuditAction::Delete(coordinate_of(late)), &refused);
+            .find_map(|v| refusal(v, policy, now).map(|error| (coordinate_of(v), error)));
+        if let Some((coordinate, error)) = refusal {
+            let refused: Result<(), RegistryError> = Err(error);
+            self.audited(caller, AuditAction::Delete(coordinate), &refused);
             return refused;
         }
         for version in pending {
@@ -171,15 +173,9 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         if version.state == VersionState::Deleted {
             return Ok(());
         }
-        if !policy.permits(version.published_at, now) {
-            return Err(RegistryError::DeleteWindowClosed);
+        if let Some(error) = refusal(&version, policy, now) {
+            return Err(error);
         }
-        version
-            .state
-            .ensure(VersionState::Deleted)
-            .map_err(|_| RegistryError::Unavailable {
-                state: version.state,
-            })?;
         match self
             .catalog
             .transition(version.id, version.state, VersionState::Deleted)
@@ -196,4 +192,22 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             Err(error) => Err(error.into()),
         }
     }
+}
+
+/// Почему версию нельзя удалить сейчас: окно закрыто или состояние не ведёт в `Deleted`.
+fn refusal(
+    version: &PackageVersion,
+    policy: &DeletePolicy,
+    now: SystemTime,
+) -> Option<RegistryError> {
+    if !policy.permits(version.published_at, now) {
+        return Some(RegistryError::DeleteWindowClosed);
+    }
+    version
+        .state
+        .ensure(VersionState::Deleted)
+        .err()
+        .map(|_| RegistryError::Unavailable {
+            state: version.state,
+        })
 }

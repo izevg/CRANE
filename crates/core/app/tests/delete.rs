@@ -229,3 +229,25 @@ fn delete_package_in_proxy_repository_is_not_hosted() {
     // Assert
     assert!(matches!(result, Err(RegistryError::NotHosted)));
 }
+
+#[test]
+fn delete_package_with_a_blocked_version_changes_nothing() {
+    // Arrange
+    let seed = Seed::new();
+    seed.add_version("foo", "1.0.0", VersionState::Released, b"a");
+    seed.add_version("foo", "2.0.0", VersionState::Blocked, b"b");
+    let registry = seed.registry();
+
+    // Act
+    let result =
+        block_on(registry.delete_package(&caller(), Format::Cargo, HOSTED, &name("foo"), &POLICY));
+
+    // Assert
+    assert!(matches!(
+        result,
+        Err(RegistryError::Unavailable {
+            state: VersionState::Blocked
+        })
+    ));
+    assert_eq!(served_versions(&registry), 1);
+}

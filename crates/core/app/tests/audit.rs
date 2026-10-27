@@ -488,3 +488,26 @@ fn package_read_records_no_events() {
     // Assert
     assert_eq!(audit.events(), []);
 }
+
+#[test]
+fn delete_package_refused_by_state_records_one_failure_event_for_that_version() {
+    // Arrange
+    let seed = Seed::new();
+    seed.add_version("foo", "1.0.0", VersionState::Released, b"a");
+    seed.add_version("foo", "2.0.0", VersionState::Blocked, b"b");
+    let audit = seed.audit();
+    let registry = seed.registry();
+
+    // Act
+    let _ =
+        block_on(registry.delete_package(&caller(), Format::Cargo, HOSTED, &name("foo"), &POLICY));
+
+    // Assert
+    assert_eq!(
+        audit.events(),
+        [event(
+            AuditAction::Delete(coordinate("foo", "2.0.0")),
+            failure("версия недоступна: Blocked")
+        )]
+    );
+}
