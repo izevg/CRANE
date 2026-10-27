@@ -25,7 +25,7 @@
 
 **Исправить относительно макета.** Убрать «Открыть ↗» из карточек (ссылка — имя). Разделить «P0 · Карантин» на пилюлю риска и StatusBadge версии. Убрать «Чисто». Убрать карточку «Индекс уязвимостей 99,4 %». Убрать дублирующийся логотип в сайдбаре.
 
-**Данные.** `GET /search?q&format&repository&workspace&include_deprecated&cursor&limit&fields` → `items[{name, format, repository{name,kind,workspace}, description, latest{version,state}, downloads_30d, owner_workspace, updated_at, lifecycle, replacement?, risk{max_priority, open_findings}? (P2), typosquat_of?, exact_match, highlights? (P3)}]`, `facets{format[], workspace[]}`, `took_ms`, `degraded[]`.
+**Данные.** `GET /search?q&format&repository&workspace&include_deprecated&cursor&limit&fields` → `items[{name, format, repository{name,kind,workspace}, description, latest{version,state}, downloads_30d, owner_team (отображаемое имя команды-владельца; переименование в `owner_workspace` — в v0.4.0 вместе с web), updated_at, lifecycle, replacement?, risk{max_priority, open_findings}? (P2), typosquat_of?, exact_match, highlights? (P3)}]`, `facets{format[], workspace[]}`, `took_ms`, `degraded[]`.
 
 **Состояния.** Пустой запрос — недавние пакеты (P1) или подсказки синтаксиса (PURL, `format:npm`). Нет результатов — «Ничего не нашлось по „…“» + советы (проверить формат, убрать фильтр) + если `typosquat_of` известен — «Возможно, вы искали …». Загрузка — 5 скелетонов карточек. Ошибка — ErrorState внутри списка, поле поиска остаётся рабочим.
 
@@ -226,7 +226,7 @@
 | --- | --- | --- | --- | --- | --- |
 | C2 Устареть / замена | P1 | диалог | 23 | `POST …/deprecation` | Превью «так увидят в поиске» — карточка §6 |
 | C3 Запросить одобрение | P2 | диалог | 11 | `POST …/approval-requests` | Список блокирующих гейтов, обязательный комментарий |
-| C4 Пространства имён | P0 | A + Sheet | 26 | `{format, pattern, match, reserved, owner_workspace, updated_at, updated_by}` | Callout о dependency confusion |
+| C4 Пространства имён | P0 | A + Sheet | 26 | `{format, pattern, match, reserved, workspace, updated_at, updated_by}` | Callout о dependency confusion |
 
 ### D. Доступ, токены, CI
 | D1 Мои токены | P0 | A | 22–24 | S5 | — |
