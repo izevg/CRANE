@@ -32,9 +32,10 @@ import {
 import { StatusBadge } from "~/shared/ui/status";
 import { AUDIT_EVENTS, type AuditEvent, EVENT_HASH, PREV_HASH } from "../data/audit";
 import { actorKindLabel, decisionBadge } from "../data/states";
+import { fitsViewport } from "../frame/fit";
 import { activeFormat } from "../frame/format";
 import { ScreenFrame } from "../frame/ScreenFrame";
-import { desktop, mobile, screenParameters } from "../frame/screen";
+import { desktop, mobile, mobile320, screenParameters } from "../frame/screen";
 
 function copyJson(): readonly [Action] {
   return [
@@ -661,4 +662,32 @@ export const English: Story = {
     // Тип актора в таблице — подпись интерфейса, а не контент: по-английски
     await expect(body.getAllByText("Human").length).toBeGreaterThan(0);
   },
+};
+
+/** Топбар не шире окна на телефоне (WCAG 1.4.10): ширины 390 и 320, обе локали. */
+export const Fit390: Story = {
+  ...Mobile390,
+  name: "Телефон 390: топбар помещается",
+  play: fitsViewport,
+};
+
+export const Fit320: Story = {
+  ...Mobile390,
+  name: "Телефон 320: топбар помещается",
+  globals: mobile320,
+  play: fitsViewport,
+};
+
+export const Fit390English: Story = {
+  ...Mobile390,
+  name: "Телефон 390 EN: топбар помещается",
+  globals: { ...mobile, locale: "en" },
+  play: fitsViewport,
+};
+
+export const Fit320English: Story = {
+  ...Mobile390,
+  name: "Телефон 320 EN: топбар помещается",
+  globals: { ...mobile320, locale: "en" },
+  play: fitsViewport,
 };

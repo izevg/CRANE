@@ -34,8 +34,9 @@ import {
 } from "~/shared/ui/primitives";
 import { EmptyState, StatusBadge } from "~/shared/ui/status";
 import { ACTIVE_TOKENS, REVOKED_TOKENS, TOKEN_LIMIT, TOKENS, type TokenRow } from "../data/tokens";
+import { fitsViewport } from "../frame/fit";
 import { ScreenFrame } from "../frame/ScreenFrame";
-import { desktop, mobile, screenParameters } from "../frame/screen";
+import { desktop, mobile, mobile320, screenParameters } from "../frame/screen";
 
 const SECRET = "crp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4";
 const EXPIRY_WARNING_DAYS = 14;
@@ -495,4 +496,32 @@ export const English: Story = {
     await expect(canvas.getByRole("heading", { level: 1, name: "My tokens" })).toBeVisible();
     await expect(canvas.getByRole("navigation", { name: "Primary menu" })).toBeVisible();
   },
+};
+
+/** Топбар не шире окна на телефоне (WCAG 1.4.10): ширины 390 и 320, обе локали. */
+export const Fit390: Story = {
+  ...Mobile,
+  name: "Телефон 390: топбар помещается",
+  play: fitsViewport,
+};
+
+export const Fit320: Story = {
+  ...Mobile,
+  name: "Телефон 320: топбар помещается",
+  globals: mobile320,
+  play: fitsViewport,
+};
+
+export const Fit390English: Story = {
+  ...Mobile,
+  name: "Телефон 390 EN: топбар помещается",
+  globals: { ...mobile, locale: "en" },
+  play: fitsViewport,
+};
+
+export const Fit320English: Story = {
+  ...Mobile,
+  name: "Телефон 320 EN: топбар помещается",
+  globals: { ...mobile320, locale: "en" },
+  play: fitsViewport,
 };

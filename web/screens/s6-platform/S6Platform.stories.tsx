@@ -17,9 +17,10 @@ import { MetricTile, ShareBar, StatChip, TimeSeriesChart } from "~/shared/ui/met
 import { Badge, Card, Link, ToggleGroup, ToggleGroupItem } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { PEOPLE, REPOSITORIES } from "../data/common";
+import { fitsViewport } from "../frame/fit";
 import { activeFormat } from "../frame/format";
 import { ScreenFrame } from "../frame/ScreenFrame";
-import { desktop, mobile, screenParameters } from "../frame/screen";
+import { desktop, mobile, mobile320, screenParameters } from "../frame/screen";
 
 // ---------------------------------------------------------------- данные
 
@@ -628,4 +629,32 @@ export const English: Story = {
     // Размеры в легенде — в формате английской локали: «5.1 TB», а не «5,1 ТБ»
     await expect(canvas.getAllByText(TB_EN).length).toBeGreaterThan(0);
   },
+};
+
+/** Топбар не шире окна на телефоне (WCAG 1.4.10): ширины 390 и 320, обе локали. */
+export const Fit390: Story = {
+  ...Mobile390,
+  name: "Телефон 390: топбар помещается",
+  play: fitsViewport,
+};
+
+export const Fit320: Story = {
+  ...Mobile390,
+  name: "Телефон 320: топбар помещается",
+  globals: mobile320,
+  play: fitsViewport,
+};
+
+export const Fit390English: Story = {
+  ...Mobile390,
+  name: "Телефон 390 EN: топбар помещается",
+  globals: { ...mobile, locale: "en" },
+  play: fitsViewport,
+};
+
+export const Fit320English: Story = {
+  ...Mobile390,
+  name: "Телефон 320 EN: топбар помещается",
+  globals: { ...mobile320, locale: "en" },
+  play: fitsViewport,
 };

@@ -29,8 +29,9 @@ import { EmptyState } from "~/shared/ui/status";
 import type { Banner } from "~/widgets/app-shell";
 import { REPOSITORIES, WORKSPACES } from "../data/common";
 import { FORMAT_FACETS, RESULTS, WORKSPACE_FACETS } from "../data/search";
+import { fitsViewport } from "../frame/fit";
 import { ScreenFrame } from "../frame/ScreenFrame";
-import { desktop, mobile, screenParameters } from "../frame/screen";
+import { desktop, mobile, mobile320, screenParameters } from "../frame/screen";
 
 function formatSegments() {
   return [
@@ -314,4 +315,32 @@ export const English: Story = {
     await expect(canvas.getByRole("heading", { level: 1, name: "Search" })).toBeVisible();
     await expect(canvas.getByText("38 results · 74 ms")).toBeVisible();
   },
+};
+
+/** Топбар не шире окна на телефоне (WCAG 1.4.10): ширины 390 и 320, обе локали. */
+export const Fit390: Story = {
+  ...Mobile,
+  name: "Телефон 390: топбар помещается",
+  play: fitsViewport,
+};
+
+export const Fit320: Story = {
+  ...Mobile,
+  name: "Телефон 320: топбар помещается",
+  globals: mobile320,
+  play: fitsViewport,
+};
+
+export const Fit390English: Story = {
+  ...Mobile,
+  name: "Телефон 390 EN: топбар помещается",
+  globals: { ...mobile, locale: "en" },
+  play: fitsViewport,
+};
+
+export const Fit320English: Story = {
+  ...Mobile,
+  name: "Телефон 320 EN: топбар помещается",
+  globals: { ...mobile320, locale: "en" },
+  play: fitsViewport,
 };

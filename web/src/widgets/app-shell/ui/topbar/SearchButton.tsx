@@ -21,9 +21,10 @@ export function SearchButton({ onOpen }: { onOpen: () => void }) {
       <span className="hidden min-w-0 flex-1 truncate text-body text-muted-foreground sm:inline">
         {visible}
       </span>{" "}
-      <Kbd aria-hidden="true" className="hidden sm:inline-flex">
-        {SHORTCUT}
-      </Kbd>
+      {/* Видимость на обёртке: у Kbd свой inline-flex, и `hidden` на нём перебивался порядком CSS */}
+      <span className="hidden sm:inline-flex">
+        <Kbd aria-hidden="true">{SHORTCUT}</Kbd>
+      </span>
     </button>
   );
 }

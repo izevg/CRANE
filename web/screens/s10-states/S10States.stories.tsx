@@ -10,8 +10,9 @@ import { EmptyState, ProblemState } from "~/shared/ui/status";
 import type { Banner } from "~/widgets/app-shell";
 import { CommandPaletteView } from "~/widgets/command-palette";
 import { type NotificationItem, NotificationsCenter } from "~/widgets/notifications-center";
+import { fitsViewport } from "../frame/fit";
 import { ScreenFrame } from "../frame/ScreenFrame";
-import { desktop, mobile, screenParameters } from "../frame/screen";
+import { desktop, mobile, mobile320, screenParameters } from "../frame/screen";
 import { PackagesBackdrop } from "./PackagesBackdrop";
 
 const BELL = /^Уведомления/;
@@ -530,4 +531,33 @@ export const EmptyEnglish: Story = {
     await expect(await BODY().findByText("No packages yet")).toBeInTheDocument();
     await expect(await BODY().findByRole("link", { name: "How to publish" })).toBeVisible();
   },
+};
+
+/** Топбар не шире окна на телефоне (WCAG 1.4.10): ширины 390 и 320, обе локали. */
+export const Fit390: Story = {
+  ...banners,
+  name: "Телефон 390: топбар помещается",
+  globals: mobile,
+  play: fitsViewport,
+};
+
+export const Fit320: Story = {
+  ...banners,
+  name: "Телефон 320: топбар помещается",
+  globals: mobile320,
+  play: fitsViewport,
+};
+
+export const Fit390English: Story = {
+  ...banners,
+  name: "Телефон 390 EN: топбар помещается",
+  globals: { ...mobile, locale: "en" },
+  play: fitsViewport,
+};
+
+export const Fit320English: Story = {
+  ...banners,
+  name: "Телефон 320 EN: топбар помещается",
+  globals: { ...mobile320, locale: "en" },
+  play: fitsViewport,
 };

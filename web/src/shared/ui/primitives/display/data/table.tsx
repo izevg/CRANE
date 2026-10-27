@@ -1,9 +1,36 @@
 import type * as React from "react";
+import { useLayoutEffect, useRef } from "react";
 import { cx } from "~/shared/lib/core";
 
+/**
+ * Контейнер прокручивается только при переполнении, и только тогда он попадает в Tab (WCAG 2.1.1, axe
+ * `scrollable-region-focusable`): на широком экране лишней остановки нет.
+ */
 export function Table({ className, ...props }: React.ComponentProps<"table">) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const container = ref.current;
+    if (!container) {
+      return;
+    }
+    const sync = () => {
+      if (container.scrollWidth > container.clientWidth) {
+        container.setAttribute("tabindex", "0");
+      } else {
+        container.removeAttribute("tabindex");
+      }
+    };
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(container);
+    const table = container.firstElementChild;
+    if (table) {
+      observer.observe(table);
+    }
+    return () => observer.disconnect();
+  }, []);
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <div ref={ref} data-slot="table-container" className="relative w-full overflow-x-auto">
       <table
         data-slot="table"
         className={cx("w-full caption-bottom text-body", className)}

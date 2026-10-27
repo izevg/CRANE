@@ -198,7 +198,7 @@ export function DataTable<TData extends RowData>({
       <div
         ref={scrollRef}
         className={cx(
-          "overflow-auto scroll-pt-10 scroll-ps-[var(--pin-start,0px)] scroll-pe-[var(--pin-end,0px)]",
+          "relative overflow-auto scroll-pt-10 scroll-ps-[var(--pin-start,0px)] scroll-pe-[var(--pin-end,0px)]",
           view.virtual && SCROLL_MAX_HEIGHT,
         )}
       >

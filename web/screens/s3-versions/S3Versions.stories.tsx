@@ -36,10 +36,11 @@ import {
 } from "~/shared/ui/primitives";
 import { StatusBadge } from "~/shared/ui/status";
 import { PURL, SHA256, STATE_COUNTS, VERSION_ROWS, type VersionRow } from "../data/versions";
+import { fitsViewport } from "../frame/fit";
 import { activeFormat } from "../frame/format";
 import { Moment } from "../frame/Moment";
 import { ScreenFrame } from "../frame/ScreenFrame";
-import { desktop, mobile, screenParameters } from "../frame/screen";
+import { desktop, mobile, mobile320, screenParameters } from "../frame/screen";
 
 const SELECTED_ROW = /1\.4\.2/;
 /** Момент публикации выбранной версии: тот же, что первое событие ленты, таблицы и сведений. */
@@ -609,4 +610,32 @@ export const English: Story = {
     await expect(table?.textContent).not.toContain("Карантин");
     await expect(table?.textContent).not.toContain("Выпущена");
   },
+};
+
+/** Топбар не шире окна на телефоне (WCAG 1.4.10): ширины 390 и 320, обе локали. */
+export const Fit390: Story = {
+  ...Mobile390,
+  name: "Телефон 390: топбар помещается",
+  play: fitsViewport,
+};
+
+export const Fit320: Story = {
+  ...Mobile390,
+  name: "Телефон 320: топбар помещается",
+  globals: mobile320,
+  play: fitsViewport,
+};
+
+export const Fit390English: Story = {
+  ...Mobile390,
+  name: "Телефон 390 EN: топбар помещается",
+  globals: { ...mobile, locale: "en" },
+  play: fitsViewport,
+};
+
+export const Fit320English: Story = {
+  ...Mobile390,
+  name: "Телефон 320 EN: топбар помещается",
+  globals: { ...mobile320, locale: "en" },
+  play: fitsViewport,
 };

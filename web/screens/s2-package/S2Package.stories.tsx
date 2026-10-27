@@ -30,9 +30,10 @@ import {
 import { StatusBadge } from "~/shared/ui/status";
 import type { Banner } from "~/widgets/app-shell";
 import { PEOPLE, REPOSITORIES } from "../data/common";
+import { fitsViewport } from "../frame/fit";
 import { Moment } from "../frame/Moment";
 import { ScreenFrame } from "../frame/ScreenFrame";
-import { desktop, mobile, screenParameters } from "../frame/screen";
+import { desktop, mobile, mobile320, screenParameters } from "../frame/screen";
 
 // i18n-fixture: заголовки шагов приходят с сервера (InstallInstructions) — контент витрины, а не текст интерфейса
 function installInstructions(client: InstallClient): InstallInstructions {
@@ -418,4 +419,32 @@ export const English: Story = {
     await expect(canvas.getByRole("heading", { name: "Install" })).toBeVisible();
     await expect(canvas.getByRole("navigation", { name: "Primary menu" })).toBeVisible();
   },
+};
+
+/** Топбар не шире окна на телефоне (WCAG 1.4.10): ширины 390 и 320, обе локали. */
+export const Fit390: Story = {
+  ...Mobile,
+  name: "Телефон 390: топбар помещается",
+  play: fitsViewport,
+};
+
+export const Fit320: Story = {
+  ...Mobile,
+  name: "Телефон 320: топбар помещается",
+  globals: mobile320,
+  play: fitsViewport,
+};
+
+export const Fit390English: Story = {
+  ...Mobile,
+  name: "Телефон 390 EN: топбар помещается",
+  globals: { ...mobile, locale: "en" },
+  play: fitsViewport,
+};
+
+export const Fit320English: Story = {
+  ...Mobile,
+  name: "Телефон 320 EN: топбар помещается",
+  globals: { ...mobile320, locale: "en" },
+  play: fitsViewport,
 };

@@ -221,6 +221,31 @@ export const Mobile390Geometry: Story = {
   },
 };
 
+const LONG_TRAIL = {
+  trail: [
+    { label: "Мои пакеты", href: "/packages" },
+    { label: "@acme/design-system-components", href: "/packages/acme-design-system" },
+    { label: "Версии и состояния публикации", href: "/packages/acme-design-system/versions" },
+  ],
+  current: "Версия 1.4.2-rc.1 и её происхождение",
+};
+
+/** Длинный путь крошек не раздвигает панель: на телефоне виден только текущий раздел с обрезкой. */
+export const Mobile320LongTrail: Story = {
+  name: "Телефон 320: длинный путь крошек, виден только текущий раздел",
+  globals: { viewport: { value: "mobile320", isRotated: false } },
+  args: { topbar: { ...meta.args.topbar, breadcrumbs: LONG_TRAIL } },
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(window.innerWidth).toBe(320));
+    await expectNoHorizontalScroll(canvasElement);
+    const nav = within(canvasElement).getByRole("navigation", { name: "Навигационная цепочка" });
+    await expect(within(nav).getByText(LONG_TRAIL.current)).toBeVisible();
+    await expect(
+      within(nav).getByRole("link", { name: "Мои пакеты", hidden: true }),
+    ).not.toBeVisible();
+  },
+};
+
 export const Mobile320Geometry: Story = {
   name: "Телефон 320: topbar помещается, скролла нет",
   globals: { viewport: { value: "mobile320", isRotated: false } },
