@@ -143,4 +143,22 @@ mod tests {
         // Assert
         assert!((1..=3).contains(&retained), "удержано {retained} из 10");
     }
+
+    #[test]
+    fn default_budget_holds_a_metadata_document_of_tens_of_mebibytes() {
+        // Arrange
+        let cache = MemoryProxyCache::default();
+        let mebibyte = 1024 * 1024;
+        block_on(cache.put(&key(1), document(32 * mebibyte), KEEP)).unwrap();
+        cache.entries.run_pending_tasks();
+
+        // Act
+        let found = block_on(cache.get(&key(1))).unwrap();
+
+        // Assert
+        assert!(
+            found.is_some(),
+            "документ в 32 МиБ не поместился в бюджет по умолчанию"
+        );
+    }
 }

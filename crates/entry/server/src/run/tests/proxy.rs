@@ -132,3 +132,43 @@ fn free_npm_name_is_registered_as_npm_proxy() {
     assert!(built.is_ok());
     assert_eq!(stored, Some(RepositoryKind::Proxy));
 }
+
+#[test]
+fn engine_limits_take_the_configured_artifact_cap_and_keep_other_defaults() {
+    // Arrange
+    let configured = 1_234;
+
+    // Act
+    let limits = limits(configured);
+
+    // Assert
+    assert_eq!(
+        limits,
+        ProxyLimits {
+            max_artifact_bytes: 1_234,
+            ..ProxyLimits::DEFAULT
+        }
+    );
+}
+
+#[test]
+fn no_proxy_repositories_means_no_engine() {
+    // Arrange
+    let catalog = MemoryCatalog::default();
+    let repos = Repos::of(Format::Cargo, RepositoryKind::Hosted, vec![NAME.to_owned()]);
+
+    // Act
+    let prepared = block_on(prepare_proxies(
+        &catalog,
+        &SequentialIdGen::default(),
+        Arc::new(MemoryBlobStore::default()),
+        &repos,
+        Proxy {
+            cache: Cache::Memory,
+            max_artifact_bytes: ProxyLimits::DEFAULT.max_artifact_bytes,
+        },
+    ));
+
+    // Assert
+    assert!(matches!(prepared, Ok(None)));
+}

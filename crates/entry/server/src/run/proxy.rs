@@ -103,6 +103,14 @@ impl<B: BlobStore + 'static> Prepared<B> {
     }
 }
 
+/// Лимиты движка: настраивается только предел артефакта, остальное берётся по умолчанию.
+fn limits(max_artifact_bytes: u64) -> ProxyLimits {
+    ProxyLimits {
+        max_artifact_bytes,
+        ..ProxyLimits::DEFAULT
+    }
+}
+
 /// Регистрирует репозитории в каталоге и строит движок с источниками каждого имени каждого формата.
 ///
 /// Движок один на все форматы (общие singleflight, кэш и лимиты) и создаётся, только если настроен
@@ -130,10 +138,7 @@ pub(super) async fn prepare_proxies<C: Catalog, B: BlobStore + 'static>(
         shared,
         blobs,
         Arc::new(SystemClock),
-        ProxyLimits {
-            max_artifact_bytes: proxy.max_artifact_bytes,
-            ..ProxyLimits::DEFAULT
-        },
+        limits(proxy.max_artifact_bytes),
     );
     let mut cargo = Vec::new();
     for name in repos.names(Format::Cargo, RepositoryKind::Proxy) {
