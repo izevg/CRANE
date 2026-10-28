@@ -15,6 +15,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use crane_app::registry::Registry;
 use crane_domain::registry::Sha256;
+use crane_format_cargo::CARGO;
 use crane_http::admin_router;
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::proxy::NoUpstream;
@@ -64,6 +65,7 @@ fn registry<B: BlobStore>(blobs: B) -> Arc<Registry<MemoryCatalog, B>> {
         Arc::new(SequentialIdGen::default()),
         Arc::new(MemoryAudit::default()),
         Arc::new(NoUpstream),
+        |_| &CARGO,
     ))
 }
 

@@ -6,6 +6,7 @@ use crane_domain::registry::{Format, Namespace, NamespacePattern, WorkspaceId};
 use uuid::Uuid;
 
 use super::ConfigError;
+use crate::ecosystem::ecosystem;
 
 pub(super) const NAMESPACES: &str = "CRANE_NAMESPACES";
 
@@ -63,7 +64,7 @@ fn entry(item: &str) -> Result<Namespace, ConfigError> {
         .split_once(':')
         .ok_or_else(|| invalid("ожидается `формат:шаблон`"))?;
     let format = Format::from_str(format.trim()).map_err(|_| invalid("неизвестный формат"))?;
-    let pattern = NamespacePattern::parse(format, pattern.trim())
+    let pattern = NamespacePattern::parse(ecosystem(format), pattern.trim())
         .map_err(|_| invalid("некорректный шаблон"))?;
     Ok(Namespace {
         format,

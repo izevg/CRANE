@@ -1,6 +1,7 @@
 //! Имена файлов tarball: `{basename}-{version}.tgz`.
 
-use crane_domain::registry::{Format, PackageName, Version};
+use crate::ecosystem::parse_version;
+use crane_domain::registry::{PackageName, Version};
 
 const EXTENSION: &str = ".tgz";
 
@@ -23,5 +24,5 @@ pub fn tarball_version(package: &PackageName, file: &str) -> Option<Version> {
         .strip_suffix(EXTENSION)?
         .strip_prefix(basename(package))?
         .strip_prefix('-')?;
-    Version::parse(Format::Npm, raw).ok()
+    parse_version(raw).ok()
 }

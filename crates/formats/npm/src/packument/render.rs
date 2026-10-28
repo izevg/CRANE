@@ -4,7 +4,8 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crane_domain::registry::{Format, PackageName, PackageVersion, Version, VersionId};
+use crate::ecosystem::parse_version;
+use crane_domain::registry::{PackageName, PackageVersion, Version, VersionId};
 
 use super::model::Packument;
 use super::project::abbreviate;
@@ -61,7 +62,7 @@ pub fn render_upstream(
     }
     let versions = std::mem::take(&mut doc.versions);
     for (key, mut fields) in versions {
-        let Ok(version) = Version::parse(Format::Npm, &key) else {
+        let Ok(version) = parse_version(&key) else {
             continue;
         };
         let foreign_name = fields

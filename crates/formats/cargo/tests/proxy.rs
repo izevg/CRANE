@@ -4,8 +4,8 @@
     reason = "в тестах падение unwrap — это падение теста"
 )]
 
-use crane_domain::registry::{Format, PackageName, Sha256};
-use crane_format_cargo::{Archive, archive, index_path};
+use crane_domain::registry::{Ecosystem, Sha256};
+use crane_format_cargo::{Archive, CARGO, archive, index_path};
 
 const SUM_A: &str = "1111111111111111111111111111111111111111111111111111111111111111";
 const SUM_B: &str = "2222222222222222222222222222222222222222222222222222222222222222";
@@ -103,7 +103,7 @@ fn index_paths_never_share_first_segment_with_archive_paths() {
     // Act
     let paths: Vec<String> = names
         .iter()
-        .map(|raw| index_path(&PackageName::parse(Format::Cargo, raw).unwrap()))
+        .map(|raw| index_path(&CARGO.parse_name(raw).unwrap()))
         .collect();
 
     // Assert

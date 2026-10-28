@@ -4,25 +4,18 @@ mod flags;
 use std::time::{Duration, SystemTime};
 
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, RepositoryId,
-    RepositoryKind, Sha256, Version, VersionId, VersionState,
+    Asset, Format, FormatMetadata, PackageVersion, Repository, RepositoryId, RepositoryKind,
+    Sha256, VersionId, VersionState,
 };
 use uuid::Uuid;
 
+use super::fixture::{name, version};
 use crate::registry::{Catalog, NewVersion};
 
 /// Проверяет реализацию `Catalog`; `new` создаёт чистый каталог для каждого сценария.
 pub async fn catalog_contract<C: Catalog>(new: impl Fn() -> C) {
     content::scenarios(&new).await;
     flags::scenarios(&new).await;
-}
-
-pub(super) fn name(raw: &str) -> PackageName {
-    PackageName::parse(Format::Cargo, raw).expect("тестовое имя пакета валидно")
-}
-
-fn version(raw: &str) -> Version {
-    Version::parse(Format::Cargo, raw).expect("тестовая версия валидна")
 }
 
 pub(super) fn repository(id: u128, name: &str) -> Repository {

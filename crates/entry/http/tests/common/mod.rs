@@ -27,7 +27,9 @@ use bytes::Bytes;
 use crane_app::registry::Registry;
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::audit::AuditEvent;
-use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
+use crane_domain::registry::{Ecosystem, Format, Repository, RepositoryId, RepositoryKind};
+use crane_format_cargo::CARGO;
+use crane_format_npm::NPM;
 use crane_http::{FormatSettings, StaticToken, TrustedProxies, admin_router, api_router};
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::audit::AuditSink;
@@ -38,6 +40,14 @@ use http_body_util::BodyExt;
 use serde_json::Value;
 use tokio::runtime::{Builder, Runtime};
 use tower::ServiceExt;
+
+/// Экосистемы, которые поднимает тестовый стенд; остальные форматы в этих сценариях не участвуют.
+pub(crate) fn ecosystem(format: Format) -> &'static dyn Ecosystem {
+    match format {
+        Format::Npm => &NPM,
+        _ => &CARGO,
+    }
+}
 
 use self::cargo::{index_path, publish_body};
 use self::switch::SwitchCatalog;
@@ -183,6 +193,7 @@ impl Api {
             ids.clone(),
             sink.clone(),
             upstream,
+            ecosystem,
         ));
         let proxy_repos = mount(&registry);
         let router = api_router(

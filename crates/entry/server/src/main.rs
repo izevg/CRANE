@@ -4,6 +4,7 @@
 
 mod cache;
 mod config;
+mod ecosystem;
 mod namespaces;
 mod run;
 mod system;

@@ -11,9 +11,9 @@ use std::fmt::Display;
 use std::time::SystemTime;
 
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, Namespace, NamespacePattern, PackageName, PackageVersion,
-    Repository, RepositoryId, RepositoryKind, Sha256, Version, VersionId, VersionState,
-    WorkspaceId,
+    Asset, Format, FormatMetadata, Namespace, NamespacePattern, OrderKey, PackageName,
+    PackageVersion, Repository, RepositoryId, RepositoryKind, Sha256, Version, VersionId,
+    VersionState, WorkspaceId,
 };
 use crane_ports::registry::CatalogError;
 
@@ -112,27 +112,30 @@ pub(crate) fn namespace_from_row(row: &PgRow) -> Result<Namespace, CatalogError>
         .map_err(corrupt)?;
     Ok(Namespace {
         format,
-        // Хранится нормализованным, поэтому разбор возвращает ту же строку.
-        pattern: NamespacePattern::parse(format, column::<&str>(row, "pattern")?)
-            .map_err(corrupt)?,
+        // Хранится нормализованным: грамматику экосистемы адаптер не знает.
+        pattern: NamespacePattern::from_stored(column::<String>(row, "pattern")?),
         workspace: WorkspaceId::new(column::<Uuid>(row, "workspace_id")?),
     })
 }
 
-/// Колонки: `format`, `name_display`, `id`, `repository_id`, `version_display`, `state`,
+/// Колонки: `name_norm`, `name_display`, `id`, `repository_id`, `version_canonical`,
+/// `version_display`, `version_order`, `prerelease`, `state`,
 /// `yanked`, `deprecated`, `published_at`, `metadata`, `paths`, `digests`, `sizes`; массивы файлов
 /// выровнены по индексу и отсортированы по пути.
 pub(crate) fn version_from_row(row: &PgRow) -> Result<PackageVersion, CatalogError> {
-    let format = column::<&str>(row, "format")?
-        .parse::<Format>()
-        .map_err(corrupt)?;
     Ok(PackageVersion {
         id: VersionId::new(column::<Uuid>(row, "id")?),
         repository: RepositoryId::new(column::<Uuid>(row, "repository_id")?),
-        package: PackageName::parse(format, column::<&str>(row, "name_display")?)
-            .map_err(corrupt)?,
-        version: Version::parse(format, column::<&str>(row, "version_display")?)
-            .map_err(corrupt)?,
+        package: PackageName::from_parts(
+            column::<String>(row, "name_norm")?,
+            column::<String>(row, "name_display")?,
+        ),
+        version: Version::from_parts(
+            column::<String>(row, "version_canonical")?,
+            column::<String>(row, "version_display")?,
+            OrderKey::from_bytes(column::<Vec<u8>>(row, "version_order")?),
+            column::<bool>(row, "prerelease")?,
+        ),
         state: state_parse(column::<&str>(row, "state")?)?,
         yanked: column::<bool>(row, "yanked")?,
         deprecated: column::<Option<String>>(row, "deprecated")?,

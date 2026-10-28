@@ -3,11 +3,12 @@
 //! эти методы нужны защите от dependency confusion, а не жизненному циклу версий.
 
 use crane_domain::registry::{
-    Format, Namespace, NamespacePattern, Repository, RepositoryId, RepositoryKind, WorkspaceId,
+    Format, Namespace, Repository, RepositoryId, RepositoryKind, WorkspaceId,
 };
 use uuid::Uuid;
 
-use super::catalog::{ensure_repo, name, new_version, publish, repository};
+use super::catalog::{ensure_repo, new_version, publish, repository};
+use super::fixture::{candidates, name, pattern};
 use crate::registry::Catalog;
 
 /// Проверяет namespace-методы реализации `Catalog`; `new` создаёт чистый каталог для сценария.
@@ -17,6 +18,8 @@ pub async fn namespace_contract<C: Catalog>(new: impl Fn() -> C) {
     namespace_for_nested_prefix_picks_outer_for_other_name(&new()).await;
     namespace_for_name_sharing_only_leading_letters_is_none(&new()).await;
     namespace_for_other_format_is_none(&new()).await;
+    namespace_for_follows_the_order_of_candidates(&new()).await;
+    namespace_for_without_candidates_is_none(&new()).await;
     hosted_exists_is_true_for_package_in_hosted_repository(&new()).await;
     hosted_exists_is_true_for_other_spelling_of_name(&new()).await;
     hosted_exists_is_false_for_package_only_in_proxy_repository(&new()).await;
@@ -30,10 +33,10 @@ fn workspace(id: u128) -> WorkspaceId {
     WorkspaceId::new(Uuid::from_u128(id))
 }
 
-fn namespace(format: Format, pattern: &str, owner: u128) -> Namespace {
+fn namespace(format: Format, raw_pattern: &str, owner: u128) -> Namespace {
     Namespace {
         format,
-        pattern: NamespacePattern::parse(format, pattern).expect("тестовый паттерн валиден"),
+        pattern: pattern(raw_pattern),
         workspace: workspace(owner),
     }
 }
@@ -71,7 +74,7 @@ async fn namespace_for_prefers_exact_pattern_over_prefix<C: Catalog>(catalog: &C
 
     // Act
     let result = catalog
-        .namespace_for(Format::Cargo, &name("acme_core"))
+        .namespace_for(Format::Cargo, &candidates(&name("acme_core")))
         .await;
 
     // Assert
@@ -91,7 +94,7 @@ async fn namespace_for_nested_prefix_picks_longest_for_inner_name<C: Catalog>(ca
 
     // Act
     let result = catalog
-        .namespace_for(Format::Cargo, &name("acme_payments_core"))
+        .namespace_for(Format::Cargo, &candidates(&name("acme_payments_core")))
         .await;
 
     // Assert
@@ -111,7 +114,7 @@ async fn namespace_for_nested_prefix_picks_outer_for_other_name<C: Catalog>(cata
 
     // Act
     let result = catalog
-        .namespace_for(Format::Cargo, &name("acme_billing"))
+        .namespace_for(Format::Cargo, &candidates(&name("acme_billing")))
         .await;
 
     // Assert
@@ -128,7 +131,7 @@ async fn namespace_for_name_sharing_only_leading_letters_is_none<C: Catalog>(cat
 
     // Act
     let result = catalog
-        .namespace_for(Format::Cargo, &name("acmecorp"))
+        .namespace_for(Format::Cargo, &candidates(&name("acmecorp")))
         .await;
 
     // Assert
@@ -145,7 +148,7 @@ async fn namespace_for_other_format_is_none<C: Catalog>(catalog: &C) {
 
     // Act
     let result = catalog
-        .namespace_for(Format::PyPi, &name("acme_core"))
+        .namespace_for(Format::PyPi, &candidates(&name("acme_core")))
         .await;
 
     // Assert
@@ -153,6 +156,40 @@ async fn namespace_for_other_format_is_none<C: Catalog>(catalog: &C) {
         result.expect("namespace_for"),
         None,
         "namespace_for: namespace другого формата имя не покрывает"
+    );
+}
+
+async fn namespace_for_follows_the_order_of_candidates<C: Catalog>(catalog: &C) {
+    // Arrange
+    let prefix = namespace(Format::Cargo, "acme-*", 100);
+    let exact = namespace(Format::Cargo, "acme-core", 200);
+    ensure_ns(catalog, &prefix).await;
+    ensure_ns(catalog, &exact).await;
+    let reversed = [pattern("acme-*"), pattern("acme-core")];
+
+    // Act
+    let result = catalog.namespace_for(Format::Cargo, &reversed).await;
+
+    // Assert
+    assert_eq!(
+        result.expect("namespace_for"),
+        Some(prefix),
+        "namespace_for: порядок кандидатов задаёт вызывающий, первый сохранённый побеждает"
+    );
+}
+
+async fn namespace_for_without_candidates_is_none<C: Catalog>(catalog: &C) {
+    // Arrange
+    ensure_ns(catalog, &namespace(Format::Cargo, "acme-*", 100)).await;
+
+    // Act
+    let result = catalog.namespace_for(Format::Cargo, &[]).await;
+
+    // Assert
+    assert_eq!(
+        result.expect("namespace_for"),
+        None,
+        "namespace_for: без кандидатов покрытия нет"
     );
 }
 

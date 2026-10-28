@@ -4,10 +4,11 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt;
 
+use crate::ecosystem::{parse_name, parse_version};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use bytes::Bytes;
-use crane_domain::registry::{Checksum, Format, FormatMetadata, PackageName, Sha1, Version};
+use crane_domain::registry::{Checksum, FormatMetadata, PackageName, Sha1, Version};
 use serde::{Deserialize, Serialize};
 
 use super::{Attachment, Body, WriteError, parse_tag, string_field};
@@ -97,7 +98,7 @@ pub(super) fn publish(package: &PackageName, body: Body<'_>) -> Result<NpmPublis
     {
         return Err(WriteError::NameMismatch);
     }
-    let version = Version::parse(Format::Npm, &key).map_err(WriteError::Version)?;
+    let version = parse_version(&key).map_err(WriteError::Version)?;
     if string_field(&manifest, "version").as_deref() != Some(key.as_ref()) {
         return Err(WriteError::VersionMismatch);
     }
@@ -232,7 +233,7 @@ fn registry_spec(spec: &str) -> bool {
                 Some(i) => (&alias[..i], &alias[i + 1..]),
                 None => (alias, ""),
             };
-            PackageName::parse(Format::Npm, name).is_ok() && plain(range)
+            parse_name(name).is_ok() && plain(range)
         }
     }
 }

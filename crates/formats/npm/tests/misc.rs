@@ -4,14 +4,14 @@
     reason = "в тестах падение unwrap — это падение теста"
 )]
 
-use crane_domain::registry::{Format, Version};
+use crane_domain::registry::{Ecosystem, Version};
 use crane_format_npm::{
-    View, WriteError, content_type, parse_tag, parse_tag_body, removable, render_error, render_ok,
-    render_tags, render_whoami,
+    NPM, View, WriteError, content_type, parse_tag, parse_tag_body, removable, render_error,
+    render_ok, render_tags, render_whoami,
 };
 
 fn version(raw: &str) -> Version {
-    Version::parse(Format::Npm, raw).unwrap()
+    NPM.parse_version(raw).unwrap()
 }
 
 #[test]

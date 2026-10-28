@@ -5,10 +5,9 @@ mod metadata;
 use std::fmt;
 
 use bytes::Bytes;
-use crane_domain::registry::{
-    Format, FormatMetadata, NameError, PackageName, Version, VersionError,
-};
+use crane_domain::registry::{FormatMetadata, NameError, PackageName, Version, VersionError};
 
+use crate::ecosystem::{parse_name, parse_version};
 use metadata::PublishJson;
 
 /// Опубликованная версия, разобранная из тела запроса.
@@ -108,8 +107,8 @@ pub fn parse_publish(body: Bytes) -> Result<CargoPublish, PublishError> {
         return Err(PublishError::TrailingBytes);
     }
     let parsed: PublishJson = serde_json::from_slice(&json).map_err(PublishError::Json)?;
-    let name = PackageName::parse(Format::Cargo, &parsed.name).map_err(PublishError::Name)?;
-    let version = Version::parse(Format::Cargo, &parsed.vers).map_err(PublishError::Version)?;
+    let name = parse_name(&parsed.name).map_err(PublishError::Name)?;
+    let version = parse_version(&parsed.vers).map_err(PublishError::Version)?;
     Ok(CargoPublish {
         name,
         version,

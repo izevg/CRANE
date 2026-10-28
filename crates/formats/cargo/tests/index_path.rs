@@ -4,11 +4,11 @@
     reason = "в тестах падение unwrap — это падение теста"
 )]
 
-use crane_domain::registry::{Format, PackageName};
-use crane_format_cargo::{index_path, parse_index_path};
+use crane_domain::registry::{Ecosystem, PackageName};
+use crane_format_cargo::{CARGO, index_path, parse_index_path};
 
 fn name(raw: &str) -> PackageName {
-    PackageName::parse(Format::Cargo, raw).unwrap()
+    CARGO.parse_name(raw).unwrap()
 }
 
 #[test]

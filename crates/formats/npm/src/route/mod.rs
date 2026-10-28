@@ -2,7 +2,8 @@
 
 mod tarball;
 
-use crane_domain::registry::{Format, NameError, PackageName};
+use crate::ecosystem::parse_name;
+use crane_domain::registry::{NameError, PackageName};
 
 pub use tarball::{tarball_file, tarball_version};
 
@@ -74,7 +75,7 @@ impl Route {
 }
 
 fn package(name: &str) -> Result<PackageName, RouteError> {
-    PackageName::parse(Format::Npm, name).map_err(RouteError::Name)
+    parse_name(name).map_err(RouteError::Name)
 }
 
 fn is_tarball(file: &str) -> bool {

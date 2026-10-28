@@ -199,6 +199,13 @@ fn migrator() -> Migrator {
             include_str!("../../migrations/0004_settings.sql").into_sql_str(),
             false,
         ),
+        Migration::new(
+            5,
+            "version_order".into(),
+            MigrationType::Simple,
+            include_str!("../../migrations/0005_version_order.sql").into_sql_str(),
+            false,
+        ),
     ])
 }
 

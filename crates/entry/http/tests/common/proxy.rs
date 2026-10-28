@@ -10,7 +10,7 @@ use axum::Router;
 use bytes::Bytes;
 use crane_app::proxy::{ProxyEngine, ProxyLimits};
 use crane_domain::proxy::{EgressPolicy, EgressRefusal};
-use crane_domain::registry::{Format, PackageName, RepositoryId};
+use crane_domain::registry::{Format, RepositoryId};
 use crane_format_cargo::{DL_HOST, INDEX_HOST};
 use crane_format_npm::REGISTRY_HOST;
 use crane_http::{EngineUpstreamNames, FormatSettings, ProxySource, presence_origin, proxy_router};
@@ -24,7 +24,7 @@ use crane_ports::system::IdGen;
 use futures_util::stream;
 use tokio::runtime::Builder;
 
-use super::{MAX_PUBLISH_BYTES, PUBLIC_URL, TestRegistry};
+use super::{MAX_PUBLISH_BYTES, PUBLIC_URL, TestRegistry, ecosystem};
 
 /// Имя proxy-репозитория в URL.
 pub(crate) const NAME: &str = "crates-io";
@@ -132,7 +132,7 @@ fn presence_of(
     format: Format,
     name: &str,
 ) -> Presence {
-    let name = PackageName::parse(format, name).unwrap();
+    let name = ecosystem(format).parse_name(name).unwrap();
     Builder::new_current_thread()
         .enable_all()
         .build()

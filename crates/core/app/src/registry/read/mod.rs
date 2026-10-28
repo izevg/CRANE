@@ -1,6 +1,6 @@
 use crane_domain::access::Caller;
 use crane_domain::audit::AuditAction;
-use crane_domain::registry::{Format, PackageName, PackageVersion};
+use crane_domain::registry::{Format, NamespacePattern, PackageName, PackageVersion};
 use crane_ports::registry::{BlobStore, Catalog};
 
 use super::{Coordinate, Download, PackageView, Registry, RegistryError, served};
@@ -95,7 +95,13 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
 
     async fn is_internal(&self, format: Format, name: &PackageName) -> Result<bool, RegistryError> {
         // Короткое замыкание: namespace дешевле, чем поиск по пакетам.
-        Ok(self.catalog.namespace_for(format, name).await?.is_some()
+        let eco = (self.ecosystems)(format);
+        let candidates = NamespacePattern::covering(eco, name);
+        Ok(self
+            .catalog
+            .namespace_for(format, &candidates)
+            .await?
+            .is_some()
             || self.catalog.hosted_exists(format, name).await?)
     }
 }

@@ -9,17 +9,18 @@
 use std::time::{Duration, SystemTime};
 
 use crane_domain::registry::{
-    Format, FormatMetadata, PackageName, PackageVersion, RepositoryId, Version, VersionId,
+    Ecosystem, FormatMetadata, PackageName, PackageVersion, RepositoryId, Version, VersionId,
     VersionState,
 };
+use crane_format_npm::NPM;
 use uuid::Uuid;
 
 pub(crate) fn pkg(raw: &str) -> PackageName {
-    PackageName::parse(Format::Npm, raw).unwrap()
+    NPM.parse_name(raw).unwrap()
 }
 
 pub(crate) fn version(raw: &str) -> Version {
-    Version::parse(Format::Npm, raw).unwrap()
+    NPM.parse_version(raw).unwrap()
 }
 
 pub(crate) fn version_id(n: u128) -> VersionId {

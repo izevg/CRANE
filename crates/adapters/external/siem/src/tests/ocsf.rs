@@ -4,16 +4,32 @@
 )]
 
 use crane_domain::access::{RequestContext, RequestId};
-use crane_domain::registry::{Coordinate, Namespace, NamespacePattern, PackageRef, WorkspaceId};
+use crane_domain::registry::{
+    Coordinate, Namespace, NamespacePattern, OrderKeyBuilder, PackageRef, WorkspaceId,
+};
 
 use super::*;
+
+/// Имя cargo из готовых частей: `siem` не зависит от `formats`.
+fn name_of(raw: &str) -> PackageName {
+    PackageName::from_parts(raw.to_ascii_lowercase().replace('-', "_"), raw.to_owned())
+}
+
+fn version_of(raw: &str) -> Version {
+    Version::from_parts(
+        raw.to_owned(),
+        raw.to_owned(),
+        OrderKeyBuilder::new().finish(),
+        false,
+    )
+}
 
 pub(super) fn coord(name: &str, version: &str) -> Coordinate {
     Coordinate {
         format: Format::Cargo,
         repository: "internal".to_owned(),
-        package: PackageName::parse(Format::Cargo, name).expect("имя"),
-        version: Version::parse(Format::Cargo, version).expect("версия"),
+        package: name_of(name),
+        version: version_of(version),
     }
 }
 
@@ -42,7 +58,7 @@ fn package_ref() -> PackageRef {
     PackageRef {
         format: Format::Cargo,
         repository: "internal".to_owned(),
-        package: PackageName::parse(Format::Cargo, "serde").expect("имя"),
+        package: name_of("serde"),
     }
 }
 
@@ -56,7 +72,7 @@ fn deprecate(message: Option<&str>) -> AuditAction {
 fn reserve() -> AuditAction {
     AuditAction::Reserve(Namespace {
         format: Format::Cargo,
-        pattern: NamespacePattern::parse(Format::Cargo, "acme-*").expect("паттерн"),
+        pattern: NamespacePattern::from_stored("acme_*".to_owned()),
         workspace: WorkspaceId::DEFAULT,
     })
 }
@@ -64,7 +80,7 @@ fn reserve() -> AuditAction {
 fn shadow() -> AuditAction {
     AuditAction::ShadowUpstream {
         format: Format::Cargo,
-        package: PackageName::parse(Format::Cargo, "acme-core").expect("имя"),
+        package: name_of("acme-core"),
     }
 }
 

@@ -18,7 +18,10 @@ path = "src/main.rs"
 crane-app = { path = "../../core/app" }
 crane-domain = { path = "../../core/domain" }
 crane-format-cargo = { path = "../../formats/cargo" }
+crane-format-maven = { path = "../../formats/maven" }
 crane-format-npm = { path = "../../formats/npm" }
+crane-format-nuget = { path = "../../formats/nuget" }
+crane-format-pypi = { path = "../../formats/pypi" }
 crane-http = { path = "../http" }
 crane-memory = { path = "../../adapters/persistence/memory" }
 # Постоянные хранилища: каталог в PostgreSQL и blob в объектном хранилище.

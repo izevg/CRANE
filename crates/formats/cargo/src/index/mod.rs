@@ -2,7 +2,9 @@
 
 mod line;
 
-use crane_domain::registry::{Format, PackageName};
+use crane_domain::registry::PackageName;
+
+use crate::ecosystem::parse_name;
 
 pub(crate) use line::{About, IndexDep, IndexMeta, StoredMeta};
 pub use line::{IndexError, render_index};
@@ -26,7 +28,7 @@ pub fn index_path(name: &PackageName) -> String {
 #[must_use]
 pub fn parse_index_path(path: &str) -> Option<PackageName> {
     let file = path.rsplit('/').next()?;
-    let name = PackageName::parse(Format::Cargo, file).ok()?;
+    let name = parse_name(file).ok()?;
     // Сверка с канонической раскладкой отклоняет заглавные буквы в пути,
     // чужие каталоги и лишние сегменты разом, без отдельных проверок.
     (index_path(&name) == path).then_some(name)

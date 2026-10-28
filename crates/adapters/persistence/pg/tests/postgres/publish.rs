@@ -128,3 +128,38 @@ fn publish_result_equals_find_result_for_nanosecond_timestamp() {
         assert_eq!(found, Some(published));
     });
 }
+
+#[test]
+fn order_key_and_prerelease_flag_survive_a_round_trip() {
+    support::run(async |server| {
+        // Arrange
+        let catalog = server.fresh_catalog().await;
+        let repo = hosted_repository(&catalog).await;
+        let published = new_version(300, repo, "rt", "1.2.3-rc.1");
+        catalog
+            .publish_version(published.clone())
+            .await
+            .expect("публикация");
+
+        // Act
+        let stored = catalog
+            .find_version(repo, &name("rt"), &published.version)
+            .await
+            .expect("find_version")
+            .expect("версия найдена");
+
+        // Assert
+        assert_eq!(
+            (
+                stored.version.order_key(),
+                stored.version.is_prerelease(),
+                stored.version.canonical(),
+            ),
+            (
+                published.version.order_key(),
+                true,
+                published.version.canonical()
+            )
+        );
+    });
+}

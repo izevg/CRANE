@@ -12,10 +12,10 @@ use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use crane_app::registry::{Coordinate, Publish, Refusal, Upload};
 use crane_domain::access::Caller;
-use crane_domain::registry::{Format, FormatMetadata, PackageName, Version};
+use crane_domain::registry::{Ecosystem, Format, FormatMetadata};
 use crane_format_cargo::{
-    CargoPublish, FOREIGN_REGISTRY_DEPENDENCY, MetadataError, asset_path, parse_publish, render_ok,
-    render_owners, render_publish_ok,
+    CARGO, CargoPublish, FOREIGN_REGISTRY_DEPENDENCY, MetadataError, asset_path, parse_publish,
+    render_ok, render_owners, render_publish_ok,
 };
 use crane_ports::registry::{BlobStore, Catalog};
 use futures_util::stream;
@@ -27,10 +27,12 @@ use crate::formats::FormatSettings;
 const JSON: &str = "application/json";
 
 fn coordinate(repo: String, name: &str, version: &str) -> Result<Coordinate, ClientError> {
-    let package =
-        PackageName::parse(Format::Cargo, name).map_err(|e| ClientError::bad_request(chain(&e)))?;
-    let version =
-        Version::parse(Format::Cargo, version).map_err(|e| ClientError::bad_request(chain(&e)))?;
+    let package = CARGO
+        .parse_name(name)
+        .map_err(|e| ClientError::bad_request(chain(&e)))?;
+    let version = CARGO
+        .parse_version(version)
+        .map_err(|e| ClientError::bad_request(chain(&e)))?;
     Ok(Coordinate {
         format: Format::Cargo,
         repository: repo,
@@ -184,7 +186,8 @@ pub(super) async fn owners<C: Catalog + 'static, B: BlobStore + 'static>(
     Extension(caller): Extension<Caller>,
     Path((repo, name)): Path<(String, String)>,
 ) -> Result<Response, ClientError> {
-    let package = PackageName::parse(Format::Cargo, &name)
+    let package = CARGO
+        .parse_name(&name)
         .map_err(|e| ClientError::bad_request(chain(&e)))?;
     let versions = shared
         .registry

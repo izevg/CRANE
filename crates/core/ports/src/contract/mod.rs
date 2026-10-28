@@ -5,6 +5,8 @@
 
 mod blob;
 mod catalog;
+mod ecosystem;
+mod fixture;
 mod namespace;
 mod onboarding;
 mod proxy;
@@ -12,6 +14,7 @@ mod settings;
 
 pub use blob::blob_store_contract;
 pub use catalog::catalog_contract;
+pub use ecosystem::{Samples, ecosystem_contract};
 pub use namespace::namespace_contract;
 pub use onboarding::onboarding_store_contract;
 pub use proxy::{fetch_leases_contract, proxy_cache_contract};

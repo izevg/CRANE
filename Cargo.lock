@@ -361,7 +361,6 @@ dependencies = [
 name = "crane-domain"
 version = "0.2.0"
 dependencies = [
- "semver",
  "sha2 0.10.9",
  "subtle",
  "thiserror",
@@ -378,6 +377,8 @@ version = "0.2.0"
 dependencies = [
  "bytes",
  "crane-domain",
+ "crane-ports",
+ "semver",
  "serde",
  "serde_json",
  "thiserror",
@@ -387,6 +388,9 @@ dependencies = [
 [[package]]
 name = "crane-format-maven"
 version = "0.2.0"
+dependencies = [
+ "crane-domain",
+]
 
 [[package]]
 name = "crane-format-npm"
@@ -395,7 +399,9 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "crane-domain",
+ "crane-ports",
  "humantime",
+ "semver",
  "serde",
  "serde_json",
  "thiserror",
@@ -405,10 +411,16 @@ dependencies = [
 [[package]]
 name = "crane-format-nuget"
 version = "0.2.0"
+dependencies = [
+ "crane-domain",
+]
 
 [[package]]
 name = "crane-format-pypi"
 version = "0.2.0"
+dependencies = [
+ "crane-domain",
+]
 
 [[package]]
 name = "crane-gitlab"
@@ -513,7 +525,10 @@ dependencies = [
  "crane-app",
  "crane-domain",
  "crane-format-cargo",
+ "crane-format-maven",
  "crane-format-npm",
+ "crane-format-nuget",
+ "crane-format-pypi",
  "crane-http",
  "crane-memory",
  "crane-objstore",

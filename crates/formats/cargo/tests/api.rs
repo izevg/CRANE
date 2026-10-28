@@ -4,8 +4,8 @@
     reason = "в тестах падение unwrap — это падение теста"
 )]
 
-use crane_domain::registry::{Format, PackageName, Version};
-use crane_format_cargo::{asset_path, render_config, render_errors};
+use crane_domain::registry::Ecosystem;
+use crane_format_cargo::{CARGO, asset_path, render_config, render_errors};
 use serde_json::{Value, json};
 
 fn parsed(raw: &str) -> Value {
@@ -15,8 +15,8 @@ fn parsed(raw: &str) -> Value {
 #[test]
 fn asset_path_uses_normalized_name_and_canonical_version() {
     // Arrange
-    let name = PackageName::parse(Format::Cargo, "Foo-Bar").unwrap();
-    let version = Version::parse(Format::Cargo, "1.2.3-rc.1+build5").unwrap();
+    let name = CARGO.parse_name("Foo-Bar").unwrap();
+    let version = CARGO.parse_version("1.2.3-rc.1+build5").unwrap();
 
     // Act
     let path = asset_path(&name, &version);

@@ -8,10 +8,9 @@ use std::time::SystemTime;
 
 use bytes::Bytes;
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, PackageName, PackageVersion, RepositoryId, Sha256, Version,
-    VersionId, VersionState,
+    Asset, Ecosystem, FormatMetadata, PackageVersion, RepositoryId, Sha256, VersionId, VersionState,
 };
-use crane_format_cargo::{IndexError, asset_path, parse_publish, render_index};
+use crane_format_cargo::{CARGO, IndexError, asset_path, parse_publish, render_index};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -195,8 +194,8 @@ fn garbage_metadata_is_reported() {
 #[test]
 fn name_and_version_are_written_as_published() {
     // Arrange
-    let name = PackageName::parse(Format::Cargo, "Foo_Bar").unwrap();
-    let vers = Version::parse(Format::Cargo, "1.0.0+meta").unwrap();
+    let name = CARGO.parse_name("Foo_Bar").unwrap();
+    let vers = CARGO.parse_version("1.0.0+meta").unwrap();
     let mut v = version("Foo_Bar", "1.0.0+meta", false, 3);
     v.package = name;
     v.version = vers;
