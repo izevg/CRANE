@@ -6,4 +6,4 @@ mod stored;
 
 pub use def::{Kind, Origin, SettingDef, Unit};
 pub use secret::Secret;
-pub use stored::{Stored, StoredValue, Version};
+pub use stored::{NewValue, Stored, StoredValue, Unreadable, Version};

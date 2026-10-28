@@ -4,7 +4,7 @@ use std::io;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crane_domain::access::Principal;
-use crane_domain::settings::{Secret, Stored, StoredValue, Version};
+use crane_domain::settings::{NewValue, Secret, Stored, StoredValue, Version};
 use crane_ports::settings::{SettingsError, SettingsStore};
 use crane_ports::system::Clock;
 
@@ -38,7 +38,7 @@ impl MemorySettings {
     fn put_sync(
         &self,
         key: &str,
-        value: StoredValue,
+        value: NewValue,
         expected: Option<Version>,
         by: &Principal,
     ) -> Result<Version, SettingsError> {
@@ -53,6 +53,10 @@ impl MemorySettings {
                 })?
             }
             _ => return Err(SettingsError::Conflict),
+        };
+        let value = match value {
+            NewValue::Plain(text) => StoredValue::Plain(text),
+            NewValue::Secret(secret) => StoredValue::Secret(secret),
         };
         rows.insert(
             key.to_owned(),
@@ -82,6 +86,7 @@ fn duplicate(stored: &Stored) -> Stored {
     let value = match &stored.value {
         StoredValue::Plain(text) => StoredValue::Plain(text.clone()),
         StoredValue::Secret(secret) => StoredValue::Secret(Secret::new(secret.expose().to_owned())),
+        StoredValue::Unreadable(reason) => StoredValue::Unreadable(reason.clone()),
     };
     Stored {
         value,
@@ -103,7 +108,7 @@ impl SettingsStore for MemorySettings {
     fn put(
         &self,
         key: &str,
-        value: StoredValue,
+        value: NewValue,
         expected: Option<Version>,
         by: &Principal,
     ) -> impl Future<Output = Result<Version, SettingsError>> + Send {
@@ -143,7 +148,7 @@ mod tests {
         // Act
         let put = futures_executor::block_on(store.put(
             "blobs",
-            StoredValue::Plain("x".to_owned()),
+            NewValue::Plain("x".to_owned()),
             None,
             &by,
         ));

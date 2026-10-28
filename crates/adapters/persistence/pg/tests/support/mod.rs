@@ -32,6 +32,8 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::{AssertSqlSafe, PgPool};
 use uuid::Uuid;
 
+pub(crate) mod settings;
+
 const URL_ENV: &str = "CRANE_TEST_DATABASE_URL";
 const REQUIRE_ENV: &str = "CRANE_TEST_REQUIRE_DB";
 

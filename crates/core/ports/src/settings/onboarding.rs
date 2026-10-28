@@ -10,6 +10,9 @@ pub enum OnboardingError {
     Completed,
     #[error("первый запуск ещё не начат")]
     NotStarted,
+    /// Хранилище не отвечает (БД недоступна): повтор позже имеет смысл.
+    #[error("хранилище первого запуска недоступно")]
+    Unreachable(#[source] Box<dyn std::error::Error + Send + Sync>),
     #[error("ошибка хранилища первого запуска")]
     Backend(#[source] Box<dyn std::error::Error + Send + Sync>),
 }

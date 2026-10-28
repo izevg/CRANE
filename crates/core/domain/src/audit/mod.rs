@@ -66,11 +66,11 @@ pub enum AuditAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingChange {
     /// `old: None` — настройка создана.
-    Plain {
-        old: Option<String>,
-        new: String,
+    Plain { old: Option<String>, new: String },
+    Secret {
+        /// Перезаписан секрет, который не открывался (потерян или сменён ключ, повреждена строка).
+        replaced_unreadable: bool,
     },
-    Secret,
 }
 
 /// Чем открыт вход в мастер.

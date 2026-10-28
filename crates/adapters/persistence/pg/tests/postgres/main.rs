@@ -9,7 +9,9 @@ mod support;
 
 mod assets;
 mod migrate;
+mod onboarding;
 mod publish;
+mod settings;
 mod versions;
 
 /// Число конкурентов в гонках: достаточно, чтобы окно между проверкой и записью пересеклось.
