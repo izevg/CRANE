@@ -87,7 +87,7 @@ pub(crate) fn layered<E, R>(env: E, read_file: &R, stored: HashMap<String, Strin
 
 ## 20.2 Домен, порты и хранение
 
-Слои как в `AGENTS.md`: `entry → adapters → app → ports → domain`; serde только в `formats` и `entry`.
+Слои как в `AGENTS.md`: `entry → adapters → app → ports → domain`; serde только в `formats`, `entry` и `crates/wire/*`.
 
 ### domain (`crates/core/domain/src/settings/`, только данные)
 
