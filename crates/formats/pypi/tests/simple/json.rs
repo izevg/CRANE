@@ -91,7 +91,16 @@ fn yanked_is_false_true_or_the_reason() {
 #[test]
 fn upload_time_is_utc_microseconds_across_leap_days_and_year_ends() {
     // Arrange
-    let seconds = [0, 951_782_400, 1_709_164_800, 1_704_067_199, 4_102_444_800];
+    let seconds = [
+        0,
+        951_782_400,
+        1_709_164_800,
+        1_704_067_199,
+        4_107_456_000,
+        4_107_542_400,
+        13_574_563_200,
+        13_574_649_600,
+    ];
 
     // Act
     let actual = seconds.map(|s| {
@@ -108,7 +117,10 @@ fn upload_time_is_utc_microseconds_across_leap_days_and_year_ends() {
             "2000-02-29T00:00:00.000007Z",
             "2024-02-29T00:00:00.000007Z",
             "2023-12-31T23:59:59.000007Z",
-            "2100-01-01T00:00:00.000007Z",
+            "2100-02-28T00:00:00.000007Z",
+            "2100-03-01T00:00:00.000007Z",
+            "2400-02-29T00:00:00.000007Z",
+            "2400-03-01T00:00:00.000007Z",
         ]
         .map(Value::from)
     );

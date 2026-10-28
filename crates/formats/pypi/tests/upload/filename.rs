@@ -43,6 +43,19 @@ fn file_name_longer_than_a_file_system_allows_is_refused() {
 }
 
 #[test]
+fn file_name_of_exactly_the_maximal_length_is_accepted() {
+    // Arrange
+    let project = "a".repeat(255 - "-1.0.0-py3-none-any.whl".len());
+    let name = format!("{project}-1.0.0-py3-none-any.whl");
+
+    // Act
+    let result = admit(&with(wheel_form(), "name", &project), &name);
+
+    // Assert
+    assert_eq!((name.len(), result.is_ok()), (255, true));
+}
+
+#[test]
 fn missing_file_name_is_refused() {
     // Arrange
     let fields = wheel_form();
