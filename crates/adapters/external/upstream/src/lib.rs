@@ -30,6 +30,18 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// а зависший поток обрывается по простою.
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Интервал HTTP/2 PING к upstream. Меньше типичного таймаута простоя NAT и файрвола (Docker Desktop,
+/// облачные NAT-шлюзы от ~60 с): они молча роняют простаивающее соединение, а без пингов hyper этого не видит
+/// и мультиплексирует новые запросы в мёртвое соединение, где их не спасает даже `READ_TIMEOUT`.
+const UPSTREAM_PING: Duration = Duration::from_secs(15);
+
+/// Сколько ждать ответ на PING. Без ответа hyper закрывает соединение, и следующий запрос открывает новое.
+const UPSTREAM_PING_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Предел простоя соединения в пуле. Для HTTP/1.1 (static.crates.io), где PING нет, это единственная защита
+/// от переиспользования соединения, которое NAT уже забыл; значение по умолчанию у reqwest (90 с) больше окна NAT.
+const UPSTREAM_POOL_IDLE: Duration = Duration::from_secs(30);
+
 /// Цель журнала egress (раздел 16.6): одна запись на каждую реальную выборку из upstream, включая отказы
 /// SSRF guard. Без заголовков, тел и `ETag`: журнал для безопасников, а не отладочный дамп.
 pub const EGRESS_TARGET: &str = "crane::upstream";
@@ -77,6 +89,11 @@ impl HttpUpstream {
             .no_proxy()
             .connect_timeout(CONNECT_TIMEOUT)
             .read_timeout(READ_TIMEOUT)
+            // Именно простаивающее в пуле соединение и рвёт NAT, поэтому пинги нужны и без активных потоков.
+            .http2_keep_alive_interval(Some(UPSTREAM_PING))
+            .http2_keep_alive_timeout(UPSTREAM_PING_TIMEOUT)
+            .http2_keep_alive_while_idle(true)
+            .pool_idle_timeout(Some(UPSTREAM_POOL_IDLE))
             .user_agent(USER_AGENT)
             .build()
             .map_err(BuildError)?;
