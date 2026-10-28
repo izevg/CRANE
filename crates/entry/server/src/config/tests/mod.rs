@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::SystemTime;
 
 use crane_domain::registry::{Format, RepositoryKind};
-use crane_domain::settings::{Kind, Stored, StoredValue, Version};
+use crane_domain::settings::{Kind, Stored, StoredValue, Unit, Version};
 
 use super::network::{ADMIN_PORT, HTTP_PORT, PUBLIC_URL};
 use super::repos::MAX_PUBLISH_BYTES;
@@ -357,5 +357,20 @@ fn error_variable_points_at_the_key_the_error_is_about() {
             Some("CRANE_SETTINGS_KEY"),
             None
         ]
+    );
+}
+
+#[test]
+fn byte_limits_carry_the_bytes_unit() {
+    // Arrange
+    let keys = ["max_publish_bytes", "proxy_max_artifact_bytes", "http_port"];
+
+    // Act
+    let units = keys.map(|key| definition(key).map(|def| def.unit));
+
+    // Assert
+    assert_eq!(
+        units,
+        [Some(Some(Unit::Bytes)), Some(Some(Unit::Bytes)), Some(None)]
     );
 }

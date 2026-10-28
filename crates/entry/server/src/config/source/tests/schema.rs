@@ -251,3 +251,66 @@ fn check_detail_never_contains_secret_values() {
         .collect();
     assert_eq!(leaked, [false]);
 }
+
+#[test]
+fn file_variable_of_a_secret_is_reported_under_that_secret_not_under_its_section() {
+    // Arrange
+    // Ключ `cache` и секция `proxy` называются по-разному: совпадение имён скрыло бы ошибку привязки.
+    let schema = schema(&[("CRANE_CACHE_FILE", "/missing")], false);
+
+    // Act
+    let result = schema.check("proxy", &rows(vec![]), &[]);
+
+    // Assert
+    assert_eq!(failed_keys(result), Some(vec!["cache".to_owned()]));
+}
+
+#[test]
+fn check_runs_the_parser_of_every_section() {
+    // Arrange
+    let schema = schema(&[], false);
+    let bad_repos = plain("a b");
+    let bad_namespaces = plain("нет-двоеточия");
+    let bad_limit = plain("0");
+    let bad_url = plain("ftp://x");
+
+    // Act
+    let results = [
+        ("repos", "cargo_repos", &bad_repos),
+        ("repos", "max_publish_bytes", &bad_limit),
+        ("namespaces", "namespaces", &bad_namespaces),
+        ("proxy", "proxy_max_artifact_bytes", &bad_limit),
+        ("network", "public_url", &bad_url),
+        ("token", "token_principal", &plain("")),
+    ]
+    .map(|(group, key, value)| {
+        failed_keys(schema.check(group, &rows(vec![]), &[(key, Some(value))]))
+    });
+
+    // Assert
+    assert_eq!(
+        results,
+        [
+            Some(vec!["cargo_repos".to_owned()]),
+            Some(vec!["max_publish_bytes".to_owned()]),
+            Some(vec!["namespaces".to_owned()]),
+            Some(vec!["proxy_max_artifact_bytes".to_owned()]),
+            Some(vec!["public_url".to_owned()]),
+            // Токена в окружении нет, поэтому секция называет и его.
+            Some(vec!["token_principal".to_owned(), "token".to_owned()]),
+        ]
+    );
+}
+
+#[test]
+fn schema_lists_every_definition() {
+    // Arrange
+    let schema = schema(&[], false);
+
+    // Act
+    let keys: Vec<_> = schema.definitions().iter().map(|def| def.key).collect();
+
+    // Assert
+    assert_eq!(keys.len(), definitions().len());
+    assert!(keys.contains(&"cargo_repos"));
+}
