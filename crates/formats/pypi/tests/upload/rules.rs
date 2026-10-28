@@ -181,3 +181,22 @@ fn malformed_sha256_digest_is_refused() {
     // Assert
     assert_eq!(actual, [true; 3]);
 }
+
+#[test]
+fn malformed_md5_digest_is_refused() {
+    // Arrange
+    // Hex, короткая и длинная строки, символ вне алфавита, стандартный алфавит с `+` и `/`.
+    let cases = [
+        "d41d8cd98f00b204e9800998ecf8427e",
+        "1B2M2Y8AsgTpgAmY7PhCf",
+        "1B2M2Y8AsgTpgAmY7PhCfgA",
+        "1B2M2Y8AsgTpgAmY7Ph!fg",
+        "+/+/+/+/+/+/+/+/+/+/+w",
+    ];
+
+    // Act
+    let actual = cases.map(|md5| refusal(&with(wheel_form(), "md5_digest", md5), WHEEL));
+
+    // Assert
+    assert_eq!(actual, [(); 5].map(|()| Some(UploadError::Md5Digest)));
+}

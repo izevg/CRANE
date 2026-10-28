@@ -9,8 +9,8 @@
 use std::time::{Duration, SystemTime};
 
 use crane_domain::registry::{
-    Asset, Ecosystem, FormatMetadata, PackageName, PackageVersion, RepositoryId, Sha256, Version,
-    VersionId, VersionState,
+    Asset, Digests, Ecosystem, FormatMetadata, Md5, PackageName, PackageVersion, RepositoryId,
+    Sha1, Sha256, Sha512, Version, VersionId, VersionState,
 };
 use crane_format_pypi::PYPI;
 use uuid::Uuid;
@@ -32,8 +32,13 @@ pub(crate) fn digest(byte: u8) -> Sha256 {
 pub(crate) fn asset(path: &str, byte: u8, size: u64) -> Asset {
     Asset {
         path: path.to_owned(),
-        sha256: digest(byte),
-        size,
+        content: Digests {
+            sha256: digest(byte),
+            sha512: Sha512::from([byte; 64]),
+            sha1: Sha1::from([byte; 20]),
+            md5: Md5::from([byte; 16]),
+            size,
+        },
     }
 }
 

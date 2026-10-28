@@ -98,14 +98,14 @@ pub fn hosted(name: &PackageName, versions: &[PackageVersion], base: &str) -> Pr
                     version.version.canonical(),
                     asset.path
                 ),
-                sha256: asset.sha256,
+                sha256: asset.content.sha256,
                 requires_python: requires_python.clone(),
                 yanked: if version.yanked {
                     Yanked::Yes(None)
                 } else {
                     Yanked::No
                 },
-                size: asset.size,
+                size: asset.content.size,
                 upload_time: Some(version.published_at),
             })
         })

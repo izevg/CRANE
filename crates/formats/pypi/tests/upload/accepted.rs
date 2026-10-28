@@ -1,4 +1,4 @@
-use crane_domain::registry::{Checksum, Sha256};
+use crane_domain::registry::{Checksum, Md5, Sha256};
 use crane_format_pypi::admit;
 use serde_json::{Value, json};
 
@@ -96,18 +96,46 @@ fn legacy_sdist_with_a_dash_in_the_project_name_is_split_at_the_last_valid_versi
 }
 
 #[test]
-fn absent_empty_md5_and_blake2_digests_declare_nothing_and_are_not_verified() {
+fn absent_empty_and_blake2_digests_declare_nothing() {
     // Arrange
-    let md5_only = with(wheel_form(), "md5_digest", "not-even-base64!");
     let blake = with(wheel_form(), "blake2_256_digest", "zz");
     let empty_sha = with(wheel_form(), "sha256_digest", "");
-    let cases = [wheel_form(), md5_only, blake, empty_sha];
+    let empty_md5 = with(wheel_form(), "md5_digest", "");
+    let cases = [wheel_form(), blake, empty_sha, empty_md5];
 
     // Act
     let actual = cases.map(|fields| admit(&fields, WHEEL).unwrap().declared);
 
     // Assert
     assert_eq!(actual, [vec![], vec![], vec![], vec![]]);
+}
+
+#[test]
+fn md5_digest_is_decoded_from_urlsafe_base64_next_to_sha256() {
+    // Arrange
+    let fields = with(wheel_form(), "sha256_digest", &sha256_hex());
+    let cases = [
+        "1B2M2Y8AsgTpgAmY7PhCfg",
+        "1B2M2Y8AsgTpgAmY7PhCfg==",
+        "-_-_-_-_-_-_-_-_-_-_-w",
+    ];
+
+    // Act
+    let actual = cases.map(|md5| {
+        let fields = with(fields.clone(), "md5_digest", md5);
+        admit(&fields, WHEEL).unwrap().declared[1]
+    });
+
+    // Assert
+    let md5 = |hex| Checksum::Md5(Md5::from_hex(hex).unwrap());
+    assert_eq!(
+        actual,
+        [
+            md5("d41d8cd98f00b204e9800998ecf8427e"),
+            md5("d41d8cd98f00b204e9800998ecf8427e"),
+            md5("fbffbffbffbffbffbffbffbffbffbffb"),
+        ]
+    );
 }
 
 #[test]

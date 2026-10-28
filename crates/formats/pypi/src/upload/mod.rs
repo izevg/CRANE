@@ -4,14 +4,17 @@
 //! отказ стоит дешевле любого ввода-вывода.
 
 mod filename;
+mod md5;
 mod metadata;
 
 use crane_domain::registry::{
-    Checksum, DigestError, FormatMetadata, NameError, PackageName, Sha256, Version, VersionError,
+    Checksum, DigestError, FormatMetadata, Md5, NameError, PackageName, Sha256, Version,
+    VersionError,
 };
 
 use crate::ecosystem::{normalize, parse_name, parse_version};
 use filename::{Distribution, check_path, parse};
+use md5::decode_md5;
 pub(crate) use metadata::VersionMetadata;
 
 const ACTION: &str = ":action";
@@ -24,8 +27,8 @@ pub struct Accepted {
     pub package: PackageName,
     pub version: Version,
     pub filename: String,
-    /// Заявленный `sha256_digest`; `md5_digest` и `blake2_256_digest` принимаются, но не
-    /// сверяются: хранилище адресуется по sha256 и считает его само, а md5 слаб как проверка.
+    /// Заявленные `sha256_digest` и `md5_digest`: реестр сверяет каждую. `blake2_256_digest`
+    /// принимается, но не сверяется: хранилище его не считает.
     pub declared: Vec<Checksum>,
     pub metadata: FormatMetadata,
 }
@@ -62,6 +65,8 @@ pub enum UploadError {
     },
     #[error("некорректное поле sha256_digest")]
     Digest(#[source] DigestError),
+    #[error("некорректное поле md5_digest: ожидается urlsafe base64 без паддинга, 16 байт")]
+    Md5Digest,
 }
 
 /// Поля формы в порядке прихода: повторы допустимы (`classifiers`, `requires_dist`).
@@ -150,9 +155,14 @@ fn check_file(
 }
 
 fn declared(form: &Form<'_>) -> Result<Vec<Checksum>, UploadError> {
-    let Some(hex) = form.filled("sha256_digest") else {
-        return Ok(Vec::new());
-    };
-    let digest = Sha256::from_hex(hex).map_err(UploadError::Digest)?;
-    Ok(vec![Checksum::Sha256(digest)])
+    let mut declared = Vec::new();
+    if let Some(hex) = form.filled("sha256_digest") {
+        let digest = Sha256::from_hex(hex).map_err(UploadError::Digest)?;
+        declared.push(Checksum::Sha256(digest));
+    }
+    if let Some(encoded) = form.filled("md5_digest") {
+        let bytes = decode_md5(encoded).ok_or(UploadError::Md5Digest)?;
+        declared.push(Checksum::Md5(Md5::from(bytes)));
+    }
+    Ok(declared)
 }
