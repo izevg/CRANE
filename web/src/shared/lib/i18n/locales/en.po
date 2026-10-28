@@ -64,14 +64,23 @@ msgstr "{total, plural, other {Results: #}}"
 msgid "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
 msgstr "{unread, plural, one {Notifications, # unread} other {Notifications, # unread}}"
 
+msgid "{value} мс"
+msgstr "{value} ms"
+
 msgid "CRANE, Реестр артефактов: на главную"
 msgstr "CRANE, Artifact registry: go to home"
 
 msgid "EOL"
 msgstr "EOL"
 
+msgid "Upstream {name} недоступен"
+msgstr "Upstream {name} is unavailable"
+
 msgid "Активен"
 msgstr "Active"
+
+msgid "Ассистенты недоступны"
+msgstr "Assistants are unavailable"
 
 msgid "Безопасность"
 msgstr "Security"
@@ -82,17 +91,44 @@ msgstr "Block {id}"
 msgid "Было"
 msgstr "Before"
 
-msgid "Войдите снова, чтобы продолжить работу"
-msgstr "Sign in again to continue"
+msgid "Веб-консоль появится в CRANE {version}"
+msgstr "The web console will be available in CRANE {version}"
+
+msgid "Версия"
+msgstr "Version"
+
+msgid "Возможно, CRANE обновился. Обновите страницу."
+msgstr "CRANE may have been updated. Refresh the page."
+
+#~ msgid "Войдите снова, чтобы продолжить работу"
+#~ msgstr "Sign in again to continue"
+
+msgid "Войдите снова, чтобы продолжить работу."
+msgstr "Sign in again to continue."
+
+msgid "Войдите, чтобы продолжить"
+msgstr "Sign in to continue"
 
 msgid "Время"
 msgstr "Time"
+
+msgid "Время сессии истекло."
+msgstr "Your session has expired."
 
 msgid "Все"
 msgstr "All"
 
 msgid "Все шаги"
 msgstr "All steps"
+
+msgid "Вход"
+msgstr "Sign in"
+
+msgid "Вход в веб-консоль появится в CRANE {version}."
+msgstr "Sign-in will be available in CRANE {version}."
+
+msgid "Вы вошли на другом устройстве, и эта сессия завершена."
+msgstr "You signed in on another device, so this session has ended."
 
 msgid "выбор"
 msgstr "select"
@@ -118,11 +154,26 @@ msgstr "Main menu"
 msgid "Готово"
 msgstr "Done"
 
+msgid "Данные на экранах примерные, не с сервера. Не принимайте по ним решений."
+msgstr "Screens show sample data, not live server data. Don't base decisions on it."
+
+msgid "Деградация"
+msgstr "Degraded"
+
 msgid "Действие «{actionLabel}» требует подтверждения вторым фактором"
 msgstr "The \"{actionLabel}\" action needs second-factor confirmation"
 
 msgid "Действия"
 msgstr "Actions"
+
+msgid "Демо"
+msgstr "Demo"
+
+msgid "Демо-режим"
+msgstr "Demo mode"
+
+msgid "Для работы с реестром нужна сессия."
+msgstr "You need a session to work with the registry."
 
 msgid "добавлено"
 msgstr "added"
@@ -144,6 +195,9 @@ msgstr "Loading"
 
 msgid "Загрузка текста"
 msgstr "Loading text"
+
+msgid "Задержка"
+msgstr "Latency"
 
 msgid "закрыть"
 msgstr "close"
@@ -190,6 +244,12 @@ msgstr "Install command"
 msgid "Командная палитра"
 msgstr "Command palette"
 
+msgid "Компонент"
+msgstr "Component"
+
+msgid "Компоненты"
+msgstr "Components"
+
 msgid "Контакт: {contact}"
 msgstr "Contact: {contact}"
 
@@ -220,8 +280,14 @@ msgstr "Personal and help"
 msgid "Массовые действия"
 msgstr "Bulk actions"
 
+msgid "мин"
+msgstr "min"
+
 msgid "модель {model}"
 msgstr "model {model}"
+
+msgid "На главную"
+msgstr "Home"
 
 msgid "Навигационная цепочка"
 msgstr "Breadcrumbs"
@@ -241,11 +307,29 @@ msgstr "not done"
 msgid "Не найдено или нет доступа"
 msgstr "Not found or no access"
 
+msgid "Не удалось выполнить запрос"
+msgstr "The request failed"
+
+msgid "Не удалось загрузить раздел"
+msgstr "Could not load the section"
+
+msgid "Не удалось обновить данные. Показаны последние полученные."
+msgstr "Could not refresh the data. Showing the last data received."
+
+msgid "Не удалось обновить данные. Попробуйте ещё раз."
+msgstr "Could not refresh the data. Try again."
+
+msgid "Не удалось открыть страницу"
+msgstr "Could not open the page"
+
 msgid "Не удалось скопировать — выделите текст вручную"
 msgstr "Could not copy. Select the text and copy it manually"
 
 msgid "Недостаточно прав"
 msgstr "Insufficient permissions"
+
+msgid "Недоступен"
+msgstr "Unavailable"
 
 msgid "недоступно"
 msgstr "unavailable"
@@ -274,8 +358,20 @@ msgstr "No new notifications"
 msgid "Номер версии нельзя использовать повторно"
 msgstr "Version number can't be reused"
 
+msgid "Обновите страницу. Если ошибка повторится, сообщите администратору CRANE."
+msgstr "Refresh the page. If the error repeats, tell your CRANE administrator."
+
+msgid "Обновить страницу"
+msgstr "Refresh page"
+
 msgid "обновлено"
 msgstr "updated"
+
+msgid "Обновлено {ago}"
+msgstr "Updated {ago}"
+
+msgid "Он появится в CRANE {version}."
+msgstr "It will be available in CRANE {version}."
 
 msgid "Оповещения"
 msgstr "Alerts"
@@ -294,6 +390,12 @@ msgstr "Discard"
 
 msgid "Отметьте, что сохранили токен"
 msgstr "Confirm that you've saved the token"
+
+msgid "Отставание фидов"
+msgstr "Feed lag"
+
+msgid "Отставание экспорта в SIEM"
+msgstr "SIEM export lag"
 
 msgid "ошибка"
 msgstr "error"
@@ -321,6 +423,12 @@ msgstr "Platform"
 
 msgid "По правилу"
 msgstr "By rule"
+
+msgid "Повторим попытку автоматически. Если сервер долго недоступен, сообщите администратору CRANE."
+msgstr "We'll retry automatically. If it stays down, contact your CRANE administrator."
+
+msgid "Повторить"
+msgstr "Retry"
 
 msgid "Подробнее: {label}"
 msgstr "Details: {label}"
@@ -364,8 +472,11 @@ msgstr "Check finished: {pass} passed, {warn, plural, one {# with a warning} oth
 msgid "Проверьте адрес или имя пакета"
 msgstr "Check the address or package name"
 
-msgid "Проверьте сеть — данные обновятся, когда связь вернётся"
-msgstr "Check your network — data will refresh when the connection returns"
+#~ msgid "Проверьте сеть — данные обновятся, когда связь вернётся"
+#~ msgstr "Check your network — data will refresh when the connection returns"
+
+msgid "Проверьте сеть — данные обновятся, когда связь вернётся."
+msgstr "Check your network — the data will refresh when the connection is back."
 
 msgid "Проверяем связь…"
 msgstr "Checking the connection…"
@@ -382,14 +493,32 @@ msgstr "Other ({count})"
 msgid "Прочитать все"
 msgstr "Mark all as read"
 
+msgid "Работает"
+msgstr "Operational"
+
 msgid "Развернуть {name}"
 msgstr "Expand {name}"
 
 msgid "Развернуть всё"
 msgstr "Expand all"
 
+msgid "Раздел пока недоступен"
+msgstr "This section isn't available yet"
+
 msgid "Реестр артефактов"
 msgstr "Artifact registry"
+
+msgid "Режим: деградация"
+msgstr "Mode: degraded"
+
+msgid "Режим: норма"
+msgstr "Mode: normal"
+
+msgid "Режим: только чтение"
+msgstr "Mode: read-only"
+
+msgid "с"
+msgstr "s"
 
 msgid "Свернуть"
 msgstr "Collapse"
@@ -406,8 +535,23 @@ msgstr "Collapse: {text}"
 msgid "Светлая"
 msgstr "Light"
 
+msgid "Сейчас она недоступна."
+msgstr "It isn't available right now."
+
+msgid "Семантический поиск недоступен"
+msgstr "Semantic search is unavailable"
+
+msgid "Сервер CRANE не отвечает"
+msgstr "CRANE server isn't responding"
+
 msgid "Сессия завершена"
 msgstr "Session ended"
+
+msgid "Сессия завершена. Вход в веб-консоль появится в CRANE {version}."
+msgstr "Session ended. Sign-in will be available in CRANE {version}."
+
+msgid "Сессия отозвана."
+msgstr "Your session was revoked."
 
 msgid "Системная"
 msgstr "System"
@@ -433,6 +577,9 @@ msgstr "Clear selection"
 msgid "Содержимое"
 msgstr "Content"
 
+msgid "Состояние"
+msgstr "Status"
+
 msgid "Сохранено {saved} из {total}"
 msgstr "Saved {saved} of {total}"
 
@@ -447,6 +594,9 @@ msgstr "Help"
 
 msgid "Стало"
 msgstr "After"
+
+msgid "Статус системы"
+msgstr "System status"
 
 msgid "Тема оформления"
 msgstr "Appearance"
@@ -486,6 +636,9 @@ msgstr "Deprecated"
 
 msgid "Файл {path}"
 msgstr "File {path}"
+
+msgid "Часть возможностей работает с ограничениями"
+msgstr "Some features are running with limitations"
 
 msgid "Шаг {position} из {total} · {title}"
 msgstr "Step {position} of {total} · {title}"
