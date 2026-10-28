@@ -155,3 +155,50 @@ fn packument_serves_stale_for_five_minutes_after_ttl() {
         [Freshness::Stale, Freshness::Stale, Freshness::Expired]
     );
 }
+
+#[test]
+fn packument_survives_upstream_errors_for_seven_days_after_ttl() {
+    // Arrange
+    let fetched_at = std::time::SystemTime::UNIX_EPOCH;
+    let ttl = 5 * 60;
+    let week = 7 * 24 * 60 * 60;
+    let ages = [ttl + week - 1, ttl + week];
+
+    // Act
+    let actual = ages.map(|age| {
+        let now = fetched_at + std::time::Duration::from_secs(age);
+        crane_format_npm::PACKUMENT.usable_on_error(0, None, fetched_at, now)
+    });
+
+    // Assert
+    assert_eq!(actual, [true, false]);
+}
+
+#[test]
+fn packument_negative_cache_grows_to_one_hour() {
+    // Arrange
+    let misses = 20;
+
+    // Act
+    let ttl = crane_format_npm::PACKUMENT.negative.ttl_after(misses);
+
+    // Assert
+    assert_eq!(ttl, std::time::Duration::from_hours(1));
+}
+
+#[test]
+fn unpublish_is_allowed_within_72_hours_only() {
+    // Arrange
+    let published_at = std::time::SystemTime::UNIX_EPOCH;
+    let window = 72 * 60 * 60;
+    let ages = [window, window + 1];
+
+    // Act
+    let actual = ages.map(|age| {
+        let now = published_at + std::time::Duration::from_secs(age);
+        crane_format_npm::UNPUBLISH.permits(published_at, now)
+    });
+
+    // Assert
+    assert_eq!(actual, [true, false]);
+}

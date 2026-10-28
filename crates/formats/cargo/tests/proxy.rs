@@ -125,3 +125,21 @@ fn index_negative_cache_grows_to_one_hour() {
     // Assert
     assert_eq!(ttl, std::time::Duration::from_hours(1));
 }
+
+#[test]
+fn index_survives_upstream_errors_for_seven_days_after_ttl() {
+    // Arrange
+    let fetched_at = std::time::SystemTime::UNIX_EPOCH;
+    let ttl = 5 * 60;
+    let week = 7 * 24 * 60 * 60;
+    let ages = [ttl + week - 1, ttl + week];
+
+    // Act
+    let actual = ages.map(|age| {
+        let now = fetched_at + std::time::Duration::from_secs(age);
+        crane_format_cargo::INDEX.usable_on_error(0, None, fetched_at, now)
+    });
+
+    // Assert
+    assert_eq!(actual, [true, false]);
+}
