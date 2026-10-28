@@ -6,21 +6,23 @@
 
 use super::*;
 
+use blobs::blobs_url;
 use database::{NO_SCHEME, scheme_of};
 
+use std::io;
+use std::path::Path;
+
+use crate::config::ConfigError;
 use crate::config::tests::{env, error_of, no_files, with};
 use crane_domain::settings::Secret;
 
 #[test]
 fn unsupported_database_names_scheme_but_never_the_secret() {
     // Arrange
-    let pairs = with(&[
-        (DATABASE_URL, "mysql://u:SECRET@h/db"),
-        (BLOBS, "file:///b"),
-    ]);
+    let source = env(&[(DATABASE_URL, "mysql://u:SECRET@h/db")]);
 
     // Act
-    let error = error_of(&pairs);
+    let error = Database::from_env(&source, &no_files).err().unwrap();
 
     // Assert
     let message = error.to_string();
@@ -59,13 +61,13 @@ fn unparsable_database_url_error_never_contains_the_password() {
 #[test]
 fn unsupported_blobs_scheme_is_named_without_the_rest_of_the_value() {
     // Arrange
-    let pairs = with(&[
-        (DATABASE_URL, "postgres://u:pw@h/db"),
-        (BLOBS, "gcs://SECRETbucket?key=SECRETkey"),
-    ]);
+    let source = env(&[(BLOBS, "gcs://SECRETbucket?key=SECRETkey")]);
 
     // Act
-    let message = error_of(&pairs).to_string();
+    let message = Blobs::from_env(&source, &no_files, true)
+        .err()
+        .unwrap()
+        .to_string();
 
     // Assert
     assert!(message.contains("gcs"), "{message}");
@@ -85,6 +87,33 @@ fn invalid_blobs_value_is_rejected_without_echoing_it() {
     assert!(!message.contains("SECRET"), "{message}");
 }
 
+/// Пара каталога и blob, как её собирает старт: тест проверяет их согласованность целиком.
+enum Storage {
+    Memory,
+    Durable {
+        database: Database,
+        blobs: url::Url,
+        s3_key: Option<crane_objstore::S3Key>,
+    },
+}
+
+fn storage_of(
+    var: &impl Fn(&str) -> Option<String>,
+    read_file: &impl Fn(&Path) -> io::Result<String>,
+) -> Result<Storage, ConfigError> {
+    let database = Database::from_env(var, read_file)?;
+    Ok(
+        match Blobs::from_env(var, read_file, database.persistent())? {
+            Blobs::Memory => Storage::Memory,
+            Blobs::Durable { url, s3_key } => Storage::Durable {
+                database,
+                blobs: url,
+                s3_key,
+            },
+        },
+    )
+}
+
 /// Форма результата для таблицы: сравнивать `Storage` целиком нельзя, секрет не `PartialEq`.
 fn shape(result: Result<Storage, ConfigError>) -> String {
     match result {
@@ -92,10 +121,13 @@ fn shape(result: Result<Storage, ConfigError>) -> String {
         Ok(Storage::Durable {
             database, blobs, ..
         }) => {
+            let Database::Postgres(options) = database else {
+                return "durable без PostgreSQL".to_owned();
+            };
             format!(
                 "durable {}/{} {}",
-                database.options().get_host(),
-                database.options().get_database().unwrap_or_default(),
+                options.get_host(),
+                options.get_database().unwrap_or_default(),
                 blobs.scheme()
             )
         }
@@ -119,7 +151,7 @@ fn storage_mode_follows_the_pair_of_database_and_blobs() {
 
     // Act
     let shapes = cases.map(|(database, blobs)| {
-        shape(Storage::from_env(
+        shape(storage_of(
             &env(&[(DATABASE_URL, database), (BLOBS, blobs)]),
             &no_files,
         ))
@@ -197,7 +229,7 @@ fn key_state(pairs: &[(&str, &str)]) -> String {
         (BLOBS, "s3://b?endpoint=http://s3:8333"),
     ];
     let all: Vec<_> = base.iter().chain(pairs).copied().collect();
-    match Storage::from_env(&env(&all), &s3_files) {
+    match storage_of(&env(&all), &s3_files) {
         Ok(Storage::Durable { s3_key, .. }) => format!("key={}", s3_key.is_some()),
         Ok(Storage::Memory) => "memory".to_owned(),
         Err(error) => format!("error {error}"),
@@ -258,7 +290,7 @@ fn s3_key_files_with_memory_storage_are_rejected() {
     ]);
 
     // Act
-    let error = Storage::from_env(&source, &s3_files).err();
+    let error = storage_of(&source, &s3_files).err();
 
     // Assert
     assert_eq!(error, Some(ConfigError::S3KeyWithMemory));
@@ -278,7 +310,7 @@ fn database_url_file_is_read_without_trailing_newline() {
     };
 
     // Act
-    let storage = Storage::from_env(&source, &read);
+    let storage = storage_of(&source, &read);
 
     // Assert
     assert_eq!(shape(storage), "durable h/db file");
@@ -294,7 +326,7 @@ fn database_url_and_its_file_together_conflict() {
     ]);
 
     // Act
-    let error = Storage::from_env(&source, &no_files).err().unwrap();
+    let error = storage_of(&source, &no_files).err().unwrap();
 
     // Assert
     assert_eq!(

@@ -43,6 +43,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }
 # Разбор CRANE_BLOBS в URL: ObjectBlobStore::from_url принимает url::Url.
 url = "2"
+# Открытый текст сохранённых секретов в слое БД обнуляется при освобождении (версия та же, что в domain).
+zeroize = "1"
 uuid = { version = "1", features = ["v7"] }
 toml = { version = "1.1.8", default-features = false, features = ["parse", "serde", "std"] }
 

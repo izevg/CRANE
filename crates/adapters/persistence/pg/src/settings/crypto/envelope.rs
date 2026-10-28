@@ -1,5 +1,6 @@
 use aws_lc_rs::aead::{Aad, NONCE_LEN, Nonce};
 use crane_domain::settings::{Secret, Unreadable, Version};
+use zeroize::Zeroizing;
 
 use super::key::SettingsKey;
 
@@ -28,10 +29,11 @@ pub(in crate::settings) fn seal(
     version: Version,
     plaintext: &Secret,
 ) -> Result<Vec<u8>, CryptoError> {
-    let mut body = plaintext.expose().as_bytes().to_vec();
+    // Буфер сначала держит открытый текст: обнуляется при Drop, в том числе на пути ошибки.
+    let mut body = Zeroizing::new(plaintext.expose().as_bytes().to_vec());
     let nonce = key
         .cipher()
-        .seal_in_place_append_tag(associated_data(setting, version, key.id()), &mut body)
+        .seal_in_place_append_tag(associated_data(setting, version, key.id()), &mut *body)
         .map_err(|_| CryptoError {
             setting: setting.to_owned(),
         })?;
@@ -62,7 +64,7 @@ pub(in crate::settings) fn open(
         .split_at_checked(NONCE_LEN)
         .ok_or(Unreadable::Corrupted)?;
     let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| Unreadable::Corrupted)?;
-    let mut buffer = body.to_vec();
+    let mut buffer = Zeroizing::new(body.to_vec());
     let plaintext = key
         .cipher()
         .open_in_place(
@@ -71,8 +73,9 @@ pub(in crate::settings) fn open(
             &mut buffer,
         )
         .map_err(|_| Unreadable::Corrupted)?;
-    String::from_utf8(plaintext.to_vec())
-        .map(Secret::new)
+    // Копия попадает сразу в `Secret`, а `buffer` с открытым текстом обнуляется при выходе.
+    std::str::from_utf8(plaintext)
+        .map(|text| Secret::new(text.to_owned()))
         .map_err(|_| Unreadable::Corrupted)
 }
 

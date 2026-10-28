@@ -15,14 +15,16 @@
 
 В разговоре «effective» часто значит «итоговое значение»; здесь слово закреплено за значением в БД. Итог в API называется `value` с полем `origin` (`env`, `stored`, `default`).
 
-**Правило приоритета: ENV > файл > БД > умолчание.** Значение в БД хранится строкой той же формы, что у окружения и файла. Загрузчик добавляет третий слой, разбор секций не меняется:
+**Правило приоритета: ENV > файл > БД > умолчание.** Значение в БД хранится строкой той же формы, что у окружения и файла. Загрузчик добавляет третий слой, разбор секций не меняется. Слой БД собирается по ключу (`StoredLayer`), а не по имени переменной, поэтому приоритет считается по ключу целиком: `X` или `X_FILE` в окружении затеняют сохранённый ключ полностью, и значение из БД не подмешивается к тому, что пришло из окружения:
 
 ```rust
 // entry/server/config/source
-pub(crate) fn layered<E, R>(env: E, read_file: &R, stored: HashMap<String, String>)
-    -> Result<impl Fn(&str) -> Option<String>, ConfigError>
-// move |name| env(name).or_else(|| file.get(name).cloned()).or_else(|| stored.get(name).cloned())
+// StoredLayer::new(rows, defs): строки по ключу; строки с неизвестным ключом и с console=false отбрасываются,
+// нечитаемый секрет остаётся ошибкой своего ключа, а не «не задан».
+// ключ отвечает слоем БД только если ни X, ни X_FILE не заданы в окружении и в файле
 ```
+
+Строки БД с `console=false` отбрасываются при загрузке: прямой `INSERT` в `setting` не ослабляет, например, `trusted_proxies`.
 
 Источник вычисляется вопросом «какой слой ответил». Значение из inherited-слоя из консоли изменить нельзя.
 
@@ -36,13 +38,13 @@ pub(crate) fn layered<E, R>(env: E, read_file: &R, stored: HashMap<String, Strin
 | `number` | десятичное целое; необязательная единица `unit`: `bytes` или `seconds` |
 | `bool` | `true` или `false` |
 | `list` | элементы через запятую без пробелов; элементы запятых не содержат (как склеивает `file::entry`) |
-| `secret` | в ответах значения нет никогда, только `secret_state: set | unset` |
+| `secret` | в ответах значения нет никогда, только `secret_state: set | unset | unreadable` (при `unreadable` — `unreadable.reason`: `missing_key`, `wrong_key`, `corrupted`) |
 
 ### Как это видит оператор
 
 - В списке и карточке настройки: бейдж источника (`env`, `stored`, `default`) и замок у `env`. Поле `env` не редактируется; подсказка называет переменную и говорит, что её нужно убрать из окружения, чтобы управлять значением из консоли. Запись поверх окружения — `409 setting-locked` с именем переменной.
 - **Затенение.** Если в БД есть значение, а окружение его перекрывает, консоль показывает его серым «сохранено, но не действует» с датой и автором. Состояние производное (строка в БД есть, ключ inherited): оно не хранится, а на старте даёт `warn` в обычный лог процесса, не событие журнала ИБ.
-- **Применение.** В v0.3.0 любое изменение вступает в силу при перезапуске: все потребители строятся один раз в `run::assemble`. `/status` показывает баннер `restart_required`, если снимок настроек, с которым процесс стартовал, отличается от текущего в БД. Снимок — хэш отсортированного списка пар (`key`, `version`): он замечает и удаление одного ключа со вставкой другого, которое пропустили бы `max(version)` и число строк. Опроса таблицы нет.
+- **Применение.** В v0.3.0 любое изменение вступает в силу при перезапуске: все потребители строятся один раз в `run::assemble`. `/status` показывает баннер `restart_required`, если снимок настроек, с которым процесс стартовал, отличается от текущего в БД. Снимок версий — карта `key → version` строк, с которыми процесс стартовал; `view` сравнивает её с текущей картой точно, без хэша. Сравнение замечает и удаление одного ключа со вставкой другого, которое пропустили бы `max(version)` и число строк. Опроса таблицы нет.
 
 ### Что происходит, когда ENV исчезает
 
@@ -84,7 +86,7 @@ pub(crate) fn layered<E, R>(env: E, read_file: &R, stored: HashMap<String, Strin
 
 ### Режим `CRANE_DATABASE_URL=memory`
 
-Настройки и состояние мастера живут в памяти и пропадают при перезапуске. Такая установка всегда предконфигурирована (окружение задаёт всё нужное), а молча теряемые правки хуже отказа. Поэтому в этом режиме запись настроек отклоняется: `409 settings-not-persistent`; чтение работает (все значения `env` или `default`).
+Настройки и состояние мастера живут в памяти и пропадают при перезапуске. Такая установка всегда предконфигурирована (окружение задаёт всё нужное), а молча теряемые правки хуже отказа. Поэтому в этом режиме запись настроек отклоняется: `409 settings-not-persistent`; чтение работает (все значения `env` или `default`). Фазы мастера в режиме memory нет (решение main): разбор прошёл — рабочий режим, не прошёл — fail fast с ненулевым кодом. `CRANE_SETTINGS_KEY_FILE` при memory отклоняется при старте: шифровать нечего и некуда. Для заблокированного ключа `setting-locked` проверяется раньше `settings-not-persistent`: в memory все ключи из окружения или умолчание, и имя переменной говорит оператору больше.
 
 ## 20.2 Домен, порты и хранение
 
@@ -131,16 +133,20 @@ pub trait OnboardingStore: Send + Sync {
 }
 
 /// Инверсия: app пишет и аудирует, entry знает, что валидно.
+pub struct Inherited { pub var: String, pub value: Option<String> }   // value None у секрета
+
 pub trait SettingsSchema: Send + Sync {
-    fn definitions(&self) -> &'static [SettingDef];
-    /// Переменная окружения или файл, задавшие ключ на старте; Some — ключ заблокирован.
-    fn inherited(&self, key: &str) -> Option<&'static str>;
-    /// Прогон секции `def.group` над наложением env > файл > stored.
-    fn check(&self, def: &SettingDef, stored: &dyn Fn(&str) -> Option<String>) -> Result<(), Invalid>;
+    fn definitions(&self) -> &[SettingDef];
+    /// Что задало ключ на старте (окружение или файл); Some — ключ заблокирован.
+    fn inherited(&self, key: &str) -> Option<Inherited>;
+    /// Прогон секции `group` над env > файл > (строки БД с применёнными изменениями).
+    /// `None` в `changes` — удаление; Err всегда непуст. Нечитаемый секрет секции — ключ в `errors`.
+    fn check(&self, group: &str, stored: &BTreeMap<String, Stored>,
+             changes: &[(&str, Option<&NewValue>)]) -> Result<(), Invalid>;
 }
 ```
 
-Порты хранения получают только `by: &Principal` для колонки `updated_by`; событие журнала пишет use case через существующий `AuditSink` (20.3). Реализации: `crane-pg` и `crane-memory` с контрактными сценариями `contract/settings` и `contract/onboarding` (CAS, «Completed необратим», «begin идемпотентен»); `SettingsSchema` — одна реализация в `entry/server`.
+Порты хранения получают только `by: &Principal` для колонки `updated_by`; событие журнала пишет use case через существующий `AuditSink` (20.3). Реализации: `crane-pg` и `crane-memory` с контрактными сценариями `contract/settings` и `contract/onboarding` (CAS, «Completed необратим», «begin идемпотентен»); `SettingsSchema` — одна реализация в `entry/server`. Use cases (`crane_app::settings::Settings`: `view`, `put`, `delete`) пишут событие из одной точки на каждую запись и каждый отказ; значение секрета в памяти обнуляется при `Drop`.
 
 ### Хранение и миграции
 
@@ -195,7 +201,7 @@ CREATE TABLE onboarding (
 | нет | Err | `begin(Pending)` с новым токеном, мастер |
 | `Pending` | любой | мастер; `completion` разрешён только при Ok, иначе `422` со списком `missing` |
 | `Completed` | Ok | рабочий режим |
-| `Completed` | Err | fail fast с `ConfigError`, как в v0.2 |
+| `Completed` | Err | fail fast с ненулевым кодом выхода: сообщение называет ключ и причину (в том числе нечитаемый `CRANE_TOKEN` в БД: потерян или сменён `CRANE_SETTINGS_KEY_FILE`), как в v0.2 |
 
 ```rust
 async fn serve_async(boot: Boot) -> Result<(), RunError> {
@@ -216,6 +222,7 @@ async fn serve_async(boot: Boot) -> Result<(), RunError> {
 }
 ```
 
+- Режимы разведены явно. `Completed` и разбор не проходит — процесс не поднимается и не показывает мастер: оператор чинит окружение или ключ. `Pending` — фаза мастера: протоколы отвечают `503 not-configured`, `readyz` отвечает `200` без деталей (оркестратор не должен убивать процесс, который ждёт мастера).
 - Пока `onboarding` в `Pending`, процесс обслуживает SPA и API мастера на **публичном** слушателе при любом результате разбора, а протоколы пакетов отвечают `503 not-configured` с `Retry-After`. Так break-glass `onboarding-reset` на работающем экземпляре действительно открывает мастер, а перезапуск посреди мастера после добавления переменных окружения не превращает незавершённую установку в рабочую с живым токеном. Admin-порт остаётся только для проб `healthz` (16.1).
 - На `complete` фаза гасится существующим graceful shutdown, слои перечитываются, процесс входит в обычный `routers()` без перезапуска.
 - Другие реплики в первой фазе раз в несколько секунд читают одну строку `onboarding`; опрос только здесь.
@@ -228,15 +235,16 @@ async fn serve_async(boot: Boot) -> Result<(), RunError> {
 
 | `AuditAction` | OCSF | Исход | Поля |
 | --- | --- | --- | --- |
-| `SettingChanged { key, version, secret }` | 6003 Update | Success | для несекретных старое и новое значение в `unmapped` (до 256 символов); для секретов значений нет |
-| `SettingRejectedLocked { key, env_var }` | 6003 Update | Failure | имя переменной, из-за которой запись запрещена |
+| `SettingChanged { key, version, change }` | 6003 Update | Success | `change`: для несекретных старое и новое значение в `unmapped` (до 256 символов); для секретов значений нет, только `replaced_unreadable` |
+| `SettingDeleted { key, secret }` | 6003 Delete | Success | значения удалённого не пишутся |
+| `SettingRejected { key, env_var }` | 6003 Update | Failure | любой отказ записи или удаления; код и причина в исходе (`setting-unknown`, `setting-locked`, `settings-not-persistent`, `setting-invalid`, `setting-conflict`, `secrets-unavailable`, `settings-unreachable`, `settings-backend`); `env_var` только у `setting-locked`; значения из запроса в событии нет |
 | `OnboardingStarted` | 6003 Create | Success | актор `crane:system` |
 | `OnboardingCompleted { via }` | 6003 Update | Success | `via`: `bootstrap_token` или `static_token` |
 | `OnboardingSkippedPreconfigured` | 6003 Update | Success | актор `crane:system` |
 | `OnboardingTokenRejected` | 3002 Logon | Failure | адрес клиента; предъявленное значение не пишется |
 | `OnboardingTokenRotated` | 6003 Update | Success | актор: оператор роли `onboarding-token` или `crane:system` |
 
-Варианты добавляются в конец `AuditAction` (поток 2 тоже добавляет свои). Затенение (20.1) — не событие журнала, а `warn` на старте и признак в API. Токены и значения секретов не пишутся ни в одно поле; единственное исключение вывода токена — 20.5.
+Варианты добавляются в конец `AuditAction` (поток 2 тоже добавляет свои). Сырое значение запроса не попадает в событие отказа ни в каком поле: опечатка в имени ключа не должна унести токен в журнал. Затенение (20.1) — не событие журнала, а `warn` на старте и признак в API. Токены и значения секретов не пишутся ни в одно поле; единственное исключение вывода токена — 20.5.
 
 ## 20.4 Мастер первого запуска
 
@@ -311,17 +319,18 @@ GCRA по адресу клиента на слое HTTP (адрес с учёт
 | `POST /onboarding/steps/{step}/probe` | проверка связи без сохранения | Bearer мастера | нет |
 | `POST /onboarding/completion` | завершить мастер | Bearer мастера | `OnboardingCompleted` |
 | `GET /settings`, `GET /settings/{key}` | итоговые значения с источниками | `settings:read` | нет |
-| `PUT /settings/{key}` | записать значение (`If-Match` с версией) | `settings:write` | `SettingChanged` |
-| `DELETE /settings/{key}` | убрать значение из БД | `settings:write` | `SettingChanged` |
+| `PUT /settings/{key}` | записать значение (`If-None-Match: *` при создании, `If-Match` с версией при обновлении) | `settings:write` | `SettingChanged` / `SettingRejected` |
+| `DELETE /settings/{key}` | убрать значение из БД (`If-Match`) | `settings:write` | `SettingDeleted` / `SettingRejected` |
+| `PUT /settings/groups/{group}` | атомарно записать ключи группы | `settings:write` | как у `PUT /settings/{key}` по каждому ключу |
 
 «Bearer мастера» — схема `bearer` с bootstrap- или статическим токеном (20.5). `GET /onboarding` отвечает так:
 
 - без заголовка — `{state}`;
-- с верным токеном — `state`, `current_step`, `steps[{id, status}]` и `missing` (ключи, разбор которых возвращает `Missing`);
+- с верным токеном — `state`, `current_step`, `steps[{id, status, groups}]` и `missing` (ключи, разбор которых возвращает `Missing`);
 - с неверным токеном — `401 bootstrap-token-invalid`, при превышении лимита — `429` с `Retry-After` на этом же вызове;
 - при `state = completed` — `{state: completed}`; остальные операции мастера отвечают `410`.
 
-Ошибки: `409 setting-locked`, `409 settings-not-persistent` (режим memory), `412` (устарел `If-Match`), `422 setting-invalid` с `errors: [{key, detail}]` (на `PUT /settings/{key}` — один элемент, на шаге мастера — по ключам шага), `422 secrets-unavailable`, `401 bootstrap-token-invalid`, `429` (лимит перебора), `410 onboarding-completed`, `503 not-configured` (протоколы в первой фазе).
+Ошибки: `409 setting-locked`, `409 settings-not-persistent` (режим memory), `412` (устарел `If-Match` или строка уже есть при создании), `428 precondition-required` (нет ни `If-Match`, ни `If-None-Match: *`), `403 insecure-public-url` (мастер при `CRANE_PUBLIC_URL` на http не с loopback), `422 setting-invalid` с `errors: [{key, detail}]` (на `PUT /settings/{key}` — один элемент, на шаге мастера — по ключам шага), `422 secrets-unavailable`, `401 bootstrap-token-invalid`, `429` (лимит перебора), `410 onboarding-completed`, `503 not-configured` (протоколы в первой фазе).
 
 Типы для web генерирует `orval` из той же спеки (`pnpm --filter web run gen:api`), поэтому UI-поток пишет заглушки против этих типов, а не против выдуманных.
 
@@ -373,13 +382,13 @@ flowchart LR
 | Проба заставляет сервер ходить по адресу, который ввёл недоверенный пользователь (SSRF) | единый клиент с SSRF-guard, allowlist для непубличных адресов, таймаут 5 с, в ответе только статусы проверок |
 | Bootstrap-токен в логе утекает через сбор логов | 24 часа, права только на мастер, цель вне аудита и SIEM, предпочтительный путь через `CRANE_BOOTSTRAP_TOKEN_FILE` |
 | Токен мастера виден JS вкладки | память вкладки, не `localStorage`; CSP SPA; срок и права токена (20.5) |
-| Потеря `CRANE_SETTINGS_KEY_FILE` делает секреты в БД нечитаемыми | ключ в Secret с резервной копией; строка остаётся видимой с бейджем «не читается» и перезаписывается из консоли по CAS (событие с `replaced_unreadable`) или перекрывается из окружения |
+| Потеря `CRANE_SETTINGS_KEY_FILE` делает секреты в БД нечитаемыми | ключ в Secret с резервной копией; строка остаётся видимой с бейджем «не читается» (`secret_state: unreadable`, причина `missing_key`, `wrong_key` или `corrupted`), перезаписывается или удаляется из консоли по CAS (событие с `replaced_unreadable`) или перекрывается из окружения |
 | БД настроек недоступна | порт отдаёт `Unreachable`, HTTP отвечает `503` с `Retry-After: 10` (B4); процесс без БД не подменяет её умолчаниями |
 | Откат строки `setting` целиком (шифртекст и версия вместе) тем, у кого есть запись в БД | не покрыто: угроза уровня доступа к БД (20.2); отдельный откат шифртекста ловит версия в AAD |
 | ENV затеняет значение из консоли, и администратор не понимает почему | бейдж и замок, серое «не действует», `warn` на старте |
 | Новый обязательный ключ отправляет обновлённую v0.2 в мастер | правило новых ключей v0.3.0 (20.1) |
-| Невалидное сохранённое значение не даёт стартовать | ошибка называет ключ; обход — ключ в окружении |
-| Гонка двух администраторов | CAS по `version`, `If-Match` (412) |
+| Невалидное сохранённое значение (или нечитаемый секрет, например `CRANE_TOKEN`) не даёт стартовать после `Completed` | fail fast: ошибка называет ключ и причину; обход — ключ в окружении. Удаление из консоли проверяется разбором, как запись (`setting-invalid`), и не может сломать следующий старт |
+| Гонка двух администраторов | CAS по `version`: `If-Match` при обновлении, `If-None-Match: *` при создании; без обоих `428`, устаревшая версия `412` |
 | Заглушки UI расходятся с реальным API | типы из одной спеки (`orval`), реестр `FIXME`, критерий F2 |
 | Потоки на общих файлах и миграциях | таблица резервирования и правила 20.7, ребейз перед PR |
 

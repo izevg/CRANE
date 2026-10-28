@@ -28,16 +28,16 @@ use tower::ServiceExt;
 use url::Url;
 use uuid::Uuid;
 
-use super::{migrate, routers};
-use crate::config::Settings;
+use super::{load, migrate, routers};
+use crate::config::{Boot, Database};
 
 const URL_ENV: &str = "CRANE_TEST_DATABASE_URL";
 const REQUIRE_ENV: &str = "CRANE_TEST_REQUIRE_DB";
-const TOKEN: &str = "stack-token";
+pub(super) const TOKEN: &str = "stack-token";
 const CRATE: &[u8] = b"\x1f\x8b not really a gzip, but cargo does not look inside";
 
 /// URL БД из окружения; без него тест пропускается (или падает при `CRANE_TEST_REQUIRE_DB=1`).
-fn database_url() -> Option<String> {
+pub(super) fn database_url() -> Option<String> {
     let url = std::env::var(URL_ENV).ok();
     if url.is_none() {
         assert!(
@@ -57,17 +57,33 @@ fn report_skip() {
     eprintln!("ПРОПУСК: {URL_ENV} не задана, тесты с PostgreSQL не выполняются");
 }
 
-fn settings(database: &str, blobs_dir: &Path) -> Settings {
+pub(super) fn lookup(database: &str, blobs_dir: &Path, extra: &[(&str, &str)]) -> Boot {
     let blobs = format!("file://{}", blobs_dir.display());
-    let env: HashMap<&str, &str> = HashMap::from([
-        ("CRANE_DATABASE_URL", database),
-        ("CRANE_BLOBS", &blobs),
-        ("CRANE_PUBLIC_URL", "https://crane.example"),
-        ("CRANE_TOKEN", TOKEN),
+    let mut env: HashMap<String, String> = HashMap::from([
+        ("CRANE_DATABASE_URL".to_owned(), database.to_owned()),
+        ("CRANE_BLOBS".to_owned(), blobs),
+        (
+            "CRANE_PUBLIC_URL".to_owned(),
+            "https://crane.example".to_owned(),
+        ),
     ]);
-    let no_files =
-        |_: &Path| -> io::Result<String> { Err(io::Error::from(io::ErrorKind::NotFound)) };
-    Settings::from_env(&|name| env.get(name).map(|v| (*v).to_owned()), &no_files).unwrap()
+    env.extend(
+        extra
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+    );
+    Boot::new(
+        move |name| env.get(name).cloned(),
+        |_| Err(io::Error::from(io::ErrorKind::NotFound)),
+    )
+}
+
+pub(super) fn token_lookup(database: &str, blobs_dir: &Path) -> Boot {
+    lookup(database, blobs_dir, &[("CRANE_TOKEN", TOKEN)])
+}
+
+pub(super) fn database_of(boot: &Boot) -> Database {
+    Database::from_env(&|name: &str| boot.var(name), &|path: &Path| boot.read(path)).unwrap()
 }
 
 /// Запущенный «сервер»: роутеры без сокетов. Миграции применяет роль `migrate`, как в compose.
@@ -79,9 +95,10 @@ struct Stack {
 
 impl Stack {
     fn start(database: &str, blobs_dir: &Path, runtime: Runtime) -> Self {
-        migrate(settings(database, blobs_dir).storage).unwrap();
+        let boot = token_lookup(database, blobs_dir);
+        migrate(database_of(&boot)).unwrap();
         let (api, admin) = runtime
-            .block_on(routers(settings(database, blobs_dir)))
+            .block_on(async { routers(load(boot).await?).await })
             .unwrap();
         Self {
             runtime,
@@ -129,7 +146,7 @@ impl Stack {
     }
 }
 
-fn runtime() -> Runtime {
+pub(super) fn runtime() -> Runtime {
     Builder::new_current_thread().enable_all().build().unwrap()
 }
 
@@ -224,10 +241,10 @@ fn migrate_creates_the_schema_in_an_empty_database() {
     let mut target = Url::parse(&url).unwrap();
     target.set_path(&format!("/{name}"));
     let dir = tempfile::tempdir().unwrap();
-    let storage = settings(target.as_str(), dir.path()).storage;
+    let database = database_of(&token_lookup(target.as_str(), dir.path()));
 
     // Act
-    let result = migrate(storage);
+    let result = migrate(database);
 
     // Assert
     // Если тест упал по panic, БД остаётся: чистка по префиксу убила бы БД параллельных процессов.

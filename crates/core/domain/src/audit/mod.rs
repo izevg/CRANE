@@ -41,10 +41,12 @@ pub enum AuditAction {
         version: Version,
         change: SettingChange,
     },
-    /// Запись отклонена: ключ задан переменной окружения или файлом.
-    SettingRejectedLocked {
+    /// Запись или удаление отклонены. Причина и код лежат в `Outcome::Failure`; сырого значения
+    /// в событии нет: опечатка в имени ключа не должна унести токен в журнал.
+    SettingRejected {
         key: String,
-        env_var: String,
+        /// Переменная, задавшая ключ, если отказ из-за блокировки.
+        env_var: Option<String>,
     },
     OnboardingStarted,
     OnboardingCompleted {

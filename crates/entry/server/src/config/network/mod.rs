@@ -1,9 +1,10 @@
 //! Сетевые параметры: порты, публичный адрес, доверенные прокси.
 
+use crane_domain::settings::{Kind, SettingDef};
 use crane_http::TrustedProxies;
 
-use super::ConfigError;
-use super::source::{number, required};
+use super::source::{failures, number, required, setting};
+use super::{ConfigError, Read, Section, Var};
 
 pub(super) const HTTP_PORT: &str = "CRANE_HTTP_PORT";
 pub(super) const ADMIN_PORT: &str = "CRANE_ADMIN_PORT";
@@ -12,13 +13,52 @@ const TRUSTED_PROXIES: &str = "CRANE_TRUSTED_PROXIES";
 const DEFAULT_HTTP_PORT: u16 = 8080;
 const DEFAULT_ADMIN_PORT: u16 = 9464;
 
-pub(super) const VARS: [&str; 4] = [HTTP_PORT, ADMIN_PORT, PUBLIC_URL, TRUSTED_PROXIES];
+const GROUP: &str = "network";
+
+pub(super) const SECTION: Section = Section {
+    group: GROUP,
+    vars,
+    settings,
+    check,
+};
+
+fn vars() -> Vec<&'static str> {
+    vec![HTTP_PORT, ADMIN_PORT, PUBLIC_URL, TRUSTED_PROXIES]
+}
+
+/// Порты и доверенные прокси меняют только окружение или файл: от них зависит, достижима ли консоль.
+fn settings() -> Vec<SettingDef> {
+    vec![
+        SettingDef {
+            console: false,
+            ..setting(GROUP, "http_port", HTTP_PORT, Kind::Number)
+        },
+        SettingDef {
+            console: false,
+            ..setting(GROUP, "admin_port", ADMIN_PORT, Kind::Number)
+        },
+        setting(GROUP, "public_url", PUBLIC_URL, Kind::Url),
+        SettingDef {
+            console: false,
+            ..setting(GROUP, "trusted_proxies", TRUSTED_PROXIES, Kind::List)
+        },
+    ]
+}
+
+fn check(var: Var, _: Read, _: bool) -> Vec<ConfigError> {
+    failures([
+        http_port(&var).err(),
+        admin_port(&var).err(),
+        public_url(&var).err(),
+        trusted_proxies(&var).err(),
+    ])
+}
 
 pub(super) fn http_port(var: &impl Fn(&str) -> Option<String>) -> Result<u16, ConfigError> {
     number(var, HTTP_PORT, DEFAULT_HTTP_PORT)
 }
 
-/// Отдельно от `Settings`: проба здоровья не должна требовать токен, адрес и хранилище.
+/// Отдельно от `Config`: проба здоровья не должна требовать токен, адрес и хранилище.
 pub(crate) fn admin_port(var: &impl Fn(&str) -> Option<String>) -> Result<u16, ConfigError> {
     number(var, ADMIN_PORT, DEFAULT_ADMIN_PORT)
 }

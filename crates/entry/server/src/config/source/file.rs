@@ -12,10 +12,10 @@ use std::path::Path;
 
 use toml::{Table, Value};
 
+use super::PREFIX;
 use crate::config::{ConfigError, vars};
 
 const CONFIG_PATH: &str = "CRANE_CONFIG";
-const PREFIX: &str = "CRANE_";
 /// Поиск значения по имени переменной: сначала окружение, потом файл.
 pub(crate) fn layered<E: Fn(&str) -> Option<String>, R: Fn(&Path) -> io::Result<String>>(
     env: E,

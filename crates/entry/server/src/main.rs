@@ -15,7 +15,7 @@ use std::process::ExitCode;
 
 use tracing_subscriber::EnvFilter;
 
-use crate::config::{Settings, Storage};
+use crate::config::{Boot, Database};
 
 const USAGE: &str = "использование: crane <serve|all|migrate|healthcheck>";
 const EXIT_USAGE: u8 = 2;
@@ -61,13 +61,17 @@ fn main() -> ExitCode {
 fn execute(role: &Role) -> Result<(), run::RunError> {
     let read_file = |path: &Path| std::fs::read_to_string(path);
     // Окружение важнее файла TOML из CRANE_CONFIG; путь к файлу задаёт только окружение.
-    let var = config::layered(|name: &str| std::env::var(name).ok(), &read_file)?;
+    let layered = config::layered(|name: &str| std::env::var(name).ok(), &read_file)?;
+    let boot = Boot::new(layered, read_file);
+    let inherited = |name: &str| boot.var(name);
     match role {
-        Role::Serve => run::serve(Settings::from_env(&var, &read_file)?),
-        // Миграциям токен и публичный адрес не нужны.
-        Role::Migrate => run::migrate(Storage::from_env(&var, &read_file)?),
+        Role::Serve => run::serve(boot.clone()),
+        // Миграциям токен, публичный адрес и blob не нужны.
+        Role::Migrate => run::migrate(Database::from_env(&inherited, &|path: &Path| {
+            boot.read(path)
+        })?),
         // Только порт admin: токен, адрес и хранилище пробе не нужны.
-        Role::Healthcheck => run::healthcheck(config::admin_port(&var)?),
+        Role::Healthcheck => run::healthcheck(config::admin_port(&inherited)?),
     }
 }
 

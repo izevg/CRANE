@@ -5,6 +5,7 @@ use aws_lc_rs::digest::{SHA256, digest};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use crane_domain::settings::Secret;
+use zeroize::Zeroizing;
 
 /// Длина ключа AES-256 в байтах.
 const KEY_LEN: usize = 32;
@@ -37,9 +38,12 @@ impl SettingsKey {
     /// # Errors
     /// [`KeyError::NotBase64`] или [`KeyError::WrongLength`], если байт не 32.
     pub fn from_base64(encoded: &Secret) -> Result<Self, KeyError> {
-        let bytes = STANDARD
-            .decode(encoded.expose())
-            .map_err(|_| KeyError::NotBase64)?;
+        // Сырые байты ключа обнуляются при выходе из функции.
+        let bytes = Zeroizing::new(
+            STANDARD
+                .decode(encoded.expose())
+                .map_err(|_| KeyError::NotBase64)?,
+        );
         let wrong_length = KeyError::WrongLength { bytes: bytes.len() };
         if bytes.len() != KEY_LEN {
             return Err(wrong_length);

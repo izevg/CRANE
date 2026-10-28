@@ -102,7 +102,7 @@ fn shape(action: &AuditAction) -> Shape {
         AuditAction::Reserve(_) => api(1, "Create", "namespace.reserve"),
         AuditAction::ShadowUpstream { .. } => api(2, "Read", "upstream.shadow"),
         AuditAction::SettingChanged { .. } => api(3, "Update", "setting.change"),
-        AuditAction::SettingRejectedLocked { .. } => api(3, "Update", "setting.reject_locked"),
+        AuditAction::SettingRejected { .. } => api(3, "Update", "setting.reject"),
         AuditAction::SettingDeleted { .. } => api(4, "Delete", "setting.delete"),
         AuditAction::OnboardingStarted => api(1, "Create", "onboarding.start"),
         AuditAction::OnboardingCompleted { .. } => api(3, "Update", "onboarding.complete"),
@@ -129,7 +129,7 @@ fn resource(action: &AuditAction) -> Option<Resource<'_>> {
         | AuditAction::ShadowUpstream { .. }
         | AuditAction::SettingChanged { .. }
         | AuditAction::SettingDeleted { .. }
-        | AuditAction::SettingRejectedLocked { .. }
+        | AuditAction::SettingRejected { .. }
         | AuditAction::OnboardingStarted
         | AuditAction::OnboardingCompleted { .. }
         | AuditAction::OnboardingSkippedPreconfigured
@@ -161,7 +161,7 @@ fn resource(action: &AuditAction) -> Option<Resource<'_>> {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct SettingFields {
     pub key: Option<String>,
-    /// Переменная, из-за которой запись запрещена.
+    /// Переменная, из-за которой запись запрещена; только при отказе по блокировке.
     pub env_var: Option<String>,
     pub version: Option<u64>,
     /// Старое и новое значение несекретной настройки, усечённые до 256 символов. У секрета и у удаления их нет.
@@ -205,9 +205,9 @@ fn setting_fields(action: &AuditAction) -> SettingFields {
             key: Some(key.clone()),
             ..SettingFields::default()
         },
-        AuditAction::SettingRejectedLocked { key, env_var } => SettingFields {
+        AuditAction::SettingRejected { key, env_var } => SettingFields {
             key: Some(key.clone()),
-            env_var: Some(env_var.clone()),
+            env_var: env_var.clone(),
             ..SettingFields::default()
         },
         _ => SettingFields::default(),

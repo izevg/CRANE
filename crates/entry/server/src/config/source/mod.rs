@@ -1,15 +1,53 @@
-//! Источники значений: поиск по имени переменной (`layered`), секреты, обязательные и числовые
-//! параметры. О том, какие параметры бывают, этот модуль ничего не знает.
+//! Источники значений: поиск по имени переменной (`layered`), слой БД по ключу (`StoredLayer`),
+//! схема настроек для консоли, секреты, обязательные и числовые параметры. О том, какие
+//! параметры бывают, этот модуль ничего не знает.
 
 mod file;
+mod schema;
+mod stored;
 
 use std::io;
 use std::path::Path;
 
-use crane_domain::settings::Secret;
+use crane_domain::settings::{Kind, Secret, SettingDef};
 
 use super::ConfigError;
 pub(crate) use file::layered;
+pub(crate) use schema::ConfigSchema;
+pub(crate) use stored::StoredLayer;
+
+/// Префикс переменных; ключ настройки — имя без него в нижнем регистре.
+const PREFIX: &str = "CRANE_";
+
+/// Определение ключа с умолчаниями: виден в консоли, без единицы. Отличия — через `..setting(…)`.
+pub(super) const fn setting(
+    group: &'static str,
+    key: &'static str,
+    env_var: &'static str,
+    kind: Kind,
+) -> SettingDef {
+    SettingDef {
+        key,
+        env_var,
+        group,
+        kind,
+        unit: None,
+        console: true,
+    }
+}
+
+/// Ошибки секции: из результатов отдельных разборов остаются только неудачные.
+pub(super) fn failures<const N: usize>(results: [Option<ConfigError>; N]) -> Vec<ConfigError> {
+    results.into_iter().flatten().collect()
+}
+
+/// Ключ настройки по имени переменной.
+pub(super) fn key_of(env_var: &str) -> String {
+    env_var
+        .strip_prefix(PREFIX)
+        .unwrap_or(env_var)
+        .to_ascii_lowercase()
+}
 
 pub(super) fn required(
     var: &impl Fn(&str) -> Option<String>,
