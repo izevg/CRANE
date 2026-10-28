@@ -38,6 +38,13 @@ All work is done in separate git worktrees, not in the main working directory:
   - Removal deletes the worktree and its local branch (`git worktree remove <path>` and `git branch -D <branch>`; the remote branch is deleted by GitHub on merge).
   - `task worktrees:prune` does exactly this: dry-run by default, `task worktrees:prune -- --apply` to remove.
 
+## Security review
+
+- Changes to the critical paths in [docs/security/critical-paths.md](docs/security/critical-paths.md) (authentication, secrets and crypto, parsers and paths, proxy and cache, publishing, archive handling, the web console boundary, and the tooling that guards the repository) are reviewed by the `sec-lead` role after the lead's gates are green. The lead invokes it; it is not a separate line and does not count toward the four leads.
+- The PR description carries `sec-review: CLEAR | CONDITIONAL | n/a` and the report path. A `BLOCK` verdict blocks the merge; every confirmed finding is closed with a failing-then-passing regression test.
+- Design work on a critical area gets a `THREAT-MODEL` pass before directives are issued. A milestone gets a `SWEEP` before `task gate`, and agent-produced history gets a `FORENSICS` pass when the owner or the orchestrator asks for it.
+- The checklist is [docs/security/review-checklist.md](docs/security/review-checklist.md). Any unexplained capability in a diff (hidden route, flag, hardcoded secret, weakened guard, new dependency or outbound call) is a finding until the author explains it.
+
 ## Commands
 
 The single entry point is the [Taskfile](Taskfile.yml) (`task --list`).
