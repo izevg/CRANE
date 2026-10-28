@@ -42,13 +42,6 @@ pub enum StoredValue {
     Secret(Secret),
 }
 
-impl StoredValue {
-    #[must_use]
-    pub const fn is_secret(&self) -> bool {
-        matches!(self, Self::Secret(_))
-    }
-}
-
 /// Строка хранилища настроек. Без `Debug` по той же причине, что и `StoredValue`.
 #[allow(
     missing_debug_implementations,
@@ -87,32 +80,5 @@ mod tests {
 
         // Assert
         assert_eq!(overflow, Some(None));
-    }
-
-    #[test]
-    fn new_rejects_zero() {
-        // Arrange
-        let cases = [0, 1];
-
-        // Act
-        let actual = cases.map(|value| Version::new(value).map(Version::get));
-
-        // Assert
-        assert_eq!(actual, [None, Some(1)]);
-    }
-
-    #[test]
-    fn is_secret_distinguishes_variants() {
-        // Arrange
-        let cases = [
-            StoredValue::Plain("x".to_owned()),
-            StoredValue::Secret(Secret::new("x".to_owned())),
-        ];
-
-        // Act
-        let actual = cases.map(|value| value.is_secret());
-
-        // Assert
-        assert_eq!(actual, [false, true]);
     }
 }

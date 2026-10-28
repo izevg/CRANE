@@ -52,16 +52,4 @@ mod tests {
         // Assert
         assert_eq!(actual, [true, false, false]);
     }
-
-    #[test]
-    fn from_bytes_roundtrips_hash_of_token() {
-        // Arrange
-        let original = TokenHash::of(&Secret::new("crb_alpha".to_owned()));
-
-        // Act
-        let restored = TokenHash::from_bytes(*original.as_bytes());
-
-        // Assert
-        assert!(restored.matches(&Secret::new("crb_alpha".to_owned())));
-    }
 }

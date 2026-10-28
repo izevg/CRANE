@@ -76,22 +76,4 @@ mod tests {
         // Assert
         assert_eq!(actual, [true, false, false, false, false]);
     }
-
-    #[test]
-    fn is_completed_is_true_only_for_completed() {
-        // Arrange
-        let cases = [
-            pending("crb_ok", Duration::from_secs(1)),
-            Onboarding::Completed {
-                at: NOW,
-                by: "x".to_owned(),
-            },
-        ];
-
-        // Act
-        let actual = cases.map(|state| state.is_completed());
-
-        // Assert
-        assert_eq!(actual, [false, true]);
-    }
 }

@@ -162,16 +162,16 @@ async fn delete_with_stale_version_conflicts_and_keeps_row<S: SettingsStore>(sto
 
 async fn put_secret_is_listed_as_secret_with_same_value<S: SettingsStore>(store: &S) {
     // Arrange
-    let value = StoredValue::Secret(Secret::new("postgres://u:p@h/db".to_owned()));
+    let value = StoredValue::Secret(Secret::new("crs_secret".to_owned()));
 
     // Act
-    let result = store.put("database_url", value, None, &operator()).await;
+    let result = store.put("token", value, None, &operator()).await;
 
     // Assert
     result.expect("put");
-    let stored = row(store, "database_url").await.expect("строка есть");
+    let stored = row(store, "token").await.expect("строка есть");
     assert!(
-        matches!(&stored.value, StoredValue::Secret(secret) if secret.expose() == "postgres://u:p@h/db")
+        matches!(&stored.value, StoredValue::Secret(secret) if secret.expose() == "crs_secret")
     );
 }
 
