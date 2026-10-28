@@ -32,6 +32,8 @@ crane-siem = { path = "../../adapters/external/siem" }
 crane-upstream = { path = "../../adapters/external/upstream" }
 # Кэш proxy и lease выборок, общие для реплик (CRANE_CACHE=valkey://…).
 crane-valkey = { path = "../../adapters/persistence/valkey" }
+# Случайные байты bootstrap-токена; тот же провайдер и фичи, что у crane-pg (в lock один aws-lc-rs).
+aws-lc-rs = { version = "1", default-features = false, features = ["aws-lc-sys", "alloc"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 # Пул соединений и разбор параметров подключения: PgCatalog принимает готовый PgPool.
 # Версия и фичи те же, что у crane-pg, чтобы в lock остался один sqlx.

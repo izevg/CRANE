@@ -6,6 +6,7 @@ mod cache;
 mod config;
 mod ecosystem;
 mod namespaces;
+mod onboarding;
 mod run;
 mod system;
 
@@ -17,26 +18,39 @@ use tracing_subscriber::EnvFilter;
 
 use crate::config::{Boot, Database};
 
-const USAGE: &str = "использование: crane <serve|all|migrate|healthcheck>";
+const USAGE: &str = "использование: crane <serve|all|migrate|healthcheck|onboarding-token|onboarding-reset --confirm>";
 const EXIT_USAGE: u8 = 2;
+const CONFIRM_FLAG: &str = "--confirm";
 
 #[derive(Debug, PartialEq, Eq)]
 enum Role {
     Serve,
     Migrate,
     Healthcheck,
+    /// Новый bootstrap-токен вместо потерянного; только пока мастер открыт.
+    OnboardingToken,
+    /// Break-glass: мастер открывается заново. Без `--confirm` отказ с подсказкой.
+    OnboardingReset {
+        confirmed: bool,
+    },
 }
 
 impl Role {
-    /// Ровно одна роль. `all` — синоним `serve`, пока нет воркера.
+    /// Ровно одна роль. `all` — синоним `serve`, пока нет воркера. Единственный флаг у
+    /// `onboarding-reset`: `--confirm`.
     fn parse(args: &[String]) -> Option<Self> {
         match args {
             [role] => match role.as_str() {
                 "serve" | "all" => Some(Self::Serve),
                 "migrate" => Some(Self::Migrate),
                 "healthcheck" => Some(Self::Healthcheck),
+                "onboarding-token" => Some(Self::OnboardingToken),
+                "onboarding-reset" => Some(Self::OnboardingReset { confirmed: false }),
                 _ => None,
             },
+            [role, flag] if role == "onboarding-reset" && flag == CONFIRM_FLAG => {
+                Some(Self::OnboardingReset { confirmed: true })
+            }
             _ => None,
         }
     }
@@ -64,12 +78,16 @@ fn execute(role: &Role) -> Result<(), run::RunError> {
     let layered = config::layered(|name: &str| std::env::var(name).ok(), &read_file)?;
     let boot = Boot::new(layered, read_file);
     let inherited = |name: &str| boot.var(name);
+    let database = || Database::from_env(&inherited, &|path: &Path| boot.read(path));
     match role {
         Role::Serve => run::serve(boot.clone()),
         // Миграциям токен, публичный адрес и blob не нужны.
-        Role::Migrate => run::migrate(Database::from_env(&inherited, &|path: &Path| {
-            boot.read(path)
-        })?),
+        Role::Migrate => run::migrate(database()?),
+        // Ролям первого запуска нужна только БД: полный Config и ключ шифрования не нужны.
+        Role::OnboardingToken => onboarding::onboarding_token(database()?),
+        Role::OnboardingReset { confirmed } => {
+            onboarding::onboarding_reset(database()?, *confirmed)
+        }
         // Только порт admin: токен, адрес и хранилище пробе не нужны.
         Role::Healthcheck => run::healthcheck(config::admin_port(&inherited)?),
     }
@@ -83,12 +101,21 @@ const SECURITY_TARGETS: [&str; 3] = [
     crane_upstream::EGRESS_TARGET,
 ];
 
-/// Директивы целей ИБ идут последними и перекрывают те же цели из `RUST_LOG`.
+/// Операционные цели, которые тоже нельзя заглушить `RUST_LOG`, но которые не журнал ИБ и не идут
+/// в SIEM. `crane::bootstrap` несёт единственную печать bootstrap-токена (20.5): без неё
+/// `RUST_LOG=warn` оставил бы оператора без входа в мастер.
+const PINNED_TARGETS: [&str; 1] = [onboarding::BOOTSTRAP_TARGET];
+
+/// Директивы закреплённых целей идут последними и перекрывают те же цели из `RUST_LOG`.
 fn log_filter(env: Option<&str>) -> EnvFilter {
     let base = env
         .filter(|value| EnvFilter::try_new(value).is_ok())
         .unwrap_or("info");
-    let pinned = SECURITY_TARGETS.map(|target| format!("{target}=info"));
+    let pinned = SECURITY_TARGETS
+        .iter()
+        .chain(&PINNED_TARGETS)
+        .map(|target| format!("{target}=info"))
+        .collect::<Vec<_>>();
     EnvFilter::new(format!("{base},{}", pinned.join(",")))
 }
 
@@ -157,6 +184,35 @@ mod tests {
 
         // Assert
         assert_eq!(role, Some(Role::Healthcheck));
+    }
+
+    #[test]
+    fn onboarding_roles_take_only_the_confirm_flag_and_reset_refuses_without_it() {
+        // Arrange
+        let cases = [
+            args(&["onboarding-token"]),
+            args(&["onboarding-reset"]),
+            args(&["onboarding-reset", "--confirm"]),
+            args(&["onboarding-reset", "--yes"]),
+            args(&["onboarding-token", "--confirm"]),
+            args(&["serve", "--confirm"]),
+        ];
+
+        // Act
+        let roles = cases.map(|case| Role::parse(&case));
+
+        // Assert
+        assert_eq!(
+            roles,
+            [
+                Some(Role::OnboardingToken),
+                Some(Role::OnboardingReset { confirmed: false }),
+                Some(Role::OnboardingReset { confirmed: true }),
+                None,
+                None,
+                None,
+            ]
+        );
     }
 
     #[test]
@@ -238,6 +294,24 @@ mod tests {
 
         // Assert
         assert_eq!(enabled, [[true, true, true]; 5]);
+    }
+
+    #[test]
+    fn bootstrap_token_line_survives_any_rust_log() {
+        // Arrange
+        let envs = [
+            Some("warn"),
+            Some("crane::bootstrap=off"),
+            Some("off"),
+            Some("неразборчиво=="),
+            None,
+        ];
+
+        // Act
+        let enabled = envs.map(|env| info_enabled(log_filter(env), onboarding::BOOTSTRAP_TARGET));
+
+        // Assert
+        assert_eq!(enabled, [true; 5]);
     }
 
     #[test]

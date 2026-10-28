@@ -27,10 +27,10 @@ use super::{load, migrate};
 use crate::system::SystemClock;
 
 /// Одна из двух разных ключей шифрования (base64 от 32 байт).
-const KEY_A: &str = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
-const KEY_B: &str = "Hh8dHBsaGRgXFhUUExIREA8ODQwLCgkIBwYFBAMCAQA=";
+pub(super) const KEY_A: &str = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+pub(super) const KEY_B: &str = "Hh8dHBsaGRgXFhUUExIREA8ODQwLCgkIBwYFBAMCAQA=";
 
-fn key_id(encoded: &str) -> String {
+pub(super) fn key_id(encoded: &str) -> String {
     SettingsKey::from_base64(&Secret::new(encoded.to_owned()))
         .unwrap()
         .id()
@@ -38,15 +38,15 @@ fn key_id(encoded: &str) -> String {
 }
 
 /// Свежая БД на запуск: строки `setting` не должны мешать параллельным тестам.
-struct FreshDb {
-    runtime: Runtime,
+pub(super) struct FreshDb {
+    pub(super) runtime: Runtime,
     admin: PgPool,
     name: String,
-    url: String,
+    pub(super) url: String,
 }
 
 impl FreshDb {
-    fn create(base_url: &str) -> Self {
+    pub(super) fn create(base_url: &str) -> Self {
         let runtime = runtime();
         let name = format!("crane_settings_{}", Uuid::new_v4().simple());
         let admin = runtime.block_on(async {
@@ -69,7 +69,7 @@ impl FreshDb {
         db
     }
 
-    fn store(&self, key: Option<&str>) -> PgSettings {
+    pub(super) fn store(&self, key: Option<&str>) -> PgSettings {
         let options = PgConnectOptions::from_str(&self.url).unwrap();
         let pool = self
             .runtime
@@ -80,7 +80,7 @@ impl FreshDb {
         PgSettings::new(pool, Arc::new(SystemClock), key)
     }
 
-    fn put(&self, store: &PgSettings, key: &str, value: NewValue) {
+    pub(super) fn put(&self, store: &PgSettings, key: &str, value: NewValue) {
         let by = Principal {
             id: "admin".to_owned(),
             kind: PrincipalKind::Robot,
@@ -90,7 +90,7 @@ impl FreshDb {
             .unwrap();
     }
 
-    fn drop_database(self) {
+    pub(super) fn drop_database(self) {
         // Если тест упал по panic, БД остаётся: чистка по префиксу убила бы БД параллельных процессов.
         self.runtime.block_on(async {
             sqlx::query(AssertSqlSafe(format!(

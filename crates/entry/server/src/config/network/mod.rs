@@ -54,7 +54,7 @@ fn check(var: Var, _: Read, _: bool) -> Vec<ConfigError> {
     ])
 }
 
-pub(super) fn http_port(var: &impl Fn(&str) -> Option<String>) -> Result<u16, ConfigError> {
+pub(crate) fn http_port(var: &impl Fn(&str) -> Option<String>) -> Result<u16, ConfigError> {
     number(var, HTTP_PORT, DEFAULT_HTTP_PORT)
 }
 

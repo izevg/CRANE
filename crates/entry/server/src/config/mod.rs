@@ -24,11 +24,12 @@ use crane_http::TrustedProxies;
 use crane_pg::KeyError;
 use source::secret;
 
-pub(crate) use network::admin_port;
+pub(crate) use network::{admin_port, http_port};
 pub(crate) use proxy::{Cache, Proxy};
 pub(crate) use repos::{Repos, proxy_var};
 pub(crate) use source::{ConfigSchema, StoredLayer, layered};
 pub(crate) use storage::{Blobs, Database, settings_key};
+pub(crate) use token::{BOOTSTRAP_PREFIX, bootstrap_token, static_token_set};
 
 type VarFn = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
 type ReadFn = Arc<dyn Fn(&Path) -> io::Result<String> + Send + Sync>;
