@@ -11,6 +11,9 @@ pub enum Format {
 }
 
 impl Format {
+    /// Все форматы: по ней таблицы форматов обходятся без перечисления вариантов вручную.
+    pub const ALL: [Self; 5] = [Self::Maven, Self::Npm, Self::PyPi, Self::NuGet, Self::Cargo];
+
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -50,18 +53,10 @@ impl FromStr for Format {
 mod tests {
     use super::*;
 
-    const ALL: [Format; 5] = [
-        Format::Maven,
-        Format::Npm,
-        Format::PyPi,
-        Format::NuGet,
-        Format::Cargo,
-    ];
-
     #[test]
     fn every_format_round_trips_through_its_string_form() {
         // Arrange
-        let formats = ALL;
+        let formats = Format::ALL;
 
         // Act
         let parsed: Vec<_> = formats

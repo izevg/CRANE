@@ -16,9 +16,9 @@ use crane_ports::proxy::{FetchLeases, ProxyCache, Upstream};
 use crane_ports::registry::{BlobStore, Catalog};
 
 use super::Handle;
-use crate::cargo::INDEX_TYPE;
 use crate::context::CacheFacts;
 use crate::error::{ClientError, chain};
+use crate::formats::cargo::INDEX_TYPE;
 use crate::serve::{document_response, refuse, respond, with_facts};
 
 const JSON: &str = "application/json";

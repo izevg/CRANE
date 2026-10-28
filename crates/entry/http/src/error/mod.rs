@@ -1,4 +1,4 @@
-//! Ошибочные ответы и единая таблица `RegistryError` → HTTP. Форма тела — свойство точки монтирования (`Dialect`).
+//! Ошибочные ответы и единая таблица `RegistryError` → HTTP. Форма тела — свойство точки монтирования (`Format`).
 
 use std::error::Error;
 
@@ -6,6 +6,7 @@ use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use crane_domain::registry::Format;
 
 mod kind;
 mod problem;
@@ -25,7 +26,7 @@ const NOT_FOUND_DETAIL: &str = "не найдено";
 /// id запроса известен только внешнему слою, он и рендерит тело (`context::render`).
 #[derive(Debug, Clone)]
 pub(crate) enum ErrorBody {
-    /// Текст для клиента; оболочку (`{"errors":[…]}`, `{"error":…}` или RFC 9457) выбирает `Dialect`.
+    /// Текст для клиента; оболочку (`{"errors":[…]}`, `{"error":…}` или RFC 9457) выбирает формат (`formats::error_body`).
     Detail { detail: String, kind: ProblemKind },
     /// RFC 9457.
     Problem {
@@ -89,23 +90,16 @@ impl IntoResponse for ClientError {
     }
 }
 
-/// Диалект точки монтирования: определяет форму тела ошибки и схему аутентификации.
-/// Ошибка формата не знает, как её покажут; слой `mark_dialect` на router формата кладёт диалект в ответ.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Dialect {
-    Cargo,
-    Npm,
-}
-
-/// Слой router'а формата (`from_fn_with_state(dialect, mark_dialect)`): снаружи auth, чтобы 401 и 403
-/// тоже получили форму своего формата.
-pub(crate) async fn mark_dialect(
-    State(dialect): State<Dialect>,
+/// Слой router'а формата (`from_fn_with_state(format, mark_format)`): снаружи auth, чтобы 401 и 403
+/// тоже получили форму своего формата. Ошибка не знает, как её покажут: тело рендерит внешний слой
+/// по формату из расширений ответа.
+pub(crate) async fn mark_format(
+    State(format): State<Format>,
     request: Request,
     next: Next,
 ) -> Response {
     let mut response = next.run(request).await;
-    response.extensions_mut().insert(dialect);
+    response.extensions_mut().insert(format);
     response
 }
 

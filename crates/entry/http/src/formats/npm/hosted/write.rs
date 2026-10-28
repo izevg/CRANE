@@ -16,7 +16,7 @@ use futures_util::stream;
 use super::read::coordinate;
 use super::{Request, Shared};
 use crate::error::{ClientError, chain};
-use crate::npm::json_ok;
+use crate::formats::npm::json_ok;
 
 const UNSUPPORTED: &str = "операция не поддерживается";
 

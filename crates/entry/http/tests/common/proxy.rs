@@ -1,6 +1,6 @@
 //! Фикстура proxy-репозитория: скриптованный upstream без сети и движок на memory-адаптерах.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::future::{Future, ready};
 use std::io;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -9,14 +9,11 @@ use std::time::{Duration, SystemTime};
 use axum::Router;
 use bytes::Bytes;
 use crane_app::proxy::{ProxyEngine, ProxyLimits};
-use crane_domain::proxy::{EgressPolicy, EgressRefusal, Origin};
+use crane_domain::proxy::{EgressPolicy, EgressRefusal};
 use crane_domain::registry::{Format, PackageName, RepositoryId};
 use crane_format_cargo::{DL_HOST, INDEX_HOST};
 use crane_format_npm::REGISTRY_HOST;
-use crane_http::{
-    CargoProxyOrigins, CargoSettings, EngineUpstreamNames, NpmSettings, cargo_proxy_router,
-    npm_proxy_router,
-};
+use crane_http::{EngineUpstreamNames, FormatSettings, ProxySource, presence_origin, proxy_router};
 use crane_memory::{
     ManualClock, MemoryBlobStore, MemoryFetchLeases, MemoryProxyCache, SequentialIdGen,
 };
@@ -27,7 +24,7 @@ use crane_ports::system::IdGen;
 use futures_util::stream;
 use tokio::runtime::Builder;
 
-use super::{MAX_NPM_PUBLISH_BYTES, MAX_PUBLISH_BYTES, PUBLIC_URL, TestRegistry};
+use super::{MAX_PUBLISH_BYTES, PUBLIC_URL, TestRegistry};
 
 /// Имя proxy-репозитория в URL.
 pub(crate) const NAME: &str = "crates-io";
@@ -143,56 +140,91 @@ fn presence_of(
         .block_on(names.presence(format, &name))
 }
 
+/// Общее двух фикстур: движок, политика egress, источник и таблица форматов в роли сервера.
+struct Fixture {
+    format: Format,
+    name: &'static str,
+    engine: TestEngine,
+    policy: EgressPolicy,
+    repository: RepositoryId,
+    upstream: FakeUpstream,
+    clock: Arc<ManualClock>,
+}
+
+impl Fixture {
+    fn new(format: Format, name: &'static str, hosts: &[&str]) -> Self {
+        let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
+        let upstream = FakeUpstream::default();
+        Self {
+            format,
+            name,
+            engine: engine(&upstream, &clock),
+            policy: EgressPolicy::new(hosts.iter().copied(), false),
+            repository: RepositoryId::new(SequentialIdGen::default().generate()),
+            upstream,
+            clock,
+        }
+    }
+
+    fn source(&self) -> ProxySource<'_> {
+        ProxySource {
+            repository: self.repository,
+            name: self.name,
+            policy: &self.policy,
+        }
+    }
+
+    fn router(&self, registry: Arc<TestRegistry>) -> Router {
+        let settings = FormatSettings {
+            public_url: PUBLIC_URL.to_owned(),
+            max_publish_bytes: MAX_PUBLISH_BYTES,
+        };
+        proxy_router(
+            self.format,
+            self.engine.clone(),
+            registry,
+            &self.source(),
+            &settings,
+        )
+        .unwrap()
+        .unwrap()
+    }
+
+    /// Что upstream знает об имени: тот же движок, что у маршрутов; источник только у формата фикстуры.
+    fn presence(&self, format: Format, name: &str) -> Presence {
+        let origin = presence_origin(self.format, &self.source())
+            .unwrap()
+            .unwrap();
+        let names =
+            EngineUpstreamNames::new(self.engine.clone(), BTreeMap::from([(self.format, origin)]));
+        presence_of(&names, format, name)
+    }
+}
+
 /// Движок cargo proxy-репозитория, фейковый upstream и часы движка.
 pub(crate) struct Proxy {
-    engine: TestEngine,
-    origins: CargoProxyOrigins,
+    fixture: Fixture,
     pub(crate) upstream: FakeUpstream,
     pub(crate) clock: Arc<ManualClock>,
 }
 
 impl Proxy {
     pub(crate) fn new() -> Self {
-        let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
-        let upstream = FakeUpstream::default();
-        let policy = EgressPolicy::new([INDEX_HOST, DL_HOST], false);
-        let repository = RepositoryId::new(SequentialIdGen::default().generate());
-        let origin = |host: &str| Origin {
-            repository,
-            base: policy.admit("https", host, None, "").unwrap(),
-        };
-        let origins = CargoProxyOrigins {
-            index: origin(INDEX_HOST),
-            dl: origin(DL_HOST),
-        };
+        let fixture = Fixture::new(Format::Cargo, NAME, &[INDEX_HOST, DL_HOST]);
         Self {
-            engine: engine(&upstream, &clock),
-            origins,
-            upstream,
-            clock,
+            upstream: fixture.upstream.clone(),
+            clock: fixture.clock.clone(),
+            fixture,
         }
     }
 
     /// Router над реестром фикстуры: защита имён видит те же namespaces и hosted-пакеты.
     pub(crate) fn router(&self, registry: Arc<TestRegistry>) -> Router {
-        let settings = CargoSettings {
-            public_url: PUBLIC_URL.to_owned(),
-            max_publish_bytes: MAX_PUBLISH_BYTES,
-        };
-        cargo_proxy_router(
-            self.engine.clone(),
-            registry,
-            self.origins.clone(),
-            &settings,
-            NAME,
-        )
+        self.fixture.router(registry)
     }
 
-    /// Что upstream знает об имени: тот же движок, что у маршрутов; источник только для cargo.
     pub(crate) fn presence(&self, format: Format, name: &str) -> Presence {
-        let names =
-            EngineUpstreamNames::new(self.engine.clone(), Some(self.origins.index.clone()), None);
-        presence_of(&names, format, name)
+        self.fixture.presence(format, name)
     }
 
     pub(crate) fn advance(&self, by: Duration) {
@@ -202,47 +234,27 @@ impl Proxy {
 
 /// Движок npm proxy-репозитория, фейковый upstream и часы движка.
 pub(crate) struct NpmProxy {
-    engine: TestEngine,
-    origin: Origin,
+    fixture: Fixture,
     pub(crate) upstream: FakeUpstream,
     pub(crate) clock: Arc<ManualClock>,
 }
 
 impl NpmProxy {
     pub(crate) fn new() -> Self {
-        let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
-        let upstream = FakeUpstream::default();
-        let policy = EgressPolicy::new([REGISTRY_HOST], false);
-        let origin = Origin {
-            repository: RepositoryId::new(SequentialIdGen::default().generate()),
-            base: policy.admit("https", REGISTRY_HOST, None, "").unwrap(),
-        };
+        let fixture = Fixture::new(Format::Npm, NPM_NAME, &[REGISTRY_HOST]);
         Self {
-            engine: engine(&upstream, &clock),
-            origin,
-            upstream,
-            clock,
+            upstream: fixture.upstream.clone(),
+            clock: fixture.clock.clone(),
+            fixture,
         }
     }
 
     pub(crate) fn router(&self, registry: Arc<TestRegistry>) -> Router {
-        let settings = NpmSettings {
-            public_url: PUBLIC_URL.to_owned(),
-            max_publish_bytes: MAX_NPM_PUBLISH_BYTES,
-        };
-        npm_proxy_router(
-            self.engine.clone(),
-            registry,
-            self.origin.clone(),
-            &settings,
-            NPM_NAME,
-        )
+        self.fixture.router(registry)
     }
 
-    /// Что upstream знает об имени; источник только для npm.
     pub(crate) fn presence(&self, format: Format, name: &str) -> Presence {
-        let names = EngineUpstreamNames::new(self.engine.clone(), None, Some(self.origin.clone()));
-        presence_of(&names, format, name)
+        self.fixture.presence(format, name)
     }
 
     pub(crate) fn advance(&self, by: Duration) {

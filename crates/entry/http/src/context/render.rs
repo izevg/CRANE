@@ -4,14 +4,15 @@ use axum::body::Body;
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::Response;
 use crane_domain::access::RequestId;
-use crane_format_cargo::render_errors;
-use crane_format_npm::render_error as render_npm_error;
+use crane_domain::registry::Format;
 use serde_json::json;
 
-use crate::error::{Dialect, ErrorBody, ProblemKind};
+use crate::error::{ErrorBody, ProblemKind};
+use crate::formats;
 
 /// Спека 04: клиенты и CI повторяют 503, окно failover PostgreSQL 10–30 с, поэтому просим подождать 10 с.
 const RETRY_AFTER_SECONDS: HeaderValue = HeaderValue::from_static("10");
+const PROBLEM_JSON: &str = "application/problem+json";
 
 /// Подставляет тело вместо пустого, если ответ несёт `ErrorBody`; остальные ответы не трогает.
 pub(super) fn render_error(mut response: Response, id: &RequestId) -> Response {
@@ -19,27 +20,14 @@ pub(super) fn render_error(mut response: Response, id: &RequestId) -> Response {
         return response;
     };
     let status = response.status();
-    let dialect = response.extensions_mut().remove::<Dialect>();
-    let (content_type, text) = match (error, dialect) {
-        // Клиенты cargo и npm показывают пользователю только текст ошибки, поэтому id уходит суффиксом.
-        (ErrorBody::Detail { detail, .. }, Some(Dialect::Cargo)) => (
-            "application/json",
-            render_errors(&format!("{detail} (request_id {})", id.as_str())),
-        ),
-        (ErrorBody::Detail { detail, .. }, Some(Dialect::Npm)) => (
-            "application/json",
-            render_npm_error(&format!("{detail} (request_id {})", id.as_str())),
-        ),
-        (ErrorBody::Detail { detail, kind }, None) => (
-            "application/problem+json",
-            problem(
-                status,
-                status.canonical_reason().unwrap_or("Error"),
-                &detail,
-                kind,
-                id,
-            ),
-        ),
+    let format = response.extensions_mut().remove::<Format>();
+    let (content_type, text) = match (error, format) {
+        (ErrorBody::Detail { detail, kind }, format) => format
+            .and_then(|format| formats::error_body(format, &detail, id.as_str()))
+            .unwrap_or_else(|| {
+                let title = status.canonical_reason().unwrap_or("Error");
+                (PROBLEM_JSON, problem(status, title, &detail, kind, id))
+            }),
         (
             ErrorBody::Problem {
                 title,
@@ -47,10 +35,7 @@ pub(super) fn render_error(mut response: Response, id: &RequestId) -> Response {
                 kind,
             },
             _,
-        ) => (
-            "application/problem+json",
-            problem(status, title, detail, kind, id),
-        ),
+        ) => (PROBLEM_JSON, problem(status, title, detail, kind, id)),
     };
     *response.body_mut() = Body::from(text);
     let headers = response.headers_mut();
@@ -93,8 +78,8 @@ mod tests {
 
     use super::*;
 
-    fn rendered(dialect: Option<Dialect>) -> (String, String) {
-        let response = render_with(StatusCode::BAD_REQUEST, dialect, ProblemKind::Blank);
+    fn rendered(format: Option<Format>) -> (String, String) {
+        let response = render_with(StatusCode::BAD_REQUEST, format, ProblemKind::Blank);
         let content_type = response.headers()[header::CONTENT_TYPE]
             .to_str()
             .unwrap()
@@ -102,14 +87,14 @@ mod tests {
         (content_type, body_text(response))
     }
 
-    fn render_with(status: StatusCode, dialect: Option<Dialect>, kind: ProblemKind) -> Response {
+    fn render_with(status: StatusCode, format: Option<Format>, kind: ProblemKind) -> Response {
         let mut response = status.into_response();
         response.extensions_mut().insert(ErrorBody::Detail {
             detail: "плохой запрос".to_owned(),
             kind,
         });
-        if let Some(dialect) = dialect {
-            response.extensions_mut().insert(dialect);
+        if let Some(format) = format {
+            response.extensions_mut().insert(format);
         }
         let id = RequestId::parse("req-1").unwrap();
         render_error(response, &id)
@@ -134,7 +119,7 @@ mod tests {
 
         // Act
         let actual = statuses.map(|status| {
-            render_with(status, Some(Dialect::Cargo), ProblemKind::Blank)
+            render_with(status, Some(Format::Cargo), ProblemKind::Blank)
                 .headers()
                 .get(header::RETRY_AFTER)
                 .cloned()
@@ -166,14 +151,14 @@ mod tests {
     }
 
     #[test]
-    fn cargo_body_of_an_unreachable_error_keeps_the_dialect_shape() {
+    fn cargo_body_of_an_unreachable_error_keeps_the_format_shape() {
         // Arrange
         let kind = ProblemKind::StorageUnreachable;
 
         // Act
         let body = body_text(render_with(
             StatusCode::SERVICE_UNAVAILABLE,
-            Some(Dialect::Cargo),
+            Some(Format::Cargo),
             kind,
         ));
 
@@ -185,15 +170,20 @@ mod tests {
     }
 
     #[test]
-    fn detail_takes_the_shape_of_the_dialect() {
+    fn detail_takes_the_shape_of_the_format() {
         // Arrange
-        let dialects = [Some(Dialect::Cargo), Some(Dialect::Npm), None];
+        let formats = [
+            Some(Format::Cargo),
+            Some(Format::Npm),
+            None,
+            Some(Format::PyPi),
+        ];
 
         // Act
-        let actual = dialects.map(rendered);
+        let actual = formats.map(rendered);
 
         // Assert
-        let [cargo, npm, none] = actual;
+        let [cargo, npm, none, pypi] = actual;
         assert_eq!(
             (cargo, npm.0, npm.1),
             (
@@ -205,6 +195,9 @@ mod tests {
                 r#"{"error":"плохой запрос (request_id req-1)"}"#.to_owned()
             )
         );
-        assert_eq!(none.0, "application/problem+json");
+        assert_eq!(
+            [none.0, pypi.0],
+            ["application/problem+json", "application/problem+json"]
+        );
     }
 }

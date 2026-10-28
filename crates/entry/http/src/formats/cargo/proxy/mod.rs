@@ -10,21 +10,42 @@ use bytes::Bytes;
 use crane_app::proxy::{ProxyEngine, ProxyError, Served};
 use crane_app::registry::Registry;
 use crane_domain::access::Caller;
-use crane_domain::proxy::{Origin, UpstreamPath};
+use crane_domain::proxy::{EgressRefusal, Origin, UpstreamPath};
 use crane_domain::registry::{Format, PackageName};
-use crane_format_cargo::{INDEX, index_path};
+use crane_format_cargo::{DL_HOST, INDEX, INDEX_HOST, index_path};
 use crane_ports::proxy::{FetchLeases, ProxyCache, Upstream};
 use crane_ports::registry::{BlobStore, Catalog};
 
-use super::{CARGO_PREFIX, CargoSettings, cargo_not_found};
+use super::cargo_not_found;
+use crate::formats::{FormatSettings, ProxySource};
 use crate::serve::Refusal;
 
 /// Источники одного proxy-репозитория: индекс и архивы живут на разных хостах, но под одним
 /// `RepositoryId` (ключи не пересекаются, см. `crane_format_cargo::INDEX`).
 #[derive(Debug, Clone)]
-pub struct CargoProxyOrigins {
-    pub index: Origin,
-    pub dl: Origin,
+struct CargoProxyOrigins {
+    index: Origin,
+    dl: Origin,
+}
+
+fn origins(source: &ProxySource<'_>) -> Result<CargoProxyOrigins, EgressRefusal> {
+    let origin = |host: &str| -> Result<Origin, EgressRefusal> {
+        Ok(Origin {
+            repository: source.repository,
+            base: source.policy.admit("https", host, None, "")?,
+        })
+    };
+    Ok(CargoProxyOrigins {
+        index: origin(INDEX_HOST)?,
+        dl: origin(DL_HOST)?,
+    })
+}
+
+/// Источник документа для проверки присутствия имени: индекс.
+pub(in crate::formats) fn presence_origin(
+    source: &ProxySource<'_>,
+) -> Result<Origin, EgressRefusal> {
+    Ok(origins(source)?.index)
 }
 
 /// Состояние обработчиков одного proxy-репозитория. `U, PC, L, B` — порты движка,
@@ -71,14 +92,13 @@ where
 }
 
 /// Router proxy-репозитория без слоя аутентификации: его накладывает `api_router`.
-/// `name` попадает в `config.json`, поэтому совпадает с именем, под которым router монтируется.
-pub fn cargo_proxy_router<U, PC, L, B, RC, RB>(
+/// Имя источника попадает в `config.json`, поэтому совпадает с именем, под которым router монтируется.
+pub(in crate::formats) fn proxy_router<U, PC, L, B, RC, RB>(
     engine: ProxyEngine<U, PC, L, B>,
     registry: Arc<Registry<RC, RB>>,
-    origins: CargoProxyOrigins,
-    settings: &CargoSettings,
-    name: &str,
-) -> Router
+    source: &ProxySource<'_>,
+    settings: &FormatSettings,
+) -> Result<Router, EgressRefusal>
 where
     U: Upstream + 'static,
     PC: ProxyCache + 'static,
@@ -90,10 +110,10 @@ where
     let shared = Arc::new(Shared {
         engine,
         registry,
-        origins,
-        base: format!("{}{CARGO_PREFIX}/{name}", settings.public_url),
+        origins: origins(source)?,
+        base: settings.mount(Format::Cargo, source.name),
     });
-    Router::new()
+    Ok(Router::new()
         .route("/index/config.json", get(routes::config))
         .route("/index/{*path}", get(routes::sparse))
         .route(
@@ -102,5 +122,5 @@ where
         )
         .route("/api/v1/crates/new", put(routes::not_hosted))
         .fallback(cargo_not_found)
-        .with_state(shared)
+        .with_state(shared))
 }

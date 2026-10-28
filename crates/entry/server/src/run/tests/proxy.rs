@@ -6,7 +6,6 @@
 
 use std::future::Future;
 
-use crane_http::{CargoSettings, NpmSettings};
 use crane_memory::{MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use tokio::runtime::Builder;
 
@@ -93,9 +92,9 @@ fn free_name_is_registered_as_proxy_and_prepared() {
 
     // Assert
     let names: Vec<&str> = prepared
-        .cargo
+        .repos
         .iter()
-        .map(|(name, _)| name.as_str())
+        .map(|(_, name, _)| name.as_str())
         .collect();
     assert_eq!(names, [NAME]);
     let stored = block_on(catalog.find_repository(Format::Cargo, NAME))
@@ -193,33 +192,54 @@ fn mount_builds_a_router_for_every_prepared_name_of_each_format() {
         ))
     };
     let formats = FormatSettings {
-        cargo: CargoSettings {
-            public_url: "http://crane.test".to_owned(),
-            max_publish_bytes: 1_024,
-        },
-        npm: NpmSettings {
-            public_url: "http://crane.test".to_owned(),
-            max_publish_bytes: 1_024,
-        },
+        public_url: "http://crane.test".to_owned(),
+        max_publish_bytes: 1_024,
     };
     let (cargo_registry, npm_registry) = (registry(&cargo), registry(&npm));
 
     // Act
     let mounted = [
-        cargo.mount(&cargo_registry, &formats),
-        npm.mount(&npm_registry, &formats),
+        cargo.mount(&cargo_registry, &formats).unwrap(),
+        npm.mount(&npm_registry, &formats).unwrap(),
     ];
 
     // Assert
     let names = mounted.map(|routers| {
-        let of = |routers: Vec<(String, axum::Router)>| {
-            routers
-                .into_iter()
-                .map(|(name, _)| name)
-                .collect::<Vec<_>>()
-        };
-        (of(routers.cargo), of(routers.npm))
+        routers
+            .into_iter()
+            .map(|(format, name, _)| (format, name))
+            .collect::<Vec<_>>()
     });
-    let expected = vec![NAME.to_owned()];
-    assert_eq!(names, [(expected.clone(), vec![]), (vec![], expected)]);
+    let expected = |format| vec![(format, NAME.to_owned())];
+    assert_eq!(names, [expected(Format::Cargo), expected(Format::Npm)]);
+}
+
+#[test]
+fn mount_refuses_a_format_without_proxy_support() {
+    // Arrange
+    let mut prepared = block_on(build(&MemoryCatalog::default())).unwrap().unwrap();
+    let repository = prepared.repos[0].2;
+    prepared.repos = vec![(Format::PyPi, NAME.to_owned(), repository)];
+    let registry = Arc::new(Registry::new(
+        MemoryCatalog::default(),
+        Arc::new(MemoryBlobStore::default()),
+        Arc::new(SystemClock),
+        Arc::new(SequentialIdGen::default()),
+        Arc::new(MemoryAudit::default()),
+        prepared.upstream_names(),
+    ));
+    let formats = FormatSettings {
+        public_url: "http://crane.test".to_owned(),
+        max_publish_bytes: 1_024,
+    };
+
+    // Act
+    let result = prepared.mount(&registry, &formats);
+
+    // Assert
+    let message = result.err().map(|error| error.to_string());
+    assert_eq!(
+        message.as_deref(),
+        Some("proxy формата pypi не поддерживается")
+    );
 }

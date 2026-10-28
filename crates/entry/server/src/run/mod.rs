@@ -11,9 +11,7 @@ use std::time::Duration;
 use axum::Router;
 use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
-use crane_http::{
-    CargoSettings, FormatSettings, NpmSettings, ProxyRouters, StaticToken, admin_router, api_router,
-};
+use crane_http::{FormatSettings, StaticToken, admin_router, api_router};
 use crane_memory::{MemoryBlobStore, MemoryCatalog};
 use crane_objstore::ObjectBlobStore;
 use crane_pg::PgCatalog;
@@ -79,20 +77,6 @@ async fn connect(database: &Database) -> Result<PgPool, RunError> {
         })
 }
 
-/// Настройки HTTP-слоя форматов: публичный адрес и предел публикации у всех общие.
-fn format_settings(public_url: String, max_publish_bytes: usize) -> FormatSettings {
-    FormatSettings {
-        cargo: CargoSettings {
-            public_url: public_url.clone(),
-            max_publish_bytes,
-        },
-        npm: NpmSettings {
-            public_url,
-            max_publish_bytes,
-        },
-    }
-}
-
 async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     catalog: C,
     blobs: B,
@@ -113,7 +97,11 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
                 .await?;
         }
     }
-    let formats = format_settings(settings.public_url, settings.max_publish_bytes);
+    // Публичный адрес и предел публикации у всех форматов общие.
+    let formats = FormatSettings {
+        public_url: settings.public_url,
+        max_publish_bytes: settings.max_publish_bytes,
+    };
     // Registry и движок делят один CAS: скачанные архивы лежат там же, где опубликованные.
     let blobs = Arc::new(blobs);
     // Движок и источники строятся до `Registry`: из того же движка берётся проверка, знает ли
@@ -140,16 +128,17 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         upstream,
     ));
     namespaces::reserve(&registry, ids.as_ref(), settings.namespaces).await?;
-    let proxy_repos = proxies.map_or_else(ProxyRouters::default, |proxies| {
-        proxies.mount(&registry, &formats)
-    });
+    let proxy_repos = proxies.map_or_else(
+        || Ok(Vec::new()),
+        |proxies| proxies.mount(&registry, &formats),
+    )?;
     let admin = admin_router(registry.clone());
     // Сырой токен живёт только до этой строки: дальше остаётся его хэш.
     let token = StaticToken::new(settings.token.expose().as_bytes(), settings.principal);
     drop(settings.token);
     let api = api_router(
-        registry,
-        formats,
+        &registry,
+        &formats,
         token,
         settings.trusted_proxies,
         audit,

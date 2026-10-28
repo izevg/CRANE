@@ -1,16 +1,15 @@
 //! Сборка proxy-репозиториев: один движок на процесс для всех форматов, router на каждое имя.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use axum::Router;
 use crane_app::proxy::{ProxyEngine, ProxyLimits};
 use crane_app::registry::Registry;
 use crane_domain::proxy::{EgressPolicy, Origin};
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
-use crane_format_cargo::{DL_HOST, INDEX_HOST};
-use crane_format_npm::REGISTRY_HOST;
 use crane_http::{
-    CargoProxyOrigins, EngineUpstreamNames, FormatSettings, ProxyRouters, cargo_proxy_router,
-    npm_proxy_router,
+    EngineUpstreamNames, FormatSettings, ProxySource, presence_origin, proxy_router, upstream_hosts,
 };
 use crane_ports::proxy::UpstreamNames;
 use crane_ports::registry::{BlobStore, Catalog};
@@ -55,18 +54,19 @@ async fn register<C: Catalog>(
 /// движка, поэтому сборка идёт в два шага.
 pub(super) struct Prepared<B> {
     engine: ProxyEngine<HttpUpstream, Backend, Backend, Arc<B>>,
-    cargo: Vec<(String, CargoProxyOrigins)>,
-    npm: Vec<(String, Origin)>,
+    policy: EgressPolicy,
+    repos: Vec<(Format, String, RepositoryId)>,
+    /// Источник документа для проверки имён: по первому proxy-репозиторию каждого формата
+    /// (хосты upstream у всех одни, ключ кэша по репозиторию, поэтому одного достаточно).
+    sources: BTreeMap<Format, Origin>,
 }
 
 impl<B: BlobStore + 'static> Prepared<B> {
-    /// Что публичные реестры знают об имени: по первому proxy-репозиторию каждого формата
-    /// (хосты upstream у всех одни, ключ кэша по репозиторию, поэтому одного достаточно).
+    /// Что публичные реестры знают об имени.
     pub(super) fn upstream_names(&self) -> Arc<dyn UpstreamNames> {
         Arc::new(EngineUpstreamNames::new(
             self.engine.clone(),
-            self.cargo.first().map(|(_, origins)| origins.index.clone()),
-            self.npm.first().map(|(_, origin)| origin.clone()),
+            self.sources.clone(),
         ))
     }
 
@@ -74,32 +74,26 @@ impl<B: BlobStore + 'static> Prepared<B> {
     pub(super) fn mount<C: Catalog + 'static>(
         self,
         registry: &Arc<Registry<C, Arc<B>>>,
-        formats: &FormatSettings,
-    ) -> ProxyRouters {
-        let cargo = self.cargo.into_iter().map(|(name, origins)| {
-            let router = cargo_proxy_router(
+        settings: &FormatSettings,
+    ) -> Result<Vec<(Format, String, Router)>, RunError> {
+        let mut routers = Vec::with_capacity(self.repos.len());
+        for (format, name, repository) in self.repos {
+            let source = ProxySource {
+                repository,
+                name: &name,
+                policy: &self.policy,
+            };
+            let router = proxy_router(
+                format,
                 self.engine.clone(),
                 Arc::clone(registry),
-                origins,
-                &formats.cargo,
-                &name,
-            );
-            (name, router)
-        });
-        let npm = self.npm.into_iter().map(|(name, origin)| {
-            let router = npm_proxy_router(
-                self.engine.clone(),
-                Arc::clone(registry),
-                origin,
-                &formats.npm,
-                &name,
-            );
-            (name, router)
-        });
-        ProxyRouters {
-            cargo: cargo.collect(),
-            npm: npm.collect(),
+                &source,
+                settings,
+            )?
+            .ok_or_else(|| format!("proxy формата {} не поддерживается", format.as_str()))?;
+            routers.push((format, name, router));
         }
+        Ok(routers)
     }
 }
 
@@ -119,54 +113,51 @@ pub(super) async fn prepare_proxies<C: Catalog, B: BlobStore + 'static>(
     catalog: &C,
     ids: &dyn IdGen,
     blobs: Arc<B>,
-    repos: &Repos,
+    repos_config: &Repos,
     proxy: Proxy,
 ) -> Result<Option<Prepared<B>>, RunError> {
-    if !repos.any(RepositoryKind::Proxy) {
+    if !repos_config.any(RepositoryKind::Proxy) {
         return Ok(None);
     }
     // Хосты upstream зашиты в форматы: proxy ходит только на них, и только по https.
-    let policy = EgressPolicy::new([INDEX_HOST, DL_HOST, REGISTRY_HOST], false);
-    let index = policy.admit("https", INDEX_HOST, None, "")?;
-    let dl = policy.admit("https", DL_HOST, None, "")?;
-    let registry = policy.admit("https", REGISTRY_HOST, None, "")?;
+    let policy = EgressPolicy::new(
+        Format::ALL
+            .iter()
+            .flat_map(|format| upstream_hosts(*format).iter().copied()),
+        false,
+    );
     // Один бэкенд на оба порта: кэш и lease выбираются вместе (`CRANE_CACHE`).
     let shared = cache::backend(proxy.cache);
     let engine = ProxyEngine::new(
-        HttpUpstream::new(policy)?,
+        HttpUpstream::new(policy.clone())?,
         shared.clone(),
         shared,
         blobs,
         Arc::new(SystemClock),
         limits(proxy.max_artifact_bytes),
     );
-    let mut cargo = Vec::new();
-    for name in repos.names(Format::Cargo, RepositoryKind::Proxy) {
-        let stored = register(catalog, ids, Format::Cargo, name).await?;
-        // Индекс и архивы под одним id: ключи не пересекаются (первый сегмент `crates` не бывает у индекса).
-        let origins = CargoProxyOrigins {
-            index: Origin {
+    let mut repos = Vec::new();
+    let mut sources = BTreeMap::new();
+    for format in Format::ALL {
+        for name in repos_config.names(format, RepositoryKind::Proxy) {
+            let stored = register(catalog, ids, format, name).await?;
+            let source = ProxySource {
                 repository: stored.id,
-                base: index.clone(),
-            },
-            dl: Origin {
-                repository: stored.id,
-                base: dl.clone(),
-            },
-        };
-        cargo.push((name.clone(), origins));
+                name,
+                policy: &policy,
+            };
+            if let Some(origin) = presence_origin(format, &source)? {
+                sources.entry(format).or_insert(origin);
+            }
+            repos.push((format, name.clone(), stored.id));
+        }
     }
-    let mut npm = Vec::new();
-    for name in repos.names(Format::Npm, RepositoryKind::Proxy) {
-        let stored = register(catalog, ids, Format::Npm, name).await?;
-        // Документы и архивы под одним id: ключи не пересекаются (архивы всегда содержат `/-/`).
-        let origin = Origin {
-            repository: stored.id,
-            base: registry.clone(),
-        };
-        npm.push((name.clone(), origin));
-    }
-    Ok(Some(Prepared { engine, cargo, npm }))
+    Ok(Some(Prepared {
+        engine,
+        policy,
+        repos,
+        sources,
+    }))
 }
 
 #[cfg(test)]
