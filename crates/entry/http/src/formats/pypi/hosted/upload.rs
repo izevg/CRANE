@@ -21,6 +21,26 @@ use crate::error::{ClientError, chain};
 const FILE_FIELD: &str = "content";
 /// Предел одного текстового поля: `description` (README пакета) бывает в сотни килобайт.
 const TEXT_FIELD_LIMIT: u64 = 1024 * 1024;
+/// Суммарный объём текстовых полей до `content` и их число: форма без файла не должна
+/// заставлять буферизовать всё тело.
+const TEXT_TOTAL_LIMIT: usize = 4 * 1024 * 1024;
+const TEXT_FIELD_COUNT: usize = 256;
+
+/// Сколько текстовых полей уже прочитано.
+#[derive(Debug, Default)]
+struct TextBudget {
+    bytes: usize,
+    fields: usize,
+}
+
+impl TextBudget {
+    /// Учитывает очередное поле; `false` — число или суммарный объём полей превысили предел.
+    fn take(&mut self, len: usize) -> bool {
+        self.fields += 1;
+        self.bytes = self.bytes.saturating_add(len);
+        self.fields <= TEXT_FIELD_COUNT && self.bytes <= TEXT_TOTAL_LIMIT
+    }
+}
 
 pub(super) async fn upload<C: Catalog + 'static, B: BlobStore + 'static>(
     State(shared): State<Arc<Shared<C, B>>>,
@@ -39,28 +59,42 @@ pub(super) async fn upload<C: Catalog + 'static, B: BlobStore + 'static>(
         .and_then(|value| value.to_str().ok())
         .and_then(|value| multer::parse_boundary(value).ok())
         .ok_or_else(|| ClientError::bad_request("ожидается multipart/form-data"))?;
-    // Размер всего тела ограничивает multer: сырой `Body` не знает про `DefaultBodyLimit`.
-    let constraints = Constraints::new().size_limit(
-        SizeLimit::new()
-            .whole_stream(limit)
-            .per_field(TEXT_FIELD_LIMIT)
-            .for_field(FILE_FIELD, limit),
-    );
-    let mut form = Multipart::with_constraints(body.into_data_stream(), boundary, constraints);
+    let mut form =
+        Multipart::with_constraints(body.into_data_stream(), boundary, constraints(limit));
     let mut fields = Vec::new();
+    let mut budget = TextBudget::default();
     while let Some(field) = form.next_field().await.map_err(|e| form_error(&e))? {
-        let Some(name) = field.name().map(str::to_owned) else {
-            continue;
-        };
-        if name == FILE_FIELD {
+        let name = field.name().map(str::to_owned);
+        if name.as_deref() == Some(FILE_FIELD) {
             // Форма жива до конца `attach`: поток файла читает её же буфер.
             return attach_file(&shared, &caller, repo, &fields, field).await;
         }
-        fields.push((name, field.text().await.map_err(|e| form_error(&e))?));
+        let Some(name) = name else {
+            // Часть без имени не нужна, но считается: иначе их число не ограничено.
+            if !budget.take(0) {
+                return Err(too_large());
+            }
+            continue;
+        };
+        let text = field.text().await.map_err(|e| form_error(&e))?;
+        if !budget.take(name.len() + text.len()) {
+            return Err(too_large());
+        }
+        fields.push((name, text));
     }
     Err(ClientError::bad_request(
         "в форме нет части content с файлом",
     ))
+}
+
+/// Размер всего тела ограничивает multer: сырой `Body` не знает про `DefaultBodyLimit`.
+fn constraints(limit: u64) -> Constraints {
+    Constraints::new().size_limit(
+        SizeLimit::new()
+            .whole_stream(limit)
+            .per_field(TEXT_FIELD_LIMIT)
+            .for_field(FILE_FIELD, limit),
+    )
 }
 
 /// Проверка по полям формы и имени файла идёт до чтения тела, поэтому часть `content` должна
@@ -149,3 +183,7 @@ fn upload_error(error: RegistryError, filename: &str) -> ClientError {
     }
     error.into()
 }
+
+#[cfg(test)]
+#[path = "tests/upload.rs"]
+mod tests;
