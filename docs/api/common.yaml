@@ -3885,18 +3885,24 @@ components:
         dep_scope:
           $ref: '#/components/schemas/DepScope'
         deployed:
-          type: boolean
+          type:
+          - boolean
+          - 'null'
+          description: Развёрнуто у потребителей (поле v1.1.0; до неё null).
         workspace:
           type:
           - string
           - 'null'
-          description: Команда-владелец (workspace)
+          description: Команда-владелец (workspace; поле v1.1.0; до неё null)
         issue:
           oneOf:
           - $ref: '#/components/schemas/IssueRef'
           - type: 'null'
         scores:
-          type: array
+          type:
+          - array
+          - 'null'
+          description: Оценки systemone (поле v1.1.0; до неё null).
           items:
             $ref: '#/components/schemas/ScoreBrief'
         _links:
@@ -4022,7 +4028,10 @@ components:
         kev_open:
           type: integer
         emergency_blocks:
-          $ref: '#/components/schemas/EmergencyCounts'
+          oneOf:
+          - $ref: '#/components/schemas/EmergencyCounts'
+          - type: 'null'
+          description: Ручной экстренный режим появляется в v1.1.0; до неё null.
         oldest_unhandled_p0:
           oneOf:
           - $ref: '#/components/schemas/OldestP0'
@@ -4523,12 +4532,15 @@ components:
         dep_scope:
           $ref: '#/components/schemas/DepScope'
         deployed:
-          type: boolean
+          type:
+          - boolean
+          - 'null'
+          description: Развёрнуто у потребителей (поле v1.1.0; до неё null).
         workspace:
           type:
           - string
           - 'null'
-          description: Команда-владелец (workspace)
+          description: Команда-владелец (workspace; поле v1.1.0; до неё null)
         issue:
           oneOf:
           - $ref: '#/components/schemas/IssueRef'
@@ -4552,7 +4564,9 @@ components:
           description: Оценки systemone с факторами.
           properties:
             crane:scores:
-              type: array
+              type:
+              - array
+              - 'null'
               items:
                 $ref: '#/components/schemas/ScoreItem'
           required:

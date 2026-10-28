@@ -150,8 +150,7 @@ CREATE TABLE risk_score (
 
 CREATE TABLE evidence (
   id uuid PRIMARY KEY,               -- UUIDv7
-  version_id uuid NOT NULL REFERENCES package_version,
-  subject_sha256 bytea NOT NULL,     -- digest файла версии, о котором утверждение; при приёме сверяется с blob
+  subject_sha256 bytea NOT NULL,     -- субъект: digest файла (blob), о котором утверждение; версии находятся через asset → blob (21.4)
   kind text NOT NULL,                -- dsse | sigstore | pgp | jwt | none: чем проверять; gate не читает
   predicate_type text NOT NULL,      -- URI типа содержимого; вид доказательства для gates и UI
   trust text NOT NULL,               -- upstream | publisher | integration | crane: откуда пришло
@@ -165,7 +164,7 @@ CREATE TABLE evidence (
   media_type text NOT NULL,
   created_at timestamptz NOT NULL,
   CHECK ((kind = 'none') = (verify_result = 'unsigned')));
-CREATE INDEX evidence_by_type ON evidence (version_id, predicate_type, created_at DESC);  -- evidence.latest(version, types)
+CREATE INDEX evidence_by_type ON evidence (subject_sha256, predicate_type, created_at DESC);  -- evidence.latest(blob, types); для версии — по её asset
 ```
 
 Evidence расширяется строками, а не колонками. Новый вид доказательства означает новую строку с новым URI в `predicate_type`; ни колонка, ни enum не добавляются. Gates и UI читают evidence только по `predicate_type`. Подписанность выражена в `verify_result`, а `kind` (формат конверта) нужен лишь верификатору: отчёт Trivy и SLSA provenance из npm одинаково доходят до gate, а политика решает по `trust` и `verify_result`, чему доверять. Голая подпись файла (PGP, Sigstore без предиката) тоже получает свой URI, поэтому `predicate_type` всегда заполнен и NULL в ключе индекса нет.
