@@ -1,18 +1,18 @@
 //! Аудит публикации: успех, повтор, неизвестный репозиторий, сбой бэкенда.
 
 use crane_domain::audit::{AuditAction, Outcome};
-use crane_domain::registry::VersionState;
+use crane_domain::registry::{Format, Namespace, NamespacePattern, VersionState, WorkspaceId};
 use futures_executor::block_on;
 
 use crate::common::faults::{RecordingBlobs, commit_log};
-use crate::common::{Seed, caller, coordinate, publish_request};
+use crate::common::{Seed, caller, coordinate, name, publish_request};
 
 use super::{event, failure};
 
 const HELLO: [&[u8]; 1] = [b"hello"];
 
 #[test]
-fn successful_publish_records_one_success_event() {
+fn successful_publish_of_new_name_records_publish_and_reserve_events() {
     // Arrange
     let seed = Seed::new();
     let audit = seed.audit();
@@ -25,10 +25,20 @@ fn successful_publish_records_one_success_event() {
     // Assert
     assert_eq!(
         audit.events(),
-        [event(
-            AuditAction::Publish(coordinate("foo", "1.0.0")),
-            Outcome::Success
-        )]
+        [
+            event(
+                AuditAction::Publish(coordinate("foo", "1.0.0")),
+                Outcome::Success
+            ),
+            event(
+                AuditAction::Reserve(Namespace {
+                    format: Format::Cargo,
+                    pattern: NamespacePattern::exact(&name("foo")),
+                    workspace: WorkspaceId::DEFAULT,
+                }),
+                Outcome::Success
+            ),
+        ]
     );
 }
 

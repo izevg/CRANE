@@ -4,8 +4,8 @@ use std::future::{Future, ready};
 use std::sync::{Arc, Mutex};
 
 use crane_domain::registry::{
-    Format, PackageName, PackageVersion, Repository, RepositoryId, Sha256, Version, VersionId,
-    VersionState,
+    Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Sha256, Version,
+    VersionId, VersionState,
 };
 use crane_memory::{MemoryBlobStore, MemoryCatalog};
 use crane_ports::registry::{
@@ -106,6 +106,29 @@ impl Catalog for BlindCatalog {
     ) -> impl Future<Output = Result<(), CatalogError>> + Send {
         self.0.transition(id, from, to)
     }
+
+    fn namespace_for(
+        &self,
+        format: Format,
+        name: &PackageName,
+    ) -> impl Future<Output = Result<Option<Namespace>, CatalogError>> + Send {
+        self.0.namespace_for(format, name)
+    }
+
+    fn hosted_exists(
+        &self,
+        format: Format,
+        name: &PackageName,
+    ) -> impl Future<Output = Result<bool, CatalogError>> + Send {
+        self.0.hosted_exists(format, name)
+    }
+
+    fn ensure_namespace(
+        &self,
+        namespace: Namespace,
+    ) -> impl Future<Output = Result<Namespace, CatalogError>> + Send {
+        self.0.ensure_namespace(namespace)
+    }
 }
 
 /// Каталог, который не отвечает на `find_repository`; остальное делегируется.
@@ -201,6 +224,29 @@ impl Catalog for DownCatalog {
         to: VersionState,
     ) -> impl Future<Output = Result<(), CatalogError>> + Send {
         self.0.transition(id, from, to)
+    }
+
+    fn namespace_for(
+        &self,
+        format: Format,
+        name: &PackageName,
+    ) -> impl Future<Output = Result<Option<Namespace>, CatalogError>> + Send {
+        self.0.namespace_for(format, name)
+    }
+
+    fn hosted_exists(
+        &self,
+        format: Format,
+        name: &PackageName,
+    ) -> impl Future<Output = Result<bool, CatalogError>> + Send {
+        self.0.hosted_exists(format, name)
+    }
+
+    fn ensure_namespace(
+        &self,
+        namespace: Namespace,
+    ) -> impl Future<Output = Result<Namespace, CatalogError>> + Send {
+        self.0.ensure_namespace(namespace)
     }
 }
 

@@ -14,10 +14,10 @@ const ABBREVIATED: &str = "application/vnd.npm.install-v1+json";
 fn published_version_appears_in_full_packument_with_our_tarball_url_and_integrity() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
 
     // Act
-    let reply = api.npm_get(&packument_uri("left-pad"));
+    let reply = api.npm_get(&packument_uri("@acme/left-pad"));
 
     // Assert
     assert_eq!(reply.status, StatusCode::OK);
@@ -28,22 +28,22 @@ fn published_version_appears_in_full_packument_with_our_tarball_url_and_integrit
     assert_eq!(doc["dist-tags"], json!({"latest": "1.0.0"}));
     assert_eq!(
         version["dist"]["tarball"],
-        format!("{PUBLIC_URL}/npm/{NPM_REPO}/left-pad/-/left-pad-1.0.0.tgz")
+        format!("{PUBLIC_URL}/npm/{NPM_REPO}/@acme/left-pad/-/left-pad-1.0.0.tgz")
     );
     assert_eq!(version["dist"]["integrity"], integrity(TARBALL));
-    assert_eq!(version["_id"], "left-pad@1.0.0");
+    assert_eq!(version["_id"], "@acme/left-pad@1.0.0");
 }
 
 #[test]
 fn abbreviated_packument_is_served_only_when_requested() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
 
     // Act
     let reply = api.with_headers(
         Method::GET,
-        &packument_uri("left-pad"),
+        &packument_uri("@acme/left-pad"),
         &[
             ("authorization", &crate::common::npm::bearer()),
             ("accept", ABBREVIATED),
@@ -55,7 +55,7 @@ fn abbreviated_packument_is_served_only_when_requested() {
     assert_eq!(reply.header("content-type"), ABBREVIATED);
     assert_eq!(reply.header("vary"), "Accept");
     let doc = reply.json();
-    assert_eq!(doc["name"], "left-pad");
+    assert_eq!(doc["name"], "@acme/left-pad");
     assert!(doc.get("_id").is_none(), "{doc}");
     assert_eq!(
         doc["versions"]["1.0.0"]["dependencies"],
@@ -67,16 +67,16 @@ fn abbreviated_packument_is_served_only_when_requested() {
 fn packument_supports_conditional_requests() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
     let etag = api
-        .npm_get(&packument_uri("left-pad"))
+        .npm_get(&packument_uri("@acme/left-pad"))
         .header("etag")
         .to_owned();
 
     // Act
     let reply = api.with_headers(
         Method::GET,
-        &packument_uri("left-pad"),
+        &packument_uri("@acme/left-pad"),
         &[
             ("authorization", &crate::common::npm::bearer()),
             ("if-none-match", &etag),
@@ -92,10 +92,10 @@ fn packument_supports_conditional_requests() {
 fn tarball_is_served_byte_for_byte() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
 
     // Act
-    let reply = api.npm_get(&tarball_uri("left-pad", "1.0.0"));
+    let reply = api.npm_get(&tarball_uri("@acme/left-pad", "1.0.0"));
 
     // Assert
     assert_eq!(reply.status, StatusCode::OK);
@@ -107,10 +107,10 @@ fn tarball_is_served_byte_for_byte() {
 fn head_of_packument_is_answered_like_get() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
 
     // Act
-    let reply = api.npm(Method::HEAD, &packument_uri("left-pad"), Vec::new());
+    let reply = api.npm(Method::HEAD, &packument_uri("@acme/left-pad"), Vec::new());
 
     // Assert
     assert_eq!(reply.status, StatusCode::OK);

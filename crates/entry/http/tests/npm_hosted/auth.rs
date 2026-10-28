@@ -39,7 +39,12 @@ fn missing_bearer_token_is_unauthorized_with_bearer_challenge() {
     let api = Api::new();
 
     // Act
-    let reply = api.with_headers(Method::GET, &packument_uri("left-pad"), &[], Vec::new());
+    let reply = api.with_headers(
+        Method::GET,
+        &packument_uri("@acme/left-pad"),
+        &[],
+        Vec::new(),
+    );
 
     // Assert
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
@@ -58,7 +63,7 @@ fn wrong_or_schemeless_token_is_forbidden_and_audited() {
     let statuses = cases.map(|value| {
         api.with_headers(
             Method::GET,
-            &packument_uri("left-pad"),
+            &packument_uri("@acme/left-pad"),
             &[("authorization", value)],
             Vec::new(),
         )

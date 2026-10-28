@@ -1,8 +1,9 @@
 // Сценарий proxy-репозитория crates.io: настоящий cargo собирает проект с зависимостью с crates.io
 // через `[source.crates-io] replace-with`, второй прогон с пустым CARGO_HOME идёт из кэша crane.
-import { accessLines } from "./audit.ts";
+import { accessLines, type Expected } from "./audit.ts";
 import { authorizedCurl, type CargoClient } from "./cargo.ts";
 import { tail } from "./exec.ts";
+import { expectHostedWins, indexPath } from "./hosted-wins.ts";
 import type { Stand } from "./stand.ts";
 
 const PROXY_REGISTRY = "crane-proxy";
@@ -62,7 +63,8 @@ export function proxyScenario(
   client: CargoClient,
   minor: number,
   repo: string,
-): void {
+  hostedName: string,
+): Expected[] {
   const base = `/cargo/${repo}`;
   const url = `https://localhost${base}`;
   const project = `proxyapp_${stand.id}_${minor}`;
@@ -110,6 +112,8 @@ export function proxyScenario(
   if (status.stdout.trim() !== String(HTTP_NOT_FOUND)) {
     throw new Error(`версия вне индекса: ожидался 404, получен ${status.stdout.trim()}`);
   }
+  const proxied = `${url}/index/${indexPath(hostedName)}`;
+  return [expectHostedWins(stand, client, proxied, hostedName, undefined)];
 }
 
 /** Для каждого пути есть успешная строка, и все такие строки несут ожидаемое значение `cache`. */

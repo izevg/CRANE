@@ -9,11 +9,14 @@
 
 pub(crate) mod capture;
 pub(crate) mod cargo;
+pub(crate) mod names;
 pub(crate) mod npm;
 pub(crate) mod proxy;
+pub(crate) mod switch;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 use axum::Router;
@@ -31,6 +34,7 @@ use crane_http::{
 };
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::audit::AuditSink;
+use crane_ports::proxy::{NoUpstream, UpstreamNames};
 use crane_ports::registry::Catalog;
 use crane_ports::system::IdGen;
 use http_body_util::BodyExt;
@@ -39,6 +43,9 @@ use tokio::runtime::{Builder, Runtime};
 use tower::ServiceExt;
 
 use self::cargo::{index_path, publish_body};
+use self::switch::SwitchCatalog;
+/// Реестр фикстуры; proxy-router получает его для защиты имён.
+pub(crate) type TestRegistry = Registry<SwitchCatalog, MemoryBlobStore>;
 
 pub(crate) const TOKEN: &str = "s3cret-token";
 pub(crate) const PUBLIC_URL: &str = "https://crane.example";
@@ -83,12 +90,36 @@ impl Reply {
     }
 }
 
+/// Каталог с hosted- и proxy-репозиториями обоих форматов.
+fn seeded_catalog(runtime: &Runtime, ids: &SequentialIdGen) -> MemoryCatalog {
+    let catalog = MemoryCatalog::default();
+    for (format, name, kind) in [
+        (Format::Cargo, REPO, RepositoryKind::Hosted),
+        (Format::Cargo, PROXY_REPO, RepositoryKind::Proxy),
+        (Format::Npm, NPM_REPO, RepositoryKind::Hosted),
+        (Format::Npm, NPM_PROXY_REPO, RepositoryKind::Proxy),
+    ] {
+        runtime
+            .block_on(catalog.ensure_repository(Repository {
+                id: RepositoryId::new(ids.generate()),
+                format,
+                kind,
+                name: name.to_owned(),
+            }))
+            .unwrap();
+    }
+    catalog
+}
+
 pub(crate) struct Api {
     runtime: Runtime,
     router: Router,
     admin: Router,
     audit: Arc<MemoryAudit>,
     clock: Arc<ManualClock>,
+    registry: Arc<TestRegistry>,
+    ids: Arc<SequentialIdGen>,
+    catalog_down: Arc<AtomicBool>,
 }
 
 impl Api {
@@ -104,69 +135,62 @@ impl Api {
 
     /// `sink` получает события и use cases, и слоя auth; `audit` — то, что отдаёт `audit_events`.
     pub(crate) fn build(proxies: &str, sink: Arc<dyn AuditSink>, audit: Arc<MemoryAudit>) -> Self {
-        Self::build_with(proxies, sink, audit, ProxyRouters::default())
+        Self::build_with(proxies, sink, audit, Arc::new(NoUpstream), |_| {
+            ProxyRouters::default()
+        })
     }
 
-    /// Рядом с hosted-репозиториями монтируются готовые proxy-routers.
-    pub(crate) fn with_proxy_repos(proxy_repos: Vec<(String, Router)>) -> Self {
+    /// Рядом с hosted-репозиториями монтируется cargo proxy-router над тем же `Registry`.
+    pub(crate) fn with_proxy(proxy: &proxy::Proxy) -> Self {
         let audit = Arc::new(MemoryAudit::default());
-        Self::build_with(
-            "",
-            audit.clone(),
-            audit,
+        Self::build_with("", audit.clone(), audit, Arc::new(NoUpstream), |registry| {
             ProxyRouters {
-                cargo: proxy_repos,
+                cargo: vec![(proxy::NAME.to_owned(), proxy.router(registry.clone()))],
                 npm: Vec::new(),
-            },
-        )
+            }
+        })
     }
 
-    /// Рядом с hosted-репозиториями монтируются готовые proxy-routers npm.
-    pub(crate) fn with_npm_proxy_repos(npm: Vec<(String, Router)>) -> Self {
+    /// Рядом с hosted-репозиториями монтируется npm proxy-router над тем же `Registry`.
+    pub(crate) fn with_npm_proxy(proxy: &proxy::NpmProxy) -> Self {
         let audit = Arc::new(MemoryAudit::default());
-        Self::build_with(
-            "",
-            audit.clone(),
-            audit,
+        Self::build_with("", audit.clone(), audit, Arc::new(NoUpstream), |registry| {
             ProxyRouters {
                 cargo: Vec::new(),
-                npm,
-            },
-        )
+                npm: vec![(proxy::NPM_NAME.to_owned(), proxy.router(registry.clone()))],
+            }
+        })
+    }
+
+    /// Публичный реестр отвечает на вопрос «знаешь ли имя» заданным ответом.
+    pub(crate) fn with_upstream(upstream: Arc<dyn UpstreamNames>) -> Self {
+        let audit = Arc::new(MemoryAudit::default());
+        Self::build_with("", audit.clone(), audit, upstream, |_| {
+            ProxyRouters::default()
+        })
     }
 
     fn build_with(
         proxies: &str,
         sink: Arc<dyn AuditSink>,
         audit: Arc<MemoryAudit>,
-        proxy_repos: ProxyRouters,
+        upstream: Arc<dyn UpstreamNames>,
+        mount: impl FnOnce(&Arc<TestRegistry>) -> ProxyRouters,
     ) -> Self {
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let ids = Arc::new(SequentialIdGen::default());
-        let catalog = MemoryCatalog::default();
-        for (format, name, kind) in [
-            (Format::Cargo, REPO, RepositoryKind::Hosted),
-            (Format::Cargo, PROXY_REPO, RepositoryKind::Proxy),
-            (Format::Npm, NPM_REPO, RepositoryKind::Hosted),
-            (Format::Npm, NPM_PROXY_REPO, RepositoryKind::Proxy),
-        ] {
-            runtime
-                .block_on(catalog.ensure_repository(Repository {
-                    id: RepositoryId::new(ids.generate()),
-                    format,
-                    kind,
-                    name: name.to_owned(),
-                }))
-                .unwrap();
-        }
+        let catalog = seeded_catalog(&runtime, &ids);
         let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
+        let catalog_down = Arc::new(AtomicBool::new(false));
         let registry = Arc::new(Registry::new(
-            catalog,
+            SwitchCatalog::new(catalog, catalog_down.clone()),
             MemoryBlobStore::default(),
             clock.clone(),
-            ids,
+            ids.clone(),
             sink.clone(),
+            upstream,
         ));
+        let proxy_repos = mount(&registry);
         let router = api_router(
             registry.clone(),
             FormatSettings {
@@ -193,10 +217,18 @@ impl Api {
         Self {
             runtime,
             router,
-            admin: admin_router(registry),
+            admin: admin_router(registry.clone()),
             audit,
             clock,
+            registry,
+            ids,
+            catalog_down,
         }
+    }
+
+    /// Каталог перестаёт отвечать на поиск имён: так недоступная БД выглядит для защиты.
+    pub(crate) fn catalog_down(&self) {
+        self.catalog_down.store(true, Ordering::SeqCst);
     }
 
     /// Сдвигает часы реестра (окно снятия версий).

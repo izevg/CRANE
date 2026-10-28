@@ -1,7 +1,7 @@
 //! Факты для журнала аудита.
 
 use crate::access::{Principal, RequestContext};
-use crate::registry::{Coordinate, PackageRef};
+use crate::registry::{Coordinate, Format, Namespace, PackageName, PackageRef};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuditAction {
@@ -22,6 +22,13 @@ pub enum AuditAction {
     Untag {
         package: PackageRef,
         tag: String,
+    },
+    /// Резервирование имён: конфигурационный namespace или первая публикация точного имени.
+    Reserve(Namespace),
+    /// Прокси отказался отдавать внутреннее имя из публичного upstream.
+    ShadowUpstream {
+        format: Format,
+        package: PackageName,
     },
 }
 

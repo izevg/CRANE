@@ -10,20 +10,24 @@ use axum::Router;
 use bytes::Bytes;
 use crane_app::proxy::{ProxyEngine, ProxyLimits};
 use crane_domain::proxy::{EgressPolicy, EgressRefusal, Origin};
-use crane_domain::registry::RepositoryId;
+use crane_domain::registry::{Format, PackageName, RepositoryId};
 use crane_format_cargo::{DL_HOST, INDEX_HOST};
 use crane_format_npm::REGISTRY_HOST;
 use crane_http::{
-    CargoProxyOrigins, CargoSettings, NpmSettings, cargo_proxy_router, npm_proxy_router,
+    CargoProxyOrigins, CargoSettings, EngineUpstreamNames, NpmSettings, cargo_proxy_router,
+    npm_proxy_router,
 };
 use crane_memory::{
     ManualClock, MemoryBlobStore, MemoryFetchLeases, MemoryProxyCache, SequentialIdGen,
 };
-use crane_ports::proxy::{ETag, Upstream, UpstreamError, UpstreamRequest, UpstreamResponse};
+use crane_ports::proxy::{
+    ETag, Presence, Upstream, UpstreamError, UpstreamNames, UpstreamRequest, UpstreamResponse,
+};
 use crane_ports::system::IdGen;
 use futures_util::stream;
+use tokio::runtime::Builder;
 
-use super::{MAX_NPM_PUBLISH_BYTES, MAX_PUBLISH_BYTES, PUBLIC_URL};
+use super::{MAX_NPM_PUBLISH_BYTES, MAX_PUBLISH_BYTES, PUBLIC_URL, TestRegistry};
 
 /// Имя proxy-репозитория в URL.
 pub(crate) const NAME: &str = "crates-io";
@@ -112,9 +116,37 @@ impl Upstream for FakeUpstream {
     }
 }
 
-/// Router proxy-репозитория, фейковый upstream и часы движка.
+type TestEngine = ProxyEngine<FakeUpstream, MemoryProxyCache, MemoryFetchLeases, MemoryBlobStore>;
+
+fn engine(upstream: &FakeUpstream, clock: &Arc<ManualClock>) -> TestEngine {
+    ProxyEngine::new(
+        upstream.clone(),
+        MemoryProxyCache::default(),
+        MemoryFetchLeases::new(clock.clone()),
+        MemoryBlobStore::default(),
+        clock.clone(),
+        ProxyLimits::DEFAULT,
+    )
+}
+
+/// Блокирующий ответ «знает ли публичный реестр имя» от настоящей реализации над фейковым upstream.
+fn presence_of(
+    names: &EngineUpstreamNames<FakeUpstream, MemoryProxyCache, MemoryFetchLeases, MemoryBlobStore>,
+    format: Format,
+    name: &str,
+) -> Presence {
+    let name = PackageName::parse(format, name).unwrap();
+    Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(names.presence(format, &name))
+}
+
+/// Движок cargo proxy-репозитория, фейковый upstream и часы движка.
 pub(crate) struct Proxy {
-    pub(crate) router: Router,
+    engine: TestEngine,
+    origins: CargoProxyOrigins,
     pub(crate) upstream: FakeUpstream,
     pub(crate) clock: Arc<ManualClock>,
 }
@@ -123,14 +155,6 @@ impl Proxy {
     pub(crate) fn new() -> Self {
         let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
         let upstream = FakeUpstream::default();
-        let engine = ProxyEngine::new(
-            upstream.clone(),
-            MemoryProxyCache::default(),
-            MemoryFetchLeases::new(clock.clone()),
-            MemoryBlobStore::default(),
-            clock.clone(),
-            ProxyLimits::DEFAULT,
-        );
         let policy = EgressPolicy::new([INDEX_HOST, DL_HOST], false);
         let repository = RepositoryId::new(SequentialIdGen::default().generate());
         let origin = |host: &str| Origin {
@@ -141,15 +165,34 @@ impl Proxy {
             index: origin(INDEX_HOST),
             dl: origin(DL_HOST),
         };
+        Self {
+            engine: engine(&upstream, &clock),
+            origins,
+            upstream,
+            clock,
+        }
+    }
+
+    /// Router над реестром фикстуры: защита имён видит те же namespaces и hosted-пакеты.
+    pub(crate) fn router(&self, registry: Arc<TestRegistry>) -> Router {
         let settings = CargoSettings {
             public_url: PUBLIC_URL.to_owned(),
             max_publish_bytes: MAX_PUBLISH_BYTES,
         };
-        Self {
-            router: cargo_proxy_router(engine, origins, &settings, NAME),
-            upstream,
-            clock,
-        }
+        cargo_proxy_router(
+            self.engine.clone(),
+            registry,
+            self.origins.clone(),
+            &settings,
+            NAME,
+        )
+    }
+
+    /// Что upstream знает об имени: тот же движок, что у маршрутов; источник только для cargo.
+    pub(crate) fn presence(&self, format: Format, name: &str) -> Presence {
+        let names =
+            EngineUpstreamNames::new(self.engine.clone(), Some(self.origins.index.clone()), None);
+        presence_of(&names, format, name)
     }
 
     pub(crate) fn advance(&self, by: Duration) {
@@ -157,9 +200,10 @@ impl Proxy {
     }
 }
 
-/// Router npm proxy-репозитория, фейковый upstream и часы движка.
+/// Движок npm proxy-репозитория, фейковый upstream и часы движка.
 pub(crate) struct NpmProxy {
-    pub(crate) router: Router,
+    engine: TestEngine,
+    origin: Origin,
     pub(crate) upstream: FakeUpstream,
     pub(crate) clock: Arc<ManualClock>,
 }
@@ -168,28 +212,37 @@ impl NpmProxy {
     pub(crate) fn new() -> Self {
         let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
         let upstream = FakeUpstream::default();
-        let engine = ProxyEngine::new(
-            upstream.clone(),
-            MemoryProxyCache::default(),
-            MemoryFetchLeases::new(clock.clone()),
-            MemoryBlobStore::default(),
-            clock.clone(),
-            ProxyLimits::DEFAULT,
-        );
         let policy = EgressPolicy::new([REGISTRY_HOST], false);
         let origin = Origin {
             repository: RepositoryId::new(SequentialIdGen::default().generate()),
             base: policy.admit("https", REGISTRY_HOST, None, "").unwrap(),
         };
+        Self {
+            engine: engine(&upstream, &clock),
+            origin,
+            upstream,
+            clock,
+        }
+    }
+
+    pub(crate) fn router(&self, registry: Arc<TestRegistry>) -> Router {
         let settings = NpmSettings {
             public_url: PUBLIC_URL.to_owned(),
             max_publish_bytes: MAX_NPM_PUBLISH_BYTES,
         };
-        Self {
-            router: npm_proxy_router(engine, origin, &settings, NPM_NAME),
-            upstream,
-            clock,
-        }
+        npm_proxy_router(
+            self.engine.clone(),
+            registry,
+            self.origin.clone(),
+            &settings,
+            NPM_NAME,
+        )
+    }
+
+    /// Что upstream знает об имени; источник только для npm.
+    pub(crate) fn presence(&self, format: Format, name: &str) -> Presence {
+        let names = EngineUpstreamNames::new(self.engine.clone(), None, Some(self.origin.clone()));
+        presence_of(&names, format, name)
     }
 
     pub(crate) fn advance(&self, by: Duration) {

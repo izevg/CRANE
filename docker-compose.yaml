@@ -57,6 +57,8 @@ services:
       # Hosted и proxy-репозитории npm (registry.npmjs.org) через запятую; пусто — не создаются.
       CRANE_NPM_REPOS: ${CRANE_NPM_REPOS:-}
       CRANE_NPM_PROXY_REPOS: ${CRANE_NPM_PROXY_REPOS:-}
+      # Резервирование внутренних имён (`формат:шаблон[=uuid]` через запятую): proxy их не отдаёт никогда.
+      CRANE_NAMESPACES: ${CRANE_NAMESPACES:-}
       # Сеть edge делят только caddy и crane: из неё верим X-Forwarded-For. Порт admin не публикуется.
       CRANE_TRUSTED_PROXIES: ${CRANE_EDGE_SUBNET:?}
     secrets: [database_url, crane_token]

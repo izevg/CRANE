@@ -36,7 +36,7 @@ struct World {
 fn world() -> World {
     let proxy = Proxy::new();
     World {
-        api: Api::with_proxy_repos(vec![(NAME.to_owned(), proxy.router)]),
+        api: Api::with_proxy(&proxy),
         upstream: proxy.upstream,
         clock: proxy.clock,
     }

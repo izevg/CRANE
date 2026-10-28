@@ -1,5 +1,6 @@
 //! Общее для ответов всех форматов: распаковка итога proxy-движка и документы с условными запросами.
 
+mod names;
 mod respond;
 
 use axum::http::{HeaderValue, StatusCode, header};
@@ -10,7 +11,8 @@ use bytes::Bytes;
 use crane_domain::registry::Sha256 as Digest;
 use sha2::{Digest as _, Sha256};
 
-pub(crate) use respond::{failure, respond, with_facts};
+pub use names::EngineUpstreamNames;
+pub(crate) use respond::{Refusal, refuse, respond, with_facts};
 
 use crate::error::ClientError;
 

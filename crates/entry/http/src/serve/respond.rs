@@ -3,6 +3,7 @@
 use axum::http::{HeaderValue, header};
 use axum::response::{IntoResponse, Response};
 use crane_app::proxy::{CacheResult, ProxyError, Revalidation, Served};
+use crane_app::registry::RegistryError;
 use tracing::{Instrument, Span, debug, warn};
 
 use crate::context::CacheFacts;
@@ -12,10 +13,23 @@ use crate::error::{ClientError, chain};
 const STALE: HeaderValue = HeaderValue::from_static("110 - \"Response is Stale\"");
 const REVALIDATION_FAILED: HeaderValue = HeaderValue::from_static("111 - \"Revalidation Failed\"");
 
+/// Почему документ не получен: защита внутренних имён отказала до движка или движок не справился.
+/// Общая для всех форматов, потому что точка входа в движок у каждого формата одна и защита стоит перед ней.
+pub(crate) enum Refusal {
+    Registry(RegistryError),
+    Proxy(ProxyError),
+}
+
+impl From<ProxyError> for Refusal {
+    fn from(error: ProxyError) -> Self {
+        Self::Proxy(error)
+    }
+}
+
 /// Превращает итог движка в ответ. Здесь же: запуск фоновой ревалидации, `Age`, `Warning`,
 /// `CacheFacts` для успеха и для ошибки. `ok` строит тело из полученного значения.
-pub(crate) fn respond<T>(
-    result: Result<Served<T>, ProxyError>,
+pub(crate) fn respond<T, E: Into<Refusal>>(
+    result: Result<Served<T>, E>,
     ok: impl FnOnce(T) -> Result<Response, ClientError>,
 ) -> Response {
     match result {
@@ -43,7 +57,15 @@ pub(crate) fn respond<T>(
             }
             with_facts(response, CacheFacts::served(&result))
         }
-        Err(error) => failure(error),
+        Err(refusal) => refuse(refusal.into()),
+    }
+}
+
+/// Отказ защиты имён даёт ответ без фактов кэша: до кэша и upstream дело не дошло.
+pub(crate) fn refuse(refusal: Refusal) -> Response {
+    match refusal {
+        Refusal::Registry(error) => ClientError::from(error).into_response(),
+        Refusal::Proxy(error) => failure(error),
     }
 }
 

@@ -84,22 +84,85 @@ fn document(repo, name):                                       // md: — пос
 
 ## 10.3 Защита внутренних имён
 
-```rust
-fn resolve(format, name, client_repo):
-    ns = namespace_index.longest_match(format, name)     // trie по префиксам и scope
-    if ns.reserved:
-        if client_repo.kind == proxy: return NotFound(reason = "reserved_internal_name")
-        return hosted_lookup(ns.repos, name)             // только hosted, никогда upstream
-    return client_repo.kind == hosted ? hosted_lookup(...) : proxy.fetch(...)
+**Инвариант.** Внутреннее имя никогда не отдаётся из upstream. Proxy любого формата отвечает на него 404 до кэша и до upstream и не раскрывает причину (hidden = not found, M8 в разделе 14). Отказ пишется в журнал аудита (`ShadowUpstream`), на нём построено правило SIEM «Разведка dependency confusion» (14).
 
-fn claim_name(principal, format, name):                  // первая публикация имени
-    ns = namespace_index.longest_match(format, name)
-    require(ns != None or policy.allow_unscoped(format)) // иначе 403 с подсказкой
-    require(decide(principal, CreatePackage, ns))
-    audit("package.claimed", principal, ns, name)        // владелец = команда namespace (или команда принципала без namespace, 14.15)
+**Что считается внутренним.** Имя (формат, нормализованное имя) внутреннее, если выполняется одно из двух:
+
+1.  его покрывает namespace этого формата;
+2.  строка `package` с этим именем есть в любом hosted-репозитории этого формата.
+
+Второе условие означает, что первая hosted-публикация и есть резервирование: строку `package` создаёт та же транзакция, что и первую версию, отдельной записи и сирот нет. Опорный инвариант: строки `package` никогда не удаляются (у версий только tombstone, у npm unpublish тоже). Защита действует на формат, а не на proxy-репозиторий.
+
+### Таблица namespace и владелец
+
+Таблица `namespace` (миграция 0003, схема в разделе 9): `(format, pattern)` уникален, `workspace_id` — владелец. Владелец — workspace (команда ≡ workspace). В v0.2.0 workspace один: константа `WorkspaceId::DEFAULT` = `00000000-0000-0000-0000-000000000001` (определена один раз в domain), он владеет всеми репозиториями и namespaces. Миграция v0.4.0 вставит строку `workspace` с этим id (slug `default`) и добавит FK на `namespace.workspace_id` и `repository.workspace_id`. Флага `reserved` нет: нерезервирующий namespace был бы дырой для dependency confusion, поэтому резервируют все. Истории смены владельцев в БД нет, заявки живут только в событиях аудита.
+
+### Шаблоны
+
+Шаблон — точное имя или префикс с одной `*` в конце сразу после разделителя формата, база непустая. Поэтому `acme-*` не покрывает `acmecorp`, а `com.acme.*` не покрывает `com.acmecorp:x`. Нормализация точного имени и базы префикса следует правилам `PackageName` формата.
+
+| Формат | Нормализация | Префикс | Разделитель |
+| --- | --- | --- | --- |
+| Cargo | нижний регистр, `-` ≡ `_` (хранится `_`) | `acme-*` → `acme_*` | `-` или `_` |
+| PyPI | PEP 503: нижний регистр, серии `-_.` → `-` | `acme-*` | `-` |
+| Maven | регистр сохраняется; имя `groupId:artifactId` | только по groupId: `com.acme.*` покрывает groupId `com.acme` и `com.acme.*` | `.` |
+| NuGet | нижний регистр | `Acme.*` → `acme.*` | `.` |
+| npm | регистр сохраняется | только scope `@acme/*`; префиксы без scope запрещены | `/` после scope |
+
+### Разрешение
+
+Побеждает самый специфичный покрывающий namespace: точное имя, затем самый длинный префикс. Это правило задаёт и владельца, и приоритет hosted над proxy. Поиск — список шаблонов-кандидатов имени от самого специфичного к наименее специфичному и один запрос по индексу `pattern = ANY($)` с сортировкой по позиции кандидата (без `LIKE`). Примеры: cargo `acme_payments_core` → `acme_payments_core`, `acme_payments_*`, `acme_*`; maven `com.acme.b:c` → `com.acme.b:c`, `com.acme.b.*`, `com.acme.*`, `com.*`.
+
+В памяти дерева в v0.2.0 нет: один запрос к БД на запрос индекса или архива через proxy, при ошибке БД защита закрывается (отказ). Дерево на реплику возможно позже как кэш за тем же портом.
+
+**Вырезание (carving).** Платформенная команда владеет `com.acme`, workspace payments — `com.acme.payments` (cargo `acme-*` и `acme-payments-*`, scope у npm). Имя под родителем, не вырезанное отдельно, принадлежит владельцу родителя. Вырезать подпространство для другого workspace и вообще создавать namespace, пересекающийся с namespace другого workspace (вложенный в него или покрывающий его), может только platform-admin со step-up. В v0.2.0 эти полномочия — конфигурация сервера `CRANE_NAMESPACES` (16). Каждое резервирование и вырезание — событие аудита `Reserve` с актором и контекстом запроса. Вложенность внутри одного workspace разрешена. Делегирования владельцем родителя нет; место под правило Cedar оставлено на v0.4.0+.
+
+```rust
+fn is_internal(format, name) -> bool:
+    namespace_covers(format, name)                        // один запрос pattern = ANY(кандидаты)
+        or hosted_package_exists(format, name)            // любой hosted-репозиторий формата
+
+fn admit_upstream(format, name):                          // перед кэшем и upstream, во всех proxy
+    if is_internal(format, name):                         // ошибка БД => отказ (fail-closed)
+        audit(ShadowUpstream, format, name)
+        return NotFound                                   // без причины
+    return Allowed
 ```
 
-Индекс namespaces хранится в памяти каждой реплики как префиксное дерево и перестраивается по событию изменения. Поиск занимает O(длины имени).
+### Правило публикации (hosted)
+
+Проверяется после проверок репозитория и hosted и до чтения тела.
+
+```rust
+fn admit_publication(repository, format, name) -> Result<Option<Reserve>>:
+    if !hosted_name_allowed(format, name):                // npm: только scoped, зашито
+        return Err(UnscopedName)                          // 422
+    match catalog.namespace_for(format, name):            // самый специфичный покрывающий
+        Some(ns) if ns.workspace != repository.workspace => Err(NamespaceOwned)  // 403
+        Some(_)                                          => Ok(None)             // свой namespace
+        None if catalog.hosted_exists(format, name)      => Ok(None)             // уже hosted
+        None => match upstream.presence(format, name):
+            Presence::Absent  => Ok(Some(Reserve(exact(name))))  // публикация станет резервированием
+            Presence::Public  => Err(PublicName)                 // 403
+            Presence::Unknown => Err(UpstreamUnavailable)        // 503: upstream не ответил
+```
+
+| Условие | Результат |
+| --- | --- |
+| npm, имя без scope | 422 `UnscopedName` |
+| имя покрыто namespace другого workspace | 403 `NamespaceOwned` |
+| имя покрыто своим namespace или уже hosted в формате | допускается |
+| новое имя, upstream его не знает | допускается; публикация становится резервированием (аудит `Reserve` с точным именем вдобавок к `Publish`) |
+| новое имя, upstream его знает | 403 `PublicName` |
+| upstream недоступен | 503 `UpstreamUnavailable` |
+
+Только scoped для npm: npm выбирает реестр по scope, поэтому внутренний пакет без scope нельзя защитить от dependency confusion без group-репозиториев. Это решение владельца; откат — сделать правило настраиваемым, когда появятся group-репозитории (вне P0–P3).
+
+Upstream спрашивает порт `UpstreamNames`. Реализация `EngineUpstreamNames` берёт тот же движок и тот же кэш, что и proxy-маршруты, и спрашивает документ имени: индекс crates.io для cargo, packument registry.npmjs.org для npm. Ответ документа (в том числе устаревший) — `Public`, `NotFound` — `Absent`, любой другой сбой — `Unknown`. Формат без источника (proxy не настроен или реализации нет) получает `Absent` явно: затенять нечего (риск записан в DEBT.md, пункт 17). Сервер строит её над первым proxy-репозиторием каждого формата (хосты upstream у всех одни), без proxy вообще подставляется `NoUpstream`. Защита `admit_upstream` стоит единой точкой перед движком в proxy cargo (`Shared::index`) и npm (`Shared::packument`; tarball идёт через неё же). Отказ закрыт в обе стороны: публичное имя не затеняется, внутреннее не остаётся незарезервированным. Резервирование широко известного публичного имени требует platform-admin со step-up (в v0.2.0 это запись `CRANE_NAMESPACES`).
+
+### Контракт v0.4.0
+
+Записано, но не реализуется сейчас. `POST/DELETE /namespaces` отображается на тот же use case. Владельцы резервируют только точные имена, неизвестные upstream; префиксы и scopes, публичные имена и пересекающиеся namespaces — только platform-admin со step-up. Namespace, покрывающий hosted-пакеты, удалить нельзя. Снятие резервирования никогда не неявное: удаление записи из `CRANE_NAMESPACES` резервирование не снимает, резервирования только добавляются.
 
 ## 10.4 Авторизация и применение отзыва
 

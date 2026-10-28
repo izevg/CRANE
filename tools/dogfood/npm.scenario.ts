@@ -2,6 +2,7 @@
 // установка пакета с npmjs дважды (промах, затем попадание). Клиент и разбор вывода npm - в npm.ts.
 import { accessLines, type Expected, egressLines } from "./audit.ts";
 import { type Result, step, tail } from "./exec.ts";
+import { reservedAndHidden } from "./hosted-wins.ts";
 import {
   HOSTED_REPO,
   hasDeprecationWarning,
@@ -99,6 +100,7 @@ function publishAndMark(t: Tools, pkg: string): Expected[] {
     t.must("pub", ["publish", "--tag", "next"]);
     events.push(event("publish", npmPurl(pkg, FIRST)), event("publish", npmPurl(pkg, BETA)));
   });
+  events.push(...reservedAndHidden(t.stand, t.client, t.agent, repoUrl(npmProxyRepo), pkg));
   step("2 dist-tags пакета: latest и next", () => {
     const raw = t.must("pub", ["view", pkg, "dist-tags", "--json"]).stdout;
     if (!sameTags(raw, { latest: FIRST, next: BETA })) {

@@ -18,21 +18,21 @@ fn delete_tarball_uri(name: &str, version: &str) -> String {
 fn deprecation_through_put_shows_in_packument_and_can_be_cleared() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
     let deprecate =
-        json!({"name": "left-pad", "versions": {"1.0.0": {"deprecated": "use right-pad"}}});
-    let put = api.npm_put(&packument_uri("left-pad"), &deprecate);
-    let shown = api.npm_get(&packument_uri("left-pad")).json();
-    let clear = json!({"name": "left-pad", "versions": {"1.0.0": {"deprecated": ""}}});
+        json!({"name": "@acme/left-pad", "versions": {"1.0.0": {"deprecated": "use right-pad"}}});
+    let put = api.npm_put(&packument_uri("@acme/left-pad"), &deprecate);
+    let shown = api.npm_get(&packument_uri("@acme/left-pad")).json();
+    let clear = json!({"name": "@acme/left-pad", "versions": {"1.0.0": {"deprecated": ""}}});
 
     // Act
-    let cleared = api.npm_put(&packument_uri("left-pad"), &clear);
+    let cleared = api.npm_put(&packument_uri("@acme/left-pad"), &clear);
 
     // Assert
     assert_eq!(put.status, StatusCode::OK);
     assert_eq!(shown["versions"]["1.0.0"]["deprecated"], "use right-pad");
     assert_eq!(cleared.status, StatusCode::OK);
-    let after = api.npm_get(&packument_uri("left-pad")).json();
+    let after = api.npm_get(&packument_uri("@acme/left-pad")).json();
     assert!(
         after["versions"]["1.0.0"].get("deprecated").is_none(),
         "{after}"
@@ -43,16 +43,16 @@ fn deprecation_through_put_shows_in_packument_and_can_be_cleared() {
 fn stale_document_that_omits_a_version_deletes_nothing() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
-    api.npm_publish("left-pad", "1.0.1", b"second");
-    let stale = json!({"name": "left-pad", "versions": {"1.0.0": {"deprecated": "old"}}, "dist-tags": {"latest": "1.0.0"}});
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.1", b"second");
+    let stale = json!({"name": "@acme/left-pad", "versions": {"1.0.0": {"deprecated": "old"}}, "dist-tags": {"latest": "1.0.0"}});
 
     // Act
-    let reply = api.npm_put(&packument_uri("left-pad"), &stale);
+    let reply = api.npm_put(&packument_uri("@acme/left-pad"), &stale);
 
     // Assert
     assert_eq!(reply.status, StatusCode::OK);
-    let doc = api.npm_get(&packument_uri("left-pad")).json();
+    let doc = api.npm_get(&packument_uri("@acme/left-pad")).json();
     let versions: Vec<&String> = doc["versions"].as_object().unwrap().keys().collect();
     assert_eq!(versions, ["1.0.0", "1.0.1"]);
     assert_eq!(doc["dist-tags"]["latest"], "1.0.1");
@@ -62,24 +62,24 @@ fn stale_document_that_omits_a_version_deletes_nothing() {
 fn deleting_a_tarball_inside_the_window_hides_the_version() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
-    api.npm_publish("left-pad", "1.0.1", b"second");
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.1", b"second");
     api.advance(Duration::from_hours(1));
 
     // Act
     let reply = api.npm(
         Method::DELETE,
-        &delete_tarball_uri("left-pad", "1.0.0"),
+        &delete_tarball_uri("@acme/left-pad", "1.0.0"),
         Vec::new(),
     );
 
     // Assert
     assert_eq!(reply.status, StatusCode::OK);
-    let doc = api.npm_get(&packument_uri("left-pad")).json();
+    let doc = api.npm_get(&packument_uri("@acme/left-pad")).json();
     let versions: Vec<&String> = doc["versions"].as_object().unwrap().keys().collect();
     assert_eq!(versions, ["1.0.1"]);
     assert_eq!(
-        api.npm_get(&tarball_uri("left-pad", "1.0.0")).status,
+        api.npm_get(&tarball_uri("@acme/left-pad", "1.0.0")).status,
         StatusCode::GONE
     );
 }
@@ -88,15 +88,15 @@ fn deleting_a_tarball_inside_the_window_hides_the_version() {
 fn deleted_version_number_cannot_be_published_again() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
     api.npm(
         Method::DELETE,
-        &delete_tarball_uri("left-pad", "1.0.0"),
+        &delete_tarball_uri("@acme/left-pad", "1.0.0"),
         Vec::new(),
     );
 
     // Act
-    let reply = api.npm_publish("left-pad", "1.0.0", TARBALL);
+    let reply = api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
 
     // Assert
     assert_eq!(reply.status, StatusCode::CONFLICT);
@@ -106,20 +106,20 @@ fn deleted_version_number_cannot_be_published_again() {
 fn deleting_a_tarball_outside_the_window_is_forbidden() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
     api.advance(Duration::from_hours(73));
 
     // Act
     let reply = api.npm(
         Method::DELETE,
-        &delete_tarball_uri("left-pad", "1.0.0"),
+        &delete_tarball_uri("@acme/left-pad", "1.0.0"),
         Vec::new(),
     );
 
     // Assert
     assert_eq!(reply.status, StatusCode::FORBIDDEN);
     assert_eq!(
-        api.npm_get(&packument_uri("left-pad")).status,
+        api.npm_get(&packument_uri("@acme/left-pad")).status,
         StatusCode::OK
     );
 }
@@ -128,20 +128,20 @@ fn deleting_a_tarball_outside_the_window_is_forbidden() {
 fn deleting_a_package_removes_every_version() {
     // Arrange
     let api = Api::new();
-    api.npm_publish("left-pad", "1.0.0", TARBALL);
-    api.npm_publish("left-pad", "1.0.1", b"second");
+    api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
+    api.npm_publish("@acme/left-pad", "1.0.1", b"second");
 
     // Act
     let reply = api.npm(
         Method::DELETE,
-        &format!("{}/-rev/1-x", packument_uri("left-pad")),
+        &format!("{}/-rev/1-x", packument_uri("@acme/left-pad")),
         Vec::new(),
     );
 
     // Assert
     assert_eq!(reply.status, StatusCode::OK);
     assert_eq!(
-        api.npm_get(&packument_uri("left-pad")).status,
+        api.npm_get(&packument_uri("@acme/left-pad")).status,
         StatusCode::NOT_FOUND
     );
 }

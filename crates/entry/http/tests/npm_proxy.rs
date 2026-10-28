@@ -34,7 +34,7 @@ struct World {
 fn world() -> World {
     let proxy = NpmProxy::new();
     World {
-        api: Api::with_npm_proxy_repos(vec![(NPM_NAME.to_owned(), proxy.router)]),
+        api: Api::with_npm_proxy(&proxy),
         upstream: proxy.upstream,
         clock: proxy.clock,
     }
@@ -384,10 +384,10 @@ fn proxy_name_wins_over_hosted_repo_parameter() {
 fn hosted_repository_next_to_proxy_keeps_working() {
     // Arrange
     let world = world();
-    world.api.npm_publish("left-pad", "1.0.0", TARBALL);
+    world.api.npm_publish("@acme/left-pad", "1.0.0", TARBALL);
 
     // Act
-    let reply = world.api.npm_get("/npm/web/left-pad");
+    let reply = world.api.npm_get("/npm/web/@acme%2fleft-pad");
 
     // Assert
     assert_eq!(reply.status, StatusCode::OK);
