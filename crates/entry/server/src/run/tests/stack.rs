@@ -13,7 +13,6 @@
 use std::collections::HashMap;
 use std::io;
 use std::path::Path;
-use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
@@ -30,7 +29,7 @@ use url::Url;
 use uuid::Uuid;
 
 use super::{load, migrate, routers};
-use crate::config::{Database, Lookup, ReadFile};
+use crate::config::{Boot, Database};
 
 const URL_ENV: &str = "CRANE_TEST_DATABASE_URL";
 const REQUIRE_ENV: &str = "CRANE_TEST_REQUIRE_DB";
@@ -58,7 +57,7 @@ fn report_skip() {
     eprintln!("ПРОПУСК: {URL_ENV} не задана, тесты с PostgreSQL не выполняются");
 }
 
-pub(super) fn lookup(database: &str, blobs_dir: &Path, extra: &[(&str, &str)]) -> Lookup {
+pub(super) fn lookup(database: &str, blobs_dir: &Path, extra: &[(&str, &str)]) -> Boot {
     let blobs = format!("file://{}", blobs_dir.display());
     let mut env: HashMap<String, String> = HashMap::from([
         ("CRANE_DATABASE_URL".to_owned(), database.to_owned()),
@@ -73,22 +72,18 @@ pub(super) fn lookup(database: &str, blobs_dir: &Path, extra: &[(&str, &str)]) -
             .iter()
             .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
     );
-    Arc::new(move |name| env.get(name).cloned())
+    Boot::new(
+        move |name| env.get(name).cloned(),
+        |_| Err(io::Error::from(io::ErrorKind::NotFound)),
+    )
 }
 
-pub(super) fn token_lookup(database: &str, blobs_dir: &Path) -> Lookup {
+pub(super) fn token_lookup(database: &str, blobs_dir: &Path) -> Boot {
     lookup(database, blobs_dir, &[("CRANE_TOKEN", TOKEN)])
 }
 
-pub(super) fn no_files() -> ReadFile {
-    Arc::new(|_| Err(io::Error::from(io::ErrorKind::NotFound)))
-}
-
-pub(super) fn database_of(var: &Lookup) -> Database {
-    Database::from_env(&|name: &str| var(name), &|_: &Path| {
-        Err(io::Error::from(io::ErrorKind::NotFound))
-    })
-    .unwrap()
+pub(super) fn database_of(boot: &Boot) -> Database {
+    Database::from_env(&|name: &str| boot.var(name), &|path: &Path| boot.read(path)).unwrap()
 }
 
 /// Запущенный «сервер»: роутеры без сокетов. Миграции применяет роль `migrate`, как в compose.
@@ -100,15 +95,15 @@ struct Stack {
 
 impl Stack {
     fn start(database: &str, blobs_dir: &Path, runtime: Runtime) -> Self {
-        let var = token_lookup(database, blobs_dir);
-        migrate(database_of(&var)).unwrap();
-        let served = runtime
-            .block_on(async { routers(load(var, no_files()).await?).await })
+        let boot = token_lookup(database, blobs_dir);
+        migrate(database_of(&boot)).unwrap();
+        let (api, admin) = runtime
+            .block_on(async { routers(load(boot).await?).await })
             .unwrap();
         Self {
             runtime,
-            api: served.api,
-            admin: served.admin,
+            api,
+            admin,
         }
     }
 

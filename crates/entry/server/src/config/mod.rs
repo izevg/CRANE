@@ -30,10 +30,38 @@ pub(crate) use repos::{Repos, proxy_var};
 pub(crate) use source::{ConfigSchema, StoredLayer, layered};
 pub(crate) use storage::{Blobs, Database, settings_key};
 
-/// Поиск значения по имени переменной в слое env + файл; разделяется со схемой настроек.
-pub(crate) type Lookup = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
-/// Чтение файла (секреты, `CRANE_CONFIG`); разделяется со схемой настроек.
-pub(crate) type ReadFile = Arc<dyn Fn(&Path) -> io::Result<String> + Send + Sync>;
+type VarFn = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+type ReadFn = Arc<dyn Fn(&Path) -> io::Result<String> + Send + Sync>;
+
+/// Слой, который не меняется за жизнь процесса: окружение с файлом TOML и чтение файлов секретов.
+/// Один раз разбирается при старте и разделяется со схемой настроек; его же перечитывает
+/// цикл двухфазного serve (B3b), файл TOML при этом не читается заново.
+#[derive(Clone)]
+pub(crate) struct Boot {
+    var: VarFn,
+    read_file: ReadFn,
+}
+
+impl Boot {
+    pub(crate) fn new(
+        var: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
+        read_file: impl Fn(&Path) -> io::Result<String> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            var: Arc::new(var),
+            read_file: Arc::new(read_file),
+        }
+    }
+
+    /// Значение переменной по имени, в том числе `AWS_*_FILE`, которых нет в `vars()`.
+    pub(crate) fn var(&self, name: &str) -> Option<String> {
+        (self.var)(name)
+    }
+
+    pub(crate) fn read(&self, path: &Path) -> io::Result<String> {
+        (self.read_file)(path)
+    }
+}
 
 /// Значение «в памяти» для хранилища, blob и кэша.
 const MEMORY: &str = "memory";

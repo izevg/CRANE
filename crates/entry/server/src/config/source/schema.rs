@@ -7,24 +7,19 @@ use crane_domain::settings::{Kind, NewValue, SettingDef, Stored};
 use crane_ports::settings::{Inherited, Invalid, InvalidKey, SettingsSchema};
 
 use super::stored::{StoredLayer, inherited_var};
-use crate::config::{ConfigError, Lookup, ReadFile, definition, definitions, section};
+use crate::config::{Boot, ConfigError, definition, definitions, section};
 
 /// Схема консоли настроек: что за ключи, что их задало на старте и что скажет разбор секции.
 /// Окружение и файл не меняются за жизнь процесса, поэтому слой читается через общие замыкания.
 pub(crate) struct ConfigSchema {
-    inherited: Lookup,
-    read_file: ReadFile,
+    boot: Boot,
     /// Режим каталога нужен проверке blob; сам `Database` с паролем схеме не передаётся.
     persistent: bool,
 }
 
 impl ConfigSchema {
-    pub(crate) fn new(inherited: Lookup, read_file: ReadFile, persistent: bool) -> Self {
-        Self {
-            inherited,
-            read_file,
-            persistent,
-        }
+    pub(crate) fn new(boot: Boot, persistent: bool) -> Self {
+        Self { boot, persistent }
     }
 }
 
@@ -35,10 +30,10 @@ impl SettingsSchema for ConfigSchema {
 
     fn inherited(&self, key: &str) -> Option<Inherited> {
         let def = definition(key)?;
-        let var = inherited_var(def, &|name: &str| (self.inherited)(name))?;
+        let var = inherited_var(def, &|name: &str| self.boot.var(name))?;
         // Секрет наружу не выходит, ни при `X`, ни при `X_FILE`.
         let value = (def.kind != Kind::Secret)
-            .then(|| (self.inherited)(&var))
+            .then(|| self.boot.var(&var))
             .flatten();
         Some(Inherited { var, value })
     }
@@ -49,8 +44,8 @@ impl SettingsSchema for ConfigSchema {
         stored: &BTreeMap<String, Stored>,
         changes: &[(&str, Option<&NewValue>)],
     ) -> Result<(), Invalid> {
-        let inherited = |name: &str| (self.inherited)(name);
-        let read_file = |path: &Path| (self.read_file)(path);
+        let inherited = |name: &str| self.boot.var(name);
+        let read_file = |path: &Path| self.boot.read(path);
         // Строки других секций не участвуют: нечитаемый секрет соседа не должен ронять эту проверку.
         let rows = stored
             .iter()
@@ -87,7 +82,7 @@ fn invalid(group: &str, errors: Vec<ConfigError>) -> Invalid {
         errors: errors
             .into_iter()
             .map(|error| InvalidKey {
-                key: key_of(group, &error),
+                key: failed_key(group, &error),
                 // Display ошибок конфигурации значений не содержит (см. `ConfigError`).
                 detail: error.to_string(),
             })
@@ -97,7 +92,7 @@ fn invalid(group: &str, errors: Vec<ConfigError>) -> Invalid {
 
 /// Ключ, к которому относится ошибка: у строки БД он назван прямо, у разбора выводится из переменной.
 /// Ошибка, не относящаяся ни к одному ключу секции, записывается на саму секцию.
-fn key_of(group: &str, error: &ConfigError) -> String {
+fn failed_key(group: &str, error: &ConfigError) -> String {
     if let ConfigError::Unreadable { key, .. } = error {
         return key.clone();
     }

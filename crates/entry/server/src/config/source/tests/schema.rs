@@ -8,7 +8,6 @@ use super::*;
 
 use std::collections::HashMap;
 use std::io;
-use std::sync::Arc;
 use std::time::SystemTime;
 
 use crane_domain::settings::{Secret, StoredValue, Unreadable, Version};
@@ -18,11 +17,11 @@ fn schema(pairs: &[(&str, &str)], persistent: bool) -> ConfigSchema {
         .iter()
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
         .collect();
-    ConfigSchema::new(
-        Arc::new(move |name: &str| map.get(name).cloned()),
-        Arc::new(|_: &Path| Err(io::Error::from(io::ErrorKind::NotFound))),
-        persistent,
-    )
+    let boot = Boot::new(
+        move |name: &str| map.get(name).cloned(),
+        |_: &Path| Err(io::Error::from(io::ErrorKind::NotFound)),
+    );
+    ConfigSchema::new(boot, persistent)
 }
 
 fn rows(items: Vec<(&str, StoredValue)>) -> BTreeMap<String, Stored> {

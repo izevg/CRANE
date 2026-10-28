@@ -15,9 +15,9 @@ use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_domain::settings::{Stored, Version};
 use crane_http::{FormatSettings, StaticToken, admin_router, api_router};
-use crane_memory::{MemoryBlobStore, MemoryCatalog};
+use crane_memory::{MemoryBlobStore, MemoryCatalog, MemorySettings};
 use crane_objstore::ObjectBlobStore;
-use crane_pg::{PgCatalog, PgSettings};
+use crane_pg::{PgCatalog, PgSettings, SettingsKey};
 use crane_ports::proxy::{NoUpstream, UpstreamNames};
 use crane_ports::registry::{BlobStore, Catalog};
 use crane_ports::settings::SettingsStore;
@@ -29,9 +29,7 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tokio::net::TcpListener;
 use tokio::runtime::Builder;
 
-use crate::config::{
-    Blobs, Config, ConfigSchema, Database, Lookup, ReadFile, StoredLayer, definition, settings_key,
-};
+use crate::config::{Blobs, Boot, Config, ConfigSchema, Database, StoredLayer, settings_key};
 use crate::ecosystem::ecosystem;
 use crate::namespaces;
 use crate::system::{SystemClock, UuidV7Ids};
@@ -43,9 +41,9 @@ const DB_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) type RunError = Box<dyn std::error::Error + Send + Sync>;
 
-pub(crate) fn serve(var: Lookup, read_file: ReadFile) -> Result<(), RunError> {
+pub(crate) fn serve(boot: Boot) -> Result<(), RunError> {
     let runtime = Builder::new_multi_thread().enable_all().build()?;
-    runtime.block_on(serve_async(var, read_file))
+    runtime.block_on(serve_async(boot))
 }
 
 /// Разобранная конфигурация и то, что нужно для остальной сборки.
@@ -56,102 +54,108 @@ pub(crate) struct Loaded {
     settings: SettingsWiring,
 }
 
-/// Передача B4a: схема консоли и версии строк, с которыми процесс стартовал
-/// (по ним `restart_required` отличает применённые настройки от ожидающих).
+/// Хранилище настроек: каталог в PostgreSQL или пустое в памяти.
+#[expect(dead_code, reason = "потребитель — HTTP настроек в B4a")]
+enum SettingsBackend {
+    Memory(MemorySettings),
+    Postgres(PgSettings),
+}
+
+/// Всё для `crane_app::settings::Settings::new`, кроме аудита (он появляется в `assemble`).
+/// Ключ шифрования читается и потребляется один раз, в `load`.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "потребитель — HTTP настроек в B4a")
+)]
 pub(crate) struct SettingsWiring {
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "потребитель — HTTP настроек в B4a")
-    )]
+    store: SettingsBackend,
     schema: Arc<ConfigSchema>,
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "потребитель — HTTP настроек в B4a")
-    )]
+    /// Версии всех строк БД на старте; какие ключи учитывать, решает только app.
     started: BTreeMap<String, Version>,
 }
 
-/// Собранные роутеры и данные для HTTP настроек.
-pub(crate) struct Served {
-    pub(crate) api: Router,
-    pub(crate) admin: Router,
+impl SettingsWiring {
+    /// Записывать есть куда: режим выводится из хранилища, отдельного флага нет.
     #[cfg_attr(
         not(test),
         expect(dead_code, reason = "потребитель — HTTP настроек в B4a")
     )]
-    settings: SettingsWiring,
+    fn persistent(&self) -> bool {
+        matches!(self.store, SettingsBackend::Postgres(_))
+    }
 }
 
-/// Слои конфигурации: env + файл (`var`), затем строки БД. Приоритет env > файл > БД > умолчание.
+/// Слои конфигурации: env + файл (`boot`), затем строки БД. Приоритет env > файл > БД > умолчание.
 /// Любая ошибка разбора валит старт: нечитаемый секрет не подменяется умолчанием.
-pub(crate) async fn load(var: Lookup, read_file: ReadFile) -> Result<Loaded, RunError> {
-    let inherited = |name: &str| var(name);
-    let reader = |path: &Path| read_file(path);
+pub(crate) async fn load(boot: Boot) -> Result<Loaded, RunError> {
+    let inherited = |name: &str| boot.var(name);
+    let reader = |path: &Path| boot.read(path);
     let database = Database::from_env(&inherited, &reader)?;
     let key = settings_key(&inherited, &reader, database.persistent())?;
-    let (pool, rows) = read_stored(&database, key).await?;
+    let (pool, store, rows) = open_settings(&database, key).await?;
     let (layer, ignored) = StoredLayer::new(&inherited, &rows, &[])?;
     for (key, why) in &ignored {
         // Значений в журнале нет: только ключ и причина.
         tracing::warn!(key, reason = ?why, "строка настройки в БД не действует");
     }
     let config = Config::from_layers(&inherited, &layer, &reader, database.persistent())?;
-    // Только ключи консоли: скрытая или неизвестная строка не должна давать ложный `restart_required`.
     let started = rows
         .iter()
-        .filter(|(key, _)| definition(key).is_some_and(|def| def.console))
         .map(|(key, row)| (key.clone(), row.version))
         .collect();
-    let schema = Arc::new(ConfigSchema::new(var, read_file, database.persistent()));
+    let schema = Arc::new(ConfigSchema::new(boot.clone(), database.persistent()));
     Ok(Loaded {
         config,
         pool,
-        settings: SettingsWiring { schema, started },
+        settings: SettingsWiring {
+            store,
+            schema,
+            started,
+        },
     })
 }
 
-/// Строки слоя БД; в памяти хранилища настроек нет, слой пуст.
-async fn read_stored(
+/// Хранилище настроек и его строки; в памяти строк нет, слой БД пуст.
+async fn open_settings(
     database: &Database,
-    key: Option<crane_pg::SettingsKey>,
-) -> Result<(Option<PgPool>, BTreeMap<String, Stored>), RunError> {
+    key: Option<SettingsKey>,
+) -> Result<(Option<PgPool>, SettingsBackend, BTreeMap<String, Stored>), RunError> {
     match database {
-        Database::Memory => Ok((None, BTreeMap::new())),
+        Database::Memory => {
+            let store = MemorySettings::new(Arc::new(SystemClock));
+            Ok((None, SettingsBackend::Memory(store), BTreeMap::new()))
+        }
         Database::Postgres(options) => {
             // Подключаемся сразу: недоступная БД валит старт, а не первый запрос.
             let pool = connect(options).await?;
             let store = PgSettings::new(pool.clone(), Arc::new(SystemClock), key);
             let rows = store.list().await?;
-            Ok((Some(pool), rows))
+            Ok((Some(pool), SettingsBackend::Postgres(store), rows))
         }
     }
 }
 
 /// Собирает роутеры API и admin над хранилищами из настроек. Отдельно от `serve`,
 /// чтобы сборку (выбор хранилищ, репозитории) проверяли тесты без сокетов.
-pub(crate) async fn routers(loaded: Loaded) -> Result<Served, RunError> {
+pub(crate) async fn routers(loaded: Loaded) -> Result<(Router, Router), RunError> {
     let Loaded {
         mut config,
         pool,
-        settings,
+        // B4a соберёт здесь `crane_app::settings::Settings` и смонтирует HTTP настроек.
+        settings: _wiring,
     } = loaded;
-    let (api, admin) = match pool {
-        None => assemble(MemoryCatalog::default(), MemoryBlobStore::default(), config).await?,
+    match pool {
+        None => assemble(MemoryCatalog::default(), MemoryBlobStore::default(), config).await,
         Some(pool) => {
-            // Постоянный каталог проверка пары оставляет только с постоянным blob.
+            // Пару каталога и blob проверил `Blobs::from_env` по режиму каталога.
             let Blobs::Durable { url, s3_key } = &mut config.blobs else {
-                return Err("каталог в PostgreSQL требует постоянного CRANE_BLOBS".into());
+                return Err("постоянный каталог требует постоянного CRANE_BLOBS".into());
             };
             let store = ObjectBlobStore::from_url(url, s3_key.take())
                 .map_err(|error| format!("не удалось открыть CRANE_BLOBS: {error}"))?;
-            assemble(PgCatalog::new(pool), store, config).await?
+            assemble(PgCatalog::new(pool), store, config).await
         }
-    };
-    Ok(Served {
-        api,
-        admin,
-        settings,
-    })
+    }
 }
 
 async fn connect(options: &PgConnectOptions) -> Result<PgPool, RunError> {
@@ -235,15 +239,15 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     Ok((api, admin))
 }
 
-async fn serve_async(var: Lookup, read_file: ReadFile) -> Result<(), RunError> {
-    let loaded = load(var, read_file).await?;
+async fn serve_async(boot: Boot) -> Result<(), RunError> {
+    let loaded = load(boot).await?;
     let (http_port, admin_port) = (loaded.config.http_port, loaded.config.admin_port);
     let names = |format, kind| loaded.config.repos.names(format, kind).to_vec();
     let repos = names(Format::Cargo, RepositoryKind::Hosted);
     let proxy_repos = names(Format::Cargo, RepositoryKind::Proxy);
     let npm_repos = names(Format::Npm, RepositoryKind::Hosted);
     let npm_proxy_repos = names(Format::Npm, RepositoryKind::Proxy);
-    let Served { api, admin, .. } = routers(loaded).await?;
+    let (api, admin) = routers(loaded).await?;
 
     let api_listener = bind(http_port).await?;
     let admin_listener = bind(admin_port).await?;

@@ -22,8 +22,8 @@ use tokio::runtime::Runtime;
 use url::Url;
 use uuid::Uuid;
 
-use super::stack::{TOKEN, database_of, database_url, lookup, no_files, runtime, token_lookup};
-use super::{load, migrate, routers};
+use super::stack::{TOKEN, database_of, database_url, lookup, runtime, token_lookup};
+use super::{load, migrate};
 use crate::system::SystemClock;
 
 /// Одна из двух разных ключей шифрования (base64 от 32 байт).
@@ -115,7 +115,7 @@ fn stored_value_acts_when_the_environment_is_silent_and_its_version_is_snapshott
         "token_principal",
         NewValue::Plain("stored-principal".to_owned()),
     );
-    // Скрытая и неизвестная строки не входят в снимок: иначе `restart_required` был бы ложным.
+    // Снимок сырой: скрытые и неизвестные строки отсеивает app, а не entry.
     db.put(
         &db.store(None),
         "http_port",
@@ -129,20 +129,26 @@ fn stored_value_acts_when_the_environment_is_silent_and_its_version_is_snapshott
     let var = token_lookup(&db.url, dir.path());
 
     // Act
-    let loaded = db.runtime.block_on(load(var, no_files()));
+    let loaded = db.runtime.block_on(load(var));
 
     // Assert
     let loaded = loaded.ok().unwrap();
     let observed = (
         loaded.config.principal.id.clone(),
         loaded.settings.started.clone(),
+        loaded.settings.persistent(),
     );
     db.drop_database();
     assert_eq!(
         observed,
         (
             "stored-principal".to_owned(),
-            BTreeMap::from([("token_principal".to_owned(), Version::FIRST)])
+            BTreeMap::from([
+                ("http_port".to_owned(), Version::FIRST),
+                ("no_such_key".to_owned(), Version::FIRST),
+                ("token_principal".to_owned(), Version::FIRST),
+            ]),
+            true
         )
     );
 }
@@ -168,7 +174,7 @@ fn environment_overrides_the_stored_value() {
     );
 
     // Act
-    let loaded = db.runtime.block_on(load(var, no_files()));
+    let loaded = db.runtime.block_on(load(var));
 
     // Assert
     let principal = loaded.ok().unwrap().config.principal.id;
@@ -190,7 +196,7 @@ fn start_fails_on_secret_sealed_with_another_key_naming_the_key_and_both_fingerp
     let var = lookup(&db.url, dir.path(), &[("CRANE_SETTINGS_KEY", KEY_B)]);
 
     // Act
-    let result = db.runtime.block_on(load(var, no_files()));
+    let result = db.runtime.block_on(load(var));
 
     // Assert
     let message = result.err().unwrap().to_string();
@@ -218,7 +224,7 @@ fn unreadable_secret_shadowed_by_the_environment_does_not_stop_the_start() {
     );
 
     // Act
-    let result = db.runtime.block_on(load(var, no_files()));
+    let result = db.runtime.block_on(load(var));
 
     // Assert
     let started = result.is_ok();
@@ -231,22 +237,23 @@ fn memory_start_has_empty_settings_layer_and_exposes_the_schema() {
     // Arrange
     let runtime = runtime();
     let dir = tempfile::tempdir().unwrap();
-    let var = lookup(
+    let boot = lookup(
         "memory",
         dir.path(),
         &[("CRANE_BLOBS", "memory"), ("CRANE_TOKEN", TOKEN)],
     );
 
     // Act
-    let served = runtime.block_on(async { routers(load(var, no_files()).await?).await });
+    let loaded = runtime.block_on(load(boot));
 
     // Assert
-    let wiring = served.ok().unwrap().settings;
+    let wiring = loaded.ok().unwrap().settings;
     assert_eq!(
         (
+            wiring.persistent(),
             wiring.started.len(),
             wiring.schema.inherited("token").map(|i| i.var)
         ),
-        (0, Some("CRANE_TOKEN".to_owned()))
+        (false, 0, Some("CRANE_TOKEN".to_owned()))
     );
 }
