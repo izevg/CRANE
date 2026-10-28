@@ -32,6 +32,7 @@ pub(crate) const UNREADABLE_KEY: &str = "registry_token";
 /// Секрет из окружения; схема-двойник нарушает контракт и отдаёт его значение, консоль обязана его скрыть.
 pub(crate) const ENV_SECRET_KEY: &str = "env_secret";
 pub(crate) const ENV_SECRET: &str = "leak-me";
+pub(crate) const ENV_SECRET_LOCATOR: &str = "valkey://env.internal:6379";
 const ROW_TIME: Duration = Duration::from_secs(1_700_000_000);
 
 const fn def(
@@ -97,10 +98,12 @@ impl SettingsSchema for Schema {
             ENV_KEY => Some(Inherited {
                 var: "CRANE_HTTP_PORT".to_owned(),
                 value: Some("8080".to_owned()),
+                locator: None,
             }),
             ENV_SECRET_KEY => Some(Inherited {
                 var: "CRANE_ENV_SECRET".to_owned(),
                 value: Some(ENV_SECRET.to_owned()),
+                locator: Some(ENV_SECRET_LOCATOR.to_owned()),
             }),
             _ => None,
         }

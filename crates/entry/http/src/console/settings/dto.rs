@@ -23,6 +23,7 @@ pub(super) fn setting(view: &SettingView) -> Value {
         "locked": view.locked(),
         "value": value(view),
         "secret_state": secret_state,
+        "locator": locator(view),
         "unreadable": unreadable,
         "version": view.stored.as_ref().map(|row| row.version.get()),
         "updated_at": view.stored.as_ref().map(|row| timestamp(row.updated_at)),
@@ -49,6 +50,26 @@ fn value(view: &SettingView) -> Option<&str> {
                 ..
             }),
         ) => Some(text),
+        _ => None,
+    }
+}
+
+/// Куда указывает секрет-URL (`scheme://host[:port]`), без учётных данных: значение секрета
+/// наружу не выходит, а смену адреса кэша или хранилища оператор должен видеть.
+fn locator(view: &SettingView) -> Option<&str> {
+    if view.def.kind != Kind::Secret {
+        return None;
+    }
+    match (view.origin(), &view.inherited, &view.stored) {
+        (Origin::Env, Some(inherited), _) => inherited.locator.as_deref(),
+        (
+            Origin::Stored,
+            _,
+            Some(StoredShown {
+                value: Shown::Secret { locator },
+                ..
+            }),
+        ) => locator.as_deref(),
         _ => None,
     }
 }

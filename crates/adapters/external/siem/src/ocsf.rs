@@ -169,6 +169,9 @@ pub struct SettingFields {
     pub new: Option<String>,
     /// `Some(true)` только при перезаписи нечитаемого секрета; значений в событии нет.
     pub replaced_unreadable: Option<bool>,
+    /// Адрес секрета-URL до и после записи (`scheme://host[:port]`, без учётных данных).
+    pub old_locator: Option<String>,
+    pub new_locator: Option<String>,
 }
 
 /// Усечение по границе символа: срез по байтам разрезал бы многобайтовый символ.
@@ -184,22 +187,27 @@ fn setting_fields(action: &AuditAction) -> SettingFields {
             change,
         } => {
             // У секрета значений нет вовсе: их нет и в самом событии.
-            let (old, new, replaced_unreadable) = match change {
+            let mut fields = SettingFields {
+                key: Some(key.clone()),
+                version: Some(version.get()),
+                ..SettingFields::default()
+            };
+            match change {
                 SettingChange::Plain { old, new } => {
-                    (old.as_deref().map(truncate), Some(truncate(new)), None)
+                    fields.old = old.as_deref().map(truncate);
+                    fields.new = Some(truncate(new));
                 }
                 SettingChange::Secret {
                     replaced_unreadable,
-                } => (None, None, replaced_unreadable.then_some(true)),
-            };
-            SettingFields {
-                key: Some(key.clone()),
-                version: Some(version.get()),
-                old,
-                new,
-                replaced_unreadable,
-                ..SettingFields::default()
+                    old_locator,
+                    new_locator,
+                } => {
+                    fields.replaced_unreadable = replaced_unreadable.then_some(true);
+                    fields.old_locator = old_locator.as_deref().map(truncate);
+                    fields.new_locator = new_locator.as_deref().map(truncate);
+                }
             }
+            fields
         }
         AuditAction::SettingDeleted { key, .. } => SettingFields {
             key: Some(key.clone()),

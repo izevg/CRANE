@@ -1,6 +1,8 @@
 use std::time::SystemTime;
 
-use crane_domain::settings::{Origin, SettingDef, Stored, StoredValue, Unreadable, Version};
+use crane_domain::settings::{
+    Origin, SettingDef, Stored, StoredValue, Unreadable, Version, locator,
+};
 use crane_ports::settings::Inherited;
 
 /// Настройка глазами консоли: три факта, остальное выводится. Секрет сюда не попадает по построению.
@@ -25,8 +27,10 @@ pub struct StoredShown {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shown {
     Plain(String),
-    /// Секрет задан; значение наружу не выходит.
-    Secret,
+    /// Секрет задан; значение наружу не выходит, только адрес без учётных данных.
+    Secret {
+        locator: Option<String>,
+    },
     Unreadable(Unreadable),
 }
 
@@ -68,7 +72,9 @@ impl StoredShown {
     pub(super) fn from_row(row: &Stored) -> Self {
         let value = match &row.value {
             StoredValue::Plain(text) => Shown::Plain(text.clone()),
-            StoredValue::Secret(_) => Shown::Secret,
+            StoredValue::Secret(secret) => Shown::Secret {
+                locator: locator(secret.expose()),
+            },
             StoredValue::Unreadable(reason) => Shown::Unreadable(reason.clone()),
         };
         Self {
@@ -99,6 +105,7 @@ mod tests {
         Inherited {
             var: "CRANE_BLOBS".to_owned(),
             value: None,
+            locator: None,
         }
     }
 

@@ -2,7 +2,9 @@
 
 use serde_json::json;
 
-use crate::fixture::{Console, ENV_SECRET, ENV_SECRET_KEY, UNREADABLE_KEY};
+use crane_domain::audit::{AuditAction, SettingChange};
+
+use crate::fixture::{Console, ENV_SECRET, ENV_SECRET_KEY, ENV_SECRET_LOCATOR, UNREADABLE_KEY};
 
 const SECRET: &str = "hunter2-very-secret";
 
@@ -102,5 +104,102 @@ fn an_environment_secret_shows_as_set_and_its_value_stays_hidden() {
             reply.text().contains(ENV_SECRET)
         ),
         (&json!("env"), &json!("set"), &json!(null), false)
+    );
+}
+
+const SECRET_URL: &str = "valkey://cache-user:cache-pw@cache.internal:6379/0";
+
+#[test]
+fn a_stored_secret_url_shows_where_it_points_and_not_how_to_log_in() {
+    // Arrange
+    let console = Console::new();
+    console.create("s3_secret", SECRET_URL);
+
+    // Act
+    let reply = console.get("/api/v1/settings/s3_secret");
+
+    // Assert
+    let text = reply.text();
+    assert_eq!(
+        (
+            reply.json()["locator"].clone(),
+            text.contains("cache-user"),
+            text.contains("cache-pw"),
+            reply.json()["value"].clone()
+        ),
+        (
+            json!("valkey://cache.internal:6379"),
+            false,
+            false,
+            json!(null)
+        )
+    );
+}
+
+#[test]
+fn a_secret_that_is_not_a_url_has_no_locator() {
+    // Arrange
+    let console = Console::new();
+    console.create("s3_secret", SECRET);
+
+    // Act
+    let reply = console.get("/api/v1/settings/s3_secret");
+
+    // Assert
+    assert_eq!(reply.json()["locator"], json!(null));
+}
+
+#[test]
+fn an_environment_secret_shows_the_locator_the_schema_gave() {
+    // Arrange
+    let console = Console::new();
+
+    // Act
+    let reply = console.get(&format!("/api/v1/settings/{ENV_SECRET_KEY}"));
+
+    // Assert
+    assert_eq!(reply.json()["locator"], json!(ENV_SECRET_LOCATOR));
+}
+
+#[test]
+fn a_plain_setting_has_no_locator() {
+    // Arrange
+    let console = Console::new();
+    console.create("blobs", "s3://bucket/path");
+
+    // Act
+    let reply = console.get("/api/v1/settings/blobs");
+
+    // Assert
+    assert_eq!(reply.json()["locator"], json!(null));
+}
+
+#[test]
+fn writing_a_secret_url_audits_the_address_and_no_credentials() {
+    // Arrange
+    let console = Console::new();
+
+    // Act
+    console.create("s3_secret", SECRET_URL);
+
+    // Assert
+    let events = console.audit_events();
+    let changes: Vec<_> = events
+        .iter()
+        .filter_map(|event| match &event.action {
+            AuditAction::SettingChanged { change, .. } => Some(change.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        (changes, format!("{events:?}").contains("cache-pw")),
+        (
+            vec![SettingChange::Secret {
+                replaced_unreadable: false,
+                old_locator: None,
+                new_locator: Some("valkey://cache.internal:6379".to_owned())
+            }],
+            false
+        )
     );
 }

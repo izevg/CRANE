@@ -94,7 +94,9 @@ fn put_secret_audits_no_values_and_marks_readable_row_as_not_unreadable() {
                 TOKEN,
                 2,
                 SettingChange::Secret {
-                    replaced_unreadable: false
+                    replaced_unreadable: false,
+                    old_locator: None,
+                    new_locator: None
                 }
             ),
             Outcome::Success
@@ -118,11 +120,47 @@ fn put_secret_over_unreadable_row_flags_replaced_unreadable() {
                 TOKEN,
                 4,
                 SettingChange::Secret {
-                    replaced_unreadable: true
+                    replaced_unreadable: true,
+                    old_locator: None,
+                    new_locator: None
                 }
             ),
             Outcome::Success
         )]
+    );
+}
+
+#[test]
+fn put_secret_url_audits_old_and_new_address_without_credentials() {
+    // Arrange
+    let old = "valkey://olduser:oldpw@old.internal:6379/0";
+    let (settings, audit) = world(seeded(&[(TOKEN, old)]), true, &[(TOKEN, 1)]);
+    let new = "valkey://newuser:newpw@[::1]:6380?x=secret-query";
+
+    // Act
+    block_on(settings.put(&caller(), TOKEN, new.to_owned(), Some(version(1)))).unwrap();
+
+    // Assert
+    let events = audit.events();
+    assert_eq!(
+        events,
+        [event(
+            changed(
+                TOKEN,
+                2,
+                SettingChange::Secret {
+                    replaced_unreadable: false,
+                    old_locator: Some("valkey://old.internal:6379".to_owned()),
+                    new_locator: Some("valkey://[::1]:6380".to_owned())
+                }
+            ),
+            Outcome::Success
+        )]
+    );
+    let text = format!("{events:?}");
+    assert_eq!(
+        ["oldpw", "newpw", "olduser", "newuser", "secret-query"].map(|part| text.contains(part)),
+        [false; 5]
     );
 }
 

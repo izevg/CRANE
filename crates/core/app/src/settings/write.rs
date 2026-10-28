@@ -1,6 +1,8 @@
 use crane_domain::access::Caller;
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome, SettingChange};
-use crane_domain::settings::{Kind, NewValue, Secret, SettingDef, Stored, StoredValue, Version};
+use crane_domain::settings::{
+    Kind, NewValue, Secret, SettingDef, Stored, StoredValue, Version, locator,
+};
 use crane_ports::settings::SettingsStore;
 
 use super::{SettingError, Settings};
@@ -142,7 +144,7 @@ impl<S: SettingsStore> Settings<S> {
     }
 }
 
-/// Что изменилось: прежнее несекретное значение и перезапись нечитаемого секрета.
+/// Что изменилось: прежнее несекретное значение, перезапись нечитаемого секрета и адреса секрета-URL.
 fn change_of(previous: Option<&Stored>, value: &NewValue) -> SettingChange {
     match value {
         NewValue::Plain(new) => SettingChange::Plain {
@@ -152,9 +154,14 @@ fn change_of(previous: Option<&Stored>, value: &NewValue) -> SettingChange {
             }),
             new: new.clone(),
         },
-        NewValue::Secret(_) => SettingChange::Secret {
+        NewValue::Secret(new) => SettingChange::Secret {
             replaced_unreadable: previous
                 .is_some_and(|row| matches!(row.value, StoredValue::Unreadable(_))),
+            old_locator: previous.and_then(|row| match &row.value {
+                StoredValue::Secret(old) => locator(old.expose()),
+                _ => None,
+            }),
+            new_locator: locator(new.expose()),
         },
     }
 }

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crane_domain::settings::{Kind, NewValue, SettingDef, Stored};
+use crane_domain::settings::{Kind, NewValue, SettingDef, Stored, locator};
 use crane_ports::settings::{Inherited, Invalid, InvalidKey, SettingsSchema};
 
 use super::stored::{StoredLayer, inherited_var};
@@ -23,6 +23,18 @@ impl ConfigSchema {
     }
 }
 
+impl ConfigSchema {
+    /// Текст секрета из `X` или из файла `X_FILE` (без перевода строки в конце); не выходит за этот модуль.
+    fn secret_text(&self, def: &SettingDef, var: &str) -> Option<String> {
+        let value = self.boot.var(var)?;
+        if var == def.env_var {
+            return Some(value);
+        }
+        let content = self.boot.read(Path::new(&value)).ok()?;
+        Some(content.trim_end_matches(['\r', '\n']).to_owned())
+    }
+}
+
 impl SettingsSchema for ConfigSchema {
     fn definitions(&self) -> &[SettingDef] {
         definitions()
@@ -31,11 +43,19 @@ impl SettingsSchema for ConfigSchema {
     fn inherited(&self, key: &str) -> Option<Inherited> {
         let def = definition(key)?;
         let var = inherited_var(def, &|name: &str| self.boot.var(name))?;
-        // Секрет наружу не выходит, ни при `X`, ни при `X_FILE`.
+        // Секрет наружу не выходит, ни при `X`, ни при `X_FILE`: только адрес без учётных данных.
         let value = (def.kind != Kind::Secret)
             .then(|| self.boot.var(&var))
             .flatten();
-        Some(Inherited { var, value })
+        let locator = (def.kind == Kind::Secret)
+            .then(|| self.secret_text(def, &var))
+            .flatten()
+            .and_then(|text| locator(&text));
+        Some(Inherited {
+            var,
+            value,
+            locator,
+        })
     }
 
     fn check(
