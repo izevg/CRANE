@@ -17,23 +17,26 @@ jobs:
     concurrency: release
     steps:
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ steps.app.outputs.token }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+          # Токен App не остаётся в .git/config: его видел бы каждый следующий шаг и каждый сторонний action.
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version-file: .nvmrc, cache: pnpm }
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with: { toolchain: stable }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Бамп, CHANGELOG, коммит, тег
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
         run: |
           tag="${HEAD_REF#release/}"
           if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "Тег $tag уже существует"; exit 1; fi
@@ -45,4 +48,6 @@ jobs:
           git add -A
           git commit -m "chore(release): $tag"
           git tag -a "$tag" -m "$tag"
-          git push origin main "$tag"
+          # Токен передаётся только этой команде, через заголовок, и не попадает в конфигурацию репозитория.
+          auth="$(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin main "$tag"
