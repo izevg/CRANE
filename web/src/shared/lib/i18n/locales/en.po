@@ -91,11 +91,20 @@ msgstr "Time"
 msgid "Все"
 msgstr "All"
 
+msgid "Все шаги"
+msgstr "All steps"
+
 msgid "выбор"
 msgstr "select"
 
 msgid "Выбрать все загруженные"
 msgstr "Select all loaded"
+
+msgid "выполнено"
+msgstr "done"
+
+msgid "выполнено окружением"
+msgstr "set by environment"
 
 msgid "Выполняется…"
 msgstr "In progress…"
@@ -150,6 +159,9 @@ msgstr "Change"
 
 msgid "Изменение: {change}"
 msgstr "Change: {change}"
+
+msgid "Изменено: {dirty}"
+msgstr "{dirty} changed"
 
 msgid "изменено: было {before}, стало {after}"
 msgstr "changed: was {before}, now {after}"
@@ -223,6 +235,9 @@ msgstr "Configure manually"
 msgid "Настроить вручную ({path})"
 msgstr "Configure manually ({path})"
 
+msgid "не выполнено"
+msgstr "not done"
+
 msgid "Не найдено или нет доступа"
 msgstr "Not found or no access"
 
@@ -231,6 +246,9 @@ msgstr "Could not copy. Select the text and copy it manually"
 
 msgid "Недостаточно прав"
 msgstr "Insufficient permissions"
+
+msgid "недоступно"
+msgstr "unavailable"
 
 msgid "Непрочитано."
 msgstr "Unread."
@@ -271,8 +289,14 @@ msgstr "open"
 msgid "Отмена"
 msgstr "Cancel"
 
+msgid "Отменить"
+msgstr "Discard"
+
 msgid "Отметьте, что сохранили токен"
 msgstr "Confirm that you've saved the token"
+
+msgid "ошибка"
+msgstr "error"
 
 msgid "Пакеты"
 msgstr "Packages"
@@ -310,6 +334,9 @@ msgstr "Search and navigate"
 msgid "Показать графиком"
 msgstr "Show as chart"
 
+msgid "Показать пароль"
+msgstr "Show password"
+
 msgid "Показать таблицей"
 msgstr "Show as table"
 
@@ -328,14 +355,26 @@ msgstr "Similar to"
 msgid "Правило: {ruleId}"
 msgstr "Rule: {ruleId}"
 
+msgid "предупреждение"
+msgstr "warning"
+
+msgid "Проверка завершена: {pass} успешно, {warn, plural, one {# с предупреждением} few {# с предупреждениями} many {# с предупреждениями} other {# с предупреждениями}}, {fail, plural, one {# с ошибкой} few {# с ошибками} many {# с ошибками} other {# с ошибками}}."
+msgstr "Check finished: {pass} passed, {warn, plural, one {# with a warning} other {# with warnings}}, {fail, plural, one {# failed} other {# failed}}."
+
 msgid "Проверьте адрес или имя пакета"
 msgstr "Check the address or package name"
 
 msgid "Проверьте сеть — данные обновятся, когда связь вернётся"
 msgstr "Check your network — data will refresh when the connection returns"
 
+msgid "Проверяем связь…"
+msgstr "Checking the connection…"
+
 msgid "Продолжить в Keycloak"
 msgstr "Continue in Keycloak"
+
+msgid "пропущено"
+msgstr "skipped"
 
 msgid "Прочие ({count})"
 msgstr "Other ({count})"
@@ -394,8 +433,14 @@ msgstr "Clear selection"
 msgid "Содержимое"
 msgstr "Content"
 
+msgid "Сохранено {saved} из {total}"
+msgstr "Saved {saved} of {total}"
+
 msgid "Сохраните сейчас — больше мы его не покажем"
 msgstr "Save it now — we won't show it again"
+
+msgid "Сохранить"
+msgstr "Save"
 
 msgid "Справка"
 msgstr "Help"
@@ -430,6 +475,9 @@ msgstr "Deleted"
 msgid "удалено"
 msgstr "removed"
 
+msgid "успешно"
+msgstr "passed"
+
 msgid "Установка"
 msgstr "Install"
 
@@ -438,6 +486,9 @@ msgstr "Deprecated"
 
 msgid "Файл {path}"
 msgstr "File {path}"
+
+msgid "Шаг {position} из {total} · {title}"
+msgstr "Step {position} of {total} · {title}"
 
 msgid "Шаг 1. Однократная настройка"
 msgstr "Step 1. One-time setup"
