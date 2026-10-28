@@ -20,13 +20,14 @@ use crane_domain::access::Caller;
 use crane_format_npm::Route;
 use crane_ports::registry::{BlobStore, Catalog};
 
-use super::{NpmSettings, npm_not_found, parse_route, service_reply};
+use super::{npm_not_found, parse_route, service_reply};
 use crate::error::ClientError;
+use crate::formats::FormatSettings;
 
 /// Общее состояние обработчика.
 pub(super) struct Shared<C, B> {
     registry: Arc<Registry<C, B>>,
-    settings: NpmSettings,
+    settings: FormatSettings,
 }
 
 /// Что нужно операциям от запроса, кроме маршрута.
@@ -38,13 +39,16 @@ struct Request {
     body: Bytes,
 }
 
-/// Router hosted-репозитория без слоёв аутентификации и диалекта: их накладывает `api_router`.
+/// Router hosted-репозитория без слоёв аутентификации и формата: их накладывает `api_router`.
 pub(crate) fn hosted_router<C: Catalog + 'static, B: BlobStore + 'static>(
     registry: Arc<Registry<C, B>>,
-    settings: NpmSettings,
+    settings: &FormatSettings,
 ) -> Router {
     let max_publish_bytes = settings.max_publish_bytes;
-    let shared = Arc::new(Shared { registry, settings });
+    let shared = Arc::new(Shared {
+        registry,
+        settings: settings.clone(),
+    });
     Router::new()
         .route("/{*path}", any(handle::<C, B>))
         .layer(DefaultBodyLimit::max(max_publish_bytes))

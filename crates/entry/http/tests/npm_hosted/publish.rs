@@ -73,7 +73,7 @@ fn put_without_attachments_or_versions_is_unsupported() {
 fn oversized_publish_document_is_rejected_before_storage() {
     // Arrange
     let api = Api::new();
-    let big = vec![7u8; crate::common::MAX_NPM_PUBLISH_BYTES];
+    let big = vec![7u8; crate::common::MAX_PUBLISH_BYTES];
 
     // Act
     let reply = api.npm_publish("@acme/left-pad", "1.0.0", &big);

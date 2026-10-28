@@ -12,7 +12,7 @@ use crane_ports::registry::{BlobStore, Catalog};
 
 use super::{Request, Shared};
 use crate::error::ClientError;
-use crate::npm::json_ok;
+use crate::formats::npm::json_ok;
 use crate::serve::document_response;
 
 const OCTET_STREAM: &str = "application/octet-stream";
@@ -44,7 +44,7 @@ pub(super) async fn packument<C: Catalog + 'static, B: BlobStore + 'static>(
     if stored.versions.is_empty() {
         return Err(ClientError::not_found());
     }
-    let base = shared.settings.mount(&request.repo);
+    let base = shared.settings.repo_url(Format::Npm, &request.repo);
     let body = render_hosted(
         package,
         &stored.versions,

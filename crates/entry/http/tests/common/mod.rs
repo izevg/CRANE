@@ -28,10 +28,7 @@ use crane_app::registry::Registry;
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::audit::AuditEvent;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
-use crane_http::{
-    CargoSettings, FormatSettings, NpmSettings, ProxyRouters, StaticToken, TrustedProxies,
-    admin_router, api_router,
-};
+use crane_http::{FormatSettings, StaticToken, TrustedProxies, admin_router, api_router};
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::audit::AuditSink;
 use crane_ports::proxy::{NoUpstream, UpstreamNames};
@@ -49,9 +46,8 @@ pub(crate) type TestRegistry = Registry<SwitchCatalog, MemoryBlobStore>;
 
 pub(crate) const TOKEN: &str = "s3cret-token";
 pub(crate) const PUBLIC_URL: &str = "https://crane.example";
-pub(crate) const MAX_PUBLISH_BYTES: usize = 4096;
-/// Документ публикации npm несёт tarball в base64, поэтому предел шире.
-pub(crate) const MAX_NPM_PUBLISH_BYTES: usize = 65536;
+/// Один предел на все форматы (`FormatSettings`); npm несёт tarball в base64, поэтому он не мал.
+pub(crate) const MAX_PUBLISH_BYTES: usize = 65536;
 pub(crate) const REPO: &str = "internal";
 /// Личность, которой принадлежит `TOKEN`.
 pub(crate) const PRINCIPAL: &str = "crane";
@@ -135,19 +131,18 @@ impl Api {
 
     /// `sink` получает события и use cases, и слоя auth; `audit` — то, что отдаёт `audit_events`.
     pub(crate) fn build(proxies: &str, sink: Arc<dyn AuditSink>, audit: Arc<MemoryAudit>) -> Self {
-        Self::build_with(proxies, sink, audit, Arc::new(NoUpstream), |_| {
-            ProxyRouters::default()
-        })
+        Self::build_with(proxies, sink, audit, Arc::new(NoUpstream), |_| Vec::new())
     }
 
     /// Рядом с hosted-репозиториями монтируется cargo proxy-router над тем же `Registry`.
     pub(crate) fn with_proxy(proxy: &proxy::Proxy) -> Self {
         let audit = Arc::new(MemoryAudit::default());
         Self::build_with("", audit.clone(), audit, Arc::new(NoUpstream), |registry| {
-            ProxyRouters {
-                cargo: vec![(proxy::NAME.to_owned(), proxy.router(registry.clone()))],
-                npm: Vec::new(),
-            }
+            vec![(
+                Format::Cargo,
+                proxy::NAME.to_owned(),
+                proxy.router(registry.clone()),
+            )]
         })
     }
 
@@ -155,19 +150,18 @@ impl Api {
     pub(crate) fn with_npm_proxy(proxy: &proxy::NpmProxy) -> Self {
         let audit = Arc::new(MemoryAudit::default());
         Self::build_with("", audit.clone(), audit, Arc::new(NoUpstream), |registry| {
-            ProxyRouters {
-                cargo: Vec::new(),
-                npm: vec![(proxy::NPM_NAME.to_owned(), proxy.router(registry.clone()))],
-            }
+            vec![(
+                Format::Npm,
+                proxy::NPM_NAME.to_owned(),
+                proxy.router(registry.clone()),
+            )]
         })
     }
 
     /// Публичный реестр отвечает на вопрос «знаешь ли имя» заданным ответом.
     pub(crate) fn with_upstream(upstream: Arc<dyn UpstreamNames>) -> Self {
         let audit = Arc::new(MemoryAudit::default());
-        Self::build_with("", audit.clone(), audit, upstream, |_| {
-            ProxyRouters::default()
-        })
+        Self::build_with("", audit.clone(), audit, upstream, |_| Vec::new())
     }
 
     fn build_with(
@@ -175,7 +169,7 @@ impl Api {
         sink: Arc<dyn AuditSink>,
         audit: Arc<MemoryAudit>,
         upstream: Arc<dyn UpstreamNames>,
-        mount: impl FnOnce(&Arc<TestRegistry>) -> ProxyRouters,
+        mount: impl FnOnce(&Arc<TestRegistry>) -> Vec<(Format, String, Router)>,
     ) -> Self {
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let ids = Arc::new(SequentialIdGen::default());
@@ -192,16 +186,10 @@ impl Api {
         ));
         let proxy_repos = mount(&registry);
         let router = api_router(
-            registry.clone(),
-            FormatSettings {
-                cargo: CargoSettings {
-                    public_url: PUBLIC_URL.to_owned(),
-                    max_publish_bytes: MAX_PUBLISH_BYTES,
-                },
-                npm: NpmSettings {
-                    public_url: PUBLIC_URL.to_owned(),
-                    max_publish_bytes: MAX_NPM_PUBLISH_BYTES,
-                },
+            &registry,
+            &FormatSettings {
+                public_url: PUBLIC_URL.to_owned(),
+                max_publish_bytes: MAX_PUBLISH_BYTES,
             },
             StaticToken::new(
                 TOKEN.as_bytes(),

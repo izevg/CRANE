@@ -21,7 +21,7 @@ use tracing::warn;
 use super::{Handle, Shared};
 use crate::context::CacheFacts;
 use crate::error::{ClientError, chain};
-use crate::npm::{parse_route, service_reply};
+use crate::formats::npm::{parse_route, service_reply};
 use crate::serve::{document_response, refuse, respond, with_facts};
 
 const OCTET_STREAM: &str = "application/octet-stream";

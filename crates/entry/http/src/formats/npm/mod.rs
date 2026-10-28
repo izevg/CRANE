@@ -11,33 +11,14 @@ use axum::response::{IntoResponse, Response};
 use crane_domain::access::Caller;
 use crane_format_npm::{Route, RouteError, render_whoami};
 
-pub(crate) use hosted::hosted_router;
-pub use proxy::npm_proxy_router;
+pub(super) use hosted::hosted_router;
+pub(super) use proxy::{presence_origin, proxy_router};
 
 use crate::error::{ClientError, chain};
 
-/// Точка монтирования npm-маршрутов; от неё же строится база ссылок на tarball.
-pub(crate) const NPM_PREFIX: &str = "/npm";
 const JSON: &str = "application/json";
 const EMPTY_OBJECT: &str = "{}";
 const AUDIT_UNSUPPORTED: &str = "аудит уязвимостей через реестр не поддерживается";
-
-/// Настройки npm-маршрутов.
-#[derive(Debug, Clone)]
-pub struct NpmSettings {
-    /// Внешний адрес без завершающего '/': от него строятся ссылки на tarball в packument.
-    pub public_url: String,
-    /// Предел тела публикации. Вложение приходит в base64 внутри JSON, то есть на треть больше
-    /// самого tarball: ограничение применяется к документу, а не к архиву.
-    pub max_publish_bytes: usize,
-}
-
-impl NpmSettings {
-    /// База ссылок на tarball: точка монтирования, с которой пришёл запрос.
-    pub(crate) fn mount(&self, repo: &str) -> String {
-        format!("{}{NPM_PREFIX}/{repo}", self.public_url)
-    }
-}
 
 pub(crate) async fn npm_not_found() -> ClientError {
     ClientError::not_found()

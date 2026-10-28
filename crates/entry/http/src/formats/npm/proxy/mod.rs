@@ -11,13 +11,14 @@ use bytes::Bytes;
 use crane_app::proxy::{ProxyEngine, ProxyError, Served};
 use crane_app::registry::Registry;
 use crane_domain::access::Caller;
-use crane_domain::proxy::Origin;
+use crane_domain::proxy::{EgressRefusal, Origin};
 use crane_domain::registry::{Format, PackageName};
-use crane_format_npm::{PACKUMENT, packument_path};
+use crane_format_npm::{PACKUMENT, REGISTRY_HOST, packument_path};
 use crane_ports::proxy::{FetchLeases, ProxyCache, Upstream};
 use crane_ports::registry::{BlobStore, Catalog};
 
-use super::{NpmSettings, npm_not_found};
+use super::npm_not_found;
+use crate::formats::{FormatSettings, ProxySource};
 use crate::serve::Refusal;
 
 /// Состояние обработчика одного proxy-репозитория. `U, PC, L, B` — порты движка,
@@ -63,15 +64,24 @@ where
     }
 }
 
-/// Router proxy-репозитория без слоёв аутентификации и диалекта: их накладывает `api_router`.
-/// `name` попадает в ссылки на tarball, поэтому совпадает с именем, под которым router монтируется.
-pub fn npm_proxy_router<U, PC, L, B, RC, RB>(
+/// Источник документов и архивов: один хост, ключи не пересекаются (архивы всегда содержат `/-/`).
+pub(in crate::formats) fn presence_origin(
+    source: &ProxySource<'_>,
+) -> Result<Origin, EgressRefusal> {
+    Ok(Origin {
+        repository: source.repository,
+        base: source.policy.admit("https", REGISTRY_HOST, None, "")?,
+    })
+}
+
+/// Router proxy-репозитория без слоёв аутентификации и формата: их накладывает `api_router`.
+/// Имя источника попадает в ссылки на tarball, поэтому совпадает с именем, под которым router монтируется.
+pub(in crate::formats) fn proxy_router<U, PC, L, B, RC, RB>(
     engine: ProxyEngine<U, PC, L, B>,
     registry: Arc<Registry<RC, RB>>,
-    origin: Origin,
-    settings: &NpmSettings,
-    name: &str,
-) -> Router
+    source: &ProxySource<'_>,
+    settings: &FormatSettings,
+) -> Result<Router, EgressRefusal>
 where
     U: Upstream + 'static,
     PC: ProxyCache + 'static,
@@ -83,13 +93,13 @@ where
     let shared = Arc::new(Shared {
         engine,
         registry,
-        origin,
-        base: settings.mount(name),
+        origin: presence_origin(source)?,
+        base: settings.repo_url(Format::Npm, source.name),
     });
-    Router::new()
+    Ok(Router::new()
         .route("/{*path}", any(routes::handle::<U, PC, L, B, RC, RB>))
         // Proxy тела не читает: запись в него всё равно закрыта (405).
         .layer(DefaultBodyLimit::max(0))
         .fallback(npm_not_found)
-        .with_state(shared)
+        .with_state(shared))
 }

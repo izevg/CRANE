@@ -20,9 +20,9 @@ use crane_format_cargo::{
 use crane_ports::registry::{BlobStore, Catalog};
 use futures_util::stream;
 
-use super::{Shared, repo_base};
-use crate::cargo::CargoSettings;
+use super::Shared;
 use crate::error::{ClientError, chain};
+use crate::formats::FormatSettings;
 
 const JSON: &str = "application/json";
 
@@ -47,12 +47,12 @@ fn json_ok(body: String) -> Response {
 /// (единственная точка эмиссии аудита).
 fn index_metadata(
     request: &CargoPublish,
-    settings: &CargoSettings,
+    settings: &FormatSettings,
     repo: &str,
 ) -> Result<Result<FormatMetadata, Refusal>, ClientError> {
     // Адрес индекса строится так же, как база в `config.json`: именно его cargo подставляет
     // в `registry` зависимостей этого репозитория.
-    let own_index = format!("sparse+{}/index/", repo_base(settings, repo));
+    let own_index = format!("sparse+{}/index/", settings.repo_url(Format::Cargo, repo));
     match request.index_metadata(&own_index) {
         Ok(metadata) => Ok(Ok(metadata)),
         Err(MetadataError::Foreign(foreign)) => Ok(Err(Refusal {

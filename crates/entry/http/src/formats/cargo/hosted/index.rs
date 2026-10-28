@@ -13,9 +13,9 @@ use crane_domain::registry::Format;
 use crane_format_cargo::{parse_index_path, render_config, render_index};
 use crane_ports::registry::{BlobStore, Catalog};
 
-use super::{Shared, repo_base};
-use crate::cargo::INDEX_TYPE;
+use super::Shared;
 use crate::error::ClientError;
+use crate::formats::cargo::INDEX_TYPE;
 use crate::serve::document_response;
 
 const JSON: &str = "application/json";
@@ -31,7 +31,7 @@ pub(super) async fn config<C: Catalog + 'static, B: BlobStore + 'static>(
         .registry
         .repository(&caller, Format::Cargo, &repo)
         .await?;
-    let base = repo_base(&shared.settings, &repo);
+    let base = shared.settings.repo_url(Format::Cargo, &repo);
     Ok(([(header::CONTENT_TYPE, JSON)], render_config(&base)).into_response())
 }
 
