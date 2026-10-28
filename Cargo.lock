@@ -362,6 +362,8 @@ name = "crane-domain"
 version = "0.2.0"
 dependencies = [
  "semver",
+ "sha2 0.10.9",
+ "subtle",
  "thiserror",
  "uuid",
 ]
@@ -431,7 +433,6 @@ dependencies = [
  "http-body-util",
  "serde_json",
  "sha2 0.10.9",
- "subtle",
  "tokio",
  "tower",
  "tracing",

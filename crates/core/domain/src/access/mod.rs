@@ -13,6 +13,30 @@ pub struct Principal {
     pub kind: PrincipalKind,
 }
 
+/// Фоновые действия самого CRANE: первый старт, перевыпуск токена.
+pub const SYSTEM_PRINCIPAL_ID: &str = "crane:system";
+/// Записи мастера первого запуска под bootstrap-токеном.
+pub const BOOTSTRAP_PRINCIPAL_ID: &str = "crane:bootstrap";
+
+impl Principal {
+    #[must_use]
+    pub fn system() -> Self {
+        Self::robot(SYSTEM_PRINCIPAL_ID)
+    }
+
+    #[must_use]
+    pub fn bootstrap() -> Self {
+        Self::robot(BOOTSTRAP_PRINCIPAL_ID)
+    }
+
+    fn robot(id: &str) -> Self {
+        Self {
+            id: id.to_owned(),
+            kind: PrincipalKind::Robot,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrincipalKind {
     Human,

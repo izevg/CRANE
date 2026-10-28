@@ -6,7 +6,7 @@ use sqlx::postgres::PgConnectOptions;
 
 use super::DATABASE_URL;
 use crate::config::ConfigError;
-use crate::config::source::Secret;
+use crane_domain::settings::Secret;
 
 /// Подстановка, когда у значения нет читаемой схемы: само значение может быть секретом.
 pub(super) const NO_SCHEME: &str = "(нет схемы)";

@@ -18,8 +18,9 @@ use std::path::Path;
 
 use crane_domain::access::Principal;
 use crane_domain::registry::Namespace;
+use crane_domain::settings::Secret;
 use crane_http::TrustedProxies;
-use source::{Secret, secret};
+use source::secret;
 
 pub(crate) use network::admin_port;
 pub(crate) use proxy::{Cache, Proxy};

@@ -1,7 +1,7 @@
 //! Чистое сопоставление `AuditEvent` с плоскими полями OCSF 1.3.
 
 use crane_domain::access::{Principal, PrincipalKind};
-use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
+use crane_domain::audit::{AuditAction, AuditEvent, Outcome, SettingChange};
 use crane_domain::registry::{Format, PackageName, Version};
 use uuid::Uuid;
 
@@ -14,6 +14,8 @@ const CATEGORY_APPLICATION: u32 = 6;
 const USER_TYPE_UNKNOWN: u32 = 0;
 const USER_TYPE_USER: u32 = 1;
 const USER_TYPE_OTHER: u32 = 99;
+/// Сколько символов значения настройки попадает в журнал: длинное значение не должно раздувать запись.
+const SETTING_VALUE_MAX_CHARS: usize = 256;
 
 /// Субъект события: `actor.user.*` у 6003, `user.*` у 3002.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +54,8 @@ pub struct OcsfRecord {
     pub resource_type: Option<&'static str>,
     pub repository: Option<String>,
     pub trace_id: Option<String>,
+    /// Поля настройки для `unmapped.setting.*`.
+    pub setting: SettingFields,
 }
 
 /// Класс, категория, activity (id и имя) и операция API по действию.
@@ -72,7 +76,7 @@ fn shape(action: &AuditAction) -> Shape {
         operation: Some(operation),
     };
     match action {
-        AuditAction::Authenticate => Shape {
+        AuditAction::Authenticate | AuditAction::OnboardingTokenRejected => Shape {
             class_uid: CLASS_AUTHENTICATION,
             category_uid: CATEGORY_IAM,
             activity_id: 1,
@@ -96,6 +100,16 @@ fn shape(action: &AuditAction) -> Shape {
         AuditAction::Untag { .. } => api(3, "Update", "untag"),
         AuditAction::Reserve(_) => api(1, "Create", "namespace.reserve"),
         AuditAction::ShadowUpstream { .. } => api(2, "Read", "upstream.shadow"),
+        AuditAction::SettingChanged { .. } => api(3, "Update", "setting.change"),
+        AuditAction::SettingRejectedLocked { .. } => api(3, "Update", "setting.reject_locked"),
+        AuditAction::SettingDeleted { .. } => api(4, "Delete", "setting.delete"),
+        AuditAction::OnboardingStarted => api(1, "Create", "onboarding.start"),
+        AuditAction::OnboardingCompleted { .. } => api(3, "Update", "onboarding.complete"),
+        AuditAction::OnboardingSkippedPreconfigured => {
+            api(3, "Update", "onboarding.skip_preconfigured")
+        }
+        AuditAction::OnboardingTokenRotated => api(3, "Update", "onboarding.rotate_token"),
+        AuditAction::OnboardingReset => api(3, "Update", "onboarding.reset"),
     }
 }
 
@@ -111,7 +125,16 @@ fn resource(action: &AuditAction) -> Option<Resource<'_>> {
     match action {
         AuditAction::Authenticate
         | AuditAction::Reserve(_)
-        | AuditAction::ShadowUpstream { .. } => None,
+        | AuditAction::ShadowUpstream { .. }
+        | AuditAction::SettingChanged { .. }
+        | AuditAction::SettingDeleted { .. }
+        | AuditAction::SettingRejectedLocked { .. }
+        | AuditAction::OnboardingStarted
+        | AuditAction::OnboardingCompleted { .. }
+        | AuditAction::OnboardingSkippedPreconfigured
+        | AuditAction::OnboardingTokenRejected
+        | AuditAction::OnboardingTokenRotated
+        | AuditAction::OnboardingReset => None,
         AuditAction::Publish(c)
         | AuditAction::Yank(c)
         | AuditAction::Unyank(c)
@@ -129,6 +152,58 @@ fn resource(action: &AuditAction) -> Option<Resource<'_>> {
             package: &package.package,
             version: None,
         }),
+    }
+}
+
+/// Поля настройки для `unmapped.setting.*`; у остальных действий пусты.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct SettingFields {
+    pub key: Option<String>,
+    /// Переменная, из-за которой запись запрещена.
+    pub env_var: Option<String>,
+    pub version: Option<u64>,
+    /// Старое и новое значение несекретной настройки, усечённые до 256 символов. У секрета и у удаления их нет.
+    pub old: Option<String>,
+    pub new: Option<String>,
+}
+
+/// Усечение по границе символа: срез по байтам разрезал бы многобайтовый символ.
+fn truncate(value: &str) -> String {
+    value.chars().take(SETTING_VALUE_MAX_CHARS).collect()
+}
+
+fn setting_fields(action: &AuditAction) -> SettingFields {
+    match action {
+        AuditAction::SettingChanged {
+            key,
+            version,
+            change,
+        } => {
+            // У секрета значений нет вовсе: их нет и в самом событии.
+            let (old, new) = match change {
+                SettingChange::Plain { old, new } => {
+                    (old.as_deref().map(truncate), Some(truncate(new)))
+                }
+                SettingChange::Secret => (None, None),
+            };
+            SettingFields {
+                key: Some(key.clone()),
+                version: Some(version.get()),
+                old,
+                new,
+                ..SettingFields::default()
+            }
+        }
+        AuditAction::SettingDeleted { key, .. } => SettingFields {
+            key: Some(key.clone()),
+            ..SettingFields::default()
+        },
+        AuditAction::SettingRejectedLocked { key, env_var } => SettingFields {
+            key: Some(key.clone()),
+            env_var: Some(env_var.clone()),
+            ..SettingFields::default()
+        },
+        _ => SettingFields::default(),
     }
 }
 
@@ -190,6 +265,7 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
         ),
     };
     let resource = resource(&event.action);
+    let setting = setting_fields(&event.action);
     OcsfRecord {
         class_uid: shape.class_uid,
         category_uid: shape.category_uid,
@@ -216,9 +292,14 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
         resource_type: resource.as_ref().map(|_| "package"),
         repository: resource.map(|r| r.repository.to_owned()),
         trace_id: event.request.trace_id.clone(),
+        setting,
     }
 }
 
 #[cfg(test)]
 #[path = "tests/ocsf.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/setting.rs"]
+mod setting_tests;

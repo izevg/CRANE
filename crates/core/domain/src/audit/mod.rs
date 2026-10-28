@@ -2,6 +2,7 @@
 
 use crate::access::{Principal, RequestContext};
 use crate::registry::{Coordinate, Format, Namespace, PackageName, PackageRef};
+use crate::settings::Version;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuditAction {
@@ -30,6 +31,48 @@ pub enum AuditAction {
         format: Format,
         package: PackageName,
     },
+    SettingChanged {
+        key: String,
+        version: Version,
+        change: SettingChange,
+    },
+    /// Запись отклонена: ключ задан переменной окружения или файлом.
+    SettingRejectedLocked {
+        key: String,
+        env_var: String,
+    },
+    OnboardingStarted,
+    OnboardingCompleted {
+        via: OnboardingCredential,
+    },
+    OnboardingSkippedPreconfigured,
+    OnboardingTokenRejected,
+    OnboardingTokenRotated,
+    /// Break-glass сброс мастера с хоста.
+    OnboardingReset,
+    /// Настройка удалена; значения удалённого в журнал не пишутся.
+    SettingDeleted {
+        key: String,
+        secret: bool,
+    },
+}
+
+/// Что изменилось в настройке. Для секрета значений нет вовсе: ни старого, ни нового.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SettingChange {
+    /// `old: None` — настройка создана.
+    Plain {
+        old: Option<String>,
+        new: String,
+    },
+    Secret,
+}
+
+/// Чем открыт вход в мастер.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OnboardingCredential {
+    BootstrapToken,
+    StaticToken,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

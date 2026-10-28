@@ -7,5 +7,5 @@
 mod ocsf;
 mod sink;
 
-pub use ocsf::{OcsfRecord, OcsfUser, ocsf};
+pub use ocsf::{OcsfRecord, OcsfUser, SettingFields, ocsf};
 pub use sink::{AUDIT_TARGET, OcsfLogSink};

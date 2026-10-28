@@ -85,6 +85,11 @@ fn emit(r: &OcsfRecord) {
         "resources.type" = r.resource_type,
         unmapped.repository = r.repository.as_deref(),
         unmapped.trace_id = r.trace_id.as_deref(),
+        unmapped.setting.key = r.setting.key.as_deref(),
+        unmapped.setting.env_var = r.setting.env_var.as_deref(),
+        unmapped.setting.version = r.setting.version,
+        unmapped.setting.old = r.setting.old.as_deref(),
+        unmapped.setting.new = r.setting.new.as_deref(),
         "аудит"
     );
 }

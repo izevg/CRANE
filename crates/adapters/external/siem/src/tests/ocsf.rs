@@ -8,7 +8,7 @@ use crane_domain::registry::{Coordinate, Namespace, NamespacePattern, PackageRef
 
 use super::*;
 
-fn coord(name: &str, version: &str) -> Coordinate {
+pub(super) fn coord(name: &str, version: &str) -> Coordinate {
     Coordinate {
         format: Format::Cargo,
         repository: "internal".to_owned(),
@@ -17,14 +17,14 @@ fn coord(name: &str, version: &str) -> Coordinate {
     }
 }
 
-fn principal(kind: PrincipalKind) -> Principal {
+pub(super) fn principal(kind: PrincipalKind) -> Principal {
     Principal {
         id: "crane".to_owned(),
         kind,
     }
 }
 
-fn event(action: AuditAction, outcome: Outcome, actor: Option<Principal>) -> AuditEvent {
+pub(super) fn event(action: AuditAction, outcome: Outcome, actor: Option<Principal>) -> AuditEvent {
     AuditEvent {
         actor,
         request: RequestContext {
@@ -68,14 +68,18 @@ fn shadow() -> AuditAction {
     }
 }
 
-fn failure() -> Outcome {
+pub(super) fn failure() -> Outcome {
     Outcome::Failure {
         reason: "причина".to_owned(),
         code: None,
     }
 }
 
-fn record(action: AuditAction, outcome: Outcome, actor: Option<Principal>) -> OcsfRecord {
+pub(super) fn record(
+    action: AuditAction,
+    outcome: Outcome,
+    actor: Option<Principal>,
+) -> OcsfRecord {
     ocsf(&event(action, outcome, actor), Uuid::nil(), 7)
 }
 

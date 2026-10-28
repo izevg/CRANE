@@ -8,8 +8,8 @@ use super::*;
 
 use database::{NO_SCHEME, scheme_of};
 
-use crate::config::source::Secret;
 use crate::config::tests::{env, error_of, no_files, with};
+use crane_domain::settings::Secret;
 
 #[test]
 fn unsupported_database_names_scheme_but_never_the_secret() {
@@ -46,7 +46,7 @@ fn unparsable_database_url_error_never_contains_the_password() {
 
     // Act
     let messages = urls.map(|url| {
-        Database::parse(&Secret(url.to_owned()))
+        Database::parse(&Secret::new(url.to_owned()))
             .err()
             .map(|error| error.to_string())
     });
