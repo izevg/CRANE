@@ -29,6 +29,8 @@ pub enum UpstreamFailure {
     Refused(#[source] EgressRefusal),
     #[error("upstream недоступен")]
     Unavailable,
+    #[error("upstream ограничил запросы")]
+    Throttled,
 }
 
 /// Ответ движка с фактами для журнала доступа и заголовков `Age`/`Warning`.

@@ -44,7 +44,8 @@ fn fetch(repo, key):                                    // key = нормали�
           304            => touch(e)
           200 metadata   => body = format.rewrite_upstream(resp); store(key, body, ttl(key))
           200 blob       => tee(resp.stream → client, → blob_store staging); verify; commit CAS
-          404            => store_negative(key, neg_ttl(key))
+          404 | 410 | 451 => store_negative(key, neg_ttl(key))   // 410/451: снятие, stale не отдаётся
+          429 | 403      => if e: return e.stale_if_throttled()  // stale не дольше min(stale_if_error, 24 ч), иначе 502 (throttled)
           5xx | timeout  => if e: return e.stale_if_error() else 502 с диагностикой   // после фильтра served(), см. ниже
         publish("inv", "px:"+key)
     })

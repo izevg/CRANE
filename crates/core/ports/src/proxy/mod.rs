@@ -59,9 +59,13 @@ pub enum UpstreamError {
     /// SSRF guard отказал (redirect-hop или адрес после DNS): событие для `SecOps`.
     #[error("upstream отклонён политикой egress")]
     Refused(#[source] EgressRefusal),
-    /// Сеть, таймаут, 5xx и любой ответ, кроме 200/304/404.
+    /// Сеть, таймаут, 5xx и любой ответ, кроме 200/304/404/410/451 и 429/403.
     #[error("upstream недоступен")]
     Unavailable(#[source] Box<dyn std::error::Error + Send + Sync>),
+    /// Upstream отказывается обслуживать нас: rate limit (429) или, у публичных реестров,
+    /// блокировка WAF или IP (403). Это не снятие пакета: оно приходит как 404/410/451.
+    #[error("upstream ограничил запросы")]
+    Throttled,
 }
 
 /// Транспорт к upstream. Адаптер (reqwest) обязан применять `EgressPolicy::check_address`

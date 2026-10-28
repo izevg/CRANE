@@ -320,7 +320,16 @@ where
                             max_age,
                             ..
                         },
-                }) if policy.usable_on_error(*unchanged, *max_age, *fetched_at, now) => {
+                }) if match reason {
+                    // Rate limit можно спровоцировать: stale при нём ограничен сутками.
+                    UpstreamFailure::Throttled => {
+                        policy.usable_when_throttled(*unchanged, *max_age, *fetched_at, now)
+                    }
+                    UpstreamFailure::Refused(_) | UpstreamFailure::Unavailable => {
+                        policy.usable_on_error(*unchanged, *max_age, *fetched_at, now)
+                    }
+                } =>
+                {
                     Ok(Served {
                         body: body.clone(),
                         result: CacheResult::StaleOnError(reason),

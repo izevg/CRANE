@@ -4,6 +4,11 @@ use std::time::{Duration, SystemTime};
 /// Потолок множителя адаптивного TTL: 2^3 = ×8 (docs/product/11-heuristics.md, 11.1).
 const ADAPTIVE_MAX_DOUBLINGS: u32 = 3;
 
+/// Потолок stale при ограничении запросов (429/403). Rate limit атакующий может спровоцировать,
+/// и без потолка stale-if-error (до недели) заморозил бы документы; сутки же переживают
+/// короткие блокировки, не отказывая в доступности.
+const STALE_IF_THROTTLED_MAX: Duration = Duration::from_hours(24);
+
 /// Возраст записи. Если часы реплик разошлись и `fetched_at` оказался в будущем, возраст 0:
 /// запись считается свежей, а не вечно «из будущего».
 #[must_use]
@@ -112,10 +117,35 @@ impl MetadataPolicy {
         fetched_at: SystemTime,
         now: SystemTime,
     ) -> bool {
+        self.usable_within(self.stale_if_error, unchanged, max_age, fetched_at, now)
+    }
+
+    /// Запись ещё годится, когда upstream ограничил запросы: окно stale-if-error, но не дольше
+    /// `STALE_IF_THROTTLED_MAX`.
+    #[must_use]
+    pub fn usable_when_throttled(
+        &self,
+        unchanged: u32,
+        max_age: Option<Duration>,
+        fetched_at: SystemTime,
+        now: SystemTime,
+    ) -> bool {
+        let window = self.stale_if_error.min(STALE_IF_THROTTLED_MAX);
+        self.usable_within(window, unchanged, max_age, fetched_at, now)
+    }
+
+    fn usable_within(
+        &self,
+        window: Duration,
+        unchanged: u32,
+        max_age: Option<Duration>,
+        fetched_at: SystemTime,
+        now: SystemTime,
+    ) -> bool {
         age(fetched_at, now)
             < self
                 .effective_ttl(unchanged, max_age)
-                .saturating_add(self.stale_if_error)
+                .saturating_add(window)
     }
 
     /// Сколько хранить запись (TTL ключа L2): пока она может понадобиться как stale или как резерв при сбое.

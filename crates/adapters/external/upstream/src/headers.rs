@@ -16,6 +16,8 @@ pub(crate) enum Classified {
         max_age: Option<Duration>,
     },
     NotFound,
+    /// Upstream отказывается обслуживать нас (429, 403).
+    Throttled,
     /// Любой другой статус: порт трактует его как недоступность upstream.
     Other(StatusCode),
 }
@@ -33,7 +35,12 @@ pub(crate) fn classify(status: StatusCode, headers: &HeaderMap) -> Classified {
         StatusCode::NOT_MODIFIED => Classified::NotModified {
             max_age: freshness_hint(headers),
         },
-        StatusCode::NOT_FOUND => Classified::NotFound,
+        // 410 и 451 — снятие пакета (в том числе по закону): как 404, иначе stale-if-error
+        // заморозил бы удалённый документ на неделю. Исходный статус остаётся в журнале egress.
+        StatusCode::NOT_FOUND | StatusCode::GONE | StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS => {
+            Classified::NotFound
+        }
+        StatusCode::TOO_MANY_REQUESTS | StatusCode::FORBIDDEN => Classified::Throttled,
         other => Classified::Other(other),
     }
 }
@@ -169,14 +176,17 @@ mod tests {
                 Classified::NotModified { max_age: hint },
             ),
             (StatusCode::NOT_FOUND, Classified::NotFound),
+            (StatusCode::GONE, Classified::NotFound),
+            (
+                StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS,
+                Classified::NotFound,
+            ),
+            (StatusCode::TOO_MANY_REQUESTS, Classified::Throttled),
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Classified::Other(StatusCode::INTERNAL_SERVER_ERROR),
             ),
-            (
-                StatusCode::FORBIDDEN,
-                Classified::Other(StatusCode::FORBIDDEN),
-            ),
+            (StatusCode::FORBIDDEN, Classified::Throttled),
         ];
 
         // Act

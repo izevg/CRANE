@@ -232,6 +232,7 @@ async fn ask_upstream<U: Upstream>(
         .map_err(|error| match error {
             UpstreamError::Refused(refusal) => UpstreamFailure::Refused(refusal),
             UpstreamError::Unavailable(_) => UpstreamFailure::Unavailable,
+            UpstreamError::Throttled => UpstreamFailure::Throttled,
         })
 }
 

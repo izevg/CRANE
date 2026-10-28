@@ -110,6 +110,7 @@ fn record_egress(
             let failure = match error {
                 UpstreamError::Refused(_) => "refused",
                 UpstreamError::Unavailable(_) => "unavailable",
+                UpstreamError::Throttled => "throttled",
             };
             tracing::info!(
                 target: EGRESS_TARGET,
@@ -150,6 +151,7 @@ impl Upstream for HttpUpstream {
             }),
             Classified::NotModified { max_age } => Ok(UpstreamResponse::NotModified { max_age }),
             Classified::NotFound => Ok(UpstreamResponse::NotFound),
+            Classified::Throttled => Err(UpstreamError::Throttled),
             Classified::Other(status) => {
                 Err(unavailable(format!("upstream ответил статусом {status}")))
             }
