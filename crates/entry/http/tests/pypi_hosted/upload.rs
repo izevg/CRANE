@@ -232,6 +232,32 @@ fn declared_content_length_over_the_limit_is_refused_before_reading() {
 }
 
 #[test]
+fn request_exactly_at_the_limit_is_accepted() {
+    // Arrange
+    let api = Api::new();
+    let mut dist = Dist::wheel("acme-core", "1.0.0");
+    let overhead = dist.form().len() - dist.bytes.len();
+    dist.bytes = vec![7; MAX_PUBLISH_BYTES - overhead];
+    let body = dist.form();
+    let length = body.len().to_string();
+    let content_type = form_content_type();
+
+    // Act
+    let reply = api.pypi(
+        Method::POST,
+        &upload_uri(),
+        &[("content-type", &content_type), ("content-length", &length)],
+        body,
+    );
+
+    // Assert
+    assert_eq!(
+        (length.parse::<usize>().unwrap(), reply.status),
+        (MAX_PUBLISH_BYTES, StatusCode::OK)
+    );
+}
+
+#[test]
 fn large_description_field_does_not_hit_the_text_field_limit() {
     // Arrange
     let api = Api::new();
