@@ -1,18 +1,33 @@
 //! Контракт `OnboardingStore`: идемпотентный `begin`, необратимый `complete`, `rotate` и `reset`.
 
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::onboarding::{Onboarding, TokenHash};
-use crane_domain::settings::Secret;
 
 use crate::settings::{OnboardingError, OnboardingStore};
+use crate::system::Clock;
 
 const NOW: SystemTime = SystemTime::UNIX_EPOCH;
 const TTL: Duration = Duration::from_secs(3_600);
+/// Время, которое контракт сообщает хранилищу через `Clock`: `complete` обязан записать его.
+fn clock_time() -> SystemTime {
+    SystemTime::UNIX_EPOCH + Duration::from_secs(5)
+}
 
-/// Проверяет реализацию `OnboardingStore`; `new` создаёт чистое хранилище для сценария.
-pub async fn onboarding_store_contract<S: OnboardingStore>(new: impl Fn() -> S) {
+struct FixedClock;
+
+impl Clock for FixedClock {
+    fn now(&self) -> SystemTime {
+        clock_time()
+    }
+}
+
+/// Проверяет реализацию `OnboardingStore`; `new` создаёт чистое хранилище для сценария,
+/// время завершения оно берёт из переданных часов.
+pub async fn onboarding_store_contract<S: OnboardingStore>(new: impl Fn(Arc<dyn Clock>) -> S) {
+    let new = || new(Arc::new(FixedClock));
     get_on_empty_store_is_none(&new()).await;
     begin_on_empty_store_returns_initial(&new()).await;
     second_begin_returns_first_state(&new()).await;
@@ -26,12 +41,8 @@ pub async fn onboarding_store_contract<S: OnboardingStore>(new: impl Fn() -> S) 
     reset_without_row_is_not_started(&new()).await;
 }
 
-fn secret(raw: &str) -> Secret {
-    Secret::new(raw.to_owned())
-}
-
 fn hash(raw: &str) -> TokenHash {
-    TokenHash::of(&secret(raw))
+    TokenHash::of(raw.as_bytes())
 }
 
 fn pending(raw: &str) -> Onboarding {
@@ -54,7 +65,7 @@ async fn accepts<S: OnboardingStore>(store: &S, raw: &str) -> bool {
         .get()
         .await
         .expect("get в проверке сценария")
-        .is_some_and(|state| state.accepts(&secret(raw), NOW))
+        .is_some_and(|state| state.accepts(raw.as_bytes(), NOW))
 }
 
 async fn get_on_empty_store_is_none<S: OnboardingStore>(store: &S) {
@@ -77,7 +88,7 @@ async fn begin_on_empty_store_returns_initial<S: OnboardingStore>(store: &S) {
 
     // Assert
     let returned = result.expect("begin");
-    assert!(returned.accepts(&secret("first"), NOW));
+    assert!(returned.accepts(b"first", NOW));
     assert!(accepts(store, "first").await);
 }
 
@@ -90,48 +101,44 @@ async fn second_begin_returns_first_state<S: OnboardingStore>(store: &S) {
 
     // Assert
     let returned = result.expect("begin");
-    assert!(returned.accepts(&secret("first"), NOW));
-    assert!(!returned.accepts(&secret("second"), NOW));
+    assert!(returned.accepts(b"first", NOW));
+    assert!(!returned.accepts(b"second", NOW));
     assert!(accepts(store, "first").await);
 }
 
 async fn complete_from_pending_records_who_and_when<S: OnboardingStore>(store: &S) {
     // Arrange
     store.begin(pending("first")).await.expect("begin");
-    let at = NOW + Duration::from_secs(5);
 
     // Act
-    let result = store.complete(&operator("alice"), at).await;
+    let result = store.complete(&operator("alice")).await;
 
     // Assert
     result.expect("complete");
     let state = store.get().await.expect("get").expect("строка есть");
     assert!(matches!(
         state,
-        Onboarding::Completed { at: done, by } if done == at && by == "alice"
+        Onboarding::Completed { at, by } if at == clock_time() && by == "alice"
     ));
 }
 
 async fn complete_from_completed_fails_and_keeps_state<S: OnboardingStore>(store: &S) {
     // Arrange
     store.begin(pending("first")).await.expect("begin");
-    let at = NOW + Duration::from_secs(5);
     store
-        .complete(&operator("alice"), at)
+        .complete(&operator("alice"))
         .await
         .expect("первый complete");
 
     // Act
-    let result = store
-        .complete(&operator("bob"), at + Duration::from_secs(1))
-        .await;
+    let result = store.complete(&operator("bob")).await;
 
     // Assert
     assert!(matches!(result, Err(OnboardingError::Completed)));
     let state = store.get().await.expect("get").expect("строка есть");
     assert!(matches!(
         state,
-        Onboarding::Completed { at: done, by } if done == at && by == "alice"
+        Onboarding::Completed { at, by } if at == clock_time() && by == "alice"
     ));
 }
 
@@ -140,7 +147,7 @@ async fn complete_without_row_is_not_started<S: OnboardingStore>(store: &S) {
     // Хранилище чистое: подготовки нет.
 
     // Act
-    let result = store.complete(&operator("alice"), NOW).await;
+    let result = store.complete(&operator("alice")).await;
 
     // Assert
     assert!(matches!(result, Err(OnboardingError::NotStarted)));
@@ -163,10 +170,7 @@ async fn rotate_from_pending_replaces_token<S: OnboardingStore>(store: &S) {
 async fn rotate_from_completed_fails_and_keeps_state<S: OnboardingStore>(store: &S) {
     // Arrange
     store.begin(pending("old")).await.expect("begin");
-    store
-        .complete(&operator("alice"), NOW)
-        .await
-        .expect("complete");
+    store.complete(&operator("alice")).await.expect("complete");
 
     // Act
     let result = store.rotate(hash("new"), NOW + TTL).await;
@@ -178,7 +182,7 @@ async fn rotate_from_completed_fails_and_keeps_state<S: OnboardingStore>(store: 
             .get()
             .await
             .expect("get")
-            .is_some_and(|state| state.is_completed())
+            .is_some_and(|state| matches!(state, Onboarding::Completed { .. }))
     );
 }
 
@@ -197,10 +201,7 @@ async fn rotate_without_row_is_not_started<S: OnboardingStore>(store: &S) {
 async fn reset_from_completed_reopens_with_new_token<S: OnboardingStore>(store: &S) {
     // Arrange
     store.begin(pending("old")).await.expect("begin");
-    store
-        .complete(&operator("alice"), NOW)
-        .await
-        .expect("complete");
+    store.complete(&operator("alice")).await.expect("complete");
 
     // Act
     let result = store.reset(hash("new"), NOW + TTL).await;

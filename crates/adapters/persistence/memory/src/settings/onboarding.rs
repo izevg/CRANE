@@ -1,14 +1,15 @@
 use std::fmt;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::SystemTime;
 
 use crane_domain::access::Principal;
 use crane_domain::onboarding::{Onboarding, TokenHash};
 use crane_ports::settings::{OnboardingError, OnboardingStore};
+use crane_ports::system::Clock;
 
-/// Состояние мастера в памяти: одна строка под замком.
-#[derive(Default)]
+/// Состояние мастера в памяти: одна строка под замком. Время завершения берёт из `Clock`.
 pub struct MemoryOnboarding {
+    clock: Arc<dyn Clock>,
     state: Mutex<Option<Onboarding>>,
 }
 
@@ -20,6 +21,14 @@ impl fmt::Debug for MemoryOnboarding {
 }
 
 impl MemoryOnboarding {
+    #[must_use]
+    pub fn new(clock: Arc<dyn Clock>) -> Self {
+        Self {
+            clock,
+            state: Mutex::new(None),
+        }
+    }
+
     // Замок берётся только в синхронных функциях: guard не должен жить через await.
     fn lock(&self) -> MutexGuard<'_, Option<Onboarding>> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
@@ -50,14 +59,14 @@ impl MemoryOnboarding {
         Ok(())
     }
 
-    fn complete_sync(&self, by: &Principal, at: SystemTime) -> Result<(), OnboardingError> {
+    fn complete_sync(&self, by: &Principal) -> Result<(), OnboardingError> {
         let mut state = self.lock();
         match state.as_ref() {
             None => Err(OnboardingError::NotStarted),
             Some(Onboarding::Completed { .. }) => Err(OnboardingError::Completed),
             Some(Onboarding::Pending { .. }) => {
                 *state = Some(Onboarding::Completed {
-                    at,
+                    at: self.clock.now(),
                     by: by.id.clone(),
                 });
                 Ok(())
@@ -94,11 +103,7 @@ impl OnboardingStore for MemoryOnboarding {
         std::future::ready(self.reset_sync(token, expires_at))
     }
 
-    fn complete(
-        &self,
-        by: &Principal,
-        at: SystemTime,
-    ) -> impl Future<Output = Result<(), OnboardingError>> + Send {
-        std::future::ready(self.complete_sync(by, at))
+    fn complete(&self, by: &Principal) -> impl Future<Output = Result<(), OnboardingError>> + Send {
+        std::future::ready(self.complete_sync(by))
     }
 }

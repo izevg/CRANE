@@ -1,7 +1,6 @@
 use std::time::SystemTime;
 
 use super::TokenHash;
-use crate::settings::Secret;
 
 /// Состояние мастера первого запуска. Два состояния: «завершён, но с токеном» непредставимо.
 /// Без `Debug`: внутри хэш токена.
@@ -22,14 +21,9 @@ pub enum Onboarding {
 }
 
 impl Onboarding {
-    #[must_use]
-    pub const fn is_completed(&self) -> bool {
-        matches!(self, Self::Completed { .. })
-    }
-
     /// Принимает токен, только пока мастер открыт, срок не вышел и хэш совпал.
     #[must_use]
-    pub fn accepts(&self, presented: &Secret, now: SystemTime) -> bool {
+    pub fn accepts(&self, presented: &[u8], now: SystemTime) -> bool {
         match self {
             // На `expires_at` токен уже не действует.
             Self::Pending { token, expires_at } => now < *expires_at && token.matches(presented),
@@ -48,7 +42,7 @@ mod tests {
 
     fn pending(token: &str, ttl: Duration) -> Onboarding {
         Onboarding::Pending {
-            token: TokenHash::of(&Secret::new(token.to_owned())),
+            token: TokenHash::of(token.as_bytes()),
             expires_at: NOW + ttl,
         }
     }
@@ -70,8 +64,7 @@ mod tests {
         ];
 
         // Act
-        let actual =
-            cases.map(|(state, raw, now)| state.accepts(&Secret::new(raw.to_owned()), now));
+        let actual = cases.map(|(state, raw, now)| state.accepts(raw.as_bytes(), now));
 
         // Assert
         assert_eq!(actual, [true, false, false, false, false]);

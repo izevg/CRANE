@@ -433,7 +433,6 @@ dependencies = [
  "http-body-util",
  "serde_json",
  "sha2 0.10.9",
- "subtle",
  "tokio",
  "tower",
  "tracing",

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crane_domain::access::Principal;
 use crane_domain::settings::{Stored, StoredValue, Version};
 
@@ -18,8 +20,8 @@ pub enum SettingsError {
 /// Отказ записи в режиме memory (нет БД) — решение `app`/`entry`, а не порта: иначе
 /// memory-адаптер нельзя было бы прогнать контрактом.
 pub trait SettingsStore: Send + Sync {
-    /// Все строки по ключу по возрастанию.
-    fn list(&self) -> impl Future<Output = Result<Vec<(String, Stored)>, SettingsError>> + Send;
+    /// Все строки; уникальность ключей и порядок задаёт тип.
+    fn list(&self) -> impl Future<Output = Result<BTreeMap<String, Stored>, SettingsError>> + Send;
 
     /// Запись с проверкой версии (CAS). `None` — строки быть не должно, новая строка получает
     /// `Version::FIRST`; иначе `expected` обязана совпасть с текущей, результат — следующая версия.

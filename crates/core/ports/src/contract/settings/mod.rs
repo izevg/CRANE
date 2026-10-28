@@ -1,4 +1,4 @@
-//! Контракт `SettingsStore`: CAS по версии, удаление, секреты и порядок выдачи.
+//! Контракт `SettingsStore`: CAS по версии, удаление и секреты.
 
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::settings::{Secret, Stored, StoredValue, Version};
@@ -15,7 +15,6 @@ pub async fn settings_store_contract<S: SettingsStore>(new: impl Fn() -> S) {
     delete_with_current_version_removes_row(&new()).await;
     delete_with_stale_version_conflicts_and_keeps_row(&new()).await;
     put_secret_is_listed_as_secret_with_same_value(&new()).await;
-    list_is_sorted_by_key(&new()).await;
 }
 
 fn operator() -> Principal {
@@ -34,8 +33,7 @@ async fn row<S: SettingsStore>(store: &S, key: &str) -> Option<Stored> {
         .list()
         .await
         .expect("list в проверке сценария")
-        .into_iter()
-        .find_map(|(name, stored)| (name == key).then_some(stored))
+        .remove(key)
 }
 
 fn is_plain(stored: &Stored, expected: &str) -> bool {
@@ -173,22 +171,4 @@ async fn put_secret_is_listed_as_secret_with_same_value<S: SettingsStore>(store:
     assert!(
         matches!(&stored.value, StoredValue::Secret(secret) if secret.expose() == "crs_secret")
     );
-}
-
-async fn list_is_sorted_by_key<S: SettingsStore>(store: &S) {
-    // Arrange
-    seed(store, "b", "1").await;
-    seed(store, "c", "1").await;
-    seed(store, "a", "1").await;
-
-    // Act
-    let listed = store.list().await;
-
-    // Assert
-    let keys: Vec<String> = listed
-        .expect("list")
-        .into_iter()
-        .map(|(key, _)| key)
-        .collect();
-    assert_eq!(keys, ["a", "b", "c"]);
 }

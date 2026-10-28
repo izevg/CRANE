@@ -3,7 +3,6 @@
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome, SettingChange};
 use crane_domain::registry::{Format, PackageName, Version};
-use crane_domain::settings::Version as SettingVersion;
 use uuid::Uuid;
 
 const SCHEMA_VERSION: &str = "1.3.0";
@@ -55,14 +54,8 @@ pub struct OcsfRecord {
     pub resource_type: Option<&'static str>,
     pub repository: Option<String>,
     pub trace_id: Option<String>,
-    /// Ключ настройки (`unmapped.setting.key`).
-    pub setting_key: Option<String>,
-    /// Переменная, из-за которой запись запрещена.
-    pub setting_env_var: Option<String>,
-    pub setting_version: Option<u64>,
-    /// Старое и новое значение несекретной настройки, усечённые до 256 символов. У секрета их нет.
-    pub setting_old: Option<String>,
-    pub setting_new: Option<String>,
+    /// Поля настройки для `unmapped.setting.*`.
+    pub setting: SettingFields,
 }
 
 /// Класс, категория, activity (id и имя) и операция API по действию.
@@ -109,6 +102,7 @@ fn shape(action: &AuditAction) -> Shape {
         AuditAction::ShadowUpstream { .. } => api(2, "Read", "upstream.shadow"),
         AuditAction::SettingChanged { .. } => api(3, "Update", "setting.change"),
         AuditAction::SettingRejectedLocked { .. } => api(3, "Update", "setting.reject_locked"),
+        AuditAction::SettingDeleted { .. } => api(4, "Delete", "setting.delete"),
         AuditAction::OnboardingStarted => api(1, "Create", "onboarding.start"),
         AuditAction::OnboardingCompleted { .. } => api(3, "Update", "onboarding.complete"),
         AuditAction::OnboardingSkippedPreconfigured => {
@@ -133,6 +127,7 @@ fn resource(action: &AuditAction) -> Option<Resource<'_>> {
         | AuditAction::Reserve(_)
         | AuditAction::ShadowUpstream { .. }
         | AuditAction::SettingChanged { .. }
+        | AuditAction::SettingDeleted { .. }
         | AuditAction::SettingRejectedLocked { .. }
         | AuditAction::OnboardingStarted
         | AuditAction::OnboardingCompleted { .. }
@@ -160,14 +155,16 @@ fn resource(action: &AuditAction) -> Option<Resource<'_>> {
     }
 }
 
-/// Поля настройки для `unmapped`.
-#[derive(Default)]
-struct SettingFields {
-    key: Option<String>,
-    env_var: Option<String>,
-    version: Option<u64>,
-    old: Option<String>,
-    new: Option<String>,
+/// Поля настройки для `unmapped.setting.*`; у остальных действий пусты.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct SettingFields {
+    pub key: Option<String>,
+    /// Переменная, из-за которой запись запрещена.
+    pub env_var: Option<String>,
+    pub version: Option<u64>,
+    /// Старое и новое значение несекретной настройки, усечённые до 256 символов. У секрета и у удаления их нет.
+    pub old: Option<String>,
+    pub new: Option<String>,
 }
 
 /// Усечение по границе символа: срез по байтам разрезал бы многобайтовый символ.
@@ -185,18 +182,22 @@ fn setting_fields(action: &AuditAction) -> SettingFields {
             // У секрета значений нет вовсе: их нет и в самом событии.
             let (old, new) = match change {
                 SettingChange::Plain { old, new } => {
-                    (old.as_deref().map(truncate), new.as_deref().map(truncate))
+                    (old.as_deref().map(truncate), Some(truncate(new)))
                 }
                 SettingChange::Secret => (None, None),
             };
             SettingFields {
                 key: Some(key.clone()),
-                version: version.map(SettingVersion::get),
+                version: Some(version.get()),
                 old,
                 new,
                 ..SettingFields::default()
             }
         }
+        AuditAction::SettingDeleted { key, .. } => SettingFields {
+            key: Some(key.clone()),
+            ..SettingFields::default()
+        },
         AuditAction::SettingRejectedLocked { key, env_var } => SettingFields {
             key: Some(key.clone()),
             env_var: Some(env_var.clone()),
@@ -291,11 +292,7 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
         resource_type: resource.as_ref().map(|_| "package"),
         repository: resource.map(|r| r.repository.to_owned()),
         trace_id: event.request.trace_id.clone(),
-        setting_key: setting.key,
-        setting_env_var: setting.env_var,
-        setting_version: setting.version,
-        setting_old: setting.old,
-        setting_new: setting.new,
+        setting,
     }
 }
 

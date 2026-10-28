@@ -92,7 +92,7 @@ fn duplicate(stored: &Stored) -> Stored {
 }
 
 impl SettingsStore for MemorySettings {
-    fn list(&self) -> impl Future<Output = Result<Vec<(String, Stored)>, SettingsError>> + Send {
+    fn list(&self) -> impl Future<Output = Result<BTreeMap<String, Stored>, SettingsError>> + Send {
         std::future::ready(Ok(self
             .lock()
             .iter()
@@ -152,7 +152,7 @@ mod tests {
         assert!(put.is_ok());
         let rows = futures_executor::block_on(store.list());
         let stamps: Vec<SystemTime> = rows
-            .map(|rows| rows.into_iter().map(|(_, row)| row.updated_at).collect())
+            .map(|rows| rows.into_values().map(|row| row.updated_at).collect())
             .unwrap_or_default();
         assert_eq!(stamps, [start + Duration::from_secs(7)]);
     }

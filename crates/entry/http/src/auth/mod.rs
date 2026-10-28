@@ -11,10 +11,9 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use crane_domain::access::{Caller, Principal, RequestContext};
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
+use crane_domain::onboarding::TokenHash;
 use crane_domain::registry::Format;
 use crane_ports::audit::AuditSink;
-use sha2::{Digest, Sha256};
-use subtle::ConstantTimeEq;
 
 pub(crate) use credential::Credential;
 use credential::{offered, presented};
@@ -25,7 +24,7 @@ use crate::formats;
 
 /// Статический токен: в памяти хранится только его SHA-256 и личность, которой он принадлежит.
 pub struct StaticToken {
-    digest: [u8; 32],
+    hash: TokenHash,
     principal: Principal,
 }
 
@@ -33,7 +32,7 @@ impl StaticToken {
     #[must_use]
     pub fn new(secret: &[u8], principal: Principal) -> Self {
         Self {
-            digest: Sha256::digest(secret).into(),
+            hash: TokenHash::of(secret),
             principal,
         }
     }
@@ -41,8 +40,7 @@ impl StaticToken {
     /// Сравнение дайджестов, а не сырых токенов: время не зависит ни от длины
     /// предъявленного значения, ни от длины общего префикса.
     pub(crate) fn authenticate(&self, presented: &[u8]) -> Option<&Principal> {
-        let presented: [u8; 32] = Sha256::digest(presented).into();
-        bool::from(presented.ct_eq(&self.digest)).then_some(&self.principal)
+        self.hash.matches(presented).then_some(&self.principal)
     }
 }
 

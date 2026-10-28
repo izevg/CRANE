@@ -39,10 +39,6 @@ pub trait OnboardingStore: Send + Sync {
         expires_at: SystemTime,
     ) -> impl Future<Output = Result<(), OnboardingError>> + Send;
 
-    /// Только из `Pending`; токен стирается.
-    fn complete(
-        &self,
-        by: &Principal,
-        at: SystemTime,
-    ) -> impl Future<Output = Result<(), OnboardingError>> + Send;
+    /// Только из `Pending`; токен стирается. Время завершения ставит хранилище (как `updated_at`).
+    fn complete(&self, by: &Principal) -> impl Future<Output = Result<(), OnboardingError>> + Send;
 }

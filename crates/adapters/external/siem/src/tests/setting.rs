@@ -8,13 +8,13 @@ use crane_domain::audit::{AuditAction, OnboardingCredential, Outcome, SettingCha
 use crane_domain::settings::Version as SettingVersion;
 use uuid::Uuid;
 
-use super::ocsf;
 use super::tests::{event, failure, principal, record};
+use super::{SettingFields, ocsf};
 
 fn setting_changed(change: SettingChange) -> AuditAction {
     AuditAction::SettingChanged {
         key: "blobs".to_owned(),
-        version: Some(SettingVersion::FIRST),
+        version: SettingVersion::FIRST,
         change,
     }
 }
@@ -97,10 +97,10 @@ fn secret_setting_change_carries_no_values() {
     // Assert
     assert_eq!(
         (
-            r.setting_key,
-            r.setting_version,
-            r.setting_old,
-            r.setting_new
+            r.setting.key,
+            r.setting.version,
+            r.setting.old,
+            r.setting.new
         ),
         (Some("blobs".to_owned()), Some(1), None, None)
     );
@@ -119,10 +119,10 @@ fn plain_setting_change_truncates_values_to_256_chars_on_char_boundary() {
     let actual = cases.clone().map(|(raw, _)| {
         let change = SettingChange::Plain {
             old: Some(raw.clone()),
-            new: Some(raw),
+            new: raw,
         };
         let r = record(setting_changed(change), Outcome::Success, None);
-        (r.setting_old, r.setting_new)
+        (r.setting.old, r.setting.new)
     });
 
     // Assert
@@ -131,30 +131,60 @@ fn plain_setting_change_truncates_values_to_256_chars_on_char_boundary() {
 }
 
 #[test]
-fn plain_setting_creation_and_removal_keep_absent_side_empty() {
+fn plain_setting_creation_has_no_old_value_and_update_has_both() {
     // Arrange
     let cases = [
         SettingChange::Plain {
             old: None,
-            new: Some("a".to_owned()),
+            new: "b".to_owned(),
         },
         SettingChange::Plain {
             old: Some("a".to_owned()),
-            new: None,
+            new: "b".to_owned(),
         },
     ];
 
     // Act
     let actual = cases.map(|change| {
         let r = record(setting_changed(change), Outcome::Success, None);
-        (r.setting_old, r.setting_new)
+        (r.setting.old, r.setting.new)
     });
 
     // Assert
     assert_eq!(
         actual,
-        [(None, Some("a".to_owned())), (Some("a".to_owned()), None)]
+        [
+            (None, Some("b".to_owned())),
+            (Some("a".to_owned()), Some("b".to_owned()))
+        ]
     );
+}
+
+#[test]
+fn deleted_setting_maps_to_delete_activity_and_carries_only_key() {
+    // Arrange
+    let cases = [true, false].map(|secret| AuditAction::SettingDeleted {
+        key: "blobs".to_owned(),
+        secret,
+    });
+
+    // Act
+    let actual = cases.map(|action| {
+        let r = record(action, Outcome::Success, None);
+        (r.activity_id, r.type_uid, r.operation, r.setting)
+    });
+
+    // Assert
+    let expected = (
+        4,
+        600_304,
+        Some("setting.delete"),
+        SettingFields {
+            key: Some("blobs".to_owned()),
+            ..SettingFields::default()
+        },
+    );
+    assert_eq!(actual, [expected.clone(), expected]);
 }
 
 #[test]
@@ -170,7 +200,7 @@ fn locked_rejection_carries_key_and_env_var() {
 
     // Assert
     assert_eq!(
-        (r.setting_key, r.setting_env_var),
+        (r.setting.key, r.setting.env_var),
         (Some("blobs".to_owned()), Some("CRANE_BLOBS".to_owned()))
     );
 }

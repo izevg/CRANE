@@ -33,8 +33,7 @@ pub enum AuditAction {
     },
     SettingChanged {
         key: String,
-        /// `None` при удалении настройки.
-        version: Option<Version>,
+        version: Version,
         change: SettingChange,
     },
     /// Запись отклонена: ключ задан переменной окружения или файлом.
@@ -51,15 +50,20 @@ pub enum AuditAction {
     OnboardingTokenRotated,
     /// Break-glass сброс мастера с хоста.
     OnboardingReset,
+    /// Настройка удалена; значения удалённого в журнал не пишутся.
+    SettingDeleted {
+        key: String,
+        secret: bool,
+    },
 }
 
 /// Что изменилось в настройке. Для секрета значений нет вовсе: ни старого, ни нового.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingChange {
-    /// `None` — значения не было (создание) или его не стало (удаление).
+    /// `old: None` — настройка создана.
     Plain {
         old: Option<String>,
-        new: Option<String>,
+        new: String,
     },
     Secret,
 }

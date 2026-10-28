@@ -52,5 +52,5 @@ fn memory_settings_satisfy_settings_store_contract() {
 
 #[test]
 fn memory_onboarding_satisfies_onboarding_store_contract() {
-    futures_executor::block_on(onboarding_store_contract(MemoryOnboarding::default));
+    futures_executor::block_on(onboarding_store_contract(MemoryOnboarding::new));
 }
