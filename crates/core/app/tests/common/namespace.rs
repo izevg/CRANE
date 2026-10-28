@@ -6,8 +6,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crane_domain::registry::{
-    Format, FormatMetadata, Namespace, NamespacePattern, PackageName, PackageVersion, Repository,
-    RepositoryId, RepositoryKind, Version, VersionId, VersionState, WorkspaceId,
+    Asset, Format, FormatMetadata, Namespace, NamespacePattern, PackageName, PackageVersion,
+    Repository, RepositoryId, RepositoryKind, Sha256, Version, VersionId, VersionState,
+    WorkspaceId,
 };
 use crane_memory::{MemoryCatalog, SequentialIdGen};
 use crane_ports::proxy::{Presence, UpstreamNames};
@@ -105,6 +106,11 @@ impl UpstreamNames for FakeUpstream {
 pub(crate) enum Fault {
     NamespaceFor,
     HostedExists,
+    AddAsset,
+    /// Параллельный запрос успел записать тот же файл: `add_asset` отвечает `AssetExists`.
+    LoseAssetRaceToSameFile,
+    /// То же, но победитель записал под этим путём другое содержимое.
+    LoseAssetRaceToOtherFile,
 }
 
 /// Каталог, у которого отказывают перечисленные методы; остальное делегируется.
@@ -146,6 +152,31 @@ impl Catalog for FaultyCatalog {
         version: NewVersion,
     ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
         self.inner.publish_version(version)
+    }
+
+    async fn add_asset(
+        &self,
+        version: VersionId,
+        asset: Asset,
+    ) -> Result<PackageVersion, CatalogError> {
+        if self.fails(Fault::AddAsset) {
+            return Err(lookup_down());
+        }
+        let winner = if self.fails(Fault::LoseAssetRaceToSameFile) {
+            Some(asset.clone())
+        } else if self.fails(Fault::LoseAssetRaceToOtherFile) {
+            Some(Asset {
+                sha256: Sha256::from([0xee; 32]),
+                ..asset.clone()
+            })
+        } else {
+            None
+        };
+        if let Some(winner) = winner {
+            self.inner.add_asset(version, winner).await?;
+            return Err(CatalogError::AssetExists);
+        }
+        self.inner.add_asset(version, asset).await
     }
 
     fn versions(

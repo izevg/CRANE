@@ -7,8 +7,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crane_domain::registry::{
-    Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Version, VersionId,
-    VersionState,
+    Asset, Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Version,
+    VersionId, VersionState,
 };
 use crane_memory::MemoryCatalog;
 use crane_ports::registry::{Catalog, CatalogError, NewVersion};
@@ -54,6 +54,14 @@ impl Catalog for SwitchCatalog {
         version: NewVersion,
     ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
         self.inner.publish_version(version)
+    }
+
+    fn add_asset(
+        &self,
+        version: VersionId,
+        asset: Asset,
+    ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
+        self.inner.add_asset(version, asset)
     }
 
     fn versions(

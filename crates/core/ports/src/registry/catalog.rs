@@ -29,6 +29,9 @@ pub enum CatalogError {
     /// Версия уже занята, в том числе tombstone (`Deleted`).
     #[error("версия уже существует")]
     VersionExists,
+    /// У версии уже есть файл с этим путём.
+    #[error("файл версии уже существует")]
+    AssetExists,
     /// Compare-and-set не сошёлся: фактическое состояние отличается от ожидаемого.
     #[error("конфликт состояния: фактическое {actual:?}")]
     StateConflict { actual: VersionState },
@@ -64,6 +67,18 @@ pub trait Catalog: Send + Sync {
     fn publish_version(
         &self,
         version: NewVersion,
+    ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send;
+
+    /// Прикрепляет файл к существующей версии. Путь уже занят у этой версии: `AssetExists`,
+    /// не меняется ничего; тот же путь у другой версии не мешает. Неизвестный id: `NotFound`.
+    /// Состояние версии не проверяет: это правило вызывающего (как у `transition`).
+    /// Blob регистрируется так же, как в `publish_version` (идемпотентно по содержимому),
+    /// всё в одной транзакции. Возвращает сохранённую версию со всеми файлами в том же порядке,
+    /// что у `find_version`.
+    fn add_asset(
+        &self,
+        version: VersionId,
+        asset: Asset,
     ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send;
 
     /// Все версии пакета, включая `Deleted`, в порядке публикации.

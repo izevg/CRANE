@@ -8,6 +8,11 @@ use crate::settings::Version;
 pub enum AuditAction {
     Authenticate,
     Publish(Coordinate),
+    /// Файл, прикреплённый к версии: путь нужен, чтобы журнал ответил, кто подложил колесо.
+    PublishFile {
+        coordinate: Coordinate,
+        path: String,
+    },
     Yank(Coordinate),
     Unyank(Coordinate),
     Delete(Coordinate),

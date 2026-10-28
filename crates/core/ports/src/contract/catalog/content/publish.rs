@@ -1,7 +1,7 @@
 use crane_domain::registry::{Format, RepositoryId, VersionState};
 use uuid::Uuid;
 
-use super::{
+use crate::contract::catalog::{
     ensure_repo, expected_record, name, new_version, publish, publish_deleted, repository,
     spellings, version,
 };

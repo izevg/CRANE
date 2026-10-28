@@ -7,6 +7,7 @@
 #[path = "../support/mod.rs"]
 mod support;
 
+mod assets;
 mod migrate;
 mod publish;
 mod versions;

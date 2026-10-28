@@ -84,6 +84,7 @@ fn shape(action: &AuditAction) -> Shape {
             operation: None,
         },
         AuditAction::Publish(_) => api(1, "Create", "publish"),
+        AuditAction::PublishFile { .. } => api(1, "Create", "publish.file"),
         AuditAction::Yank(_) => api(3, "Update", "yank"),
         AuditAction::Unyank(_) => api(3, "Update", "unyank"),
         AuditAction::Delete(_) => api(4, "Delete", "delete"),
@@ -136,6 +137,7 @@ fn resource(action: &AuditAction) -> Option<Resource<'_>> {
         | AuditAction::OnboardingTokenRotated
         | AuditAction::OnboardingReset => None,
         AuditAction::Publish(c)
+        | AuditAction::PublishFile { coordinate: c, .. }
         | AuditAction::Yank(c)
         | AuditAction::Unyank(c)
         | AuditAction::Delete(c)

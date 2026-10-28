@@ -19,10 +19,10 @@ use crane_ports::proxy::UpstreamNames;
 use crane_ports::registry::{BlobError, BlobStore, ByteStream, Catalog, CatalogError};
 use crane_ports::system::{Clock, IdGen};
 
-pub use write::Refusal;
+pub use write::{Attach, Refusal};
 
 /// Файл версии от клиента. Один файл на запрос: так устроены все протоколы;
-/// добавление файлов к версии (`PyPI`, Maven) — отдельный use case позже.
+/// несколько файлов одной версии (`PyPI`, Maven) набираются повторными [`Attach`].
 pub struct Upload {
     pub path: String,
     pub body: ByteStream,
@@ -90,6 +90,9 @@ pub enum RegistryError {
     /// В том числе версия, удалённая tombstone-ом: номер релиза занят навсегда.
     #[error("версия уже существует")]
     VersionExists,
+    /// У версии уже есть файл с этим путём и другим содержимым.
+    #[error("файл версии уже существует")]
+    AssetExists,
     #[error("версия недоступна: {state:?}")]
     Unavailable { state: VersionState },
     // Checksum с sha512 велик: без Box вариант раздувает каждый `Result<_, RegistryError>`.
@@ -147,6 +150,7 @@ impl From<CatalogError> for RegistryError {
     fn from(error: CatalogError) -> Self {
         match error {
             CatalogError::VersionExists => Self::VersionExists,
+            CatalogError::AssetExists => Self::AssetExists,
             CatalogError::Unreachable(source) => Self::Unreachable(source),
             // `find_*` возвращают Option, а записи физически не удаляются, поэтому
             // NotFound и StateConflict здесь означают нарушенный инвариант, то есть 500.
@@ -265,14 +269,23 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             .ok_or(RegistryError::RepositoryNotFound)
     }
 
-    /// Версия hosted-репозитория: мутации, меняющие содержимое, прокси-репозиториям запрещены.
-    async fn find_hosted(&self, coordinate: &Coordinate) -> Result<PackageVersion, RegistryError> {
+    /// Hosted-репозиторий координаты: запись в прокси-репозиторий запрещена.
+    async fn hosted_repository(
+        &self,
+        coordinate: &Coordinate,
+    ) -> Result<Repository, RegistryError> {
         let repository = self
             .find_repository(coordinate.format, &coordinate.repository)
             .await?;
         if repository.kind != RepositoryKind::Hosted {
             return Err(RegistryError::NotHosted);
         }
+        Ok(repository)
+    }
+
+    /// Версия hosted-репозитория: мутации, меняющие содержимое, прокси-репозиториям запрещены.
+    async fn find_hosted(&self, coordinate: &Coordinate) -> Result<PackageVersion, RegistryError> {
+        let repository = self.hosted_repository(coordinate).await?;
         self.catalog
             .find_version(repository.id, &coordinate.package, &coordinate.version)
             .await?
@@ -331,6 +344,21 @@ fn use_case_futures_are_send<C: Catalog, B: BlobStore>(
     send(registry.package(caller, Format::Cargo, "", package));
     send(registry.repository(caller, Format::Cargo, ""));
     send(registry.ready());
+}
+
+/// То же для прикрепления файла: проверка при компиляции.
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "проверка типов: функцию не вызывают, её компилируют"
+)]
+fn attach_future_is_send<C: Catalog, B: BlobStore>(
+    registry: &Registry<C, B>,
+    caller: &Caller,
+    attach: Attach,
+) {
+    fn send<T: Send>(_: T) {}
+    send(registry.attach(caller, attach));
 }
 
 /// То же для защиты имён: проверка при компиляции.

@@ -1,6 +1,5 @@
-mod lifecycle;
-mod publish;
-mod tags;
+mod content;
+mod flags;
 
 use std::time::{Duration, SystemTime};
 
@@ -14,9 +13,8 @@ use crate::registry::{Catalog, NewVersion};
 
 /// Проверяет реализацию `Catalog`; `new` создаёт чистый каталог для каждого сценария.
 pub async fn catalog_contract<C: Catalog>(new: impl Fn() -> C) {
-    publish::scenarios(&new).await;
-    lifecycle::scenarios(&new).await;
-    tags::scenarios(&new).await;
+    content::scenarios(&new).await;
+    flags::scenarios(&new).await;
 }
 
 pub(super) fn name(raw: &str) -> PackageName {

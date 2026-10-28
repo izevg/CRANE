@@ -1,7 +1,7 @@
 use crane_domain::registry::{RepositoryId, VersionId};
 use uuid::Uuid;
 
-use super::{ensure_repo, find, name, new_version, publish, unknown_version_id};
+use crate::contract::catalog::{ensure_repo, find, name, new_version, publish, unknown_version_id};
 use crate::registry::{Catalog, CatalogError, NewVersion};
 
 /// Сценарии группы; порядок вызовов сохраняет порядок общего прогона.

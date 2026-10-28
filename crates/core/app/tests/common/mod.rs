@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
-use crane_app::registry::{Coordinate, Publish, Registry, Upload};
+use crane_app::registry::{Attach, Coordinate, Publish, Registry, Upload};
 use crane_domain::access::{Caller, Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::registry::{
     Asset, Checksum, Format, FormatMetadata, PackageName, PackageRef, PackageVersion, Repository,
@@ -137,6 +137,31 @@ pub(crate) fn publish_request(
         },
         metadata: Ok(FormatMetadata::new(METADATA.to_owned())),
         tags: Vec::new(),
+    }
+}
+
+/// Тело, которое обрывается на чтении: тест, где его читать нельзя, ловит `RegistryError::Body`.
+pub(crate) fn broken_body() -> ByteStream {
+    let items = vec![Err(io::Error::other("обрыв"))];
+    Box::pin(stream::iter(items))
+}
+
+/// Файл `path` версии `package` `raw_version`: так добавляются второй и следующие файлы.
+pub(crate) fn attach_request(
+    package: &str,
+    raw_version: &str,
+    path: &str,
+    chunks: &[&'static [u8]],
+    declared: Vec<Checksum>,
+) -> Attach {
+    Attach {
+        coordinate: coordinate(package, raw_version),
+        file: Upload {
+            path: path.to_owned(),
+            body: body(chunks),
+            declared,
+        },
+        metadata: Ok(FormatMetadata::new(METADATA.to_owned())),
     }
 }
 
