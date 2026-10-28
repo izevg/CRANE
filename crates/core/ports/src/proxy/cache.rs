@@ -2,7 +2,7 @@ use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
 use crane_domain::proxy::ProxyKey;
-use crane_domain::registry::{Checksum, Digests, Sha1, Sha256, Sha512};
+use crane_domain::registry::Digests;
 
 /// Непрозрачный валидатор upstream для условных запросов (`If-None-Match`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,51 +43,10 @@ pub enum CachedState {
         /// передаёт заголовок, и бэкенды обязаны хранить его без потерь до секунды.
         max_age: Option<Duration>,
     },
-    /// Артефакт лежит в CAS; запись хранит только дайджесты. Неизменяем: `ETag` и счётчик не нужны.
-    Blob(CachedDigests),
+    /// Артефакт лежит в CAS; запись хранит только дайджесты (все, включая MD5: proxy отдаёт и `.md5`). Неизменяем: `ETag` и счётчик не нужны.
+    Blob(Digests),
     /// Upstream ответил 404. `misses` — сколько раз подряд (рост negative TTL).
     Missing { misses: u32 },
-}
-
-/// Дайджесты проксированного артефакта. Уже, чем `Digests`: MD5 в запись кэша не входит
-/// (формат записи Valkey его не хранит), а клиентам proxy MD5 не отдаёт.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CachedDigests {
-    pub sha256: Sha256,
-    pub sha512: Sha512,
-    pub sha1: Sha1,
-    pub size: u64,
-}
-
-impl From<&Digests> for CachedDigests {
-    fn from(digests: &Digests) -> Self {
-        Self {
-            sha256: digests.sha256,
-            sha512: digests.sha512,
-            sha1: digests.sha1,
-            size: digests.size,
-        }
-    }
-}
-
-impl CachedDigests {
-    /// Совпадает ли ожидаемая сумма с посчитанной тем же алгоритмом. MD5 не хранится,
-    /// поэтому ожидание MD5 не выполнимо никогда.
-    #[must_use]
-    pub fn satisfies(&self, expected: &Checksum) -> bool {
-        !matches!(expected, Checksum::Md5(_)) && self.of_kind(expected) == *expected
-    }
-
-    /// Посчитанная сумма того же алгоритма, что и `like`. Для MD5 суммы нет:
-    /// возвращается SHA-256, который заведомо не равен ожиданию.
-    #[must_use]
-    pub const fn of_kind(&self, like: &Checksum) -> Checksum {
-        match like {
-            Checksum::Sha512(_) => Checksum::Sha512(self.sha512),
-            Checksum::Sha1(_) => Checksum::Sha1(self.sha1),
-            Checksum::Sha256(_) | Checksum::Md5(_) => Checksum::Sha256(self.sha256),
-        }
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -116,63 +75,4 @@ pub trait ProxyCache: Send + Sync {
         entry: Cached,
         keep_for: Duration,
     ) -> impl Future<Output = Result<(), CacheError>> + Send;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sample() -> CachedDigests {
-        CachedDigests {
-            sha256: Sha256::from([1; 32]),
-            sha512: Sha512::from([2; 64]),
-            sha1: Sha1::from([3; 20]),
-            size: 5,
-        }
-    }
-
-    #[test]
-    fn satisfies_matches_stored_algorithms_and_never_md5() {
-        // Arrange
-        let digests = sample();
-        let cases = [
-            Checksum::Sha256(digests.sha256),
-            Checksum::Sha512(digests.sha512),
-            Checksum::Sha1(digests.sha1),
-            Checksum::Sha256(Sha256::from([0; 32])),
-            Checksum::Sha512(Sha512::from([0; 64])),
-            Checksum::Sha1(Sha1::from([0; 20])),
-            Checksum::Md5(crane_domain::registry::Md5::from([0; 16])),
-        ];
-
-        // Act
-        let actual = cases.map(|c| digests.satisfies(&c));
-
-        // Assert
-        assert_eq!(actual, [true, true, true, false, false, false, false]);
-    }
-
-    #[test]
-    fn of_kind_returns_own_digest_of_requested_algorithm() {
-        // Arrange
-        let digests = sample();
-        let cases = [
-            Checksum::Sha256(Sha256::from([0; 32])),
-            Checksum::Sha512(Sha512::from([0; 64])),
-            Checksum::Sha1(Sha1::from([0; 20])),
-        ];
-
-        // Act
-        let actual = cases.map(|c| digests.of_kind(&c));
-
-        // Assert
-        assert_eq!(
-            actual,
-            [
-                Checksum::Sha256(digests.sha256),
-                Checksum::Sha512(digests.sha512),
-                Checksum::Sha1(digests.sha1),
-            ]
-        );
-    }
 }

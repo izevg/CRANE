@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crane_domain::registry::{Asset, PackageVersion, VersionId};
+use crane_domain::registry::{Asset, Digests, PackageVersion, VersionId};
 use crane_ports::registry::{CatalogError, NewVersion};
 use sqlx::{PgConnection, PgPool};
 
@@ -98,24 +98,14 @@ fn files_of(assets: &[Asset]) -> Result<Files<'_>, CatalogError> {
                 .map_err(|_| rejected("размер файла не помещается в bigint"))
         })
         .collect::<Result<Vec<_>, _>>()?;
+    // Одна проекция на колонку: массивы для UNNEST выровнены по индексу файла.
+    let column = |bytes: fn(&Digests) -> &[u8]| assets.iter().map(|a| bytes(&a.content)).collect();
     Ok(Files {
         paths: assets.iter().map(|a| a.path.as_str()).collect(),
-        sha256: assets
-            .iter()
-            .map(|a| a.content.sha256.as_bytes().as_slice())
-            .collect(),
-        sha512: assets
-            .iter()
-            .map(|a| a.content.sha512.as_bytes().as_slice())
-            .collect(),
-        sha1: assets
-            .iter()
-            .map(|a| a.content.sha1.as_bytes().as_slice())
-            .collect(),
-        md5: assets
-            .iter()
-            .map(|a| a.content.md5.as_bytes().as_slice())
-            .collect(),
+        sha256: column(|d| d.sha256.as_bytes()),
+        sha512: column(|d| d.sha512.as_bytes()),
+        sha1: column(|d| d.sha1.as_bytes()),
+        md5: column(|d| d.md5.as_bytes()),
         sizes,
     })
 }

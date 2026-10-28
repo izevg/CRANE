@@ -1,24 +1,25 @@
-//! Бинарный формат записи в Valkey (big-endian, версия 2):
+//! Бинарный формат записи в Valkey (big-endian, версия 3):
 //!
 //! ```text
 //! version u8 | fetched_at: secs u64, nanos u32 | tag u8 | состояние
 //! Document: unchanged u32 | etag: флаг u8 [len u32, utf8] | max_age: флаг u8 [секунды u64] | body до конца
-//! Blob:     sha256 [32] | sha512 [64] | sha1 [20] | size u64
+//! Blob:     sha256 [32] | sha512 [64] | sha1 [20] | md5 [16] | size u64
 //! Missing:  misses u32
 //! ```
 //!
 //! Формат ручной: serde в адаптерах запрещён, а полей мало.
 //!
-//! Версия 1 хранила в Blob только sha256 и размер. Такие записи читаются как `CodecError::Version`,
-//! то есть как промах: кэш не источник истины, запись перезальётся из CAS или upstream.
+//! Версия 1 хранила в Blob только sha256 и размер, версия 2 ещё sha512 и sha1 без md5. Такие записи
+//! читаются как `CodecError::Version`, то есть как промах: кэш не источник истины, запись
+//! перезальётся из CAS или upstream. Так же поведёт себя и прежний код, встретив версию 3.
 
 use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
-use crane_domain::registry::{Sha1, Sha256, Sha512};
-use crane_ports::proxy::{Cached, CachedDigests, CachedState, ETag};
+use crane_domain::registry::{Digests, Md5, Sha1, Sha256, Sha512};
+use crane_ports::proxy::{Cached, CachedState, ETag};
 
-const VERSION: u8 = 2;
+const VERSION: u8 = 3;
 const TAG_DOCUMENT: u8 = 0;
 const TAG_BLOB: u8 = 1;
 const TAG_MISSING: u8 = 2;
@@ -28,6 +29,7 @@ const NANOS_PER_SECOND: u32 = 1_000_000_000;
 const SHA256_LEN: usize = 32;
 const SHA512_LEN: usize = 64;
 const SHA1_LEN: usize = 20;
+const MD5_LEN: usize = 16;
 
 /// Ошибка кодека. Без данных записи: в них бывает содержимое upstream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -54,7 +56,7 @@ pub(super) enum CodecError {
 fn encoded_len(state: &CachedState) -> usize {
     const HEADER: usize = 1 + 8 + 4 + 1;
     const DOCUMENT_FIXED: usize = 4 + 1 + 4 + 1 + 8;
-    const BLOB: usize = SHA256_LEN + SHA512_LEN + SHA1_LEN + 8;
+    const BLOB: usize = SHA256_LEN + SHA512_LEN + SHA1_LEN + MD5_LEN + 8;
     HEADER
         + match state {
             CachedState::Document { body, etag, .. } => {
@@ -107,6 +109,7 @@ pub(super) fn encode(entry: &Cached) -> Result<Vec<u8>, CodecError> {
             out.extend(digests.sha256.as_bytes());
             out.extend(digests.sha512.as_bytes());
             out.extend(digests.sha1.as_bytes());
+            out.extend(digests.md5.as_bytes());
             out.extend(digests.size.to_be_bytes());
         }
         CachedState::Missing { misses } => {
@@ -157,12 +160,14 @@ pub(super) fn decode(raw: Bytes) -> Result<Cached, CodecError> {
             let sha256 = Sha256::from(reader.array::<SHA256_LEN>()?);
             let sha512 = Sha512::from(reader.array::<SHA512_LEN>()?);
             let sha1 = Sha1::from(reader.array::<SHA1_LEN>()?);
+            let md5 = Md5::from(reader.array::<MD5_LEN>()?);
             let size = reader.u64()?;
             reader.finish()?;
-            CachedState::Blob(CachedDigests {
+            CachedState::Blob(Digests {
                 sha256,
                 sha512,
                 sha1,
+                md5,
                 size,
             })
         }
@@ -228,7 +233,7 @@ impl Reader {
 mod tests {
     use super::*;
 
-    const HEADER: [u8; 13] = [2, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0];
+    const HEADER: [u8; 13] = [3, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0];
 
     fn framed(tail: &[u8]) -> Bytes {
         Bytes::from([HEADER.as_slice(), tail].concat())
@@ -238,16 +243,12 @@ mod tests {
     fn decode_rejects_malformed_input() {
         // Arrange
         let cases = [
-            ("неизвестная версия", Bytes::from_static(&[3])),
-            (
-                "запись версии 1",
-                Bytes::from([&[1, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 1][..], &[0; 40]].concat()),
-            ),
+            ("неизвестная версия", Bytes::from_static(&[4])),
             ("пустой ввод", Bytes::new()),
-            ("усечено fetched_at", Bytes::from_static(&[2, 0, 0, 0])),
+            ("усечено fetched_at", Bytes::from_static(&[3, 0, 0, 0])),
             (
                 "наносекунды вне диапазона",
-                Bytes::from_static(&[2, 0, 0, 0, 0, 0, 0, 0, 7, 0x3b, 0x9a, 0xca, 0x00, 0]),
+                Bytes::from_static(&[3, 0, 0, 0, 0, 0, 0, 0, 7, 0x3b, 0x9a, 0xca, 0x00, 0]),
             ),
             ("неизвестный тег", framed(&[9])),
             ("усечён счётчик документа", framed(&[0, 0, 0])),
@@ -268,7 +269,7 @@ mod tests {
             ("усечён Blob", framed(&[1, 0, 0])),
             (
                 "хвост после Blob",
-                framed(&[&[1][..], &[0; 124], &[0]].concat()),
+                framed(&[&[1][..], &[0; 140], &[0]].concat()),
             ),
         ];
 
@@ -280,7 +281,6 @@ mod tests {
             actual,
             [
                 ("неизвестная версия", Some(CodecError::Version)),
-                ("запись версии 1", Some(CodecError::Version)),
                 ("пустой ввод", Some(CodecError::Truncated)),
                 ("усечено fetched_at", Some(CodecError::Truncated)),
                 ("наносекунды вне диапазона", Some(CodecError::Time)),
@@ -301,14 +301,29 @@ mod tests {
     }
 
     #[test]
+    fn blob_entries_of_older_versions_are_a_version_mismatch() {
+        // Arrange
+        let header = |version: u8| [version, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 1];
+        let v1 = Bytes::from([&header(1)[..], &[0; 40]].concat());
+        let v2 = Bytes::from([&header(2)[..], &[0; 124]].concat());
+
+        // Act
+        let actual = [v1, v2].map(|raw| decode(raw).err());
+
+        // Assert
+        assert_eq!(actual, [Some(CodecError::Version); 2]);
+    }
+
+    #[test]
     fn blob_entry_round_trips_with_all_digests() {
         // Arrange
         let entry = Cached {
             fetched_at: SystemTime::UNIX_EPOCH + Duration::from_secs(7),
-            state: CachedState::Blob(CachedDigests {
+            state: CachedState::Blob(Digests {
                 sha256: Sha256::from([1; 32]),
                 sha512: Sha512::from([2; 64]),
                 sha1: Sha1::from([3; 20]),
+                md5: Md5::from([4; 16]),
                 size: 42,
             }),
         };
@@ -346,10 +361,11 @@ mod tests {
                 unchanged: 3,
                 max_age: Some(Duration::from_secs(60)),
             },
-            CachedState::Blob(CachedDigests {
+            CachedState::Blob(Digests {
                 sha256: Sha256::from([1; 32]),
                 sha512: Sha512::from([2; 64]),
                 sha1: Sha1::from([3; 20]),
+                md5: Md5::from([4; 16]),
                 size: 42,
             }),
             CachedState::Missing { misses: 2 },
