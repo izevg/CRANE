@@ -156,6 +156,18 @@ impl Api {
         })
     }
 
+    /// То же, но публикация спрашивает публичное имя у crates.io через движок proxy, как сервер.
+    pub(crate) fn with_proxy_presence(proxy: &proxy::Proxy) -> Self {
+        let audit = Arc::new(MemoryAudit::default());
+        Self::build_with("", audit.clone(), audit, proxy.names(), |registry| {
+            vec![(
+                Format::Cargo,
+                proxy::NAME.to_owned(),
+                proxy.router(registry.clone()),
+            )]
+        })
+    }
+
     /// Рядом с hosted-репозиториями монтируется npm proxy-router над тем же `Registry`.
     pub(crate) fn with_npm_proxy(proxy: &proxy::NpmProxy) -> Self {
         let audit = Arc::new(MemoryAudit::default());

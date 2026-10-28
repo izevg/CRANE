@@ -11,7 +11,7 @@ use bytes::Bytes;
 use crane_app::proxy::{ProxyEngine, ProxyLimits};
 use crane_domain::proxy::{EgressPolicy, EgressRefusal};
 use crane_domain::registry::{Format, RepositoryId};
-use crane_format_cargo::{DL_HOST, INDEX_HOST};
+use crane_format_cargo::{API_HOST, DL_HOST, INDEX_HOST};
 use crane_format_npm::REGISTRY_HOST;
 use crane_http::{EngineUpstreamNames, FormatSettings, ProxySource, presence_origin, proxy_router};
 use crane_memory::{
@@ -127,11 +127,7 @@ fn engine(upstream: &FakeUpstream, clock: &Arc<ManualClock>) -> TestEngine {
 }
 
 /// Блокирующий ответ «знает ли публичный реестр имя» от настоящей реализации над фейковым upstream.
-fn presence_of(
-    names: &EngineUpstreamNames<FakeUpstream, MemoryProxyCache, MemoryFetchLeases, MemoryBlobStore>,
-    format: Format,
-    name: &str,
-) -> Presence {
+fn presence_of(names: &dyn UpstreamNames, format: Format, name: &str) -> Presence {
     let name = ecosystem(format).parse_name(name).unwrap();
     Builder::new_current_thread()
         .enable_all()
@@ -190,14 +186,19 @@ impl Fixture {
         .unwrap()
     }
 
-    /// Что upstream знает об имени: тот же движок, что у маршрутов; источник только у формата фикстуры.
-    fn presence(&self, format: Format, name: &str) -> Presence {
+    fn names(&self) -> Arc<dyn UpstreamNames> {
         let origin = presence_origin(self.format, &self.source())
             .unwrap()
             .unwrap();
-        let names =
-            EngineUpstreamNames::new(self.engine.clone(), BTreeMap::from([(self.format, origin)]));
-        presence_of(&names, format, name)
+        Arc::new(EngineUpstreamNames::new(
+            self.engine.clone(),
+            BTreeMap::from([(self.format, origin)]),
+        ))
+    }
+
+    /// Что upstream знает об имени: тот же движок, что у маршрутов; источник только у формата фикстуры.
+    fn presence(&self, format: Format, name: &str) -> Presence {
+        presence_of(self.names().as_ref(), format, name)
     }
 }
 
@@ -210,7 +211,7 @@ pub(crate) struct Proxy {
 
 impl Proxy {
     pub(crate) fn new() -> Self {
-        let fixture = Fixture::new(Format::Cargo, NAME, &[INDEX_HOST, DL_HOST]);
+        let fixture = Fixture::new(Format::Cargo, NAME, &[INDEX_HOST, DL_HOST, API_HOST]);
         Self {
             upstream: fixture.upstream.clone(),
             clock: fixture.clock.clone(),
@@ -225,6 +226,11 @@ impl Proxy {
 
     pub(crate) fn presence(&self, format: Format, name: &str) -> Presence {
         self.fixture.presence(format, name)
+    }
+
+    /// Публичный реестр для `Registry`: тот же движок и кэш, что у маршрутов proxy, как на сервере.
+    pub(crate) fn names(&self) -> Arc<dyn UpstreamNames> {
+        self.fixture.names()
     }
 
     pub(crate) fn advance(&self, by: Duration) {
