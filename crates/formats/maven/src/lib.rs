@@ -5,5 +5,7 @@
 //! timestamp-сборками.
 
 mod ecosystem;
+mod layout;
 
 pub use ecosystem::{Build, MAVEN, Maven};
+pub use layout::{Algorithm, FileName, Resource, Route, RouteError};
