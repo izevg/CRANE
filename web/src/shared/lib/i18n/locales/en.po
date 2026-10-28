@@ -311,7 +311,7 @@ msgid "Не удалось выполнить запрос"
 msgstr "The request failed"
 
 msgid "Не удалось загрузить раздел"
-msgstr "Could not load the section"
+msgstr "Couldn't load this section"
 
 msgid "Не удалось обновить данные. Показаны последние полученные."
 msgstr "Could not refresh the data. Showing the last data received."
