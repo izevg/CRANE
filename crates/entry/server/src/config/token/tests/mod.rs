@@ -42,3 +42,19 @@ fn blank_or_control_character_principal_is_rejected() {
     };
     assert_eq!(errors, [invalid(), invalid()]);
 }
+
+#[test]
+fn principal_name_is_limited_to_128_characters() {
+    // Arrange
+    let names = ["я".repeat(128), "я".repeat(129)];
+
+    // Act
+    let accepted = names.each_ref().map(|name| {
+        let mut pairs: Vec<(&str, &str)> = with(&[]);
+        pairs.push((TOKEN_PRINCIPAL, name));
+        parse(&pairs).is_ok()
+    });
+
+    // Assert
+    assert_eq!(accepted, [true, false]);
+}

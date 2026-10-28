@@ -13,6 +13,8 @@ const TOKEN_PRINCIPAL: &str = "CRANE_TOKEN_PRINCIPAL";
 const DEFAULT_PRINCIPAL: &str = "crane";
 
 const GROUP: &str = "token";
+/// Как предел `RequestId`: идентификатор попадает в каждое событие аудита и строку access-журнала.
+const PRINCIPAL_MAX_CHARS: usize = 128;
 
 pub(super) const SECTION: Section = Section {
     group: GROUP,
@@ -47,6 +49,12 @@ pub(super) fn principal(var: &impl Fn(&str) -> Option<String>) -> Result<Princip
         return Err(ConfigError::Invalid {
             var: TOKEN_PRINCIPAL,
             reason: "ожидалось непустое имя без управляющих символов",
+        });
+    }
+    if id.chars().count() > PRINCIPAL_MAX_CHARS {
+        return Err(ConfigError::Invalid {
+            var: TOKEN_PRINCIPAL,
+            reason: "имя длиннее 128 символов",
         });
     }
     Ok(Principal {
