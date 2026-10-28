@@ -2,7 +2,7 @@
 //! `crane-server` рядом с выбором реализации.
 
 use super::*;
-use crate::registry::{Format, Version, VersionError, hosted_name_allowed};
+use crate::registry::{Format, Purl, Version, VersionError, hosted_name_allowed};
 
 const MAX_LEN: usize = 20;
 
@@ -79,6 +79,15 @@ impl Ecosystem for Rules {
 
     fn namespace_shape(&self) -> NamespaceShape {
         self.shape
+    }
+
+    fn purl(&self, name: &PackageName, version: Option<&Version>) -> Purl {
+        Purl::new(
+            "cargo",
+            None,
+            name.as_written().to_owned(),
+            version.map(|version| version.as_written().to_owned()),
+        )
     }
 }
 

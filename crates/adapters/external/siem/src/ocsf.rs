@@ -2,7 +2,7 @@
 
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome, SettingChange};
-use crane_domain::registry::{Format, PackageName, Version};
+use crane_domain::registry::{Ecosystems, Format, PackageName, Version};
 use uuid::Uuid;
 
 const SCHEMA_VERSION: &str = "1.3.0";
@@ -214,17 +214,9 @@ fn setting_fields(action: &AuditAction) -> SettingFields {
     }
 }
 
-/// `+` (метаданные сборки) и `@` (scope npm) кодируются: иначе purl неоднозначен.
-fn purl_component(raw: &str) -> String {
-    raw.replace('+', "%2B").replace('@', "%40")
-}
-
-fn purl(r: &Resource<'_>) -> String {
-    let name = purl_component(r.package.as_written());
-    let base = format!("pkg:{}/{name}", r.format.as_str());
-    r.version.map_or(base.clone(), |version| {
-        format!("{base}@{}", purl_component(version.as_written()))
-    })
+/// Строку purl собирает экосистема формата: тип, namespace и регистр у каждой свои.
+fn purl(ecosystems: Ecosystems, r: &Resource<'_>) -> String {
+    ecosystems(r.format).purl(r.package, r.version).to_string()
 }
 
 fn kind_name(kind: PrincipalKind) -> &'static str {
@@ -255,9 +247,14 @@ fn user(principal: Option<&Principal>) -> OcsfUser {
     }
 }
 
-/// `event_id` и время ставит приёмник.
+/// `event_id` и время ставит приёмник; `ecosystems` нужны, чтобы записать purl ресурса.
 #[must_use]
-pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
+pub fn ocsf(
+    event: &AuditEvent,
+    ecosystems: Ecosystems,
+    event_id: Uuid,
+    time_ms: u64,
+) -> OcsfRecord {
     let shape = shape(&event.action);
     let subject = user(event.actor.as_ref());
     let is_auth = shape.class_uid == CLASS_AUTHENTICATION;
@@ -295,7 +292,7 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
         src_ip: event.request.client_ip.map(|ip| ip.to_string()),
         user_agent: event.request.user_agent.clone(),
         operation: shape.operation,
-        resource_uid: resource.as_ref().map(purl),
+        resource_uid: resource.as_ref().map(|r| purl(ecosystems, r)),
         resource_type: resource.as_ref().map(|_| "package"),
         repository: resource.map(|r| r.repository.to_owned()),
         trace_id: event.request.trace_id.clone(),

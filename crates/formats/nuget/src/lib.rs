@@ -1,7 +1,7 @@
 //! Протокол NuGet-фида.
 
 use crane_domain::registry::{
-    Ecosystem, Format, NameError, NamespaceShape, PackageName, Version, VersionError,
+    Ecosystem, Format, NameError, NamespaceShape, PackageName, Purl, Version, VersionError,
 };
 
 /// Правила `NuGet`; реализация [`Ecosystem`] без состояния.
@@ -40,6 +40,16 @@ impl Ecosystem for NuGet {
 
     fn namespace_shape(&self) -> NamespaceShape {
         NamespaceShape::Delimited
+    }
+
+    // NuGet: namespace запрещён; имя печатается в написанном регистре (PURL-TYPES, nuget).
+    fn purl(&self, name: &PackageName, version: Option<&Version>) -> Purl {
+        Purl::new(
+            "nuget",
+            None,
+            name.as_written().to_owned(),
+            version.map(|version| version.as_written().to_owned()),
+        )
     }
 }
 

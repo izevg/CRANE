@@ -29,7 +29,9 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tokio::net::TcpListener;
 use tokio::runtime::Builder;
 
-use crate::config::{Blobs, Boot, Config, ConfigSchema, Database, StoredLayer, settings_key};
+use crate::config::{
+    Blobs, Boot, Config, ConfigSchema, Database, Repos, StoredLayer, settings_key,
+};
 use crate::ecosystem::ecosystem;
 use crate::namespaces;
 use crate::system::{SystemClock, UuidV7Ids};
@@ -176,18 +178,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     // Ключ S3 нужен был только для открытия blob-хранилища.
     drop(config.blobs);
     let ids = Arc::new(UuidV7Ids);
-    for (format, names) in config.repos.of_kind(RepositoryKind::Hosted) {
-        for name in names {
-            catalog
-                .ensure_repository(Repository {
-                    id: RepositoryId::new(ids.generate()),
-                    format,
-                    kind: RepositoryKind::Hosted,
-                    name: name.clone(),
-                })
-                .await?;
-        }
-    }
+    ensure_hosted_repositories(&catalog, ids.as_ref(), &config.repos).await?;
     // Публичный адрес и предел публикации у всех форматов общие.
     let formats = FormatSettings {
         public_url: config.public_url,
@@ -209,7 +200,11 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         .as_ref()
         .map_or_else(|| Arc::new(NoUpstream), proxy::Prepared::upstream_names);
     // Один приёмник на use cases и на слой auth; в v0.4.0 действия записи уйдут в журнал PG.
-    let audit = Arc::new(OcsfLogSink::new(Arc::new(SystemClock), ids.clone()));
+    let audit = Arc::new(OcsfLogSink::new(
+        Arc::new(SystemClock),
+        ids.clone(),
+        ecosystem,
+    ));
     let registry = Arc::new(Registry::new(
         catalog,
         blobs,
@@ -237,6 +232,27 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         proxy_repos,
     );
     Ok((api, admin))
+}
+
+/// Hosted-репозитории из настроек должны быть в каталоге до первой публикации.
+async fn ensure_hosted_repositories<C: Catalog>(
+    catalog: &C,
+    ids: &dyn IdGen,
+    repos: &Repos,
+) -> Result<(), RunError> {
+    for (format, names) in repos.of_kind(RepositoryKind::Hosted) {
+        for name in names {
+            catalog
+                .ensure_repository(Repository {
+                    id: RepositoryId::new(ids.generate()),
+                    format,
+                    kind: RepositoryKind::Hosted,
+                    name: name.clone(),
+                })
+                .await?;
+        }
+    }
+    Ok(())
 }
 
 async fn serve_async(boot: Boot) -> Result<(), RunError> {
@@ -341,6 +357,11 @@ async fn terminate() {
 #[cfg(test)]
 #[path = "tests/settings.rs"]
 mod settings_tests;
+
+#[cfg(test)]
+#[path = "tests/hosted.rs"]
+mod hosted_tests;
+
 #[cfg(test)]
 #[path = "tests/stack.rs"]
 mod stack;

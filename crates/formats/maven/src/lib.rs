@@ -1,7 +1,7 @@
 //! Протокол Maven-репозитория.
 
 use crane_domain::registry::{
-    Ecosystem, Format, NameError, NamespaceShape, PackageName, Version, VersionError,
+    Ecosystem, Format, NameError, NamespaceShape, PackageName, Purl, Version, VersionError,
 };
 
 /// Правила Maven; реализация [`Ecosystem`] без состояния.
@@ -44,6 +44,20 @@ impl Ecosystem for Maven {
 
     fn namespace_shape(&self) -> NamespaceShape {
         NamespaceShape::Grouped
+    }
+
+    // Maven: имя пакета хранится как `groupId:artifactId`; groupId — namespace, регистр значим.
+    fn purl(&self, name: &PackageName, version: Option<&Version>) -> Purl {
+        let (namespace, name) = match name.as_written().split_once(':') {
+            Some((group, artifact)) => (Some(group.to_owned()), artifact),
+            None => (None, name.as_written()),
+        };
+        Purl::new(
+            "maven",
+            namespace,
+            name.to_owned(),
+            version.map(|version| version.as_written().to_owned()),
+        )
     }
 }
 

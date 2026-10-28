@@ -5,7 +5,7 @@
 
 use crane_domain::registry::{
     Ecosystem, Format, NameError, NamespacePattern, NamespaceShape, OrderKeyBuilder, PackageName,
-    Version, VersionError,
+    Purl, Version, VersionError,
 };
 
 /// Нормализация и разделители cargo без проверки грамматики.
@@ -38,6 +38,15 @@ impl Ecosystem for Underscored {
 
     fn namespace_shape(&self) -> NamespaceShape {
         NamespaceShape::Delimited
+    }
+
+    fn purl(&self, name: &PackageName, version: Option<&Version>) -> Purl {
+        Purl::new(
+            "cargo",
+            None,
+            name.as_written().to_owned(),
+            version.map(|version| version.as_written().to_owned()),
+        )
     }
 }
 

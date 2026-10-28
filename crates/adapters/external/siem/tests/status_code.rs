@@ -6,6 +6,9 @@
     reason = "в тестах падение unwrap — это падение теста"
 )]
 
+mod common;
+
+use common::ecosystems;
 use crane_domain::access::{Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
 use crane_domain::registry::{Coordinate, Format, OrderKeyBuilder, PackageName, Version};
@@ -53,7 +56,8 @@ fn failure_code_goes_to_status_code_and_absent_code_stays_none() {
     let cases = [coded, uncoded, Outcome::Success];
 
     // Act
-    let statuses = cases.map(|outcome| ocsf(&event(outcome), Uuid::nil(), 0).status_code);
+    let statuses =
+        cases.map(|outcome| ocsf(&event(outcome), ecosystems, Uuid::nil(), 0).status_code);
 
     // Assert
     assert_eq!(statuses, [Some("some-rule".to_owned()), None, None]);

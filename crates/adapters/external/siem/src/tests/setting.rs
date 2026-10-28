@@ -8,7 +8,7 @@ use crane_domain::audit::{AuditAction, OnboardingCredential, Outcome, SettingCha
 use crane_domain::settings::Version as SettingVersion;
 use uuid::Uuid;
 
-use super::tests::{event, failure, principal, record};
+use super::tests::{ecosystems, event, failure, principal, record};
 use super::{SettingFields, ocsf};
 
 fn setting_changed(change: SettingChange) -> AuditAction {
@@ -67,7 +67,7 @@ fn rejected_onboarding_token_maps_to_authentication_logon_with_user() {
     let event = event(AuditAction::OnboardingTokenRejected, failure(), None);
 
     // Act
-    let r = ocsf(&event, Uuid::nil(), 0);
+    let r = ocsf(&event, ecosystems, Uuid::nil(), 0);
 
     // Assert
     assert_eq!(
@@ -96,7 +96,7 @@ fn secret_setting_change_carries_no_values() {
     );
 
     // Act
-    let r = ocsf(&event, Uuid::nil(), 0);
+    let r = ocsf(&event, ecosystems, Uuid::nil(), 0);
 
     // Assert
     assert_eq!(
