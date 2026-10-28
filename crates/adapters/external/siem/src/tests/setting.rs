@@ -24,7 +24,9 @@ fn setting_and_onboarding_actions_map_to_api_activity_without_resource() {
     // Arrange
     let robot = Some(principal(PrincipalKind::Robot));
     let cases = [
-        setting_changed(SettingChange::Secret),
+        setting_changed(SettingChange::Secret {
+            replaced_unreadable: false,
+        }),
         AuditAction::SettingRejectedLocked {
             key: "blobs".to_owned(),
             env_var: "CRANE_BLOBS".to_owned(),
@@ -86,7 +88,9 @@ fn rejected_onboarding_token_maps_to_authentication_logon_with_user() {
 fn secret_setting_change_carries_no_values() {
     // Arrange
     let event = event(
-        setting_changed(SettingChange::Secret),
+        setting_changed(SettingChange::Secret {
+            replaced_unreadable: false,
+        }),
         Outcome::Success,
         Some(principal(PrincipalKind::Human)),
     );
@@ -104,6 +108,24 @@ fn secret_setting_change_carries_no_values() {
         ),
         (Some("blobs".to_owned()), Some(1), None, None)
     );
+}
+
+#[test]
+fn secret_change_flags_replaced_unreadable_only_when_set() {
+    // Arrange
+    let cases = [false, true];
+
+    // Act
+    let actual = cases.map(|replaced_unreadable| {
+        let change = SettingChange::Secret {
+            replaced_unreadable,
+        };
+        let r = record(setting_changed(change), Outcome::Success, None);
+        (r.setting.replaced_unreadable, r.setting.old, r.setting.new)
+    });
+
+    // Assert
+    assert_eq!(actual, [(None, None, None), (Some(true), None, None)]);
 }
 
 #[test]

@@ -3,7 +3,7 @@
 use std::time::SystemTime;
 
 use crane_domain::access::Principal;
-use crane_domain::settings::{Secret, Stored, StoredValue, Version};
+use crane_domain::settings::{NewValue, Stored, StoredValue, Unreadable, Version};
 use crane_ports::settings::SettingsError;
 
 use sqlx::postgres::{PgArguments, PgRow};
@@ -11,13 +11,22 @@ use sqlx::query::Query;
 use sqlx::{Postgres, Row};
 use time::OffsetDateTime;
 
-use crate::db_time::{from_db_time, to_db_time};
+use crate::db::{from_db_time, is_unreachable, to_db_time};
 use crate::settings::BoxError;
-use crate::settings::crypto::{CryptoError, SettingsKey, open, seal};
+use crate::settings::crypto::{SettingsKey, open, seal};
 
-/// Единственная воронка ошибок адаптера: драйвер, шифр или описание рассинхрона схемы.
+/// Воронка ошибок адаптера, кроме драйвера: шифр или описание рассинхрона схемы.
 pub(super) fn backend(error: impl Into<BoxError>) -> SettingsError {
     SettingsError::Backend(error.into())
+}
+
+/// Сбой драйвера: «БД недоступна» отделяется от остальных сбоев (порт отвечает 503, а не 500).
+pub(super) fn driver(error: sqlx::Error) -> SettingsError {
+    if is_unreachable(&error) {
+        SettingsError::Unreachable(Box::new(error))
+    } else {
+        SettingsError::Backend(Box::new(error))
+    }
 }
 
 /// Версия в `bigint`: выше `i64::MAX` не помещается, это ошибка адаптера, а не паника.
@@ -41,15 +50,15 @@ impl Columns {
     /// Готовит строку к записи; секрет запечатывается той же `version`, что попадёт в строку.
     pub(super) fn encode(
         setting: &str,
-        value: StoredValue,
+        value: NewValue,
         version: Version,
         at: SystemTime,
         by: &Principal,
         cipher: Option<&SettingsKey>,
     ) -> Result<Self, SettingsError> {
         let (text, sealed, key_id) = match value {
-            StoredValue::Plain(text) => (Some(text), None, None),
-            StoredValue::Secret(secret) => {
+            NewValue::Plain(text) => (Some(text), None, None),
+            NewValue::Secret(secret) => {
                 let cipher = cipher.ok_or(SettingsError::SecretsUnavailable)?;
                 let sealed = seal(cipher, setting, version, &secret).map_err(backend)?;
                 (None, Some(sealed), Some(cipher.id().to_owned()))
@@ -87,7 +96,7 @@ fn column<'r, T>(row: &'r PgRow, name: &str) -> Result<T, SettingsError>
 where
     T: sqlx::Decode<'r, Postgres> + sqlx::Type<Postgres>,
 {
-    row.try_get(name).map_err(backend)
+    row.try_get(name).map_err(driver)
 }
 
 /// Строка БД -> запись порта; запечатанное значение открывается ключом.
@@ -107,9 +116,7 @@ pub(super) fn stored_from_row(
         column::<Option<String>>(row, "key_id")?,
     ) {
         (Some(text), None, None) => StoredValue::Plain(text),
-        (None, Some(sealed), Some(key_id)) => {
-            StoredValue::Secret(open_secret(key, &setting, version, &key_id, &sealed)?)
-        }
+        (None, Some(sealed), Some(key_id)) => open_secret(key, &setting, version, &key_id, &sealed),
         _ => return Err(backend("строка настройки нарушает схему")),
     };
     let stored = Stored {
@@ -122,17 +129,17 @@ pub(super) fn stored_from_row(
     Ok((setting, stored))
 }
 
+/// Нечитаемый секрет не ошибка чтения: версия и автор строки видны без ключа.
 fn open_secret(
     key: Option<&SettingsKey>,
     setting: &str,
     version: Version,
     key_id: &str,
     sealed: &[u8],
-) -> Result<Secret, SettingsError> {
-    let key = key.ok_or_else(|| {
-        backend(CryptoError::MissingKey {
-            setting: setting.to_owned(),
-        })
-    })?;
-    open(key, setting, version, key_id, sealed).map_err(backend)
+) -> StoredValue {
+    let Some(key) = key else {
+        return StoredValue::Unreadable(Unreadable::MissingKey);
+    };
+    open(key, setting, version, key_id, sealed)
+        .map_or_else(StoredValue::Unreadable, StoredValue::Secret)
 }

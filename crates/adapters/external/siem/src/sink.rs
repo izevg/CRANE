@@ -90,6 +90,7 @@ fn emit(r: &OcsfRecord) {
         unmapped.setting.version = r.setting.version,
         unmapped.setting.old = r.setting.old.as_deref(),
         unmapped.setting.new = r.setting.new.as_deref(),
+        unmapped.setting.replaced_unreadable = r.setting.replaced_unreadable,
         "аудит"
     );
 }

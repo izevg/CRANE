@@ -11,7 +11,7 @@ use crane_ports::system::Clock;
 use sqlx::PgPool;
 
 use self::rows::{Columns, state_from_row};
-use crate::db_time::to_db_time;
+use crate::db::{is_unreachable, to_db_time};
 use crate::settings::BoxError;
 
 mod rows;
@@ -38,9 +38,18 @@ const OUT_OF_RANGE: &str = "момент времени вне диапазон�
 
 const EXISTS: &str = "SELECT EXISTS (SELECT 1 FROM onboarding)";
 
-/// Единственная воронка ошибок адаптера: драйвер или описание рассинхрона схемы.
+/// Воронка ошибок адаптера, кроме драйвера: описание рассинхрона схемы или времени.
 fn backend(error: impl Into<BoxError>) -> OnboardingError {
     OnboardingError::Backend(error.into())
+}
+
+/// Сбой драйвера: «БД недоступна» отделяется от остальных сбоев (порт отвечает 503, а не 500).
+fn driver(error: sqlx::Error) -> OnboardingError {
+    if is_unreachable(&error) {
+        OnboardingError::Unreachable(Box::new(error))
+    } else {
+        OnboardingError::Backend(Box::new(error))
+    }
 }
 
 /// Состояние мастера в PostgreSQL. Время завершения берёт из `Clock`.
@@ -71,7 +80,7 @@ impl PgOnboarding {
         {
             Ok(true) => OnboardingError::Completed,
             Ok(false) => OnboardingError::NotStarted,
-            Err(error) => backend(error),
+            Err(error) => driver(error),
         }
     }
 
@@ -88,7 +97,7 @@ impl PgOnboarding {
             .execute(&self.pool)
             .await
             .map(|done| done.rows_affected())
-            .map_err(backend)
+            .map_err(driver)
     }
 }
 
@@ -97,7 +106,7 @@ impl OnboardingStore for PgOnboarding {
         sqlx::query(SELECT)
             .fetch_optional(&self.pool)
             .await
-            .map_err(backend)?
+            .map_err(driver)?
             .as_ref()
             .map(state_from_row)
             .transpose()
@@ -109,7 +118,7 @@ impl OnboardingStore for PgOnboarding {
             .bind_to(sqlx::query(INSERT))
             .execute(&self.pool)
             .await
-            .map_err(backend)?;
+            .map_err(driver)?;
         // Отдельный запрос, не `WITH ins AS (INSERT ..) SELECT ..`: в READ COMMITTED снимок
         // одного оператора взят до коммита конкурента и строки победителя не увидел бы.
         self.get()
@@ -142,7 +151,7 @@ impl OnboardingStore for PgOnboarding {
             .bind(&by.id)
             .execute(&self.pool)
             .await
-            .map_err(backend)?
+            .map_err(driver)?
             .rows_affected();
         match affected {
             0 => Err(self.refusal().await),

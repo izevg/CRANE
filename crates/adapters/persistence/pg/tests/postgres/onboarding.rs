@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use crane_domain::onboarding::{Onboarding, TokenHash};
-use crane_ports::settings::OnboardingStore;
+use crane_ports::settings::{OnboardingError, OnboardingStore};
 
 use crate::CONTENDERS;
 use crate::support;
@@ -51,5 +51,21 @@ fn concurrent_begin_returns_the_same_winner_to_every_replica() {
         let winners = seen[0].iter().filter(|accepted| **accepted).count();
         assert!(seen.iter().all(|view| *view == seen[0]));
         assert_eq!(winners, 1);
+    });
+}
+
+#[test]
+fn closed_pool_makes_onboarding_store_unreachable() {
+    support::run(async |server| {
+        // Arrange
+        let pool = server.fresh_pool().await;
+        let store = crane_pg::PgOnboarding::new(pool.clone(), clock());
+        pool.close().await;
+
+        // Act
+        let result = store.get().await;
+
+        // Assert
+        assert!(matches!(result, Err(OnboardingError::Unreachable(_))));
     });
 }

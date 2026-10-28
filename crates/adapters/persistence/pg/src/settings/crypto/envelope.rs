@@ -1,29 +1,13 @@
 use aws_lc_rs::aead::{Aad, NONCE_LEN, Nonce};
-use crane_domain::settings::{Secret, Version};
+use crane_domain::settings::{Secret, Unreadable, Version};
 
 use super::key::SettingsKey;
 
-/// Почему секрет не запечатан или не открыт. Только имя настройки и отпечатки ключей:
-/// ни байтов, ни значений в сообщениях нет.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum CryptoError {
-    #[error(
-        "секрет настройки {setting} запечатан ключом {stored_key_id}, а задан ключ {current_key_id}: \
-         верните прежний CRANE_SETTINGS_KEY_FILE или перезапишите секрет"
-    )]
-    WrongKey {
-        setting: String,
-        stored_key_id: String,
-        current_key_id: String,
-    },
-    #[error("секрет настройки {setting} повреждён или принадлежит другой строке или версии")]
-    Corrupted { setting: String },
-    #[error(
-        "секрет настройки {setting} лежит в БД, а ключ шифрования не задан (CRANE_SETTINGS_KEY_FILE)"
-    )]
-    MissingKey { setting: String },
-    #[error("не удалось зашифровать секрет настройки {setting}")]
-    SealFailed { setting: String },
+/// Запечатать секрет не удалось. Только имя настройки: ни значения, ни ключа в сообщении нет.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("не удалось зашифровать секрет настройки {setting}")]
+pub(crate) struct CryptoError {
+    setting: String,
 }
 
 /// Связывает шифртекст со строкой: имя настройки, версия и отпечаток ключа. Перенесённый в
@@ -48,7 +32,7 @@ pub(in crate::settings) fn seal(
     let nonce = key
         .cipher()
         .seal_in_place_append_tag(associated_data(setting, version, key.id()), &mut body)
-        .map_err(|_| CryptoError::SealFailed {
+        .map_err(|_| CryptoError {
             setting: setting.to_owned(),
         })?;
     let mut sealed = Vec::with_capacity(NONCE_LEN + body.len());
@@ -58,27 +42,26 @@ pub(in crate::settings) fn seal(
 }
 
 /// Открывает конверт из строки `setting` версии `version`, запечатанный ключом `stored_key_id`.
+/// Отказ - свойство строки (`Unreadable`), а не ошибка адаптера.
 pub(in crate::settings) fn open(
     key: &SettingsKey,
     setting: &str,
     version: Version,
     stored_key_id: &str,
     sealed: &[u8],
-) -> Result<Secret, CryptoError> {
-    let corrupted = || CryptoError::Corrupted {
-        setting: setting.to_owned(),
-    };
+) -> Result<Secret, Unreadable> {
     // Чужой ключ распознаётся по отпечатку без попытки расшифровки: так оператор видит причину.
     if stored_key_id != key.id() {
-        return Err(CryptoError::WrongKey {
-            setting: setting.to_owned(),
+        return Err(Unreadable::WrongKey {
             stored_key_id: stored_key_id.to_owned(),
             current_key_id: key.id().to_owned(),
         });
     }
     // Хвост короче тега `open_in_place` отвергает сам: длину тега знает только алгоритм.
-    let (nonce, body) = sealed.split_at_checked(NONCE_LEN).ok_or_else(corrupted)?;
-    let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| corrupted())?;
+    let (nonce, body) = sealed
+        .split_at_checked(NONCE_LEN)
+        .ok_or(Unreadable::Corrupted)?;
+    let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| Unreadable::Corrupted)?;
     let mut buffer = body.to_vec();
     let plaintext = key
         .cipher()
@@ -87,10 +70,10 @@ pub(in crate::settings) fn open(
             associated_data(setting, version, key.id()),
             &mut buffer,
         )
-        .map_err(|_| corrupted())?;
+        .map_err(|_| Unreadable::Corrupted)?;
     String::from_utf8(plaintext.to_vec())
         .map(Secret::new)
-        .map_err(|_| corrupted())
+        .map_err(|_| Unreadable::Corrupted)
 }
 
 #[cfg(test)]
@@ -115,7 +98,7 @@ mod tests {
         .expect("seal")
     }
 
-    fn opened(result: Result<Secret, CryptoError>) -> Result<String, CryptoError> {
+    fn opened(result: Result<Secret, Unreadable>) -> Result<String, Unreadable> {
         result.map(|secret| secret.expose().to_owned())
     }
 
@@ -158,12 +141,7 @@ mod tests {
         let result = open(&key(1), "other", version(1), key(1).id(), &envelope);
 
         // Assert
-        assert_eq!(
-            opened(result),
-            Err(CryptoError::Corrupted {
-                setting: "other".to_owned()
-            })
-        );
+        assert_eq!(opened(result), Err(Unreadable::Corrupted));
     }
 
     #[test]
@@ -175,12 +153,7 @@ mod tests {
         let result = open(&key(1), SETTING, version(2), key(1).id(), &envelope);
 
         // Assert
-        assert_eq!(
-            opened(result),
-            Err(CryptoError::Corrupted {
-                setting: SETTING.to_owned()
-            })
-        );
+        assert_eq!(opened(result), Err(Unreadable::Corrupted));
     }
 
     #[test]
@@ -194,8 +167,7 @@ mod tests {
         // Assert
         assert_eq!(
             opened(result),
-            Err(CryptoError::WrongKey {
-                setting: SETTING.to_owned(),
+            Err(Unreadable::WrongKey {
                 stored_key_id: key(1).id().to_owned(),
                 current_key_id: key(2).id().to_owned(),
             })
@@ -212,12 +184,7 @@ mod tests {
         let result = open(&key(1), SETTING, version(1), key(1).id(), &envelope);
 
         // Assert
-        assert_eq!(
-            opened(result),
-            Err(CryptoError::Corrupted {
-                setting: SETTING.to_owned()
-            })
-        );
+        assert_eq!(opened(result), Err(Unreadable::Corrupted));
     }
 
     #[test]
@@ -229,12 +196,7 @@ mod tests {
         let result = open(&key(1), SETTING, version(1), key(1).id(), &short);
 
         // Assert
-        assert_eq!(
-            opened(result),
-            Err(CryptoError::Corrupted {
-                setting: SETTING.to_owned()
-            })
-        );
+        assert_eq!(opened(result), Err(Unreadable::Corrupted));
     }
 
     #[test]
@@ -269,22 +231,9 @@ mod tests {
     #[test]
     fn error_messages_contain_neither_plaintext_nor_key_material() {
         // Arrange
-        let errors = [
-            CryptoError::WrongKey {
-                setting: SETTING.to_owned(),
-                stored_key_id: key(1).id().to_owned(),
-                current_key_id: key(2).id().to_owned(),
-            },
-            CryptoError::Corrupted {
-                setting: SETTING.to_owned(),
-            },
-            CryptoError::MissingKey {
-                setting: SETTING.to_owned(),
-            },
-            CryptoError::SealFailed {
-                setting: SETTING.to_owned(),
-            },
-        ];
+        let errors = [CryptoError {
+            setting: SETTING.to_owned(),
+        }];
         let key_text = encoded(1).expose().to_owned();
 
         // Act
@@ -294,6 +243,6 @@ mod tests {
         });
 
         // Assert
-        assert_eq!(leaks, [false; 4]);
+        assert_eq!(leaks, [false]);
     }
 }

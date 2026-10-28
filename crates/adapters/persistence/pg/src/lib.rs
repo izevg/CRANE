@@ -4,10 +4,10 @@
 //! `rows`. Схема развивается только вперёд по правилам из `migrations/README.md`.
 
 mod catalog;
-mod db_time;
+mod db;
 mod schema;
 mod settings;
 
 pub use catalog::PgCatalog;
 pub use schema::{SchemaError, migrate};
-pub use settings::{CryptoError, KeyError, PgOnboarding, PgSettings, SettingsKey};
+pub use settings::{KeyError, PgOnboarding, PgSettings, SettingsKey};

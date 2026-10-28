@@ -7,12 +7,12 @@ use std::fmt;
 use std::sync::Arc;
 
 use crane_domain::access::Principal;
-use crane_domain::settings::{Stored, StoredValue, Version};
+use crane_domain::settings::{NewValue, Stored, Version};
 use crane_ports::settings::{SettingsError, SettingsStore};
 use crane_ports::system::Clock;
 use sqlx::PgPool;
 
-use self::rows::{Columns, backend, db_version, stored_from_row};
+use self::rows::{Columns, backend, db_version, driver, stored_from_row};
 use super::crypto::SettingsKey;
 
 const SELECT_ALL: &str =
@@ -71,7 +71,7 @@ impl SettingsStore for PgSettings {
         let rows = sqlx::query(SELECT_ALL)
             .fetch_all(&self.pool)
             .await
-            .map_err(backend)?;
+            .map_err(driver)?;
         rows.iter()
             .map(|row| stored_from_row(row, self.key.as_ref()))
             .collect()
@@ -80,7 +80,7 @@ impl SettingsStore for PgSettings {
     async fn put(
         &self,
         key: &str,
-        value: StoredValue,
+        value: NewValue,
         expected: Option<Version>,
         by: &Principal,
     ) -> Result<Version, SettingsError> {
@@ -100,7 +100,7 @@ impl SettingsStore for PgSettings {
         let affected = query
             .execute(&self.pool)
             .await
-            .map_err(backend)?
+            .map_err(driver)?
             .rows_affected();
         if affected == 0 {
             return Err(SettingsError::Conflict);
@@ -114,7 +114,7 @@ impl SettingsStore for PgSettings {
             .bind(db_version(expected)?)
             .execute(&self.pool)
             .await
-            .map_err(backend)?
+            .map_err(driver)?
             .rows_affected();
         if affected == 0 {
             return Err(SettingsError::Conflict);

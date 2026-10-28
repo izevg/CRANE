@@ -7,8 +7,8 @@ use sqlx::query::Query;
 use sqlx::{Postgres, Row};
 use time::OffsetDateTime;
 
-use super::{OUT_OF_RANGE, backend};
-use crate::db_time::{from_db_time, to_db_time};
+use super::{OUT_OF_RANGE, backend, driver};
+use crate::db::{from_db_time, to_db_time};
 
 /// Четыре колонки состояния в порядке `$1..$4` вставки.
 pub(super) struct Columns {
@@ -53,10 +53,10 @@ impl Columns {
 /// Строка БД -> состояние. CHECK `onboarding_state` допускает только две формы строки;
 /// любая другая значит, что схема разошлась с кодом.
 pub(super) fn state_from_row(row: &PgRow) -> Result<Onboarding, OnboardingError> {
-    let hash: Option<Vec<u8>> = row.try_get("token_hash").map_err(backend)?;
-    let expires: Option<OffsetDateTime> = row.try_get("token_expires_at").map_err(backend)?;
-    let at: Option<OffsetDateTime> = row.try_get("completed_at").map_err(backend)?;
-    let by: Option<String> = row.try_get("completed_by").map_err(backend)?;
+    let hash: Option<Vec<u8>> = row.try_get("token_hash").map_err(driver)?;
+    let expires: Option<OffsetDateTime> = row.try_get("token_expires_at").map_err(driver)?;
+    let at: Option<OffsetDateTime> = row.try_get("completed_at").map_err(driver)?;
+    let by: Option<String> = row.try_get("completed_by").map_err(driver)?;
     match (hash, expires, at, by) {
         (Some(hash), Some(expires), None, None) => {
             let bytes: [u8; 32] = hash

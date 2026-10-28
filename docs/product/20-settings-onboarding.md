@@ -57,6 +57,7 @@ pub(crate) fn layered<E, R>(env: E, read_file: &R, stored: HashMap<String, Strin
 - **Правило для новых ключей v0.3.0:** либо есть умолчание, либо ключ обязателен только при включении своей фичи (обычный код секции). Иначе рабочая v0.2 после обновления не разберётся и уйдёт в мастер.
 - **Неизвестные ключи** в БД (ключ удалён в новой версии) при загрузке пропускаются с `warn`.
 - **Невалидное сохранённое значение** после завершения мастера валит старт с `ConfigError`, где назван ключ; обход — тот же ключ в окружении.
+- **Нечитаемый секрет** (нет `CRANE_SETTINGS_KEY_FILE`, ключ другой или строка повреждена) — значение строки, а не отказ всего списка: консоль показывает строку с бейджем «не читается» (причина: нет ключа, другой ключ с обоими отпечатками, повреждена), версия и автор видны без ключа. Если ключ перекрыт окружением или файлом, строка затенена как обычно. Если ключ не перекрыт и нужен разбору, старт падает с `ConfigError`, где назван ключ: fail-closed, молча в умолчание значение не превращается (реализует B3). Нечитаемый `CRANE_TOKEN` значит, что протоколы отвечают `503`, реестр не открывается. Перезапись по CAS (`If-Match` с версией этой строки) работает как обычный `PUT`, а событие журнала несёт `replaced_unreadable`.
 
 ### Какие настройки в базу не попадают
 
@@ -94,7 +95,7 @@ pub(crate) fn layered<E, R>(env: E, read_file: &R, stored: HashMap<String, Strin
 - `Secret`: существующий `config::source::Secret` (без `Debug` и `Display`, значение только через `expose()`) переносится в domain. Один тип секрета на проект, тест редакции один.
 - `SettingDef { key, env_var, group, kind: Kind, unit: Option<Unit>, console: bool }`, `Kind { Text, Number, Bool, List, Url, Secret }`, `Unit { Bytes, Seconds }`. `group` — секция конфигурации, она же группа UI и шаг мастера.
 - `Origin { Env, Stored, Default }`.
-- `StoredValue { Plain(String), Secret(Secret) }`, `Version(NonZeroU64)`, `Stored { value, version, updated_at, updated_by }`.
+- `NewValue { Plain(String), Secret(Secret) }` (ввод `put`), `StoredValue { Plain(String), Secret(Secret), Unreadable(Unreadable) }` (то, что отдаёт `list`), `Unreadable { MissingKey, WrongKey { stored_key_id, current_key_id }, Corrupted }` (только отпечатки, байтов нет), `Version(NonZeroU64)`, `Stored { value, version, updated_at, updated_by }`. Нечитаемое значение записать нельзя по построению: у ввода такого варианта нет.
 - `Onboarding { Pending { token: TokenHash, expires_at }, Completed { at, by } }` и `TokenHash([u8; 32])` с чистой функцией `matches(&self, presented: &Secret) -> bool` (SHA-256 и сравнение в постоянное время; `sha2` и `subtle` уже в дереве).
 - `ProbeReport { checks }`, `ProbeCheck { id, status, detail }`, `ProbeStatus { Pass, Warn, Fail, Skipped }`.
 - Новые варианты `AuditAction` (20.3), только в конец enum.
@@ -113,16 +114,16 @@ pub(super) const SETTINGS: [SettingDef; 2] = [
 
 ```rust
 pub trait SettingsStore: Send + Sync {
-    async fn list(&self) -> Result<Vec<(String, Stored)>, StoreError>;
+    async fn list(&self) -> Result<BTreeMap<String, Stored>, SettingsError>;
     /// Запись с проверкой версии (CAS): None — строки не было.
-    async fn put(&self, key: &str, value: &StoredValue, expected: Option<Version>, by: &Principal) -> Result<Version, StoreError>;
-    async fn delete(&self, key: &str, expected: Version, by: &Principal) -> Result<(), StoreError>;
-}   // StoreError: Conflict (412), SecretsUnavailable (422), NotPersistent (409), Unavailable
+    async fn put(&self, key: &str, value: NewValue, expected: Option<Version>, by: &Principal) -> Result<Version, SettingsError>;
+    async fn delete(&self, key: &str, expected: Version) -> Result<(), SettingsError>;
+}   // SettingsError: Conflict (412), SecretsUnavailable (422), Unreachable (503, Retry-After: 10), Backend (500); NotPersistent (409) решает app
 
 pub trait OnboardingStore: Send + Sync {
-    async fn get(&self) -> Result<Option<Onboarding>, StoreError>;
+    async fn get(&self) -> Result<Option<Onboarding>, OnboardingError>;
     /// Первый старт: вставляет `initial`, если строки нет; возвращает то, что лежит в БД.
-    async fn begin(&self, initial: Onboarding) -> Result<Onboarding, StoreError>;
+    async fn begin(&self, initial: Onboarding) -> Result<Onboarding, OnboardingError>;
     /// Новый токен вместо истёкшего или потерянного (старт, роль `onboarding-token`).
     async fn rotate(&self, token: TokenHash, expires_at: SystemTime) -> Result<(), OnboardingError>;
     /// Только из Pending; Completed → OnboardingError::Completed (410).
@@ -178,7 +179,7 @@ CREATE TABLE onboarding (
 - AES-256-GCM через `aws_lc_rs::aead::RandomizedNonceKey` (сам генерирует 96-битный nonce). `aws-lc-rs` уже криптопровайдер проекта (sqlx и object_store собраны с `tls-rustls-aws-lc-rs`), новой зависимости нет.
 - Файл ключа — base64 от 32 байт (`openssl rand -base64 32`), права 0400, читается тем же `source::secret` с обрезкой перевода строки (сырые байты эту обрезку ломают).
 - AAD = имя настройки, версия строки и `key_id`: шифртекст нельзя переставить в строку другой настройки, а оставшийся от старой версии не откроется. **Не покрыто:** откат строки целиком (старые шифртекст и версия вместе) тем, у кого есть запись в БД; это угроза уровня доступа к БД.
-- Без ключа `put` секрета — `StoreError::SecretsUnavailable` (`422 secrets-unavailable`): мастер показывает секретные поля неактивными и объясняет, что задать (`*_FILE`-переменную секрета или `CRANE_SETTINGS_KEY_FILE`).
+- Без ключа `put` секрета — `SettingsError::SecretsUnavailable` (`422 secrets-unavailable`), а секрет, уже лежащий в БД, читается как `Unreadable::MissingKey`: мастер показывает секретные поля неактивными и объясняет, что задать (`*_FILE`-переменную секрета или `CRANE_SETTINGS_KEY_FILE`).
 - Секреты из окружения в БД не копируются и не шифруются.
 - Ротация ключа (`rekey`) — после v0.3.0; до неё один активный ключ.
 
@@ -372,7 +373,8 @@ flowchart LR
 | Проба заставляет сервер ходить по адресу, который ввёл недоверенный пользователь (SSRF) | единый клиент с SSRF-guard, allowlist для непубличных адресов, таймаут 5 с, в ответе только статусы проверок |
 | Bootstrap-токен в логе утекает через сбор логов | 24 часа, права только на мастер, цель вне аудита и SIEM, предпочтительный путь через `CRANE_BOOTSTRAP_TOKEN_FILE` |
 | Токен мастера виден JS вкладки | память вкладки, не `localStorage`; CSP SPA; срок и права токена (20.5) |
-| Потеря `CRANE_SETTINGS_KEY_FILE` делает секреты в БД нечитаемыми | ключ в Secret с резервной копией; секреты можно перезаписать |
+| Потеря `CRANE_SETTINGS_KEY_FILE` делает секреты в БД нечитаемыми | ключ в Secret с резервной копией; строка остаётся видимой с бейджем «не читается» и перезаписывается из консоли по CAS (событие с `replaced_unreadable`) или перекрывается из окружения |
+| БД настроек недоступна | порт отдаёт `Unreachable`, HTTP отвечает `503` с `Retry-After: 10` (B4); процесс без БД не подменяет её умолчаниями |
 | Откат строки `setting` целиком (шифртекст и версия вместе) тем, у кого есть запись в БД | не покрыто: угроза уровня доступа к БД (20.2); отдельный откат шифртекста ловит версия в AAD |
 | ENV затеняет значение из консоли, и администратор не понимает почему | бейдж и замок, серое «не действует», `warn` на старте |
 | Новый обязательный ключ отправляет обновлённую v0.2 в мастер | правило новых ключей v0.3.0 (20.1) |

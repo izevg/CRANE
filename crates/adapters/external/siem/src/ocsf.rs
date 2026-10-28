@@ -167,6 +167,8 @@ pub struct SettingFields {
     /// Старое и новое значение несекретной настройки, усечённые до 256 символов. У секрета и у удаления их нет.
     pub old: Option<String>,
     pub new: Option<String>,
+    /// `Some(true)` только при перезаписи нечитаемого секрета; значений в событии нет.
+    pub replaced_unreadable: Option<bool>,
 }
 
 /// Усечение по границе символа: срез по байтам разрезал бы многобайтовый символ.
@@ -182,17 +184,20 @@ fn setting_fields(action: &AuditAction) -> SettingFields {
             change,
         } => {
             // У секрета значений нет вовсе: их нет и в самом событии.
-            let (old, new) = match change {
+            let (old, new, replaced_unreadable) = match change {
                 SettingChange::Plain { old, new } => {
-                    (old.as_deref().map(truncate), Some(truncate(new)))
+                    (old.as_deref().map(truncate), Some(truncate(new)), None)
                 }
-                SettingChange::Secret => (None, None),
+                SettingChange::Secret {
+                    replaced_unreadable,
+                } => (None, None, replaced_unreadable.then_some(true)),
             };
             SettingFields {
                 key: Some(key.clone()),
                 version: Some(version.get()),
                 old,
                 new,
+                replaced_unreadable,
                 ..SettingFields::default()
             }
         }

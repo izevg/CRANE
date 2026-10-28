@@ -1,7 +1,7 @@
 //! Контракт `SettingsStore`: CAS по версии, удаление и секреты.
 
 use crane_domain::access::{Principal, PrincipalKind};
-use crane_domain::settings::{Secret, Stored, StoredValue, Version};
+use crane_domain::settings::{NewValue, Secret, Stored, StoredValue, Version};
 
 use crate::settings::{SettingsError, SettingsStore};
 
@@ -24,8 +24,8 @@ fn operator() -> Principal {
     }
 }
 
-fn plain(value: &str) -> StoredValue {
-    StoredValue::Plain(value.to_owned())
+fn plain(value: &str) -> NewValue {
+    NewValue::Plain(value.to_owned())
 }
 
 async fn row<S: SettingsStore>(store: &S, key: &str) -> Option<Stored> {
@@ -160,7 +160,7 @@ async fn delete_with_stale_version_conflicts_and_keeps_row<S: SettingsStore>(sto
 
 async fn put_secret_is_listed_as_secret_with_same_value<S: SettingsStore>(store: &S) {
     // Arrange
-    let value = StoredValue::Secret(Secret::new("crs_secret".to_owned()));
+    let value = NewValue::Secret(Secret::new("crs_secret".to_owned()));
 
     // Act
     let result = store.put("token", value, None, &operator()).await;
