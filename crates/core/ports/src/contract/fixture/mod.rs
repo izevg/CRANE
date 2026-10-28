@@ -4,8 +4,8 @@
 //! каталога нужны только согласованные нормализованные формы и кандидаты namespace.
 
 use crane_domain::registry::{
-    Ecosystem, Format, NameError, NamespacePattern, OrderKeyBuilder, PackageName, Version,
-    VersionError,
+    Ecosystem, Format, NameError, NamespacePattern, NamespaceShape, OrderKeyBuilder, PackageName,
+    Version, VersionError,
 };
 
 /// Нормализация и разделители cargo без проверки грамматики.
@@ -34,6 +34,10 @@ impl Ecosystem for Underscored {
 
     fn accepted_separators(&self) -> &'static [char] {
         &['-', '_']
+    }
+
+    fn namespace_shape(&self) -> NamespaceShape {
+        NamespaceShape::Delimited
     }
 }
 

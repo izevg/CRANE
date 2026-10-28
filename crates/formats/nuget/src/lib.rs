@@ -1,6 +1,8 @@
 //! Протокол NuGet-фида.
 
-use crane_domain::registry::{Ecosystem, Format, NameError, PackageName, Version, VersionError};
+use crane_domain::registry::{
+    Ecosystem, Format, NameError, NamespaceShape, PackageName, Version, VersionError,
+};
 
 /// Правила `NuGet`; реализация [`Ecosystem`] без состояния.
 #[derive(Debug, Clone, Copy)]
@@ -34,6 +36,10 @@ impl Ecosystem for NuGet {
 
     fn accepted_separators(&self) -> &'static [char] {
         &['.']
+    }
+
+    fn namespace_shape(&self) -> NamespaceShape {
+        NamespaceShape::Delimited
     }
 }
 

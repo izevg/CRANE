@@ -2,14 +2,36 @@
 //! `crane-server` рядом с выбором реализации.
 
 use super::*;
-use crate::registry::{Version, VersionError};
+use crate::registry::{Format, Version, VersionError, hosted_name_allowed};
 
-/// Слова через `-`, регистр и `_` не значимы, имя не начинается с цифры и не длиннее `MAX_LEN`.
 const MAX_LEN: usize = 20;
 
-struct Dashed;
+/// Правила тестовой экосистемы: форма, разделитель и допустимые написания перед `*`.
+/// Имя не начинается с цифры и не длиннее `MAX_LEN`.
+struct Rules {
+    shape: NamespaceShape,
+    separator: char,
+    accepted: &'static [char],
+}
 
-impl Ecosystem for Dashed {
+/// Слова через `-`, регистр и `_` не значимы.
+const DASHED: Rules = Rules {
+    shape: NamespaceShape::Delimited,
+    separator: '-',
+    accepted: &['-', '_'],
+};
+const SCOPED: Rules = Rules {
+    shape: NamespaceShape::Scoped,
+    separator: '/',
+    accepted: &['/'],
+};
+const GROUPED: Rules = Rules {
+    shape: NamespaceShape::Grouped,
+    separator: '.',
+    accepted: &['.'],
+};
+
+impl Ecosystem for Rules {
     fn format(&self) -> Format {
         Format::Cargo
     }
@@ -31,15 +53,22 @@ impl Ecosystem for Dashed {
     }
 
     fn normalize(&self, raw: &str) -> String {
-        raw.to_ascii_lowercase().replace('_', "-")
+        match self.shape {
+            NamespaceShape::Delimited => raw.to_ascii_lowercase().replace('_', "-"),
+            NamespaceShape::Scoped | NamespaceShape::Grouped => raw.to_owned(),
+        }
     }
 
     fn separator(&self) -> char {
-        '-'
+        self.separator
     }
 
     fn accepted_separators(&self) -> &'static [char] {
-        &['-', '_']
+        self.accepted
+    }
+
+    fn namespace_shape(&self) -> NamespaceShape {
+        self.shape
     }
 }
 
@@ -54,7 +83,7 @@ fn parse_normalizes_exact_and_prefix_patterns() {
 
     // Act
     let actual = cases.map(|raw| {
-        NamespacePattern::parse(&Dashed, raw).map(|p| (p.as_str().to_owned(), p.is_prefix()))
+        NamespacePattern::parse(&DASHED, raw).map(|p| (p.as_str().to_owned(), p.is_prefix()))
     });
 
     // Assert
@@ -71,7 +100,7 @@ fn parse_rejects_malformed_patterns() {
     ];
 
     // Act
-    let actual = cases.map(|raw| NamespacePattern::parse(&Dashed, raw).unwrap_err());
+    let actual = cases.map(|raw| NamespacePattern::parse(&DASHED, raw).unwrap_err());
 
     // Assert
     assert_eq!(
@@ -94,10 +123,10 @@ fn parse_rejects_malformed_patterns() {
 #[test]
 fn covering_lists_patterns_from_most_specific_to_most_general() {
     // Arrange
-    let name = Dashed.parse_name("acme-payments-core").unwrap();
+    let name = DASHED.parse_name("acme-payments-core").unwrap();
 
     // Act
-    let actual = NamespacePattern::covering(&Dashed, &name);
+    let actual = NamespacePattern::covering(&DASHED, &name);
 
     // Assert
     assert_eq!(
@@ -109,10 +138,10 @@ fn covering_lists_patterns_from_most_specific_to_most_general() {
 #[test]
 fn covering_does_not_cross_segment_boundaries() {
     // Arrange
-    let name = Dashed.parse_name("acmecorp").unwrap();
+    let name = DASHED.parse_name("acmecorp").unwrap();
 
     // Act
-    let actual = NamespacePattern::covering(&Dashed, &name);
+    let actual = NamespacePattern::covering(&DASHED, &name);
 
     // Assert
     assert_eq!(strings(&actual), ["acmecorp"]);
@@ -121,11 +150,11 @@ fn covering_does_not_cross_segment_boundaries() {
 #[test]
 fn name_is_covered_by_its_own_prefix_pattern() {
     // Arrange
-    let name = Dashed.parse_name("Acme-Payments").unwrap();
-    let namespace = NamespacePattern::parse(&Dashed, "acme-*").unwrap();
+    let name = DASHED.parse_name("Acme-Payments").unwrap();
+    let namespace = NamespacePattern::parse(&DASHED, "acme-*").unwrap();
 
     // Act
-    let covering = NamespacePattern::covering(&Dashed, &name);
+    let covering = NamespacePattern::covering(&DASHED, &name);
 
     // Assert
     assert_eq!(covering.last(), Some(&namespace));
@@ -139,7 +168,7 @@ fn prefix_base_is_validated_without_its_separator() {
     // Act
     let actual = cases
         .each_ref()
-        .map(|raw| NamespacePattern::parse(&Dashed, raw).map(|p| p.is_prefix()));
+        .map(|raw| NamespacePattern::parse(&DASHED, raw).map(|p| p.is_prefix()));
 
     // Assert
     assert_eq!(
@@ -152,4 +181,136 @@ fn prefix_base_is_validated_without_its_separator() {
             })),
         ]
     );
+}
+
+fn parse_all(eco: &Rules, raws: &[&str]) -> Vec<Result<String, PatternError>> {
+    raws.iter()
+        .map(|raw| NamespacePattern::parse(eco, raw).map(|p| p.as_str().to_owned()))
+        .collect()
+}
+
+fn covering_of_name(eco: &Rules, normalized: &str) -> Vec<String> {
+    let name = PackageName::from_parts(normalized.to_owned(), normalized.to_owned());
+    NamespacePattern::covering(eco, &name)
+        .iter()
+        .map(|p| p.as_str().to_owned())
+        .collect()
+}
+
+#[test]
+fn scoped_shape_accepts_only_a_scope_as_prefix() {
+    // Arrange
+    let raws = ["@acme/*", "@acme/ui", "acme/*", "@/*", "@a/b/*", "@acme*"];
+
+    // Act
+    let actual = parse_all(&SCOPED, &raws);
+
+    // Assert
+    assert_eq!(
+        actual,
+        [
+            Ok("@acme/*".to_owned()),
+            Ok("@acme/ui".to_owned()),
+            Err(PatternError::Scope),
+            Err(PatternError::EmptyBase),
+            Err(PatternError::Scope),
+            Err(PatternError::Scope),
+        ]
+    );
+}
+
+#[test]
+fn scoped_shape_is_covered_by_its_scope_only() {
+    // Arrange
+    let names = ["@acme/ui", "left-pad", "@/x"];
+
+    // Act
+    let actual = names.map(|name| covering_of_name(&SCOPED, name));
+
+    // Assert
+    assert_eq!(
+        actual,
+        [
+            vec!["@acme/ui".to_owned(), "@acme/*".to_owned()],
+            vec!["left-pad".to_owned()],
+            vec!["@/x".to_owned()],
+        ]
+    );
+}
+
+#[test]
+fn grouped_shape_takes_a_group_base_and_rejects_colon_in_prefix() {
+    // Arrange
+    let raws = [
+        "com.acme.*",
+        "com.acme:core",
+        "com.acme:*",
+        "com.acme*",
+        ".*",
+    ];
+
+    // Act
+    let actual = parse_all(&GROUPED, &raws);
+
+    // Assert
+    assert_eq!(
+        actual,
+        [
+            Ok("com.acme.*".to_owned()),
+            Ok("com.acme:core".to_owned()),
+            Err(PatternError::GroupId),
+            Err(PatternError::Boundary),
+            Err(PatternError::EmptyBase),
+        ]
+    );
+}
+
+#[test]
+fn grouped_shape_is_covered_by_group_prefixes_and_only_exactly_without_a_group() {
+    // Arrange
+    let names = ["com.acme.b:c", "com.acmecorp:x", "plain"];
+
+    // Act
+    let actual = names.map(|name| covering_of_name(&GROUPED, name));
+
+    // Assert
+    assert_eq!(
+        actual,
+        [
+            vec![
+                "com.acme.b:c".to_owned(),
+                "com.acme.b.*".to_owned(),
+                "com.acme.*".to_owned(),
+                "com.*".to_owned()
+            ],
+            vec![
+                "com.acmecorp:x".to_owned(),
+                "com.acmecorp.*".to_owned(),
+                "com.*".to_owned()
+            ],
+            vec!["plain".to_owned()],
+        ]
+    );
+}
+
+#[test]
+fn only_scoped_shape_requires_a_scope_for_hosted_names() {
+    // Arrange
+    let cases = [
+        (&DASHED, "left-pad"),
+        (&SCOPED, "left-pad"),
+        (&SCOPED, "@acme/ui"),
+        (&GROUPED, "com.acme:core"),
+    ];
+
+    // Act
+    let actual = cases.map(|(eco, name)| {
+        hosted_name_allowed(
+            eco,
+            &PackageName::from_parts(name.to_owned(), name.to_owned()),
+        )
+    });
+
+    // Assert
+    assert_eq!(actual, [true, false, true, true]);
 }

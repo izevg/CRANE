@@ -10,7 +10,7 @@
 
 mod pattern;
 
-use super::{Ecosystem, Format, PackageName, WorkspaceId};
+use super::{Ecosystem, Format, NamespaceShape, PackageName, WorkspaceId};
 
 pub use pattern::{NamespacePattern, PatternError};
 
@@ -24,9 +24,9 @@ pub struct Namespace {
 
 /// Можно ли опубликовать имя в hosted-репозиторий экосистемы.
 ///
-/// Для npm нельзя неименованное по scope: клиент маршрутизирует реестры только по scope,
-/// поэтому безscope-имя нечем защитить от подмены из публичного реестра.
+/// Для формы `Scoped` нельзя неименованное по scope: клиент маршрутизирует реестры только
+/// по scope, поэтому безscope-имя нечем защитить от подмены из публичного реестра.
 #[must_use]
 pub fn hosted_name_allowed(eco: &dyn Ecosystem, name: &PackageName) -> bool {
-    !eco.requires_scope() || name.normalized().starts_with('@')
+    eco.namespace_shape() != NamespaceShape::Scoped || name.normalized().starts_with('@')
 }

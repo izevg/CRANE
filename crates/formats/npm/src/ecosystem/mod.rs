@@ -3,7 +3,9 @@
 mod name;
 mod version;
 
-use crane_domain::registry::{Ecosystem, Format, NameError, PackageName, Version, VersionError};
+use crane_domain::registry::{
+    Ecosystem, Format, NameError, NamespaceShape, PackageName, Version, VersionError,
+};
 
 pub(crate) use name::parse_name;
 pub(crate) use version::parse_version;
@@ -42,8 +44,8 @@ impl Ecosystem for Npm {
     }
 
     // Клиент маршрутизирует реестры только по scope, безscope-имя нечем защитить от подмены.
-    fn requires_scope(&self) -> bool {
-        true
+    fn namespace_shape(&self) -> NamespaceShape {
+        NamespaceShape::Scoped
     }
 }
 

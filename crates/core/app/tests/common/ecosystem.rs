@@ -2,8 +2,8 @@
 //! грамматику сюда не подтянуть, а сценариям нужны только согласованные формы имён и версий.
 
 use crane_domain::registry::{
-    Ecosystem, Format, NameError, NamespacePattern, OrderKeyBuilder, PackageName, Version,
-    VersionError,
+    Ecosystem, Format, NameError, NamespacePattern, NamespaceShape, OrderKeyBuilder, PackageName,
+    Version, VersionError,
 };
 
 pub(crate) struct TestCargo;
@@ -31,6 +31,10 @@ impl Ecosystem for TestCargo {
 
     fn accepted_separators(&self) -> &'static [char] {
         &['-', '_']
+    }
+
+    fn namespace_shape(&self) -> NamespaceShape {
+        NamespaceShape::Delimited
     }
 }
 

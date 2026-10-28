@@ -1,6 +1,8 @@
 //! Протокол Maven-репозитория.
 
-use crane_domain::registry::{Ecosystem, Format, NameError, PackageName, Version, VersionError};
+use crane_domain::registry::{
+    Ecosystem, Format, NameError, NamespaceShape, PackageName, Version, VersionError,
+};
 
 /// Правила Maven; реализация [`Ecosystem`] без состояния.
 #[derive(Debug, Clone, Copy)]
@@ -35,6 +37,10 @@ impl Ecosystem for Maven {
 
     fn accepted_separators(&self) -> &'static [char] {
         &['.']
+    }
+
+    fn namespace_shape(&self) -> NamespaceShape {
+        NamespaceShape::Grouped
     }
 }
 

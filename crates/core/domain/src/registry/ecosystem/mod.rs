@@ -28,10 +28,21 @@ pub trait Ecosystem: Send + Sync {
     /// Разделители, которыми клиент может записать границу перед `*`.
     fn accepted_separators(&self) -> &'static [char];
 
-    /// npm: hosted-имя без scope недопустимо.
-    fn requires_scope(&self) -> bool {
-        false
-    }
+    /// Форма пространства имён: по ней `NamespacePattern` режет имена на сегменты,
+    /// а `hosted_name_allowed` решает, нужен ли scope.
+    fn namespace_shape(&self) -> NamespaceShape;
+}
+
+/// Форма пространства имён экосистемы. Domain знает только форму, а не форматы.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamespaceShape {
+    /// Префикс обрывается на разделителе сегмента (`acme-*`): cargo, pypi, nuget.
+    Delimited,
+    /// Только `@scope/*`; hosted-имя обязано иметь scope: клиент маршрутизирует реестры
+    /// по scope, безscope-имя нечем защитить от подмены (npm).
+    Scoped,
+    /// Префикс по базе до `:`, база состоит из сегментов через разделитель (`com.acme.*`), maven.
+    Grouped,
 }
 
 /// Выбор реализации по тегу формата; настоящую функцию подставляет `entry`, чтобы `app`

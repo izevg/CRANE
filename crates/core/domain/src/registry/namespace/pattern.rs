@@ -1,6 +1,6 @@
 //! Паттерн namespace: разбор, нормализация и список паттернов, покрывающих имя.
 
-use super::super::{Ecosystem, Format, NameError, PackageName};
+use super::super::{Ecosystem, NameError, NamespaceShape, PackageName};
 
 const WILDCARD: char = '*';
 
@@ -17,9 +17,9 @@ pub enum PatternError {
     EmptyBase,
     #[error("`*` должен стоять сразу после разделителя формата и ровно одного")]
     Boundary,
-    #[error("npm: префикс допустим только в виде `@scope/*`")]
+    #[error("префикс допустим только в виде `@scope/*`")]
     Scope,
-    #[error("maven: префикс задаётся только по groupId, без `:`")]
+    #[error("префикс задаётся только по базе группы, без `:`")]
     GroupId,
     #[error("имя в паттерне недопустимо: {0}")]
     Name(#[from] NameError),
@@ -55,15 +55,13 @@ impl NamespacePattern {
     fn parse_prefix(eco: &dyn Ecosystem, raw: &str) -> Result<Self, PatternError> {
         // Срез по ASCII-символу `*` в конце: граница символа гарантирована.
         let head = raw.trim_end_matches(WILDCARD);
-        match eco.format() {
-            Format::Npm => Self::parse_scope(head),
-            Format::Maven | Format::Cargo | Format::PyPi | Format::NuGet => {
-                Self::parse_delimited(eco, head)
-            }
+        match eco.namespace_shape() {
+            NamespaceShape::Scoped => Self::parse_scope(head),
+            NamespaceShape::Delimited | NamespaceShape::Grouped => Self::parse_delimited(eco, head),
         }
     }
 
-    /// npm: только `@scope/`, без вложенных сегментов.
+    /// `Scoped`: только `@scope/`, без вложенных сегментов.
     fn parse_scope(head: &str) -> Result<Self, PatternError> {
         let Some(scope) = head
             .strip_prefix('@')
@@ -84,7 +82,7 @@ impl NamespacePattern {
         let Some(last) = head.chars().last() else {
             return Err(PatternError::EmptyBase);
         };
-        if eco.format() == Format::Maven && head.contains(':') {
+        if eco.namespace_shape() == NamespaceShape::Grouped && head.contains(':') {
             return Err(PatternError::GroupId);
         }
         if !eco.accepted_separators().contains(&last) {
@@ -139,17 +137,16 @@ impl NamespacePattern {
 /// То же, что [`NamespacePattern::covering`], над нормализованной строкой.
 fn covering_of(eco: &dyn Ecosystem, normalized: &str) -> Vec<NamespacePattern> {
     let mut patterns = vec![NamespacePattern(normalized.to_owned())];
-    match eco.format() {
-        Format::Npm => patterns.extend(scope_prefix(normalized)),
-        Format::Maven => {
-            // Имя без `:` не принадлежит никакому groupId: покрыть его может только точный паттерн.
+    let sep = eco.separator();
+    match eco.namespace_shape() {
+        NamespaceShape::Scoped => patterns.extend(scope_prefix(normalized)),
+        NamespaceShape::Grouped => {
+            // Имя без `:` не принадлежит никакой группе: покрыть его может только точный паттерн.
             if let Some((group, _)) = normalized.split_once(':') {
-                patterns.extend(group_prefixes(group));
+                patterns.extend(group_prefixes(group, sep));
             }
         }
-        Format::Cargo | Format::PyPi | Format::NuGet => {
-            patterns.extend(prefixes(normalized, eco.separator()));
-        }
+        NamespaceShape::Delimited => patterns.extend(prefixes(normalized, sep)),
     }
     patterns
 }
@@ -163,13 +160,13 @@ fn scope_prefix(normalized: &str) -> Option<NamespacePattern> {
     (scope.len() > 1).then(|| NamespacePattern(format!("{scope}/{WILDCARD}")))
 }
 
-/// `G.*` покрывает и сам groupId `G`, и `G.x`; затем префиксы родительских групп.
-fn group_prefixes(group: &str) -> Vec<NamespacePattern> {
+/// `G.*` покрывает и саму группу `G`, и `G.x`; затем префиксы родительских групп.
+fn group_prefixes(group: &str, sep: char) -> Vec<NamespacePattern> {
     if group.is_empty() {
         return Vec::new();
     }
-    let own = NamespacePattern(format!("{group}.{WILDCARD}"));
-    std::iter::once(own).chain(prefixes(group, '.')).collect()
+    let own = NamespacePattern(format!("{group}{sep}{WILDCARD}"));
+    std::iter::once(own).chain(prefixes(group, sep)).collect()
 }
 
 /// Префиксы `<начало><sep>*` справа налево по каждому разделителю, кроме нулевой позиции.

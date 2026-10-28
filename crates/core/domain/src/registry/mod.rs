@@ -10,7 +10,7 @@ mod namespace;
 
 pub use coordinate::{Format, FormatError, NameError, PackageName, Version, VersionError};
 pub use digest::{Checksum, DigestError, Sha1, Sha256, Sha512};
-pub use ecosystem::{Ecosystem, Ecosystems, OrderKey, OrderKeyBuilder};
+pub use ecosystem::{Ecosystem, Ecosystems, NamespaceShape, OrderKey, OrderKeyBuilder};
 pub use entity::{
     Asset, FormatMetadata, PackageVersion, Repository, RepositoryId, RepositoryKind, VersionId,
     WorkspaceId,
