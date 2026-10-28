@@ -6,6 +6,8 @@
 
 mod ecosystem;
 mod layout;
+mod metadata;
 
 pub use ecosystem::{Build, MAVEN, Maven};
 pub use layout::{Algorithm, FileName, Resource, Route, RouteError};
+pub use metadata::{RETENTION, builds, stale_builds, versions};
