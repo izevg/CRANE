@@ -8409,6 +8409,12 @@ components:
       properties:
         step:
           $ref: '#/components/schemas/OnboardingStep'
+        next_credential:
+          type: string
+          enum:
+          - bootstrap_token
+          - static_token
+          description: 'Каким токеном слать следующие запросы мастера. `static_token` - статический токен задан (этим шагом или окружением), bootstrap-токен больше не принимается.'
         report:
           $ref: '#/components/schemas/ProbeReport'
         _links:
@@ -9714,7 +9720,9 @@ components:
         - onboarding
         summary: Проверить и сохранить ключи шага
         description: |-
-          Прогон секции шага над наложением env > файл > БД + значения запроса, затем запись в БД; идемпотентно. Ключи, заданные окружением, - 409 `setting-locked`; ошибки разбора - 422 `setting-invalid` с `errors` по ключам шага. Результат содержит отчёт проверки связи.
+          Прогон секции шага над наложением env > файл > БД + значения запроса, затем запись в БД; идемпотентно. Ключи, заданные окружением, - 409 `setting-locked`; ошибки разбора - 422 `setting-invalid` с `errors` по ключам шага. Результат содержит отчёт проверки связи и `next_credential`.
+
+          Шаг `remaining`, записавший статический токен `token`, отвечает `next_credential: static_token`: bootstrap-токен с этого момента не принимается, и SPA шлёт статический токен, который оператор только что ввёл (сервер проверяет его по текущему слою БД, без перезапуска). Если нет ни `CRANE_TOKEN` в окружении, ни `CRANE_SETTINGS_KEY_FILE`, записать токен нельзя: 422 `secrets-unavailable`, `token` остаётся в `missing`.
 
           Доступ: `Authorization: Bearer` с bootstrap-токеном `crb_…` (пока статический токен не задан) либо статическим `CRANE_TOKEN`. После завершения мастера - 410 `onboarding-completed`.
         operationId: saveOnboardingStep
@@ -9818,7 +9826,7 @@ components:
         - onboarding
         summary: Завершить мастер
         description: |-
-          Возможно, когда разбор всей конфигурации проходит (иначе 409 со списком недостающих ключей). Атомарно переводит состояние в `completed`, стирает bootstrap-токен и закрывает мастер навсегда; процесс входит в рабочий режим без перезапуска.
+          Возможно, когда разбор всей конфигурации проходит (иначе 422 `setting-invalid` с `errors` по недостающим ключам). Атомарно переводит состояние в `completed`, стирает bootstrap-токен и закрывает мастер навсегда; процесс входит в рабочий режим без перезапуска.
 
           Доступ: `Authorization: Bearer` с bootstrap-токеном `crb_…` (пока статический токен не задан) либо статическим `CRANE_TOKEN`. После завершения мастера - 410 `onboarding-completed`.
         operationId: completeOnboarding
@@ -9847,6 +9855,8 @@ components:
             $ref: '#/components/responses/Unauthorized'
           '409':
             $ref: '#/components/responses/Conflict'
+          '422':
+            $ref: '#/components/responses/SettingInvalid'
           '410':
             $ref: '#/components/responses/Gone'
           '429':
