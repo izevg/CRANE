@@ -20,9 +20,9 @@ use bytes::Bytes;
 use crane_app::registry::{Attach, Coordinate, Publish, Registry, Upload};
 use crane_domain::access::{Caller, Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::registry::{
-    Asset, Checksum, Ecosystem, Format, FormatMetadata, PackageName, PackageRef, PackageVersion,
-    Repository, RepositoryId, RepositoryKind, Sha1, Sha256, Sha512, Version, VersionId,
-    VersionState,
+    Asset, Checksum, Digests, Ecosystem, Format, FormatMetadata, Md5, PackageName, PackageRef,
+    PackageVersion, Repository, RepositoryId, RepositoryKind, Sha1, Sha256, Sha512, Version,
+    VersionId, VersionState,
 };
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::proxy::{NoUpstream, UpstreamNames};
@@ -40,6 +40,8 @@ const HELLO_SHA256: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e7304
 /// sha512 и sha1 от байт `hello`.
 const HELLO_SHA512: &str = "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043";
 const HELLO_SHA1: &str = "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d";
+/// md5 от байт `hello`.
+const HELLO_MD5: &str = "5d41402abc4b2a76b9719d911017c592";
 pub(crate) const METADATA: &str = r#"{"deps":[]}"#;
 
 pub(crate) fn fixed_now() -> SystemTime {
@@ -79,6 +81,21 @@ pub(crate) fn hello_sha512() -> Sha512 {
 
 pub(crate) fn hello_sha1() -> Sha1 {
     Sha1::from_hex(HELLO_SHA1).unwrap()
+}
+
+pub(crate) fn hello_md5() -> Md5 {
+    Md5::from_hex(HELLO_MD5).unwrap()
+}
+
+/// Все дайджесты `hello` как константы: эталон, независимый от реализации `Digester`.
+pub(crate) fn hello_digests() -> Digests {
+    Digests {
+        sha256: hello_sha256(),
+        sha512: hello_sha512(),
+        sha1: hello_sha1(),
+        md5: hello_md5(),
+        size: 5,
+    }
 }
 
 pub(crate) fn name(raw: &str) -> PackageName {
@@ -233,8 +250,7 @@ impl Seed {
         let digests = block_on(self.blobs.commit(staged)).unwrap();
         Asset {
             path: path.to_owned(),
-            sha256: digests.sha256,
-            size: digests.size,
+            content: digests,
         }
     }
 
@@ -292,8 +308,13 @@ impl Seed {
     pub(crate) fn add_dangling(&self, package: &str, raw_version: &str) -> PackageVersion {
         let asset = Asset {
             path: asset_path(package, raw_version),
-            sha256: Sha256::from([0xee; 32]),
-            size: 1,
+            content: Digests {
+                sha256: Sha256::from([0xee; 32]),
+                sha512: Sha512::from([0xee; 64]),
+                sha1: Sha1::from([0xee; 20]),
+                md5: Md5::from([0xee; 16]),
+                size: 1,
+            },
         };
         self.insert(
             package,

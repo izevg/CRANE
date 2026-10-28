@@ -142,7 +142,10 @@ pub(super) async fn download<C: Catalog + 'static, B: BlobStore + 'static>(
         StatusCode::OK,
         [
             (header::CONTENT_TYPE, "application/octet-stream".to_owned()),
-            (header::CONTENT_LENGTH, download.asset.size.to_string()),
+            (
+                header::CONTENT_LENGTH,
+                download.asset.content.size.to_string(),
+            ),
         ],
         Body::from_stream(download.body),
     )

@@ -23,8 +23,8 @@ use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, OrderKeyBuilder, PackageName, Repository, RepositoryId,
-    RepositoryKind, Sha256, Version, VersionId, VersionState,
+    Asset, Digests, Format, FormatMetadata, Md5, OrderKeyBuilder, PackageName, Repository,
+    RepositoryId, RepositoryKind, Sha1, Sha256, Sha512, Version, VersionId, VersionState,
 };
 use crane_pg::{PgCatalog, migrate};
 use crane_ports::registry::{Catalog, NewVersion};
@@ -237,8 +237,13 @@ pub(crate) fn version(raw: &str) -> Version {
 pub(crate) fn asset(path: &str, fill: u8, size: u64) -> Asset {
     Asset {
         path: path.to_owned(),
-        sha256: Sha256::from([fill; 32]),
-        size,
+        content: Digests {
+            sha256: Sha256::from([fill; 32]),
+            sha512: Sha512::from([fill ^ 0x40; 64]),
+            sha1: Sha1::from([fill ^ 0x80; 20]),
+            md5: Md5::from([fill ^ 0xc0; 16]),
+            size,
+        },
     }
 }
 

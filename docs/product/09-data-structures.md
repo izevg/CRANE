@@ -101,7 +101,7 @@ CREATE TABLE blob_store (
 CREATE TABLE blob (
   store_id text NOT NULL REFERENCES blob_store,
   sha256 bytea NOT NULL, size bigint NOT NULL,
-  sha512 bytea, sha1 bytea, md5 bytea,               -- для протоколов клиентов
+  sha512 bytea NOT NULL, sha1 bytea NOT NULL, md5 bytea NOT NULL,  -- для протоколов клиентов; считаются при записи
   created_at timestamptz NOT NULL, verified_at timestamptz,
   gc_mark timestamptz,               -- момент, когда blob стал кандидатом
   PRIMARY KEY (store_id, sha256));   -- дедупликация в пределах хранилища
@@ -322,6 +322,11 @@ CREATE TABLE blob (
   store_id text NOT NULL, sha256 bytea NOT NULL CHECK (octet_length(sha256) = 32),
   size bigint NOT NULL CHECK (size >= 0), created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (store_id, sha256));
+-- Миграция 0006: все дайджесты содержимого, чтобы контрольные суммы отдавались строкой каталога без чтения blob.
+ALTER TABLE blob
+  ADD COLUMN sha512 bytea NOT NULL CHECK (octet_length(sha512) = 64),
+  ADD COLUMN sha1   bytea NOT NULL CHECK (octet_length(sha1) = 20),
+  ADD COLUMN md5    bytea NOT NULL CHECK (octet_length(md5) = 16);
 
 CREATE TABLE asset (
   version_id uuid NOT NULL REFERENCES package_version (id), path text NOT NULL,
@@ -349,13 +354,13 @@ CREATE TABLE onboarding (
     OR (completed_at IS NOT NULL AND token_hash IS NULL AND token_expires_at IS NULL AND completed_by IS NOT NULL)));
 ```
 
-*Рис. 9.3. Срез схемы v0.1.0 плюс миграции 0002 (`deprecated`, `dist_tag`), 0004 (`setting`, `onboarding`) и 0005 (`version_order`, `prerelease`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД. Миграция 0003 `namespace` (expand, только `CREATE TABLE`) добавляет таблицу `namespace` в виде, показанном выше; история заявок на имена в БД не хранится, она живёт только в событиях аудита. Миграция 0004 `settings` (expand, только `CREATE TABLE`) добавляет `setting` и `onboarding`: секрет лежит только в `value_sealed`, откат строки целиком (старые шифртекст и версия вместе) шифр не ловит, это угроза уровня доступа к БД (20.2). Миграция 0005 добавляет `version_order` и `prerelease` как `NOT NULL` без backfill: в отличие от остальных миграций, она отказывается идти по непустой `package_version` (dev-БД до v0.3.0 пересоздаётся), потому что заполнить колонки без грамматики экосистемы нечем. Адаптер читает версию как набор фактов (`Version::from_parts`) и грамматик экосистем не знает.
+*Рис. 9.3. Срез схемы v0.1.0 плюс миграции 0002 (`deprecated`, `dist_tag`), 0004 (`setting`, `onboarding`), 0005 (`version_order`, `prerelease`) и 0006 (`blob.sha512`, `blob.sha1`, `blob.md5`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД. Миграция 0003 `namespace` (expand, только `CREATE TABLE`) добавляет таблицу `namespace` в виде, показанном выше; история заявок на имена в БД не хранится, она живёт только в событиях аудита. Миграция 0004 `settings` (expand, только `CREATE TABLE`) добавляет `setting` и `onboarding`: секрет лежит только в `value_sealed`, откат строки целиком (старые шифртекст и версия вместе) шифр не ловит, это угроза уровня доступа к БД (20.2). Миграция 0005 добавляет `version_order` и `prerelease` как `NOT NULL` без backfill: в отличие от остальных миграций, она отказывается идти по непустой `package_version` (dev-БД до v0.3.0 пересоздаётся), потому что заполнить колонки без грамматики экосистемы нечем. Адаптер читает версию как набор фактов (`Version::from_parts`) и грамматик экосистем не знает. Миграция 0006 добавляет `sha512`, `sha1` и `md5` в `blob` как `NOT NULL` без backfill по той же причине: она отказывается идти по непустой `blob`, потому что дайджесты старых строк восстановимы только перечитыванием CAS. Дайджесты определяются содержимым, поэтому при конфликте `(store_id, sha256)` существующая строка остаётся как есть.
 
 | Отложено | Когда добавляется |
 | --- | --- |
 | `package.namespace_id`, `package.owner_workspace_id` (с CHECK), FK `namespace.workspace_id` и `repository.workspace_id` на `workspace` | v0.4.0, вместе с командами и workspaces. Таблица `namespace` уже есть (миграция 0003, 10.3) |
 | `purl`, `sort_key`, `mutable`, `published_by` | Появление потребителя (граф, сортировка, аудит публикаций) |
-| `sha512`, `sha1`, `md5`, `media_type` | Форматы, которым нужны эти дайджесты и типы |
+| `media_type` | Форматы, которым нужен тип |
 | таблица `blob_store` | Второе физическое хранилище; пока `store_id` — текст без FK |
 | `package_embedding` | Векторный поиск, P3 / v1.2.0 |
 | `download_event` | v0.4.0, вместе с журналом аудита (колонки `workspace_id`, `bytes`, `source` входят в `CREATE TABLE` сразу, до появления потока) |
@@ -374,11 +379,13 @@ CREATE TABLE onboarding (
 | `package` | 1 млн | 73 МБ | 105 МБ (PK и UNIQUE `(repository_id, name_norm)`) | ~73 Б / ~105 Б |
 | `package_version` | 10 млн | 1953 МБ | 809 МБ (PK uuid и UNIQUE `(package_id, version)`) | ~195 Б с учётом fillfactor 90 (средний tuple 176 Б, из них `metadata` 96 Б) / ~81 Б |
 | `asset` | 10 млн | 965 МБ | 611 МБ (PK) | ~96 Б / ~61 Б |
-| `blob` | 10 млн | 805 МБ | 731 МБ (PK) | ~80 Б / ~73 Б |
+| `blob` | 10 млн | 805 МБ (замер до миграции 0006); ≈ 1790 МБ с дайджестами (оценка) | 731 МБ (PK) | ~84 Б → ≈ 188 Б (оценка) / ~73 Б |
 
-Итого ≈ 6 ГБ на 10 млн версий.
+Итого ≈ 6 ГБ на 10 млн версий по замеру; с дайджестами миграции 0006 ≈ 7 ГБ (оценка, не замер).
 
-**Экстраполяция на L:** 10–100 млн версий, то есть ×1–×10 к замеру, ≈ 6–60 ГБ, а пакетов 1–5 млн (×1–×5 для `package`). Сверху добавится рост `metadata`: реальная metadata cargo крупнее 96 Б, а значения больше ~2 КБ уходят в TOAST (сжатие, отдельная relation, в строке остаётся указатель). Число asset на версию в других форматах больше одного (Maven), тогда `asset` растёт пропорционально. Blob после дедупликации не больше числа asset.
+**Пересчёт `blob` после миграции 0006.** Три `bytea NOT NULL` добавляют к кортежу sha512 (64 Б), sha1 (20 Б) и md5 (16 Б) плюс по 1 байту короткого заголовка varlena на значение (значения короче 127 Б, выравнивания не требуют): 64 + 20 + 16 + 3 = 103 Б. Битовая карта NULL не меняется (колонки `NOT NULL`). Строка замера 805 МБ / 10 млн ≈ 84 Б, новая ≈ 84 + 103 ≈ 187, с выравниванием кортежа по 8 байтам ≈ 188 Б: heap ≈ 188 Б × 10 млн ≈ 1790 МБ, то есть +985 МБ. Индекс PK `(store_id, sha256)` не меняется. Итого 6052 МБ + 985 МБ ≈ 7,0 ГБ. Значения дайджестов несжимаемы и в TOAST не уходят.
+
+**Экстраполяция на L:** 10–100 млн версий, то есть ×1–×10 к замеру, ≈ 7–70 ГБ (с дайджестами `blob`; без них 6–60 ГБ), а пакетов 1–5 млн (×1–×5 для `package`). Сверху добавится рост `metadata`: реальная metadata cargo крупнее 96 Б, а значения больше ~2 КБ уходят в TOAST (сжатие, отдельная relation, в строке остаётся указатель). Число asset на версию в других форматах больше одного (Maven), тогда `asset` растёт пропорционально. Blob после дедупликации не больше числа asset.
 
 Индекс правил deny (10.2) живёт в памяти реплики и ключуется по (format, name_norm). Индекс строится по строкам `emergency_block`: приём `MAL-*` создаёт их сотни тысяч, но по одной на имя, поэтому порядок объёма — десятки МБ (оценка, не замер).
 
@@ -582,7 +589,7 @@ stateDiagram-v2
 | Ключ | Значение и TTL |
 | --- | --- |
 | `md:<repo>:<name>` | Отрендеренная metadata (сжатая zstd) + ETag; TTL по эвристике 11.1; инвалидация по событию. Для proxy — документ после фильтра `served()`; сырой документ upstream — в `px:`. |
-| `px:<repo>:<path>` | Запись proxy-кэша: факты (время получения; тело, ETag и max-age документа; дайджесты артефакта или счётчик 404), ручной бинарный формат с байтом версии (кодек v2: blob несёт sha256, sha512, sha1 и размер; записи v1 читаются как промах). TTL = `keep_for` из политики; у артефактов TTL нет. |
+| `px:<repo>:<path>` | Запись proxy-кэша: факты (время получения; тело, ETag и max-age документа; дайджесты артефакта или счётчик 404), ручной бинарный формат с байтом версии (кодек v3: blob несёт sha256, sha512, sha1, md5 и размер; записи v1 и v2 читаются как промах, прежний код так же читает v3). TTL = `keep_for` из политики; у артефактов TTL нет. |
 | `sf:<repo>:<path>` | Lease singleflight: `SET NX PX` с токеном-фенсингом, снимается Lua-скриптом только своим токеном. |
 | `rl:<principal>:<bucket>` | Теоретическое время прибытия GCRA; Lua-скрипт атомарно. |
 | `ep:<principal>` | Эпоха авторизации; инкремент при отзыве, блокировке, смене групп. |

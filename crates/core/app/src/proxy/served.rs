@@ -7,7 +7,8 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use crane_domain::proxy::EgressRefusal;
-use crane_ports::registry::{ByteStream, Digests};
+use crane_domain::registry::Digests;
+use crane_ports::registry::ByteStream;
 
 use super::ProxyError;
 

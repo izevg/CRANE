@@ -156,8 +156,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         let digests = self.blobs.commit(staged).await?;
         Ok(Asset {
             path: upload.path,
-            sha256: digests.sha256,
-            size: digests.size,
+            content: digests,
         })
     }
 }

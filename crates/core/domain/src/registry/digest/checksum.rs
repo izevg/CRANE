@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{Sha1, Sha256, Sha512};
+use super::{Md5, Sha1, Sha256, Sha512};
 
 /// Контрольная сумма с явным алгоритмом: то, что заявил клиент или upstream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -8,6 +8,7 @@ pub enum Checksum {
     Sha256(Sha256),
     Sha512(Sha512),
     Sha1(Sha1),
+    Md5(Md5),
 }
 
 impl fmt::Display for Checksum {
@@ -16,6 +17,7 @@ impl fmt::Display for Checksum {
             Self::Sha256(d) => write!(f, "sha256:{d}"),
             Self::Sha512(d) => write!(f, "sha512:{d}"),
             Self::Sha1(d) => write!(f, "sha1:{d}"),
+            Self::Md5(d) => write!(f, "md5:{d}"),
         }
     }
 }

@@ -4,7 +4,7 @@ use crane_domain::registry::{Asset, Format, FormatMetadata, PackageVersion, Vers
 use futures_executor::block_on;
 
 use crate::common::{
-    HOSTED, Seed, asset_path, caller, coordinate, fixed_now, hello_sha256, name, publish_request,
+    HOSTED, Seed, asset_path, caller, coordinate, fixed_now, hello_digests, name, publish_request,
     read, version,
 };
 
@@ -34,8 +34,7 @@ fn publish_creates_released_record_with_store_digests_and_clock_time() {
         published_at: fixed_now(),
         assets: vec![Asset {
             path: asset_path("foo", "1.0.0"),
-            sha256: hello_sha256(),
-            size: 5,
+            content: hello_digests(),
         }],
         metadata: FormatMetadata::new(crate::common::METADATA.to_owned()),
     };

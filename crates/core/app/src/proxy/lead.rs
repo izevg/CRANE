@@ -4,12 +4,12 @@ use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
 use crane_domain::proxy::{Freshness, MetadataPolicy, NegativePolicy, ProxyKey, UpstreamBase};
-use crane_domain::registry::Checksum;
+use crane_domain::registry::{Checksum, Digests};
 use crane_ports::proxy::{
     Cached, CachedState, Claim, ETag, FetchLeases, Lease, ProxyCache, Upstream, UpstreamError,
     UpstreamRequest, UpstreamResponse,
 };
-use crane_ports::registry::{BlobError, BlobStore, ByteStream, Digests};
+use crane_ports::registry::{BlobError, BlobStore, ByteStream};
 use futures_util::{StreamExt, stream};
 
 use super::flight::Outcome;

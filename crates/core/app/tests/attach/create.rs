@@ -4,7 +4,7 @@ use crane_domain::registry::{FormatMetadata, VersionState};
 use futures_executor::block_on;
 
 use crate::common::{
-    METADATA, Seed, asset_path, attach_request, caller, coordinate, hello_sha256, read,
+    METADATA, Seed, asset_path, attach_request, caller, coordinate, hello_digests, read,
 };
 
 use super::{FIRST, HELLO, SECOND, paths_of_foo};
@@ -21,8 +21,8 @@ fn first_file_creates_released_version_with_that_file() {
     // Assert
     assert_eq!(version.state, VersionState::Released);
     assert_eq!(
-        (version.assets.len(), version.assets[0].sha256),
-        (1, hello_sha256())
+        (version.assets.len(), version.assets[0].content),
+        (1, hello_digests())
     );
 }
 

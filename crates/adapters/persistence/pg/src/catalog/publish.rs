@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crane_domain::registry::{Asset, PackageVersion, VersionId};
+use crane_domain::registry::{Asset, Digests, PackageVersion, VersionId};
 use crane_ports::registry::{CatalogError, NewVersion};
 use sqlx::{PgConnection, PgPool};
 
@@ -22,7 +22,10 @@ const ASSET_VERSION_FKEY: &str = "asset_version_id_fkey";
 /// Файлы версии в виде параллельных массивов для `UNNEST`.
 struct Files<'a> {
     paths: Vec<&'a str>,
-    digests: Vec<&'a [u8]>,
+    sha256: Vec<&'a [u8]>,
+    sha512: Vec<&'a [u8]>,
+    sha1: Vec<&'a [u8]>,
+    md5: Vec<&'a [u8]>,
     sizes: Vec<i64>,
 }
 
@@ -90,16 +93,19 @@ pub(super) async fn publish_version(
 fn files_of(assets: &[Asset]) -> Result<Files<'_>, CatalogError> {
     let sizes = assets
         .iter()
-        .map(|a| i64::try_from(a.size).map_err(|_| rejected("размер файла не помещается в bigint")))
+        .map(|a| {
+            i64::try_from(a.content.size)
+                .map_err(|_| rejected("размер файла не помещается в bigint"))
+        })
         .collect::<Result<Vec<_>, _>>()?;
-    let paths = assets.iter().map(|a| a.path.as_str()).collect();
-    let digests = assets
-        .iter()
-        .map(|a| a.sha256.as_bytes().as_slice())
-        .collect();
+    // Одна проекция на колонку: массивы для UNNEST выровнены по индексу файла.
+    let column = |bytes: fn(&Digests) -> &[u8]| assets.iter().map(|a| bytes(&a.content)).collect();
     Ok(Files {
-        paths,
-        digests,
+        paths: assets.iter().map(|a| a.path.as_str()).collect(),
+        sha256: column(|d| d.sha256.as_bytes()),
+        sha512: column(|d| d.sha512.as_bytes()),
+        sha1: column(|d| d.sha1.as_bytes()),
+        md5: column(|d| d.md5.as_bytes()),
         sizes,
     })
 }
@@ -125,15 +131,21 @@ async fn ensure_package(conn: &mut PgConnection, new: &NewVersion) -> Result<i64
         .map_err(backend)
 }
 
-/// Содержимое общее для версий и репозиториев: уже известный blob не трогаем.
+/// Содержимое общее для версий и репозиториев: уже известный blob не трогаем. Остальные
+/// дайджесты однозначно определяются содержимым, поэтому у существующей строки они те же.
 async fn insert_blobs(conn: &mut PgConnection, files: &Files<'_>) -> Result<(), CatalogError> {
     sqlx::query(
-        "INSERT INTO blob (store_id, sha256, size)
-         SELECT $1, t.digest, t.size FROM UNNEST($2::bytea[], $3::int8[]) AS t(digest, size)
+        "INSERT INTO blob (store_id, sha256, sha512, sha1, md5, size)
+         SELECT $1, t.sha256, t.sha512, t.sha1, t.md5, t.size
+         FROM UNNEST($2::bytea[], $3::bytea[], $4::bytea[], $5::bytea[], $6::int8[])
+              AS t(sha256, sha512, sha1, md5, size)
          ON CONFLICT (store_id, sha256) DO NOTHING",
     )
     .bind(STORE_ID)
-    .bind(&files.digests)
+    .bind(&files.sha256)
+    .bind(&files.sha512)
+    .bind(&files.sha1)
+    .bind(&files.md5)
     .bind(&files.sizes)
     .execute(conn)
     .await
@@ -181,7 +193,7 @@ async fn insert_assets(
     .bind(version.as_uuid())
     .bind(STORE_ID)
     .bind(&files.paths)
-    .bind(&files.digests)
+    .bind(&files.sha256)
     .execute(conn)
     .await?;
     Ok(())

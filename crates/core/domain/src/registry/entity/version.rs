@@ -1,14 +1,14 @@
 use std::time::SystemTime;
 
 use super::{RepositoryId, VersionId};
-use crate::registry::{PackageName, Sha256, Version, VersionState};
+use crate::registry::{Digests, PackageName, Version, VersionState};
 
 /// Файл версии в CAS.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Asset {
     pub path: String,
-    pub sha256: Sha256,
-    pub size: u64,
+    /// Дайджесты считаются при записи один раз, чтобы отдавать контрольные суммы без чтения blob.
+    pub content: Digests,
 }
 
 /// Непрозрачный JSON формата: ядро его не читает и не проверяет.

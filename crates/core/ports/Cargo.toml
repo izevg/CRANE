@@ -19,6 +19,9 @@ bytes = "1"
 crane-domain = { path = "../domain" }
 futures-core = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
+# MD5 нужен только как контрольная сумма `.md5` Maven (не для безопасности); 0.10 делит digest 0.10 с sha1/sha2,
+# транзитивный md-5 0.11 в lock тянул бы второй digest.
+md-5 = "0.10"
 sha1 = "0.10"
 sha2 = "0.10"
 thiserror = "2"

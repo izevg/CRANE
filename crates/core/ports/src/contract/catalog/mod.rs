@@ -4,8 +4,8 @@ mod flags;
 use std::time::{Duration, SystemTime};
 
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, PackageVersion, Repository, RepositoryId, RepositoryKind,
-    Sha256, VersionId, VersionState,
+    Asset, Digests, Format, FormatMetadata, Md5, PackageVersion, Repository, RepositoryId,
+    RepositoryKind, Sha1, Sha256, Sha512, VersionId, VersionState,
 };
 use uuid::Uuid;
 
@@ -16,6 +16,18 @@ use crate::registry::{Catalog, NewVersion};
 pub async fn catalog_contract<C: Catalog>(new: impl Fn() -> C) {
     content::scenarios(&new).await;
     flags::scenarios(&new).await;
+}
+
+/// Дайджесты с разными байтами у каждого алгоритма: перепутанные колонки или пустые значения
+/// не совпадут с исходными.
+pub(super) fn digests(byte: u8) -> Digests {
+    Digests {
+        sha256: Sha256::from([byte; 32]),
+        sha512: Sha512::from([byte ^ 0x40; 64]),
+        sha1: Sha1::from([byte ^ 0x80; 20]),
+        md5: Md5::from([byte ^ 0xc0; 16]),
+        size: 3,
+    }
 }
 
 pub(super) fn repository(id: u128, name: &str) -> Repository {
@@ -38,8 +50,7 @@ pub(super) fn new_version(seq: u64, repo: RepositoryId, package: &str, raw: &str
         published_at: SystemTime::UNIX_EPOCH + Duration::from_secs(seq),
         assets: vec![Asset {
             path: format!("{package}-{raw}.crate"),
-            sha256: Sha256::from([7; 32]),
-            size: 3,
+            content: digests(7),
         }],
         metadata: FormatMetadata::new(r#"{"deps":[]}"#.to_owned()),
         tags: Vec::new(),

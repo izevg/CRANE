@@ -22,7 +22,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             .into_iter()
             .find(|asset| asset.path == path)
             .ok_or(RegistryError::AssetNotFound)?;
-        let body = self.blobs.open(&asset.sha256).await?;
+        let body = self.blobs.open(&asset.content.sha256).await?;
         Ok(Download { asset, body })
     }
 

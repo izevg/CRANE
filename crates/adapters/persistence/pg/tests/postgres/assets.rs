@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crane_domain::registry::{Asset, Sha256};
+use crane_domain::registry::{Asset, Digests, Md5, Sha1, Sha256, Sha512};
 use crane_ports::registry::{Catalog, CatalogError};
 
 use crate::CONTENDERS;
@@ -12,8 +12,13 @@ use crate::support::{hosted_repository, join_all, name, new_version, version};
 fn wheel(path: String, byte: u8) -> Asset {
     Asset {
         path,
-        sha256: Sha256::from([byte; 32]),
-        size: 3,
+        content: Digests {
+            sha256: Sha256::from([byte; 32]),
+            sha512: Sha512::from([byte; 64]),
+            sha1: Sha1::from([byte; 20]),
+            md5: Md5::from([byte; 16]),
+            size: 3,
+        },
     }
 }
 

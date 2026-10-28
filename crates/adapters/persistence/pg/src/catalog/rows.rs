@@ -11,9 +11,9 @@ use std::fmt::Display;
 use std::time::SystemTime;
 
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, Namespace, NamespacePattern, OrderKey, PackageName,
-    PackageVersion, Repository, RepositoryId, RepositoryKind, Sha256, Version, VersionId,
-    VersionState, WorkspaceId,
+    Asset, Digests, Format, FormatMetadata, Md5, Namespace, NamespacePattern, OrderKey,
+    PackageName, PackageVersion, Repository, RepositoryId, RepositoryKind, Sha1, Sha256, Sha512,
+    Version, VersionId, VersionState, WorkspaceId,
 };
 use crane_ports::registry::CatalogError;
 
@@ -120,7 +120,7 @@ pub(crate) fn namespace_from_row(row: &PgRow) -> Result<Namespace, CatalogError>
 
 /// Колонки: `name_norm`, `name_display`, `id`, `repository_id`, `version_canonical`,
 /// `version_display`, `version_order`, `prerelease`, `state`,
-/// `yanked`, `deprecated`, `published_at`, `metadata`, `paths`, `digests`, `sizes`; массивы файлов
+/// `yanked`, `deprecated`, `published_at`, `metadata`, `paths`, `sha256`, `sha512`, `sha1`, `md5`, `sizes`; массивы файлов
 /// выровнены по индексу и отсортированы по пути.
 pub(crate) fn version_from_row(row: &PgRow) -> Result<PackageVersion, CatalogError> {
     Ok(PackageVersion {
@@ -140,37 +140,70 @@ pub(crate) fn version_from_row(row: &PgRow) -> Result<PackageVersion, CatalogErr
         yanked: column::<bool>(row, "yanked")?,
         deprecated: column::<Option<String>>(row, "deprecated")?,
         published_at: from_db_time(column::<OffsetDateTime>(row, "published_at")?)?,
-        assets: assets_from_columns(
-            column::<Vec<String>>(row, "paths")?,
-            column::<Vec<Vec<u8>>>(row, "digests")?,
-            column::<Vec<i64>>(row, "sizes")?,
-        )?,
+        assets: AssetColumns {
+            paths: column::<Vec<String>>(row, "paths")?,
+            sha256: column::<Vec<Vec<u8>>>(row, "sha256")?,
+            sha512: column::<Vec<Vec<u8>>>(row, "sha512")?,
+            sha1: column::<Vec<Vec<u8>>>(row, "sha1")?,
+            md5: column::<Vec<Vec<u8>>>(row, "md5")?,
+            sizes: column::<Vec<i64>>(row, "sizes")?,
+        }
+        .into_assets()?,
         metadata: FormatMetadata::new(column::<String>(row, "metadata")?),
     })
 }
 
-fn assets_from_columns(
+/// Параллельные массивы файлов версии из `array_agg`, выровненные по индексу.
+struct AssetColumns {
     paths: Vec<String>,
-    digests: Vec<Vec<u8>>,
+    sha256: Vec<Vec<u8>>,
+    sha512: Vec<Vec<u8>>,
+    sha1: Vec<Vec<u8>>,
+    md5: Vec<Vec<u8>>,
     sizes: Vec<i64>,
-) -> Result<Vec<Asset>, CatalogError> {
-    if paths.len() != digests.len() || paths.len() != sizes.len() {
-        return Err(corrupt("массивы файлов версии разной длины"));
-    }
-    paths
-        .into_iter()
-        .zip(digests)
-        .zip(sizes)
-        .map(|((path, digest), size)| {
-            let bytes = <[u8; 32]>::try_from(digest)
-                .map_err(|d| corrupt(format!("sha256 длиной {} вместо 32", d.len())))?;
-            Ok(Asset {
-                path,
-                sha256: Sha256::from(bytes),
-                size: u64::try_from(size).map_err(|_| corrupt("отрицательный размер файла"))?,
+}
+
+/// Дайджест фиксированной длины из байт колонки; чужая длина - повреждение данных
+/// (CHECK в схеме её не допускает).
+fn fixed<const N: usize>(name: &str, bytes: Vec<u8>) -> Result<[u8; N], CatalogError> {
+    <[u8; N]>::try_from(bytes).map_err(|b| corrupt(format!("{name} длиной {} вместо {N}", b.len())))
+}
+
+impl AssetColumns {
+    fn into_assets(self) -> Result<Vec<Asset>, CatalogError> {
+        let len = self.paths.len();
+        let lens = [
+            self.sha256.len(),
+            self.sha512.len(),
+            self.sha1.len(),
+            self.md5.len(),
+            self.sizes.len(),
+        ];
+        if lens.iter().any(|&l| l != len) {
+            return Err(corrupt("массивы файлов версии разной длины"));
+        }
+        self.paths
+            .into_iter()
+            .zip(self.sha256)
+            .zip(self.sha512)
+            .zip(self.sha1)
+            .zip(self.md5)
+            .zip(self.sizes)
+            .map(|(((((path, sha256), sha512), sha1), md5), size)| {
+                Ok(Asset {
+                    path,
+                    content: Digests {
+                        sha256: Sha256::from(fixed("sha256", sha256)?),
+                        sha512: Sha512::from(fixed("sha512", sha512)?),
+                        sha1: Sha1::from(fixed("sha1", sha1)?),
+                        md5: Md5::from(fixed("md5", md5)?),
+                        size: u64::try_from(size)
+                            .map_err(|_| corrupt("отрицательный размер файла"))?,
+                    },
+                })
             })
-        })
-        .collect()
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -265,43 +298,86 @@ mod tests {
         assert!(matches!(result, Err(CatalogError::Backend(_))));
     }
 
+    fn columns(n: usize) -> AssetColumns {
+        AssetColumns {
+            paths: vec!["a".to_owned(); n],
+            sha256: vec![vec![1; 32]; n],
+            sha512: vec![vec![2; 64]; n],
+            sha1: vec![vec![3; 20]; n],
+            md5: vec![vec![4; 16]; n],
+            sizes: vec![5; n],
+        }
+    }
+
     #[test]
     fn inconsistent_asset_columns_are_rejected_as_corrupt_row() {
         // Arrange
-        let path = || vec!["a".to_owned()];
         let cases = [
-            (path(), vec![vec![0; 32]], vec![]),
-            (path(), vec![vec![0; 31]], vec![1]),
-            (path(), vec![vec![0; 32]], vec![-1]),
+            AssetColumns {
+                sizes: vec![],
+                ..columns(1)
+            },
+            AssetColumns {
+                sha256: vec![vec![1; 31]],
+                ..columns(1)
+            },
+            AssetColumns {
+                sha512: vec![vec![2; 63]],
+                ..columns(1)
+            },
+            AssetColumns {
+                sha1: vec![vec![3; 19]],
+                ..columns(1)
+            },
+            AssetColumns {
+                md5: vec![vec![4; 15]],
+                ..columns(1)
+            },
+            AssetColumns {
+                md5: vec![],
+                ..columns(1)
+            },
+            AssetColumns {
+                sizes: vec![-1],
+                ..columns(1)
+            },
         ];
 
         // Act
-        let rejected = cases.map(|(p, d, s)| assets_from_columns(p, d, s).is_err());
+        let rejected = cases.map(|c| c.into_assets().is_err());
 
         // Assert
-        assert_eq!(rejected, [true; 3]);
+        assert_eq!(rejected, [true; 7]);
     }
 
     #[test]
     fn valid_columns_become_assets_in_input_order() {
         // Arrange
-        let paths = vec!["a".to_owned(), "b".to_owned()];
-        let digests = vec![vec![1; 32], vec![2; 32]];
+        let input = AssetColumns {
+            paths: vec!["a".to_owned(), "b".to_owned()],
+            sizes: vec![5, 0],
+            ..columns(2)
+        };
 
         // Act
-        let assets = assets_from_columns(paths, digests, vec![5, 0]).ok();
+        let assets = input.into_assets().ok();
 
         // Assert
+        let content = |size| Digests {
+            sha256: Sha256::from([1; 32]),
+            sha512: Sha512::from([2; 64]),
+            sha1: Sha1::from([3; 20]),
+            md5: Md5::from([4; 16]),
+            size,
+        };
         let expected = vec![
             Asset {
                 path: "a".to_owned(),
-                sha256: Sha256::from([1; 32]),
-                size: 5,
+                content: content(5),
             },
             Asset {
                 path: "b".to_owned(),
-                sha256: Sha256::from([2; 32]),
-                size: 0,
+                content: content(0),
             },
         ];
         assert_eq!(assets, Some(expected));

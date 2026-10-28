@@ -98,7 +98,7 @@ pub fn render_index(versions: &[PackageVersion]) -> Result<String, IndexError> {
             name: v.package.as_written(),
             vers: v.version.as_written(),
             deps: &meta.index.deps,
-            cksum: asset.sha256.to_string(),
+            cksum: asset.content.sha256.to_string(),
             features: &meta.index.features,
             yanked: v.yanked,
             links: meta.index.links.as_deref(),

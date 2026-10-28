@@ -4,16 +4,17 @@ use std::sync::Arc;
 
 use crane_app::proxy::{CacheResult, ProxyEngine, ProxyError, ProxyLimits};
 use crane_domain::proxy::NegativePolicy;
+use crane_domain::registry::Digests;
 use crane_memory::{ManualClock, MemoryBlobStore};
 use crane_ports::proxy::{Cached, CachedState, ProxyCache};
-use crane_ports::registry::{BlobError, Digests};
+use crane_ports::registry::BlobError;
 use futures_executor::block_on;
 
 use crate::common::faults::OpenFailsBlobs;
 use crate::common::proxy::ports::{SharedCache, SharedLeases};
 use crate::common::proxy::upstream::{FakeUpstream, Step};
 use crate::common::proxy::{SharedBlobs, World, bytes_of, epoch, key, origin, path, secs};
-use crate::common::{hello_sha1, hello_sha256, hello_sha512};
+use crate::common::{hello_md5, hello_sha1, hello_sha256, hello_sha512};
 
 use super::CRATE;
 
@@ -78,6 +79,7 @@ fn cas_backend_failure_on_hit_is_a_backend_error() {
             sha256: hello_sha256(),
             sha512: hello_sha512(),
             sha1: hello_sha1(),
+            md5: hello_md5(),
             size: 5,
         }),
     };
@@ -112,6 +114,7 @@ fn cas_unreachable_on_hit_is_an_unreachable_error() {
             sha256: hello_sha256(),
             sha512: hello_sha512(),
             sha1: hello_sha1(),
+            md5: hello_md5(),
             size: 5,
         }),
     };

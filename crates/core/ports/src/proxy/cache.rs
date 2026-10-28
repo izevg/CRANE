@@ -2,8 +2,7 @@ use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
 use crane_domain::proxy::ProxyKey;
-
-use crate::registry::Digests;
+use crane_domain::registry::Digests;
 
 /// Непрозрачный валидатор upstream для условных запросов (`If-None-Match`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,7 +43,7 @@ pub enum CachedState {
         /// передаёт заголовок, и бэкенды обязаны хранить его без потерь до секунды.
         max_age: Option<Duration>,
     },
-    /// Артефакт лежит в CAS; запись хранит только дайджесты. Неизменяем: `ETag` и счётчик не нужны.
+    /// Артефакт лежит в CAS; запись хранит только дайджесты (все, включая MD5: proxy отдаёт и `.md5`). Неизменяем: `ETag` и счётчик не нужны.
     Blob(Digests),
     /// Upstream ответил 404. `misses` — сколько раз подряд (рост negative TTL).
     Missing { misses: u32 },

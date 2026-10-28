@@ -6,8 +6,8 @@ use crane_ports::registry::Catalog;
 use crate::support;
 use crate::support::{hosted_repository, new_version};
 
-/// Число миграций в `migrator()`: файлы `0001`-`0005`.
-const MIGRATIONS: i64 = 5;
+/// Число миграций в `migrator()`: файлы `0001`-`0006`.
+const MIGRATIONS: i64 = 6;
 
 #[test]
 fn migrate_is_idempotent_on_empty_database() {
@@ -142,5 +142,30 @@ fn version_order_migration_refuses_a_database_that_already_has_versions() {
             .expect_err("миграция отказывает на непустой таблице")
             .to_string();
         assert!(message.contains("0005"), "{message}");
+    });
+}
+
+#[test]
+fn blob_digests_migration_refuses_a_database_that_already_has_blobs() {
+    support::run(async |server| {
+        // Arrange
+        let pool = server.fresh_pool().await;
+        let catalog = PgCatalog::new(pool.clone());
+        let repo = hosted_repository(&catalog).await;
+        catalog
+            .publish_version(new_version(1, repo, "serde", "1.0.0"))
+            .await
+            .expect("версия с файлом в подготовке");
+
+        // Act
+        let result = sqlx::raw_sql(include_str!("../../migrations/0006_blob_digests.sql"))
+            .execute(&pool)
+            .await;
+
+        // Assert
+        let message = result
+            .expect_err("миграция отказывает на непустой таблице blob")
+            .to_string();
+        assert!(message.contains("0006"), "{message}");
     });
 }
