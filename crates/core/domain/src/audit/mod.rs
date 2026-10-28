@@ -1,7 +1,7 @@
 //! Факты для журнала аудита.
 
 use crate::access::{Principal, RequestContext};
-use crate::registry::Coordinate;
+use crate::registry::{Coordinate, Format, Namespace, PackageName, PackageRef};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuditAction {
@@ -9,12 +9,37 @@ pub enum AuditAction {
     Publish(Coordinate),
     Yank(Coordinate),
     Unyank(Coordinate),
+    Delete(Coordinate),
+    Deprecate {
+        coordinate: Coordinate,
+        /// `None` снимает устаревание.
+        message: Option<String>,
+    },
+    Tag {
+        coordinate: Coordinate,
+        tag: String,
+    },
+    Untag {
+        package: PackageRef,
+        tag: String,
+    },
+    /// Резервирование имён: конфигурационный namespace или первая публикация точного имени.
+    Reserve(Namespace),
+    /// Прокси отказался отдавать внутреннее имя из публичного upstream.
+    ShadowUpstream {
+        format: Format,
+        package: PackageName,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     Success,
-    Failure { reason: String },
+    /// `code` — стабильный машиночитаемый код отказа по правилу; `None`, если правила нет.
+    Failure {
+        reason: String,
+        code: Option<&'static str>,
+    },
 }
 
 /// Факт для журнала. `event_id` и время ставит приёмник.

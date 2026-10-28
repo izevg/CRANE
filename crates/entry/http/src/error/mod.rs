@@ -1,39 +1,54 @@
-//! Два вида ошибочных ответов и единая таблица `RegistryError` → HTTP.
+//! Ошибочные ответы и единая таблица `RegistryError` → HTTP. Форма тела — свойство точки монтирования (`Dialect`).
 
 use std::error::Error;
 
+use axum::extract::{Request, State};
 use axum::http::StatusCode;
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use crane_app::proxy::ProxyError;
 use crane_app::registry::RegistryError;
 use crane_domain::registry::VersionState;
 
+mod kind;
+
+pub(crate) use kind::ProblemKind;
+
 const INTERNAL_DETAIL: &str = "внутренняя ошибка сервера";
+/// Единственный текст клиенту при недоступном хранилище: адреса и причины остаются в журнале.
+const UNREACHABLE_DETAIL: &str = "хранилище временно недоступно";
+const NOT_READY_DETAIL: &str = "хранилище не готово";
+const UPSTREAM_DETAIL: &str = "upstream недоступен";
+const NOT_FOUND_DETAIL: &str = "не найдено";
 
 /// Что именно писать в тело ошибки. Ответ несёт его в расширениях с пустым телом:
 /// id запроса известен только внешнему слою, он и рендерит тело (`context::render`).
 #[derive(Debug, Clone)]
 pub(crate) enum ErrorBody {
-    /// `{"errors":[{"detail":"…"}]}`.
-    Cargo(String),
+    /// Текст для клиента; оболочку (`{"errors":[…]}`, `{"error":…}` или RFC 9457) выбирает `Dialect`.
+    Detail { detail: String, kind: ProblemKind },
     /// RFC 9457.
     Problem {
         title: &'static str,
         detail: &'static str,
+        kind: ProblemKind,
     },
 }
 
-/// Ошибка в форме cargo: `{"errors":[{"detail":"…"}]}`.
+/// Ошибка для клиента формата: статус и текст, без привязки к проводной форме.
 #[derive(Debug)]
-pub(crate) struct CargoError {
+pub(crate) struct ClientError {
     status: StatusCode,
     detail: String,
+    kind: ProblemKind,
 }
 
-impl CargoError {
+impl ClientError {
     pub(crate) fn new(status: StatusCode, detail: impl Into<String>) -> Self {
         Self {
             status,
             detail: detail.into(),
+            kind: ProblemKind::Blank,
         }
     }
 
@@ -42,38 +57,84 @@ impl CargoError {
     }
 
     pub(crate) fn not_found() -> Self {
-        Self::new(StatusCode::NOT_FOUND, "не найдено")
+        Self::new(StatusCode::NOT_FOUND, NOT_FOUND_DETAIL)
     }
 
     /// 500 с обобщённым текстом: причину видит только журнал.
     pub(crate) fn internal(source: &(dyn Error + 'static)) -> Self {
-        let (status, detail) = internal(source);
-        Self { status, detail }
+        // Текст источника может содержать адреса и пути хранилища: клиенту он не нужен.
+        tracing::error!(error = %chain(source), "внутренняя ошибка запроса");
+        Self::new(StatusCode::INTERNAL_SERVER_ERROR, INTERNAL_DETAIL)
+    }
+
+    /// 503: хранилище не отвечает, повтор позже имеет смысл. Это отказ среды, а не баг, поэтому warn.
+    pub(crate) fn unreachable(source: &(dyn Error + 'static)) -> Self {
+        // Цепочка может содержать хост хранилища: она только в журнале.
+        tracing::warn!(error = %chain(source), "хранилище недоступно");
+        Self {
+            kind: ProblemKind::StorageUnreachable,
+            ..Self::new(StatusCode::SERVICE_UNAVAILABLE, UNREACHABLE_DETAIL)
+        }
     }
 }
 
-impl From<RegistryError> for CargoError {
+impl From<RegistryError> for ClientError {
     fn from(error: RegistryError) -> Self {
-        let (status, detail) = describe(&error);
-        Self { status, detail }
+        describe(&error)
     }
 }
 
-impl IntoResponse for CargoError {
+/// Клиенту proxy сообщает только «upstream недоступен»: адреса, причины отказа и суммы остаются в журнале.
+impl From<ProxyError> for ClientError {
+    fn from(error: ProxyError) -> Self {
+        match error {
+            ProxyError::NotFound => Self::not_found(),
+            ProxyError::Upstream(_)
+            | ProxyError::DigestMismatch { .. }
+            | ProxyError::TooLarge { .. } => Self::new(StatusCode::BAD_GATEWAY, UPSTREAM_DETAIL),
+            ProxyError::Unreachable(_) => Self::unreachable(&error),
+            ProxyError::Backend(_) => Self::internal(&error),
+        }
+    }
+}
+
+impl IntoResponse for ClientError {
     fn into_response(self) -> Response {
         let mut response = self.status.into_response();
-        response
-            .extensions_mut()
-            .insert(ErrorBody::Cargo(self.detail));
+        response.extensions_mut().insert(ErrorBody::Detail {
+            detail: self.detail,
+            kind: self.kind,
+        });
         response
     }
 }
 
-/// Ошибка в форме RFC 9457 для не-cargo маршрутов.
+/// Диалект точки монтирования: определяет форму тела ошибки и схему аутентификации.
+/// Ошибка формата не знает, как её покажут; слой `mark_dialect` на router формата кладёт диалект в ответ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Dialect {
+    Cargo,
+    Npm,
+}
+
+/// Слой router'а формата (`from_fn_with_state(dialect, mark_dialect)`): снаружи auth, чтобы 401 и 403
+/// тоже получили форму своего формата.
+pub(crate) async fn mark_dialect(
+    State(dialect): State<Dialect>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let mut response = next.run(request).await;
+    response.extensions_mut().insert(dialect);
+    response
+}
+
+/// Ошибка в форме RFC 9457 для маршрутов вне форматов.
 #[derive(Debug)]
 pub(crate) struct Problem {
     status: StatusCode,
     detail: &'static str,
+    kind: ProblemKind,
 }
 
 impl Problem {
@@ -81,15 +142,28 @@ impl Problem {
         Self {
             status: StatusCode::NOT_FOUND,
             detail: "маршрут не найден",
+            kind: ProblemKind::Blank,
         }
     }
 }
 
 impl Problem {
-    pub(crate) const fn storage_unavailable() -> Self {
+    /// Проба готовности: хранилище не отвечает (тот же тип и текст, что у `ClientError::unreachable`).
+    pub(crate) const fn unreachable() -> Self {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
-            detail: "хранилище недоступно",
+            detail: UNREACHABLE_DETAIL,
+            kind: ProblemKind::StorageUnreachable,
+        }
+    }
+
+    /// Проба готовности: хранилище ответило ошибкой (конфигурация или баг), а не молчанием.
+    /// Сервис не готов, но «повторите позже» не обещаем: тип общий.
+    pub(crate) const fn not_ready() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            detail: NOT_READY_DETAIL,
+            kind: ProblemKind::Blank,
         }
     }
 }
@@ -100,6 +174,7 @@ impl IntoResponse for Problem {
         response.extensions_mut().insert(ErrorBody::Problem {
             title: self.status.canonical_reason().unwrap_or("Error"),
             detail: self.detail,
+            kind: self.kind,
         });
         response
     }
@@ -122,31 +197,36 @@ pub(crate) fn chain(error: &(dyn Error + 'static)) -> String {
     text
 }
 
-fn internal(source: &(dyn Error + 'static)) -> (StatusCode, String) {
-    // Текст источника может содержать адреса и пути хранилища: клиенту он не нужен.
-    tracing::error!(error = %chain(source), "внутренняя ошибка запроса");
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        INTERNAL_DETAIL.to_owned(),
-    )
-}
-
-fn describe(error: &RegistryError) -> (StatusCode, String) {
+fn describe(error: &RegistryError) -> ClientError {
     let status = match error {
         RegistryError::RepositoryNotFound
         | RegistryError::VersionNotFound
+        | RegistryError::TagNotFound
         | RegistryError::AssetNotFound => StatusCode::NOT_FOUND,
         RegistryError::NotHosted => StatusCode::METHOD_NOT_ALLOWED,
         RegistryError::VersionExists => StatusCode::CONFLICT,
         RegistryError::Unavailable {
             state: VersionState::Deleted,
         } => StatusCode::GONE,
-        RegistryError::Unavailable { .. } => StatusCode::FORBIDDEN,
-        RegistryError::DigestMismatch { .. } => StatusCode::UNPROCESSABLE_ENTITY,
-        RegistryError::Body(_) => StatusCode::BAD_REQUEST,
-        RegistryError::Backend(_) => return internal(error),
+        RegistryError::Unavailable { .. }
+        | RegistryError::DeleteWindowClosed
+        | RegistryError::NamespaceOwned
+        | RegistryError::PublicName => StatusCode::FORBIDDEN,
+        RegistryError::DigestMismatch { .. } | RegistryError::UnscopedName => {
+            StatusCode::UNPROCESSABLE_ENTITY
+        }
+        RegistryError::Body(_) | RegistryError::Rejected { .. } => StatusCode::BAD_REQUEST,
+        RegistryError::Unreachable(_) => return ClientError::unreachable(error),
+        // Внутреннее имя для клиента неотличимо от отсутствующего: причину не раскрываем.
+        RegistryError::Shadowed => {
+            return ClientError::new(StatusCode::NOT_FOUND, NOT_FOUND_DETAIL);
+        }
+        RegistryError::UpstreamUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+        RegistryError::NamespaceConflict | RegistryError::Backend(_) => {
+            return ClientError::internal(error);
+        }
     };
-    (status, error.to_string())
+    ClientError::new(status, error.to_string())
 }
 
 #[cfg(test)]
@@ -157,15 +237,18 @@ fn describe(error: &RegistryError) -> (StatusCode, String) {
 )]
 mod tests {
     use std::io;
+    use std::sync::Arc;
 
-    use crane_domain::registry::Sha256;
+    use crane_app::proxy::UpstreamFailure;
+    use crane_domain::proxy::EgressRefusal;
+    use crane_domain::registry::{Checksum, Sha256};
 
     use super::*;
 
     #[test]
     fn registry_errors_map_to_http_statuses() {
         // Arrange
-        let digest = Sha256::from([1; 32]);
+        let digest = Checksum::Sha256(Sha256::from([1; 32]));
         let cases = [
             (RegistryError::RepositoryNotFound, StatusCode::NOT_FOUND),
             (RegistryError::NotHosted, StatusCode::METHOD_NOT_ALLOWED),
@@ -192,14 +275,20 @@ mod tests {
             ),
             (
                 RegistryError::DigestMismatch {
-                    declared: digest,
-                    actual: digest,
+                    declared: Box::new(digest),
+                    actual: Box::new(digest),
                 },
                 StatusCode::UNPROCESSABLE_ENTITY,
             ),
+            (RegistryError::DeleteWindowClosed, StatusCode::FORBIDDEN),
+            (RegistryError::TagNotFound, StatusCode::NOT_FOUND),
             (
                 RegistryError::Body(io::Error::other("обрыв")),
                 StatusCode::BAD_REQUEST,
+            ),
+            (
+                RegistryError::Unreachable("сбой".into()),
+                StatusCode::SERVICE_UNAVAILABLE,
             ),
             (
                 RegistryError::Backend("сбой".into()),
@@ -208,10 +297,57 @@ mod tests {
         ];
 
         // Act
-        let actual = cases.each_ref().map(|(error, _)| describe(error).0);
+        let actual = cases.each_ref().map(|(error, _)| describe(error).status);
 
         // Assert
         assert_eq!(actual, cases.map(|(_, expected)| expected));
+    }
+
+    #[test]
+    fn proxy_errors_map_to_status_and_hide_upstream_details() {
+        // Arrange
+        let sum = Checksum::Sha256(Sha256::from([1; 32]));
+        let cases = [
+            ProxyError::NotFound,
+            ProxyError::Upstream(UpstreamFailure::Unavailable),
+            ProxyError::Upstream(UpstreamFailure::Refused(EgressRefusal::HostNotAllowed(
+                "evil.example".to_owned(),
+            ))),
+            ProxyError::DigestMismatch {
+                expected: Box::new(sum),
+                actual: Box::new(sum),
+            },
+            ProxyError::TooLarge { limit: 1 },
+            ProxyError::Unreachable(Arc::new(io::Error::other("postgres://u:SECRET@h/db"))),
+            ProxyError::Backend(Arc::new(io::Error::other("postgres://u:SECRET@h/db"))),
+        ];
+
+        // Act
+        let actual = cases.map(|error| {
+            let error = ClientError::from(error);
+            (error.status, error.detail)
+        });
+
+        // Assert
+        let bad_gateway = (StatusCode::BAD_GATEWAY, UPSTREAM_DETAIL.to_owned());
+        assert_eq!(
+            actual,
+            [
+                (StatusCode::NOT_FOUND, "не найдено".to_owned()),
+                bad_gateway.clone(),
+                bad_gateway.clone(),
+                bad_gateway.clone(),
+                bad_gateway,
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    UNREACHABLE_DETAIL.to_owned()
+                ),
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    INTERNAL_DETAIL.to_owned()
+                ),
+            ]
+        );
     }
 
     #[test]
@@ -220,10 +356,22 @@ mod tests {
         let error = RegistryError::Backend("postgres://u:SECRET@h/db".into());
 
         // Act
-        let (_, detail) = describe(&error);
+        let detail = describe(&error).detail;
 
         // Assert
         assert_eq!(detail, INTERNAL_DETAIL);
+    }
+
+    #[test]
+    fn unreachable_detail_hides_the_source_message() {
+        // Arrange
+        let error = RegistryError::Unreachable("postgres://u:SECRET@h/db".into());
+
+        // Act
+        let detail = describe(&error).detail;
+
+        // Assert
+        assert_eq!(detail, UNREACHABLE_DETAIL);
     }
 
     #[test]
@@ -232,7 +380,7 @@ mod tests {
         let error = RegistryError::VersionExists;
 
         // Act
-        let (_, detail) = describe(&error);
+        let detail = describe(&error).detail;
 
         // Assert
         assert_eq!(detail, "версия уже существует");

@@ -8,7 +8,8 @@
 
 mod common;
 
-use common::{DownCatalog, OpenFailsBlobs, Seed};
+use common::Seed;
+use common::faults::{DownCatalog, OpenFailsBlobs};
 use crane_app::registry::RegistryError;
 use crane_domain::registry::{Format, Sha256};
 use crane_ports::registry::BlobError;
@@ -36,7 +37,7 @@ fn unreachable_catalog_makes_registry_not_ready() {
 
     // Assert
     assert!(
-        matches!(result, Err(RegistryError::Backend(_))),
+        matches!(result, Err(RegistryError::Unreachable(_))),
         "{result:?}"
     );
 }

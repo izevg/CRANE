@@ -14,9 +14,11 @@ const rules: Rules = {
   unlimitedDirs: ["tests"],
   serviceFiles: ["Cargo.toml"],
   testFiles: ["*.test.*"],
+  storyFiles: ["*.stories.*"],
   entryFiles: ["lib.rs", "index.ts"],
   rustLayers: { domain: [], ports: ["domain"], adapters: ["domain", "ports"] },
   aaa: { roots: [], exemptDirs: [] },
+  size: { roots: [], exemptDirs: [], extensions: [], maxLines: 400, warnLines: 320 },
 };
 
 const tree = (spec: Record<string, 0 | 1>): string => {
@@ -64,6 +66,20 @@ const structureCases: StructureCase[] = [
     expected: 0,
   },
   {
+    name: "stories не считаются в лимит файлов и не создают смешанность",
+    spec: {
+      ...files(["a.ts", "b.ts", "c.ts", "d.ts"]),
+      "src/a.stories.tsx": 0,
+      "src/b.stories.tsx": 0,
+    },
+    expected: 0,
+  },
+  {
+    name: "файл story не создаёт смешанность",
+    spec: { "src/a.stories.tsx": 0, "src/d": 1 },
+    expected: 0,
+  },
+  {
     name: "служебные файлы и tests/ не считаются",
     spec: { ...files(["a.ts", "b.ts", "c.ts", "d.ts"]), "src/Cargo.toml": 0, "src/tests/x.ts": 0 },
     expected: 0,
@@ -86,6 +102,7 @@ for (const c of structureCases) {
 const meta = (root: string, pkgs: [string, string, string[]][]): CargoMetadata => ({
   packages: pkgs.map(([name, path, deps]) => ({
     name,
+    version: "0.0.0",
     manifest_path: join(root, "crates", path, "Cargo.toml"),
     dependencies: deps.map((d) => ({ name: d, kind: null })),
   })),

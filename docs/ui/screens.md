@@ -25,7 +25,7 @@
 
 **Исправить относительно макета.** Убрать «Открыть ↗» из карточек (ссылка — имя). Разделить «P0 · Карантин» на пилюлю риска и StatusBadge версии. Убрать «Чисто». Убрать карточку «Индекс уязвимостей 99,4 %». Убрать дублирующийся логотип в сайдбаре.
 
-**Данные.** `GET /search?q&format&repository&workspace&include_deprecated&cursor&limit&fields` → `items[{name, format, repository{name,kind,workspace}, description, latest{version,state}, downloads_30d, owner_team, updated_at, lifecycle, replacement?, risk{max_priority, open_findings}? (P2), typosquat_of?, exact_match, highlights? (P3)}]`, `facets{format[], workspace[]}`, `took_ms`, `degraded[]`.
+**Данные.** `GET /search?q&format&repository&workspace&include_deprecated&cursor&limit&fields` → `items[{name, format, repository{name,kind,workspace}, description, latest{version,state}, downloads_30d, owner_team (отображаемое имя команды-владельца; переименование в `owner_workspace` — в v0.4.0 вместе с web), updated_at, lifecycle, replacement?, risk{max_priority, open_findings}? (P2), typosquat_of?, exact_match, highlights? (P3)}]`, `facets{format[], workspace[]}`, `took_ms`, `degraded[]`.
 
 **Состояния.** Пустой запрос — недавние пакеты (P1) или подсказки синтаксиса (PURL, `format:npm`). Нет результатов — «Ничего не нашлось по „…“» + советы (проверить формат, убрать фильтр) + если `typosquat_of` известен — «Возможно, вы искали …». Загрузка — 5 скелетонов карточек. Ошибка — ErrorState внутри списка, поле поиска остаётся рабочим.
 
@@ -90,7 +90,7 @@
 
 **Исправить.** Убрать вторые крошки и строку «Kafka lag: 0 · Скан синхронизирован» (Kafka в продукте нет). «Security Gate Fail» → убрать. «Удалить версию…» из шапки в меню «…». Убрать правую «опасную зону». ScoreBar virality — один тон. «Доверительный интервал» → «уверенность». «SLSA Level 3», «Подпись Cosign валидна» — убрать (нет в продукте). Запрос на одобрение: «Статус: In Review» → «На рассмотрении».
 
-**Данные.** `GET …/versions/{v}/promotion?target=release`, `POST …/promotion/evaluate`, `POST …/promotions`, `GET …/license`, `GET …/evidence`, `GET …/findings` (+ `scan`), `POST …/versions/{v}/deletion {reason}` (rel `crane:delete`).
+**Данные.** `GET …/versions/{v}/promotion?target=release`, `POST …/promotion/evaluations`, `POST …/promotions`, `GET …/license`, `GET …/evidence`, `GET …/findings` (+ `scan`), `POST …/versions/{v}/deletion {reason}` (rel `crane:delete`).
 
 **Приёмка.** Каждая карточка гейта имеет текстовый результат; «Нет данных» различим в forced-colors (рамка + текст); фокус в диалоге удаления на «Отмена»; после «Пересчитать» тост и обновлённые карточки, фокус остаётся на кнопке.
 
@@ -127,7 +127,7 @@
 
 **Исправить.** Убрать «Выгрузить отчёт» как primary (нет в документации для админа; если нужно — I1). Убрать «Журнал инцидентов», «Перезапустить все (3)». Не обрезать названия быстрых действий. Ошибки задач на английском («Timeout connecting to Trivy») — показываем как есть, это сырой текст ошибки, но с подписью «Последняя ошибка».
 
-**Данные.** `GET /platform/overview?window=` (tiles), `GET /status` (components), `GET /platform/series/requests?window`, `GET /platform/series/storage-by-workspace?window` (top-8 + other), `GET /platform/retention/forecast`, `GET /jobs?state=dead&limit=3` (строка несёт `crane:retry`), `GET /integrity/checks/latest`; действия: `GET /retention/preview?rule_id=&limit` (без MFA; из ответа `crane:run` → `POST /retention/runs`, step-up), `POST /cache/warmups` (202), `POST /integrity/checks` (202 + ресурс). Каденс: плитки и компоненты 15 с, графики 60 с.
+**Данные.** `GET /platform/overview?window=` (tiles), `GET /status` (components), `GET /platform/latency?window` (p50/p95/p99 и `slo_ms` для «Запросы и задержки»; график показывает только задержки), `GET /platform/usage?group=workspace|format&top=8` (`items[]` + `other`, «Объём по командам и форматам»), `GET /retention/preview?limit=` без `rule_id` (`{versions, bytes}` для «Ближайших удалений»; топ-3 правил берётся из `GET /retention/rules`), `GET /jobs?state=dead&limit=3` (строка несёт `crane:retry`), `GET /storage/integrity-checks?limit=1` (`checked`, `mismatches`; `limit=1` считается последней проверкой); открытые вопросы по этим операциям — в спеке у операций; действия: `GET /retention/preview?rule_id=&limit` (без MFA; из ответа `crane:run` → `POST /retention/runs`, step-up), `POST /cache/warmups` (202), `POST /storage/integrity-checks` (202 + ресурс). Каденс: плитки и компоненты 15 с, графики 60 с.
 
 **Приёмка.** При паузе автообновления сетевых запросов опроса нет; на скрытой вкладке опрос останавливается; плитка без данных показывает «—»; графики не анимируются при обновлении; сводка графика доступна скринридеру.
 
@@ -146,7 +146,7 @@
 
 **Исправить.** Убрать primary «Принять VEX» и «Экспорт в CSV» (не описан), «Настроить гейты» → ссылка. Убрать курсор «cur_sec_…» и «Показано 5 из 221». Убрать цветные чипы экосистем. Плитка «Фиды 4 мин» — без «9 источников онлайн» лейбла-бейджа (в caption). Кнопка «Экспорт» из bulk-панели — убрать.
 
-**Данные.** `GET /findings?priority&kev&malware&overdue&team&ecosystem&scope&q&sort=-priority,sla_due_at&cursor` → строка `{id, priority, priority_source, sla{due_at,state}|null, status, advisory{id,aliases[]}, purl, ecosystem, cvss, epss, epss_percentile, kev, malware, fixed_in?, scores[], dep_scope, deployed, team, issue?}`; `GET /findings/summary` → `by_priority, overdue, kev, emergency_blocks{active}, oldest_unhandled_p0`; `GET /feeds`; `GET /emergency-blocks?state=active`; `GET /license-reviews?sort=-virality&limit=3`. Массовые: `POST /vex-statements|/exceptions|/issues {finding_ids[]…}` → `results[]`. Каденс сводки 30 с; новые строки — пилюля «Новых: N · Показать».
+**Данные.** `GET /findings?priority&kev&malware&overdue&team&ecosystem&scope&status&q&sort=-priority,sla_due_at&cursor` → строка `{id, priority, priority_source, sla{due_at,state}|null, status, advisory{id,aliases[]}, purl, ecosystem, cvss, epss, epss_percentile, kev, malware, fixed_in?, scores[], dep_scope, deployed, team, issue?}`; `GET /findings/summary` → `by_priority, overdue, kev_open, emergency_blocks{active}, oldest_unhandled_p0, feeds_max_lag_s`; `GET /license-reviews/summary` → `pending`; `GET /feeds` (полный список без пагинации; число фидов, требующих внимания, клиент считает по нему: `state` не `ok`); `GET /emergency-blocks?state=active`; `GET /license-reviews?sort=-virality&limit=3`. Массовые: `POST /vex-statements|/exceptions|/issues {finding_ids[]…}` → `results[]`. Каденс сводки 30 с; новые строки — пилюля «Новых: N · Показать».
 
 **Приёмка.** Сегменты приоритета — toggle group с `aria-pressed` и счётчиком в имени; выделение строк клавиатурой (Space на чекбоксе), BulkActionBar объявляется «Выбрано 3»; «Принять VEX» при разных advisory disabled с видимой причиной; при 1440 таблица без горизонтального скролла в наборе P1+P2.
 
@@ -160,7 +160,7 @@
 
 **Исправить.** Убрать вторые крошки, «Контекст: Production-кластер», чип «3,9 мс · кэш», «Колонки» в карточке (переносится в общий механизм). Колонка «Окружение» — не показывается, пока API не отдаёт evidence о развёртывании (решение владельца 27.10.2026). «Critical risk» модели → убрать. «Регламент: подтверждает в течение 30 мин» — убрать (нет в документации). «KEV Exploit Active» → «В KEV».
 
-**Данные.** `GET /findings/{id}` (+ `scores[{kind,value,confidence,factors[],model,model_version,shadow}]`, `priority_source`, `sla`), `GET /impact?finding={id}&level=&cursor` (по ссылке `crane:impact` у находки) → `consumers[{project, version, team, downloads, lockfile, sbom, deployed}]` + `counts`, `GET /findings/{id}/history`, `GET /findings/{id}/explanation` (P3; 503 `ai-unavailable`). Действия: `POST /vex-statements`, `POST /exceptions` (MFA), `POST /issues` — со списком из одной находки; `POST /emergency-blocks` (сразу активна, step-up MFA; снятие — `…/lift`).
+**Данные.** `GET /findings/{id}` (+ `scores[{kind,value,confidence,factors[],model,model_version,shadow}]`, `priority_source`, `sla`), `GET /impact?finding={id}&level=&cursor` (по ссылке `crane:impact` у находки) → `_embedded['crane:consumers'][{project, version, team, levels{downloads, lockfile, sbom, deployed}}]` + `counts{downloads, lockfile, sbom, deployed}`, `GET /findings/{id}/priority-history`, `GET /findings/{id}/explanation` (P3; 503 `ai-unavailable`). Действия: `POST /vex-statements`, `POST /exceptions` (MFA), `POST /issues` — со списком из одной находки; `POST /emergency-blocks` (сразу активна, step-up MFA; снятие — `…/lift`).
 
 **Приёмка.** Каждая ячейка уровня читается скринридером как «Lockfile: да»; при 503 объяснения страница без ошибок, вместо карточки — info-строка; отсчёт SLA не объявляется live region.
 
@@ -226,16 +226,16 @@
 | --- | --- | --- | --- | --- | --- |
 | C2 Устареть / замена | P1 | диалог | 23 | `POST …/deprecation` | Превью «так увидят в поиске» — карточка §6 |
 | C3 Запросить одобрение | P2 | диалог | 11 | `POST …/approval-requests` | Список блокирующих гейтов, обязательный комментарий |
-| C4 Пространства имён | P0 | A + Sheet | 26 | `{format, pattern, match, reserved, owner_workspace, updated_at, updated_by}` | Callout о dependency confusion |
+| C4 Пространства имён | P0 | A + Sheet | 26 | `{format, pattern, match, reserved, workspace, updated_at, updated_by}` | Callout о dependency confusion |
 
 ### D. Доступ, токены, CI
 | D1 Мои токены | P0 | A | 22–24 | S5 | — |
 | --- | --- | --- | --- | --- | --- |
 | D2 Мои действия | P0 | F | 16, 27 | `GET /me/actions` (свои, немаскированные) | Без плиток и без заметки audit.viewed |
-| D3 Роботы | P0 | A + C | 16, 21, 24 | `{name, team, scopes, expires_at, credentials[{prefix,…}], rotation{phase, overlap_until}}` | Создание с MFA → показ секрета; ротация — Timeline из 3 фаз |
+| D3 Роботы | P0 | A + C | 16, 21, 24 | `{name, workspace, scopes, expires_at, credentials[{prefix,…}], rotation{phase, overlap_until}}` | Создание с MFA → показ секрета; ротация — Timeline из 3 фаз |
 | D4 Политики доверия | P1 | A + Sheet (мастер при первом) | 7, 26 | `{issuer: gitlab|kubernetes|github|keycloak, conditions[], scopes, max_ttl_s}` | Пустое состояние с CodeBlock `id_tokens` |
 | D5 CI/CD | P1 | D | 2, 7, 27 | публикации из CI `{purl, project, commit, pipeline, job, ref, outcome, request_id, rule_id?}` | Шаблоны CI — CodeBlock по форматам |
-| D6 Доступ команды | P1 | A (только чтение) | 8 | участники по ролям + source_group | «Управлять в Keycloak» |
+| D6 Доступ команды | P0 | A + вкладки (Участники · История) | 8, 16, 27 | `GET /workspaces/{workspace}/members?role&source`, `PUT/DELETE …/members/{principal_id}/roles/{role}` (только source `local`), `GET …/members/history?from&to` | Таблица: участник, роль, источник (`idp` · `local`), «с» (`valid_from`); таблица показывает текущие строки (`valid_to = null`). Строки источника `idp` только для чтения, подпись «управляется IdP». Локальные роли добавляет и снимает owner команды (если `access.local_membership=deny` — кнопок нет, caption с причиной). Вкладка «История» (прошлое, период `from`–`to`) показывается только owner, secops и auditor. Состояния: пусто «В команде нет участников; импортируйте группы маппингом или добавьте локально»; команда без owner — бейдж и callout «нет владельца, действует platform-admin»; архивная команда — только чтение, баннер; нет прав или нет такой команды — нейтральный 404. Визуал — web-uix-lead |
 | D7 Диагностика | P1 | B | 16, 27 | `GET /diagnostics/{request_id}` | Трасса Cedar только здесь; чужой или скрытый request_id — нейтральный 404 «Не найдено или нет доступа» |
 
 ### E. Платформа
@@ -246,15 +246,28 @@
 | E4 Upstream | P1 | A | 3, 9 | `{name, status, since, latency_p95_ms, rpm, coalesced_ratio, stale_served_24h, allowlist}` | Последствие для клиентов в caption |
 | E5 Квоты | P1 | A | 2 (RingGauge) | `{workspace, bytes, warn_bytes, hard_bytes, trend}` | RingGauge с текстом %, не только дугой |
 | E6 Retention и GC | P1 | A + результат | 23, 32 | `GET /retention/preview?rule_id=&limit` (`_embedded["crane:candidates"]` + `next`), из ответа `crane:run` → `POST /retention/runs {rule_id, reason}` | «Применить» — деструктивный диалог с причиной, кнопка с бейджем MFA (step-up обязателен); пробный прогон — без MFA |
-| E7 Целостность | P1 | A | 27 | `POST/GET /integrity/checks` | Асинхронный прогресс |
+| E7 Целостность | P1 | A | 27 | `POST/GET /storage/integrity-checks` | Асинхронный прогресс |
 | E8 Готовность и прогрев | P1 | J + A | 2, 32 | `POST /readiness`, `POST /cache/warmups` (202) | MUST: drag-and-drop с альтернативой кнопкой «Выбрать файл» (WCAG 2.2 2.5.7) |
 | E9 Очереди | P1 | A + C | 16, 17 | `{kind, queued, oldest_age_s, running, failed_24h}`, dead jobs, `POST /jobs/{id}/retry` | «Повторить» — только одиночный, по строке и в панели; массового нет |
 | E10 Бэкапы | P1 | D | 16 | ОВ (ресурс не согласован) | Timeline бэкапов, PITR-окно |
 | E11 Импорт из Nexus | P1 | G | 16, 27 | ОВ | Идемпотентные шаги |
 | E12 Вебхуки | P2 | A + C | 24 | доставки `{event_id, status, attempts, next_retry_at}` | Секрет один раз |
 | E13 Интеграции и AI | P1–P3 | B (карточки) + A | 3 | `{role, endpoint, model, timeout_ms, limits, fallback_order, breaker, key{is_set, updated_at}}` | MUST: порядок fallback — кнопки ↑/↓, не только drag (WCAG 2.2 2.5.7) |
-| E14 Workspaces | P1 | A + Sheet | — | ОВ (лёгкий список) | — |
+| E14 Команды | P0 | A + Sheet | 8, 16, 21, 27 | `GET /workspaces`, `POST /workspaces`, `PATCH /workspaces/{workspace}`, `POST …/archive`, `POST …/unarchive` | Список всех команд (`GET /workspaces`, только platform-admin): имя, slug, участники, ресурсы, статус; создание (platform-admin). Owner правит `display_name`/`description` на странице своей команды (`GET /workspaces/{workspace}`, ссылка из K4 и D6). Архивация и разархивация — диалог со step-up; при `409` показывается список ресурсов, которыми команда ещё владеет (namespaces, пакеты без namespace, репозитории, активные роботы, trust policies, активные доступы), со ссылками. Архивные команды — отдельный фильтр. Состояния: пусто, загрузка, ошибка, нейтральный 404. В коде `workspace`, в UI «Команда». Визуал — web-uix-lead |
 | E15 Статус системы | P0 | D (упрощённый) | 3 | `GET /status` | Доступен всем ролям |
+
+### Команды, владение и след скачиваний
+
+Новые экраны к D6 и E14. Данные — пути из 14.15; точный контракт — OpenAPI. Общие состояния для всех экранов: пусто (объясняет, как появятся данные), загрузка (скелетон), ошибка (problem+json одним компонентом), архивная команда (только чтение, баннер), нет прав или нет такой команды — нейтральный 404 «Не найдено или нет доступа». Визуал всех экранов — web-uix-lead.
+
+| Экран | Фаза | Архетип | Паттерны | Данные | Особенности |
+| --- | --- | --- | --- | --- | --- |
+| D8 Маппинги групп | P0 | A + Sheet | 16, 21, 27 | `GET/POST /group-mappings`, `DELETE /group-mappings/{mapping_id}` | Только platform-admin; создание и удаление со step-up (это выдача прав). Строка: группа IdP (нормализованная, `role:<имя>` для ролей), команда или «роль экземпляра», роль, кто и когда создал. Пусто: «Маппингов нет: роли из IdP не выдаются». При создании `group_ref` предзаполняется по рекомендуемому имени `/crane/<slug>/<роль>`; путь группы не разбирается, права дают только явные маппинги |
+| D9 Межкомандный доступ | P1 | A + Sheet | 8, 16, 21 | `GET/POST /access-grants`, `POST /access-grants/{grant_id}/revoke` | Две вкладки: «Выданные нами» (owner команды-владельца: ресурс, получатель, роль, срок, создать/отозвать со step-up) и «Полученные нами» (owner получателя, только чтение). Роли только `reader`, `developer`, `maintainer`; ресурс — namespace или репозиторий. Истёкшие и отозванные — серым с датой. Нет прав на ресурс — нейтральный 404 |
+| C5 Передача владения | P1 | диалог | 21, 23 | `POST /ownership-transfers` {ресурс, `to`, обоснование} | Вызывается из C4, E3 и карточки пакета без namespace. Step-up обязателен. Превью: ресурс, от кого, кому, что переходит (пакеты внутри namespace). Исполнитель — owner обеих команд или platform-admin; иначе действие скрыто. Применяется сразу; в результате ссылка на событие журнала. Роботы и trust policies не передаются: подсказка в диалоге |
+| I2 След команды | P1 | D + A | 2, 4, 9, 27 | `GET /usage/downloads?workspace&repository&purl&source&principal_kind&from&to&group_by`, экспорт `POST /audit/exports` с `stream: usage` | Фильтры: период, репозиторий, source, вид принципала, пакет. Таблицы: топ пакетов, байты, доля холодных загрузок и кто их вызвал (`source=miss`). Строка-корзина «не распределено» показывается всегда, без скрытия. Owner видит только свою команду, platform-admin и secops — любую. Экспорт — через единый диалог `/audit/exports` (обоснование, step-up). Разрез по личностям в агрегате недоступен: подпись «личности — в журнале скачиваний (G10)». Состояния: пусто за период, загрузка, ошибка, агрегат за текущий день собирается из сырых событий (подпись) |
+| G10 Скачивания | P1 (API с v0.4.0) | F + C | 16, 27 | `GET /audit/downloads?purl&from&to`, экспорт `POST /audit/exports` с `stream: downloads` | Для secops: сырой поиск по префиксу PURL (`pkg:npm/event-stream@` — любая версия) и окну. Баннер покрытия из `coverage`: `dropped_known` и часы без дайджеста; признака «полно» нет. Панель события: участник, токен, команда атрибуции, `source`, `bytes`, IP. Каждый запрос пишет `audit.viewed`: заметка в caption. Auditor — маскированно с v1.1.0 |
+| K4 Переключатель команды | P0 | оболочка (шапка) | 7 | `GET /me` (поле `workspaces`), поле `workspace` в `TokenCreate` | Показывается только у человека из нескольких команд; выбор команды атрибуции для новых токенов и фильтр списков. Без выбора токены идут в «не распределено» (подпись под переключателем). Смена команды посреди сессии выданные токены не меняет |
 
 ### F. AppSec (P2)
 | F1 Находки | E | S7 |

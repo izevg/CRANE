@@ -7,9 +7,16 @@
     reason = "dead_code: фикстуры общие для тестовых бинарей; unwrap в тестах = падение теста"
 )]
 
-use std::io;
+pub(crate) mod capture;
+pub(crate) mod cargo;
+pub(crate) mod names;
+pub(crate) mod npm;
+pub(crate) mod proxy;
+pub(crate) mod switch;
+
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 use axum::Router;
@@ -21,24 +28,39 @@ use crane_app::registry::Registry;
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::audit::AuditEvent;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
-use crane_http::{CargoSettings, StaticToken, TrustedProxies, admin_router, api_router};
-use crane_memory::{FixedClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_http::{
+    CargoSettings, FormatSettings, NpmSettings, ProxyRouters, StaticToken, TrustedProxies,
+    admin_router, api_router,
+};
+use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::audit::AuditSink;
+use crane_ports::proxy::{NoUpstream, UpstreamNames};
 use crane_ports::registry::Catalog;
 use crane_ports::system::IdGen;
 use http_body_util::BodyExt;
-use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
+use serde_json::Value;
 use tokio::runtime::{Builder, Runtime};
 use tower::ServiceExt;
+
+use self::cargo::{index_path, publish_body};
+use self::switch::SwitchCatalog;
+/// Реестр фикстуры; proxy-router получает его для защиты имён.
+pub(crate) type TestRegistry = Registry<SwitchCatalog, MemoryBlobStore>;
 
 pub(crate) const TOKEN: &str = "s3cret-token";
 pub(crate) const PUBLIC_URL: &str = "https://crane.example";
 pub(crate) const MAX_PUBLISH_BYTES: usize = 4096;
+/// Документ публикации npm несёт tarball в base64, поэтому предел шире.
+pub(crate) const MAX_NPM_PUBLISH_BYTES: usize = 65536;
 pub(crate) const REPO: &str = "internal";
 /// Личность, которой принадлежит `TOKEN`.
 pub(crate) const PRINCIPAL: &str = "crane";
 const PROXY_REPO: &str = "mirror";
+/// Hosted-репозиторий npm.
+pub(crate) const NPM_REPO: &str = "web";
+/// Имя proxy-репозитория npm в каталоге; routers монтируются снаружи.
+pub(crate) const NPM_PROXY_REPO: &str = "npmjs";
+const WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub(crate) struct Reply {
     pub(crate) status: StatusCode,
@@ -68,11 +90,36 @@ impl Reply {
     }
 }
 
+/// Каталог с hosted- и proxy-репозиториями обоих форматов.
+fn seeded_catalog(runtime: &Runtime, ids: &SequentialIdGen) -> MemoryCatalog {
+    let catalog = MemoryCatalog::default();
+    for (format, name, kind) in [
+        (Format::Cargo, REPO, RepositoryKind::Hosted),
+        (Format::Cargo, PROXY_REPO, RepositoryKind::Proxy),
+        (Format::Npm, NPM_REPO, RepositoryKind::Hosted),
+        (Format::Npm, NPM_PROXY_REPO, RepositoryKind::Proxy),
+    ] {
+        runtime
+            .block_on(catalog.ensure_repository(Repository {
+                id: RepositoryId::new(ids.generate()),
+                format,
+                kind,
+                name: name.to_owned(),
+            }))
+            .unwrap();
+    }
+    catalog
+}
+
 pub(crate) struct Api {
     runtime: Runtime,
     router: Router,
     admin: Router,
     audit: Arc<MemoryAudit>,
+    clock: Arc<ManualClock>,
+    registry: Arc<TestRegistry>,
+    ids: Arc<SequentialIdGen>,
+    catalog_down: Arc<AtomicBool>,
 }
 
 impl Api {
@@ -88,34 +135,73 @@ impl Api {
 
     /// `sink` получает события и use cases, и слоя auth; `audit` — то, что отдаёт `audit_events`.
     pub(crate) fn build(proxies: &str, sink: Arc<dyn AuditSink>, audit: Arc<MemoryAudit>) -> Self {
+        Self::build_with(proxies, sink, audit, Arc::new(NoUpstream), |_| {
+            ProxyRouters::default()
+        })
+    }
+
+    /// Рядом с hosted-репозиториями монтируется cargo proxy-router над тем же `Registry`.
+    pub(crate) fn with_proxy(proxy: &proxy::Proxy) -> Self {
+        let audit = Arc::new(MemoryAudit::default());
+        Self::build_with("", audit.clone(), audit, Arc::new(NoUpstream), |registry| {
+            ProxyRouters {
+                cargo: vec![(proxy::NAME.to_owned(), proxy.router(registry.clone()))],
+                npm: Vec::new(),
+            }
+        })
+    }
+
+    /// Рядом с hosted-репозиториями монтируется npm proxy-router над тем же `Registry`.
+    pub(crate) fn with_npm_proxy(proxy: &proxy::NpmProxy) -> Self {
+        let audit = Arc::new(MemoryAudit::default());
+        Self::build_with("", audit.clone(), audit, Arc::new(NoUpstream), |registry| {
+            ProxyRouters {
+                cargo: Vec::new(),
+                npm: vec![(proxy::NPM_NAME.to_owned(), proxy.router(registry.clone()))],
+            }
+        })
+    }
+
+    /// Публичный реестр отвечает на вопрос «знаешь ли имя» заданным ответом.
+    pub(crate) fn with_upstream(upstream: Arc<dyn UpstreamNames>) -> Self {
+        let audit = Arc::new(MemoryAudit::default());
+        Self::build_with("", audit.clone(), audit, upstream, |_| {
+            ProxyRouters::default()
+        })
+    }
+
+    fn build_with(
+        proxies: &str,
+        sink: Arc<dyn AuditSink>,
+        audit: Arc<MemoryAudit>,
+        upstream: Arc<dyn UpstreamNames>,
+        mount: impl FnOnce(&Arc<TestRegistry>) -> ProxyRouters,
+    ) -> Self {
         let runtime = Builder::new_current_thread().enable_all().build().unwrap();
         let ids = Arc::new(SequentialIdGen::default());
-        let catalog = MemoryCatalog::default();
-        for (name, kind) in [
-            (REPO, RepositoryKind::Hosted),
-            (PROXY_REPO, RepositoryKind::Proxy),
-        ] {
-            runtime
-                .block_on(catalog.ensure_repository(Repository {
-                    id: RepositoryId::new(ids.generate()),
-                    format: Format::Cargo,
-                    kind,
-                    name: name.to_owned(),
-                }))
-                .unwrap();
-        }
+        let catalog = seeded_catalog(&runtime, &ids);
+        let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH));
+        let catalog_down = Arc::new(AtomicBool::new(false));
         let registry = Arc::new(Registry::new(
-            catalog,
+            SwitchCatalog::new(catalog, catalog_down.clone()),
             MemoryBlobStore::default(),
-            Arc::new(FixedClock::new(SystemTime::UNIX_EPOCH)),
-            ids,
+            clock.clone(),
+            ids.clone(),
             sink.clone(),
+            upstream,
         ));
+        let proxy_repos = mount(&registry);
         let router = api_router(
             registry.clone(),
-            CargoSettings {
-                public_url: PUBLIC_URL.to_owned(),
-                max_publish_bytes: MAX_PUBLISH_BYTES,
+            FormatSettings {
+                cargo: CargoSettings {
+                    public_url: PUBLIC_URL.to_owned(),
+                    max_publish_bytes: MAX_PUBLISH_BYTES,
+                },
+                npm: NpmSettings {
+                    public_url: PUBLIC_URL.to_owned(),
+                    max_publish_bytes: MAX_NPM_PUBLISH_BYTES,
+                },
             },
             StaticToken::new(
                 TOKEN.as_bytes(),
@@ -126,13 +212,41 @@ impl Api {
             ),
             TrustedProxies::parse(proxies).unwrap(),
             sink,
+            proxy_repos,
         );
         Self {
             runtime,
             router,
-            admin: admin_router(registry),
+            admin: admin_router(registry.clone()),
             audit,
+            clock,
+            registry,
+            ids,
+            catalog_down,
         }
+    }
+
+    /// Каталог перестаёт отвечать на поиск имён: так недоступная БД выглядит для защиты.
+    pub(crate) fn catalog_down(&self) {
+        self.catalog_down.store(true, Ordering::SeqCst);
+    }
+
+    /// Сдвигает часы реестра (окно снятия версий).
+    pub(crate) fn advance(&self, by: std::time::Duration) {
+        self.clock.advance(by);
+    }
+
+    /// Даёт задачам, запущенным запросом (фоновая ревалидация), выполниться, пока условие не истинно.
+    pub(crate) fn wait_until(&self, condition: impl Fn() -> bool) {
+        self.runtime.block_on(async {
+            tokio::time::timeout(WAIT, async {
+                while !condition() {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+        });
     }
 
     pub(crate) fn audit_events(&self) -> Vec<AuditEvent> {
@@ -221,78 +335,4 @@ pub(crate) fn request(
         request.extensions_mut().insert(ConnectInfo(peer));
     }
     request
-}
-
-/// Общий буфер для перехвата вывода `tracing-subscriber`.
-#[derive(Clone, Default)]
-pub(crate) struct SharedBuf(Arc<Mutex<Vec<u8>>>);
-
-impl SharedBuf {
-    pub(crate) fn text(&self) -> String {
-        let bytes = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        String::from_utf8(bytes.clone()).unwrap()
-    }
-}
-
-impl io::Write for SharedBuf {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for SharedBuf {
-    type Writer = Self;
-
-    fn make_writer(&'a self) -> Self::Writer {
-        self.clone()
-    }
-}
-
-/// Раскладка индекса для коротких тестовых имён длиной >= 4.
-pub(crate) fn index_path(name: &str) -> String {
-    format!("{}/{}/{name}", &name[0..2], &name[2..4])
-}
-
-/// Тело `PUT /api/v1/crates/new`: длина JSON, JSON, длина крейта, крейт.
-pub(crate) fn publish_body(name: &str, vers: &str, krate: &[u8]) -> Vec<u8> {
-    let meta = json!({
-        "name": name,
-        "vers": vers,
-        "deps": [{
-            "name": "serde", "version_req": "^1.0", "features": ["derive"],
-            "optional": false, "default_features": true, "target": null,
-            "kind": "normal", "registry": null, "explicit_name_in_toml": null
-        }],
-        "features": { "default": ["std"], "std": [] },
-        "description": "тестовый крейт",
-        "license": "MIT"
-    })
-    .to_string();
-    let mut out = Vec::new();
-    out.extend_from_slice(&u32::try_from(meta.len()).unwrap().to_le_bytes());
-    out.extend_from_slice(meta.as_bytes());
-    out.extend_from_slice(&u32::try_from(krate.len()).unwrap().to_le_bytes());
-    out.extend_from_slice(krate);
-    out
-}
-
-pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
-/// Единственная строка индекса как JSON.
-pub(crate) fn single_index_line(reply: &Reply) -> Value {
-    let text = reply.text();
-    let mut lines = text.lines();
-    let line = lines.next().unwrap();
-    assert!(lines.next().is_none(), "ожидалась одна строка: {text}");
-    serde_json::from_str(line).unwrap()
 }

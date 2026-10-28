@@ -12,13 +12,23 @@ export interface Rules {
   unlimitedDirs: string[];
   serviceFiles: string[];
   testFiles: string[];
+  /** Stories Storybook: витрина и спецификация компонента. В правило четырёх не входят, но и не тесты (AAA не проверяется). */
+  storyFiles: string[];
   entryFiles: string[];
   rustLayers: Record<string, string[]>;
   aaa: { roots: string[]; exemptDirs: string[] };
+  size: {
+    roots: string[];
+    exemptDirs: string[];
+    extensions: string[];
+    maxLines: number;
+    warnLines: number;
+  };
 }
 
 export interface CargoPackage {
   name: string;
+  version: string;
   manifest_path: string;
   dependencies: { name: string; kind: string | null }[];
 }
@@ -45,6 +55,7 @@ interface Listing {
 function list(dir: string, rules: Rules): Listing {
   const isService = matcher(rules.serviceFiles);
   const isTest = matcher(rules.testFiles);
+  const isStory = matcher(rules.storyFiles);
   const listing: Listing = { files: [], dirs: [] };
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const { name } = entry;
@@ -55,7 +66,7 @@ function list(dir: string, rules: Rules): Listing {
       if (!(rules.ignoredDirs.includes(name) || rules.unlimitedDirs.includes(name))) {
         listing.dirs.push(name);
       }
-    } else if (!(isService(name) || isTest(name))) {
+    } else if (!(isService(name) || isTest(name) || isStory(name))) {
       listing.files.push(name);
     }
   }
@@ -87,6 +98,27 @@ export function checkStructure(root: string, rules: Rules): string[] {
   };
   return rules.scope
     .map((scope) => join(root, scope))
+    .filter((start) => existsSync(start))
+    .flatMap(walk);
+}
+
+/**
+ * Исходные файлы под roots: пути относительно root через `/`, обход в глубину
+ * в порядке имён. Точечные папки и папки из skipped пропускаются, отсутствующие корни игнорируются.
+ */
+export function sourceFiles(root: string, roots: string[], skipped: ReadonlySet<string>): string[] {
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true })
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .flatMap((entry) => {
+        const full = join(dir, entry.name);
+        if (!entry.isDirectory()) {
+          return [relative(root, full).split(sep).join("/")];
+        }
+        return skipped.has(entry.name) || entry.name.startsWith(".") ? [] : walk(full);
+      });
+  return roots
+    .map((r) => join(root, r))
     .filter((start) => existsSync(start))
     .flatMap(walk);
 }

@@ -9,13 +9,21 @@ const ENV = {
   CRANE_TOKEN_SECRET: "./secrets/crane_token",
   POSTGRES_PASSWORD_SECRET: "./secrets/postgres_password",
   CRANE_DATABASE_URL_SECRET: "./secrets/database_url",
+  VALKEY_PASSWORD_SECRET: "./secrets/valkey_password",
+  CRANE_CACHE_URL_SECRET: "./secrets/cache_url",
   POSTGRES_USER: "crane",
   POSTGRES_DB: "cranedb",
 };
+const S3_ENV = {
+  ...ENV,
+  S3_ACCESS_KEY_ID_SECRET: "./secrets/s3_access_key_id",
+  S3_SECRET_ACCESS_KEY_SECRET: "./secrets/s3_secret_access_key",
+};
+const S3_FILE_COUNT = 7;
 const MODE_MASK = 0o777;
 const DIR_MODE = 0o700;
 const FILE_MODE = 0o644;
-const FILE_COUNT = 3;
+const FILE_COUNT = 5;
 const NAMES_VARIABLE = /POSTGRES_USER/;
 
 let counter = 0;
@@ -28,7 +36,7 @@ const read = (root: string, name: string): string =>
   readFileSync(join(root, "secrets", name), "utf8");
 
 describe("initSecrets", () => {
-  it("creates all three files, building the URL from the password and .env names", () => {
+  it("creates all five files, building the URL from the password and .env names", () => {
     // Arrange
     const root = workdir();
 
@@ -41,6 +49,33 @@ describe("initSecrets", () => {
       read(root, "database_url"),
       `postgres://crane:${read(root, "postgres_password")}@postgres:5432/cranedb`,
     );
+  });
+
+  it("builds the Valkey URL from the Valkey password", () => {
+    // Arrange
+    const root = workdir();
+
+    // Act
+    initSecrets(ENV, root, sequence);
+
+    // Assert
+    const password = read(root, "valkey_password");
+    assert.equal(read(root, "cache_url"), `valkey://crane:${password}@valkey:6379`);
+  });
+
+  it("builds the missing Valkey URL from the password that is already on disk", () => {
+    // Arrange
+    const root = workdir();
+    initSecrets(ENV, root, sequence);
+    writeFileSync(join(root, "secrets", "valkey_password"), "kept-valkey\n");
+    rmSync(join(root, "secrets", "cache_url"));
+
+    // Act
+    const created = initSecrets(ENV, root, sequence);
+
+    // Assert
+    assert.deepEqual(created, ["./secrets/cache_url"]);
+    assert.equal(read(root, "cache_url"), "valkey://crane:kept-valkey@valkey:6379");
   });
 
   it("gives the directory 0700 and the files 0644", () => {
@@ -96,5 +131,28 @@ describe("initSecrets", () => {
 
     // Assert
     assert.throws(call, { message: NAMES_VARIABLE });
+  });
+
+  it("creates the S3 key pair when the S3 variables are set", () => {
+    // Arrange
+    const root = workdir();
+
+    // Act
+    const created = initSecrets(S3_ENV, root, sequence);
+
+    // Assert
+    assert.equal(created.length, S3_FILE_COUNT);
+    assert.notEqual(read(root, "s3_access_key_id"), read(root, "s3_secret_access_key"));
+  });
+
+  it("creates no S3 files when the S3 variables are not set", () => {
+    // Arrange
+    const root = workdir();
+
+    // Act
+    const created = initSecrets(ENV, root, sequence);
+
+    // Assert
+    assert.equal(created.length, FILE_COUNT);
   });
 });

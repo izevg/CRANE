@@ -3,7 +3,13 @@
 # Значения только из .env; пропущенная переменная останавливает запуск.
 # Секреты (токен, пароль PostgreSQL, URL каталога) лежат в файлах и монтируются в /run/secrets:
 # ни в переменных окружения, ни в этом файле их нет.
-# Профили: cache (valkey), scan (analyzer + trivy), s3 (seaweedfs вместо тома).
+# Профиль: scan (analyzer + trivy). Остальные режимы описаны override-файлами, а не профилями:
+# они меняют настройку самого crane (ключи, сети, зависимости). Подключаются через COMPOSE_FILE (строка в .env)
+# или несколькими -f:
+#   docker-compose.s3.yaml     S3 (SeaweedFS) вместо локального тома blobs
+#   docker-compose.cache.yaml  Valkey с обязательной аутентификацией в изолированной сети cache
+#   COMPOSE_FILE=docker-compose.yaml:docker-compose.s3.yaml:docker-compose.cache.yaml
+# По умолчанию single-node работает с кэшем memory (CRANE_CACHE не задан) и локальным томом, секретов Valkey и S3 не требует.
 name: crane
 
 x-crane: &crane
@@ -17,7 +23,6 @@ x-crane: &crane
   secrets: [database_url]
   environment: &crane-env
     CRANE_DATABASE_URL_FILE: /run/secrets/database_url
-    CRANE_CACHE: ${CRANE_CACHE:?}
     CRANE_BLOBS: ${CRANE_BLOBS:?}
 
 services:
@@ -52,6 +57,13 @@ services:
       CRANE_PUBLIC_URL: https://${CRANE_HOST:?}
       CRANE_TOKEN_FILE: /run/secrets/crane_token
       CRANE_TOKEN_PRINCIPAL: ${CRANE_TOKEN_PRINCIPAL:?}
+      # Список имён proxy-репозиториев crates.io через запятую; пусто — proxy выключен.
+      CRANE_CARGO_PROXY_REPOS: ${CRANE_CARGO_PROXY_REPOS:-}
+      # Hosted и proxy-репозитории npm (registry.npmjs.org) через запятую; пусто — не создаются.
+      CRANE_NPM_REPOS: ${CRANE_NPM_REPOS:-}
+      CRANE_NPM_PROXY_REPOS: ${CRANE_NPM_PROXY_REPOS:-}
+      # Резервирование внутренних имён (`формат:шаблон[=uuid]` через запятую): proxy их не отдаёт никогда.
+      CRANE_NAMESPACES: ${CRANE_NAMESPACES:-}
       # Сеть edge делят только caddy и crane: из неё верим X-Forwarded-For. Порт admin не публикуется.
       CRANE_TRUSTED_PROXIES: ${CRANE_EDGE_SUBNET:?}
     secrets: [database_url, crane_token]
@@ -103,18 +115,6 @@ services:
       timeout: 3s
       retries: 10
 
-  valkey:
-    profiles: [cache]
-    image: ${VALKEY_IMAGE:?}
-    restart: unless-stopped
-    command: ["--save", "", "--appendonly", "no"]
-
-  seaweedfs:
-    profiles: [s3]
-    image: ${SEAWEEDFS_IMAGE:?}
-    restart: unless-stopped
-    command: ["server", "-dir=/data", "-s3", "-s3.port=8333"]
-    volumes: [s3:/data]
 
 networks:
   scan:
@@ -135,6 +135,5 @@ secrets:
 volumes:
   pg:
   blobs:
-  s3:
   trivy:
   caddy-data:

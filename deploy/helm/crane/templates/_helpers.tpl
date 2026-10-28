@@ -3,7 +3,8 @@
 {{- end -}}
 
 {{- define "crane.image" -}}
-{{- printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) -}}
+{{- $ref := printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) -}}
+{{- if .Values.image.digest -}}{{ printf "%s@%s" $ref .Values.image.digest }}{{- else -}}{{ $ref }}{{- end -}}
 {{- end -}}
 
 {{- define "crane.labels" -}}

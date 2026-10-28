@@ -69,10 +69,10 @@ const config: IConfiguration = {
     },
     {
       name: "not-to-test",
-      comment: "Продуктовый код не импортирует тесты",
+      comment: "Продуктовый код не импортирует тесты и stories",
       severity: "error",
-      from: { pathNot: "\\.test\\.(ts|tsx)$" },
-      to: { path: "\\.test\\.(ts|tsx)$" },
+      from: { pathNot: "\\.(test|stories)\\.(ts|tsx)$" },
+      to: { path: "\\.(test|stories)\\.(ts|tsx)$" },
     },
     {
       name: "not-to-deprecated",
@@ -84,13 +84,19 @@ const config: IConfiguration = {
     {
       name: "not-to-dev-dep",
       severity: "error",
-      from: { path: "^src/", pathNot: "\\.test\\.(ts|tsx)$" },
+      // stories импортируют dev-зависимость storybook/test (play-функции), как и тесты — в бандл они не попадают
+      from: { path: "^src/", pathNot: "\\.(test|stories)\\.(ts|tsx)$" },
       to: { dependencyTypes: ["npm-dev"] },
     },
     {
       name: "no-orphans",
       severity: "error",
-      from: { orphan: true, pathNot: ["\\.test\\.(ts|tsx)$", "^src/app/main\\.tsx$"] },
+      // story — точка входа Storybook, на неё никто не импортирует
+      from: {
+        orphan: true,
+        // .d.ts — объявление модулей (*.po), на него никто не импортирует
+        pathNot: ["\\.(test|stories)\\.(ts|tsx)$", "\\.d\\.ts$", "^src/app/main\\.tsx$"],
+      },
       to: {},
     },
   ],

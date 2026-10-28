@@ -2,7 +2,7 @@
 // на своей машине. Сценарий: публикация, индекс, сборка, yank, разрешение, unyank.
 import type { Expected } from "./audit.ts";
 import { type Client, startClient } from "./client.ts";
-import { log, type Result, tail } from "./exec.ts";
+import { log, type Result, step, tail } from "./exec.ts";
 import type { Stand } from "./stand.ts";
 import { parseCargo } from "./versions.ts";
 
@@ -11,12 +11,13 @@ export interface CargoClient extends Client {
   version: string;
 }
 
-const ROOT_CERT = "/caddy/caddy/pki/authorities/local/root.crt";
+export const ROOT_CERT = "/caddy/caddy/pki/authorities/local/root.crt";
 const INDEX = "https://localhost/cargo/internal/index/";
 const READY_SECONDS = 60;
 const YANKED = /yanked/i;
 const TOKEN_ENV = "CARGO_REGISTRIES_CRANE_TOKEN";
-const REGISTRY = "crane";
+/** Имя hosted-реестра в конфигурации клиента: `[registries.crane]` приходит из env. */
+export const REGISTRY = "crane";
 // Cargo не читает токен альтернативного реестра из окружения без явного провайдера учётных данных.
 const CLIENT_ENV = {
   CARGO_HTTP_CAINFO: ROOT_CERT,
@@ -24,6 +25,32 @@ const CLIENT_ENV = {
   CARGO_REGISTRIES_CRANE_CREDENTIAL_PROVIDER: "cargo:token",
   CARGO_TERM_COLOR: "never",
 };
+
+/** Токен hosted-реестра в окружение cargo: значение идёт через env, в argv попадает только имя. */
+export const craneCredentials = (token: string): Record<string, string> => ({
+  [TOKEN_ENV]: token,
+});
+
+/** Окружение cargo в контейнере: свой CARGO_HOME и CARGO_TARGET_DIR рядом, токен hosted-реестра. */
+export const cargoEnv = (home: string, token: string): Record<string, string> => ({
+  CARGO_HOME: home,
+  CARGO_TARGET_DIR: `${home}-target`,
+  ...craneCredentials(token),
+});
+
+/**
+ * curl с токеном через stdin (`-K -`): секрет не виден в `ps`. `args` — всё остальное, включая URL.
+ * `scheme` — схема заголовка (npm: `Bearer`); без неё токен идёт как есть, как у cargo.
+ */
+export const authorizedCurl = (
+  client: Client,
+  token: string,
+  args: string[],
+  scheme?: string,
+): Result =>
+  client.exec(["curl", "--cacert", ROOT_CERT, "-K", "-", ...args], {
+    input: `header = "Authorization: ${scheme === undefined ? "" : `${scheme} `}${token}"\n`,
+  });
 
 /**
  * Запускает клиент и ждёт, пока Caddy выпустит сертификат, а crane отдаст config.json.
@@ -34,25 +61,17 @@ export function startCargo(stand: Stand, image: string): CargoClient {
   log(`клиент ${image}: запуск`);
   const client = startClient(stand, image, CLIENT_ENV);
   try {
-    const ready = client.exec(
-      [
-        "curl",
-        "-fsS",
-        "--retry",
-        String(READY_SECONDS),
-        "--retry-delay",
-        "1",
-        "--retry-all-errors",
-        "--retry-max-time",
-        String(READY_SECONDS),
-        "--cacert",
-        ROOT_CERT,
-        "-K",
-        "-",
-        `${INDEX}config.json`,
-      ],
-      { input: `header = "Authorization: ${stand.token}"\n` },
-    );
+    const ready = authorizedCurl(client, stand.token, [
+      "-fsS",
+      "--retry",
+      String(READY_SECONDS),
+      "--retry-delay",
+      "1",
+      "--retry-all-errors",
+      "--retry-max-time",
+      String(READY_SECONDS),
+      `${INDEX}config.json`,
+    ]);
     if (ready.status !== 0) {
       throw new Error(`индекс не ответил за ${READY_SECONDS} с: ${tail(ready.stderr)}`);
     }
@@ -65,7 +84,7 @@ export function startCargo(stand: Stand, image: string): CargoClient {
 }
 
 /** Крейт данными: манифест плюс файлы относительно его каталога. */
-interface Crate {
+export interface Crate {
   name: string;
   version: string;
   /** Строки секции [dependencies]. */
@@ -73,7 +92,7 @@ interface Crate {
   files: Record<string, string>;
 }
 
-const manifest = (crate: Crate): string =>
+export const manifest = (crate: Crate): string =>
   [
     "[package]",
     `name = "${crate.name}"`,
@@ -93,18 +112,29 @@ const dep = (name: string, requirement: string): string =>
 const fn = (name: string, body: string): string =>
   `pub fn ${name}() -> &'static str {\n    ${body}\n}\n`;
 
-const step = (name: string, body: () => void): void => {
-  try {
-    body();
-  } catch (error) {
-    throw new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
+/** Имя первого крейта сценария: по нему же проверяется, что hosted побеждает proxy. */
+export const hostedName = (stand: Stand, minor: number): string => `dfa_${stand.id}_${minor}`;
 
-/** Выполняет сценарий и возвращает события аудита, которые он обязан породить. */
-export function scenario(stand: Stand, client: CargoClient, minor: number): Expected[] {
+/** Всё, что нужно шагам сценария: запуск cargo, запись крейтов и учёт ожидаемых событий аудита. */
+interface Kit {
+  agent: string;
+  a: string;
+  b: string;
+  main: string;
+  events: Expected[];
+  freshHome(): string;
+  cargo(dir: string, home: string, args: string[], token?: string): Result;
+  must(dir: string, home: string, args: string[]): Result;
+  expectOutput(result: Result, want: string): void;
+  app(name: string, dependency: string, call: string): void;
+  audited(operation: "publish" | "yank" | "unyank", name: string, version: string): void;
+  libA(version: string): Crate;
+  publish(crate: Crate): void;
+}
+
+function scenarioKit(stand: Stand, client: CargoClient, minor: number): Kit {
   const suffix = `${stand.id}_${minor}`;
-  const a = `dfa_${suffix}`;
+  const a = hostedName(stand, minor);
   const b = `dfb_${suffix}`;
   const agent = `cargo/${client.version}`;
   const main = "/tmp/h-main";
@@ -118,7 +148,7 @@ export function scenario(stand: Stand, client: CargoClient, minor: number): Expe
   const cargo = (dir: string, home: string, args: string[], token = stand.token): Result =>
     client.exec(["cargo", ...args], {
       cwd: `/work/${dir}`,
-      env: { CARGO_HOME: home, CARGO_TARGET_DIR: `${home}-target`, [TOKEN_ENV]: token },
+      env: cargoEnv(home, token),
     });
   const must = (dir: string, home: string, args: string[]): Result => {
     const result = cargo(dir, home, args);
@@ -155,76 +185,114 @@ export function scenario(stand: Stand, client: CargoClient, minor: number): Expe
     version,
     files: { "src/lib.rs": fn("version", `"${version}"`) },
   });
+  const published = new Set<string>();
   const publish = (crate: Crate): void => {
     write(crate);
     must(crate.name, main, ["publish", "--registry", REGISTRY]);
+    // Первая публикация нового имени (его нет ни у upstream, ни в hosted) становится его резервированием.
+    if (!published.has(crate.name)) {
+      published.add(crate.name);
+      events.push({ kind: "reserve", agent });
+    }
     audited("publish", crate.name, crate.version);
   };
 
+  return {
+    agent,
+    a,
+    b,
+    main,
+    events,
+    freshHome,
+    cargo,
+    must,
+    expectOutput,
+    app,
+    audited,
+    libA,
+    publish,
+  };
+}
+
+/** Шаги 1-3: публикация трёх версий, поиск в индексе, сборка app из транзитивной зависимости. */
+function publishAndBuild(k: Kit): void {
   step("1 публикация a@0.1.0, a@0.1.1, b@0.1.0", () => {
-    publish(libA("0.1.0"));
-    publish(libA("0.1.1"));
-    publish({
-      name: b,
+    k.publish(k.libA("0.1.0"));
+    k.publish(k.libA("0.1.1"));
+    k.publish({
+      name: k.b,
       version: "0.1.0",
-      deps: [dep(a, "0.1")],
-      files: { "src/lib.rs": fn("a_version", `${a}::version()`) },
+      deps: [dep(k.a, "0.1")],
+      files: { "src/lib.rs": fn("a_version", `${k.a}::version()`) },
     });
   });
 
   step("2 поиск в индексе", () => {
-    const info = must(".", main, ["info", a, "--registry", REGISTRY]);
+    const info = k.must(".", k.main, ["info", k.a, "--registry", REGISTRY]);
     if (!`${info.stdout}${info.stderr}`.includes("0.1.1")) {
       throw new Error(`cargo info не показал 0.1.1\n${tail(info.stdout)}`);
     }
   });
 
   step("3 сборка app из b (транзитивно a@0.1.1)", () => {
-    app("app", dep(b, "0.1"), `${b}::a_version()`);
-    expectOutput(must("app", main, ["run", "-q"]), "0.1.1");
+    k.app("app", dep(k.b, "0.1"), `${k.b}::a_version()`);
+    k.expectOutput(k.must("app", k.main, ["run", "-q"]), "0.1.1");
   });
+}
 
+/** Шаги 4-8: yank чужим токеном и своим, как он виден разрешению зависимостей и Cargo.lock. */
+function yankFlow(k: Kit, stand: Stand): void {
   step("4 yank чужим токеном отклонён", () => {
-    const denied = cargo(
-      a,
-      main,
-      ["yank", "--registry", REGISTRY, "--version", "0.1.0", a],
+    const denied = k.cargo(
+      k.a,
+      k.main,
+      ["yank", "--registry", REGISTRY, "--version", "0.1.0", k.a],
       stand.wrongToken,
     );
     if (denied.status === 0) {
       throw new Error("yank с неверным токеном прошёл");
     }
-    events.push({ kind: "authFailure", agent });
+    k.events.push({ kind: "authFailure", agent: k.agent });
   });
 
   step("5 yank a@0.1.1", () => {
-    must(a, main, ["yank", "--registry", REGISTRY, "--version", "0.1.1", a]);
-    audited("yank", a, "0.1.1");
+    k.must(k.a, k.main, ["yank", "--registry", REGISTRY, "--version", "0.1.1", k.a]);
+    k.audited("yank", k.a, "0.1.1");
   });
 
   step("6 разрешение обходит yanked: app2 получает a@0.1.0", () => {
-    app("app2", dep(b, "0.1"), `${b}::a_version()`);
-    expectOutput(must("app2", freshHome(), ["run", "-q"]), "0.1.0");
+    k.app("app2", dep(k.b, "0.1"), `${k.b}::a_version()`);
+    k.expectOutput(k.must("app2", k.freshHome(), ["run", "-q"]), "0.1.0");
   });
 
   step("7 прямая зависимость от yanked версии не разрешается", () => {
-    app("app3", dep(a, "=0.1.1"), `${a}::version()`);
-    const locked = cargo("app3", freshHome(), ["generate-lockfile"]);
+    k.app("app3", dep(k.a, "=0.1.1"), `${k.a}::version()`);
+    const locked = k.cargo("app3", k.freshHome(), ["generate-lockfile"]);
     if (locked.status === 0 || !YANKED.test(locked.stderr)) {
       throw new Error(`generate-lockfile -> ${locked.status}\n${tail(locked.stderr)}`);
     }
   });
 
   step("8 Cargo.lock с yanked версией собирается из пустого кэша", () => {
-    expectOutput(must("app", freshHome(), ["run", "-q", "--locked"]), "0.1.1");
+    k.expectOutput(k.must("app", k.freshHome(), ["run", "-q", "--locked"]), "0.1.1");
   });
+}
 
+/** Шаг 9: unyank возвращает версию в разрешение. */
+function unyank(k: Kit): void {
   step("9 unyank a@0.1.1", () => {
-    must(a, main, ["yank", "--registry", REGISTRY, "--undo", "--version", "0.1.1", a]);
-    audited("unyank", a, "0.1.1");
-    app("app4", dep(b, "0.1"), `${b}::a_version()`);
-    expectOutput(must("app4", freshHome(), ["run", "-q"]), "0.1.1");
+    k.must(k.a, k.main, ["yank", "--registry", REGISTRY, "--undo", "--version", "0.1.1", k.a]);
+    k.audited("unyank", k.a, "0.1.1");
+    k.app("app4", dep(k.b, "0.1"), `${k.b}::a_version()`);
+    k.expectOutput(k.must("app4", k.freshHome(), ["run", "-q"]), "0.1.1");
   });
+}
 
-  return events;
+/** Выполняет сценарий и возвращает события аудита, которые он обязан породить. */
+export function scenario(stand: Stand, client: CargoClient, minor: number): Expected[] {
+  const k = scenarioKit(stand, client, minor);
+  publishAndBuild(k);
+  yankFlow(k, stand);
+  unyank(k);
+  return k.events;
 }

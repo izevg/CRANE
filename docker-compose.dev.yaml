@@ -1,8 +1,10 @@
 # Локальная разработка: только зависимости, сам CRANE запускается с хоста (`cargo run`).
 # Значения берутся из .env (cp .env.dist .env); порты публикуются на ${DEV_BIND}.
-# Пароль PostgreSQL лежит в файле POSTGRES_PASSWORD_SECRET и в окружение не попадает.
+# Пароли PostgreSQL и Valkey лежат в файлах POSTGRES_PASSWORD_SECRET и VALKEY_PASSWORD_SECRET
+# и в окружение не попадают; Valkey принимает только пользователей из ACL, собранного при старте из этого пароля.
 #   docker compose -f docker-compose.dev.yaml up -d
 #   export CRANE_DATABASE_URL="postgres://${POSTGRES_USER}:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
+#   export CRANE_CACHE="valkey://crane:$(cat "$VALKEY_PASSWORD_SECRET")@127.0.0.1:${VALKEY_PORT}"
 name: crane-dev
 
 services:
@@ -12,6 +14,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: ${POSTGRES_DB:?}
+    # Только dev и тесты: каждый тест адаптера делает CREATE/DROP DATABASE, а DROP DATABASE ждёт
+    # checkpoint (7-11 с на Docker for Mac). Без fsync тесты укладываются в таймаут мутаций.
+    # Данные dev-БД при сбое питания не гарантируются; прод этот файл не использует.
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
     secrets: [postgres_password]
     ports: ["${DEV_BIND:?}:${POSTGRES_PORT:?}:5432"]
     volumes: [pg:/var/lib/postgresql/data]
@@ -23,11 +29,26 @@ services:
 
   valkey:
     image: ${VALKEY_IMAGE:?}
-    # Кэш эфемерный: персистентность не нужна.
-    command: ["--save", "", "--appendonly", "no"]
+    # Кэш эфемерный: персистентность не нужна. Ключи без TTL, поэтому память ограничена, вытесняется LRU.
+    # crane получает те же права, что в проде. crane-test (все команды) нужен только тестовой обвязке
+    # адаптера (FLUSHDB между тестами, CLIENT LIST) и в прод не идёт.
+    command:
+      - sh
+      - -c
+      # ACL пишется при старте из секрета: пароль не попадает ни в argv (printf встроен в sh), ни в env,
+      # ни в образ, а политика живёт здесь, а не в замороженном файле секрета. Дальше обычная точка входа
+      # образа (под tini): она понижает права до valkey и запускает valkey-server.
+      - |
+        set -eu
+        umask 077
+        printf 'user default off\nuser crane on >%s ~* &* +@all -@dangerous\nuser crane-test on >%s ~* &* +@all\n' "$$(cat /run/secrets/valkey_password)" "$$(cat /run/secrets/valkey_password)" > /tmp/valkey.acl
+        chown valkey /tmp/valkey.acl
+        exec docker-entrypoint.sh valkey-server --save "" --appendonly no --maxmemory ${VALKEY_MAXMEMORY:?} --maxmemory-policy allkeys-lru --aclfile /tmp/valkey.acl
+    secrets: [valkey_password]
     ports: ["${DEV_BIND:?}:${VALKEY_PORT:?}:6379"]
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      # Пароль читается из секрета внутри контейнера: в argv и в docker inspect его нет.
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$(cat /run/secrets/valkey_password)" valkey-cli --user crane ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -36,7 +57,19 @@ services:
   seaweedfs:
     profiles: [s3]
     image: ${SEAWEEDFS_IMAGE:?}
-    command: ["server", "-dir=/data", "-s3", "-s3.port=8333"]
+    # Ключ S3 из файлов секретов собирается в identities во временный файл контейнера (как в docker-compose.s3.yaml);
+    # crane на хосте берёт его из AWS_ACCESS_KEY_ID_FILE и AWS_SECRET_ACCESS_KEY_FILE. Бакет создаёт разработчик:
+    # `weed shell`, `s3.bucket.create -name <бакет>`.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -eu
+        umask 077
+        printf '{"identities":[{"name":"crane","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' \
+          "$$(cat /run/secrets/s3_access_key_id)" "$$(cat /run/secrets/s3_secret_access_key)" > /tmp/s3.json
+        exec weed server -dir=/data -s3 -s3.port=8333 -s3.config=/tmp/s3.json
+    secrets: [s3_access_key_id, s3_secret_access_key]
     ports: ["${DEV_BIND:?}:${SEAWEEDFS_S3_PORT:?}:8333"]
     volumes: [blobs:/data]
 
@@ -51,6 +84,12 @@ services:
 secrets:
   postgres_password:
     file: ${POSTGRES_PASSWORD_SECRET:?задайте POSTGRES_PASSWORD_SECRET}
+  s3_access_key_id:
+    file: ${S3_ACCESS_KEY_ID_SECRET:?задайте S3_ACCESS_KEY_ID_SECRET}
+  s3_secret_access_key:
+    file: ${S3_SECRET_ACCESS_KEY_SECRET:?задайте S3_SECRET_ACCESS_KEY_SECRET}
+  valkey_password:
+    file: ${VALKEY_PASSWORD_SECRET:?задайте VALKEY_PASSWORD_SECRET}
 
 volumes:
   pg:

@@ -11,6 +11,7 @@
       "**",
       "!**/dist",
       "!**/coverage",
+      "!**/storybook-static",
       "!**/.stryker-tmp",
       "!**/reports",
       "!web/src/**/*.gen.*",
@@ -18,6 +19,11 @@
       "!**/*.yaml",
       "!**/*.yml"
     ]
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
   },
   "formatter": {
     "indentStyle": "space",
@@ -70,6 +76,13 @@
         "noAccumulatingSpread": "error"
       },
       "complexity": {
+        "noExcessiveLinesPerFunction": {
+          "level": "error",
+          "options": {
+            "maxLines": 80,
+            "skipBlankLines": true
+          }
+        },
         "noExcessiveCognitiveComplexity": {
           "level": "error",
           "options": {
@@ -90,6 +103,28 @@
     }
   },
   "overrides": [
+    {
+      "includes": ["**/*.stories.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noJsxLiterals": "off",
+            "noMagicNumbers": "off",
+            "useComponentExportOnlyModules": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.*"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": "off"
+          }
+        }
+      }
+    },
     {
       "includes": ["web/**"],
       "linter": {

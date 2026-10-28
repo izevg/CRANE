@@ -2,7 +2,7 @@
 
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
-use crane_domain::registry::Coordinate;
+use crane_domain::registry::{Format, PackageName, Version};
 use uuid::Uuid;
 
 const SCHEMA_VERSION: &str = "1.3.0";
@@ -34,6 +34,8 @@ pub struct OcsfRecord {
     pub status_id: u32,
     pub status: &'static str,
     pub status_detail: Option<String>,
+    /// Стабильный код отказа по правилу (`status_code` базового события OCSF).
+    pub status_code: Option<String>,
     pub severity_id: u32,
     pub event_id: Uuid,
     pub correlation_uid: String,
@@ -80,23 +82,67 @@ fn shape(action: &AuditAction) -> Shape {
         AuditAction::Publish(_) => api(1, "Create", "publish"),
         AuditAction::Yank(_) => api(3, "Update", "yank"),
         AuditAction::Unyank(_) => api(3, "Update", "unyank"),
+        AuditAction::Delete(_) => api(4, "Delete", "delete"),
+        AuditAction::Deprecate { message, .. } => api(
+            3,
+            "Update",
+            if message.is_some() {
+                "deprecate"
+            } else {
+                "undeprecate"
+            },
+        ),
+        AuditAction::Tag { .. } => api(3, "Update", "tag"),
+        AuditAction::Untag { .. } => api(3, "Update", "untag"),
+        AuditAction::Reserve(_) => api(1, "Create", "namespace.reserve"),
+        AuditAction::ShadowUpstream { .. } => api(2, "Read", "upstream.shadow"),
     }
 }
 
-fn coordinate(action: &AuditAction) -> Option<&Coordinate> {
+/// Объект действия: пакет и, если действие над версией, сама версия.
+struct Resource<'a> {
+    format: Format,
+    repository: &'a str,
+    package: &'a PackageName,
+    version: Option<&'a Version>,
+}
+
+fn resource(action: &AuditAction) -> Option<Resource<'_>> {
     match action {
-        AuditAction::Authenticate => None,
-        AuditAction::Publish(c) | AuditAction::Yank(c) | AuditAction::Unyank(c) => Some(c),
+        AuditAction::Authenticate
+        | AuditAction::Reserve(_)
+        | AuditAction::ShadowUpstream { .. } => None,
+        AuditAction::Publish(c)
+        | AuditAction::Yank(c)
+        | AuditAction::Unyank(c)
+        | AuditAction::Delete(c)
+        | AuditAction::Deprecate { coordinate: c, .. }
+        | AuditAction::Tag { coordinate: c, .. } => Some(Resource {
+            format: c.format,
+            repository: &c.repository,
+            package: &c.package,
+            version: Some(&c.version),
+        }),
+        AuditAction::Untag { package, .. } => Some(Resource {
+            format: package.format,
+            repository: &package.repository,
+            package: &package.package,
+            version: None,
+        }),
     }
 }
 
-/// `+` в версии (метаданные сборки) кодируется: иначе purl неоднозначен.
-fn purl(c: &Coordinate) -> String {
-    format!(
-        "pkg:cargo/{}@{}",
-        c.package.as_written(),
-        c.version.as_written().replace('+', "%2B")
-    )
+/// `+` (метаданные сборки) и `@` (scope npm) кодируются: иначе purl неоднозначен.
+fn purl_component(raw: &str) -> String {
+    raw.replace('+', "%2B").replace('@', "%40")
+}
+
+fn purl(r: &Resource<'_>) -> String {
+    let name = purl_component(r.package.as_written());
+    let base = format!("pkg:{}/{name}", r.format.as_str());
+    r.version.map_or(base.clone(), |version| {
+        format!("{base}@{}", purl_component(version.as_written()))
+    })
 }
 
 fn kind_name(kind: PrincipalKind) -> &'static str {
@@ -133,11 +179,17 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
     let shape = shape(&event.action);
     let subject = user(event.actor.as_ref());
     let is_auth = shape.class_uid == CLASS_AUTHENTICATION;
-    let (status_id, status, severity_id, status_detail) = match &event.outcome {
-        Outcome::Success => (1, "Success", 1, None),
-        Outcome::Failure { reason } => (2, "Failure", 2, Some(reason.clone())),
+    let (status_id, status, severity_id, status_detail, status_code) = match &event.outcome {
+        Outcome::Success => (1, "Success", 1, None, None),
+        Outcome::Failure { reason, code } => (
+            2,
+            "Failure",
+            2,
+            Some(reason.clone()),
+            code.map(str::to_owned),
+        ),
     };
-    let resource = coordinate(&event.action);
+    let resource = resource(&event.action);
     OcsfRecord {
         class_uid: shape.class_uid,
         category_uid: shape.category_uid,
@@ -147,6 +199,7 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
         status_id,
         status,
         status_detail,
+        status_code,
         severity_id,
         event_id,
         correlation_uid: event.request.request_id.as_str().to_owned(),
@@ -159,243 +212,13 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
         src_ip: event.request.client_ip.map(|ip| ip.to_string()),
         user_agent: event.request.user_agent.clone(),
         operation: shape.operation,
-        resource_uid: resource.map(purl),
-        resource_type: resource.map(|_| "package"),
-        repository: resource.map(|c| c.repository.clone()),
+        resource_uid: resource.as_ref().map(purl),
+        resource_type: resource.as_ref().map(|_| "package"),
+        repository: resource.map(|r| r.repository.to_owned()),
         trace_id: event.request.trace_id.clone(),
     }
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::expect_used,
-    reason = "в тестах падение expect — это падение теста"
-)]
-mod tests {
-    use crane_domain::access::{RequestContext, RequestId};
-    use crane_domain::registry::{Format, PackageName, Version};
-
-    use super::*;
-
-    fn coord(name: &str, version: &str) -> Coordinate {
-        Coordinate {
-            format: Format::Cargo,
-            repository: "internal".to_owned(),
-            package: PackageName::parse(Format::Cargo, name).expect("имя"),
-            version: Version::parse(Format::Cargo, version).expect("версия"),
-        }
-    }
-
-    fn principal(kind: PrincipalKind) -> Principal {
-        Principal {
-            id: "crane".to_owned(),
-            kind,
-        }
-    }
-
-    fn event(action: AuditAction, outcome: Outcome, actor: Option<Principal>) -> AuditEvent {
-        AuditEvent {
-            actor,
-            request: RequestContext {
-                request_id: RequestId::parse("req-1").expect("id"),
-                trace_id: Some("4bf92f3577b34da6a3ce929d0e0e4736".to_owned()),
-                client_ip: "10.0.4.17".parse().ok(),
-                user_agent: Some("cargo/1.90".to_owned()),
-            },
-            action,
-            outcome,
-        }
-    }
-
-    fn failure() -> Outcome {
-        Outcome::Failure {
-            reason: "причина".to_owned(),
-        }
-    }
-
-    fn record(action: AuditAction, outcome: Outcome, actor: Option<Principal>) -> OcsfRecord {
-        ocsf(&event(action, outcome, actor), Uuid::nil(), 7)
-    }
-
-    #[test]
-    fn action_and_outcome_map_to_class_activity_type_status_and_severity() {
-        // Arrange
-        let robot = Some(principal(PrincipalKind::Robot));
-        let c = || coord("serde", "1.0.0");
-        let cases = [
-            (AuditAction::Authenticate, Outcome::Success, None),
-            (AuditAction::Authenticate, failure(), None),
-            (AuditAction::Publish(c()), Outcome::Success, robot.clone()),
-            (AuditAction::Publish(c()), failure(), robot.clone()),
-            (AuditAction::Yank(c()), Outcome::Success, robot.clone()),
-            (AuditAction::Unyank(c()), failure(), robot),
-        ];
-
-        // Act
-        let actual = cases.map(|(action, outcome, actor)| {
-            let r = record(action, outcome, actor);
-            (
-                r.class_uid,
-                r.category_uid,
-                r.activity_id,
-                r.type_uid,
-                r.status_id,
-                r.severity_id,
-                r.operation,
-            )
-        });
-
-        // Assert
-        assert_eq!(
-            actual,
-            [
-                (3002, 3, 1, 300_201, 1, 1, None),
-                (3002, 3, 1, 300_201, 2, 2, None),
-                (6003, 6, 1, 600_301, 1, 1, Some("publish")),
-                (6003, 6, 1, 600_301, 2, 2, Some("publish")),
-                (6003, 6, 3, 600_303, 1, 1, Some("yank")),
-                (6003, 6, 3, 600_303, 2, 2, Some("unyank")),
-            ]
-        );
-    }
-
-    #[test]
-    fn failure_carries_reason_and_success_carries_none() {
-        // Arrange
-        let actor = Some(principal(PrincipalKind::Robot));
-        let cases = [failure(), Outcome::Success];
-
-        // Act
-        let details = cases.map(|outcome| {
-            let action = AuditAction::Publish(coord("serde", "1.0.0"));
-            record(action, outcome, actor.clone()).status_detail
-        });
-
-        // Assert
-        assert_eq!(details, [Some("причина".to_owned()), None]);
-    }
-
-    #[test]
-    fn purl_encodes_plus_in_version_and_keeps_written_name() {
-        // Arrange
-        let cases = [
-            coord("serde", "1.0.0"),
-            coord("Foo_Bar", "1.2.3-rc.1+build5"),
-        ];
-
-        // Act
-        let actual = cases.map(|c| purl(&c));
-
-        // Assert
-        assert_eq!(
-            actual,
-            [
-                "pkg:cargo/serde@1.0.0",
-                "pkg:cargo/Foo_Bar@1.2.3-rc.1%2Bbuild5"
-            ]
-        );
-    }
-
-    #[test]
-    fn principal_kind_maps_to_ocsf_user_type() {
-        // Arrange
-        let kinds = [
-            PrincipalKind::Human,
-            PrincipalKind::Robot,
-            PrincipalKind::Workload,
-            PrincipalKind::Agent,
-        ];
-
-        // Act
-        let actual = kinds.map(|kind| {
-            let r = record(
-                AuditAction::Yank(coord("serde", "1.0.0")),
-                Outcome::Success,
-                Some(principal(kind)),
-            );
-            r.actor.map(|u| (u.type_id, u.type_name))
-        });
-
-        // Assert
-        let expected = [(1, "User"), (99, "Robot"), (99, "Workload"), (99, "Agent")]
-            .map(|(id, name)| Some((id, name.to_owned())));
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn authentication_subject_goes_to_user_and_write_subject_to_actor() {
-        // Arrange
-        let robot = Some(principal(PrincipalKind::Robot));
-        let cases = [
-            event(AuditAction::Authenticate, failure(), None),
-            event(
-                AuditAction::Publish(coord("serde", "1.0.0")),
-                Outcome::Success,
-                robot,
-            ),
-        ];
-
-        // Act
-        let actual = cases.map(|event| {
-            let r = ocsf(&event, Uuid::nil(), 0);
-            (r.user.map(|u| u.type_id), r.actor.map(|u| u.type_id))
-        });
-
-        // Assert
-        assert_eq!(actual, [(Some(0), None), (None, Some(99))]);
-    }
-
-    #[test]
-    fn write_event_carries_resource_request_context_and_stamp() {
-        // Arrange
-        let event = event(
-            AuditAction::Publish(coord("serde", "1.0.0")),
-            Outcome::Success,
-            Some(principal(PrincipalKind::Robot)),
-        );
-
-        // Act
-        let r = ocsf(&event, Uuid::from_u128(5), 1234);
-
-        // Assert
-        assert_eq!(
-            (
-                r.event_id,
-                r.time_ms,
-                r.correlation_uid.as_str(),
-                r.src_ip.as_deref(),
-                r.user_agent.as_deref(),
-                r.resource_uid.as_deref(),
-                r.resource_type,
-                r.repository.as_deref(),
-                r.trace_id.as_deref(),
-            ),
-            (
-                Uuid::from_u128(5),
-                1234,
-                "req-1",
-                Some("10.0.4.17"),
-                Some("cargo/1.90"),
-                Some("pkg:cargo/serde@1.0.0"),
-                Some("package"),
-                Some("internal"),
-                Some("4bf92f3577b34da6a3ce929d0e0e4736"),
-            )
-        );
-    }
-
-    #[test]
-    fn authentication_event_has_no_resource() {
-        // Arrange
-        let event = event(AuditAction::Authenticate, failure(), None);
-
-        // Act
-        let r = ocsf(&event, Uuid::nil(), 0);
-
-        // Assert
-        assert_eq!(
-            (r.resource_uid, r.resource_type, r.repository, r.operation),
-            (None, None, None, None)
-        );
-    }
-}
+#[path = "tests/ocsf.rs"]
+mod tests;

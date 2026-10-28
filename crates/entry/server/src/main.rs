@@ -2,7 +2,9 @@
 //!
 //! Конфигурация: env поверх необязательного TOML (`config`), логи JSON в stdout (раздел 16.6).
 
+mod cache;
 mod config;
+mod namespaces;
 mod run;
 mod system;
 
@@ -68,9 +70,13 @@ fn execute(role: &Role) -> Result<(), run::RunError> {
     }
 }
 
-/// Цели журнала ИБ v0.1.0 (раздел 14.9): аудит и лог доступа. Уровень логов их не глушит:
+/// Цели журнала ИБ (раздел 14.9): аудит, лог доступа и egress. Уровень логов их не глушит:
 /// оператор, снизивший шум через `RUST_LOG`, не должен молча потерять журнал безопасности.
-const SECURITY_TARGETS: [&str; 2] = [crane_siem::AUDIT_TARGET, crane_http::ACCESS_TARGET];
+const SECURITY_TARGETS: [&str; 3] = [
+    crane_siem::AUDIT_TARGET,
+    crane_http::ACCESS_TARGET,
+    crane_upstream::EGRESS_TARGET,
+];
 
 /// Директивы целей ИБ идут последними и перекрывают те же цели из `RUST_LOG`.
 fn log_filter(env: Option<&str>) -> EnvFilter {
@@ -166,18 +172,48 @@ mod tests {
         assert_eq!(roles, [None, None, None, None, None]);
     }
 
+    /// Заглушка точки вызова: нужна лишь для сборки `Metadata`, в реестр tracing не попадает.
+    struct StubCallsite;
+
+    static STUB: StubCallsite = StubCallsite;
+    static STUB_META: tracing::Metadata<'static> = tracing::Metadata::new(
+        "stub",
+        "stub",
+        tracing::Level::INFO,
+        None,
+        None,
+        None,
+        tracing::field::FieldSet::new(&[], tracing::callsite::Identifier(&STUB)),
+        tracing::metadata::Kind::EVENT,
+    );
+
+    impl tracing::Callsite for StubCallsite {
+        fn set_interest(&self, _: tracing::subscriber::Interest) {}
+
+        fn metadata(&self) -> &tracing::Metadata<'_> {
+            &STUB_META
+        }
+    }
+
     /// Включена ли запись `info` для цели под заданным фильтром.
-    fn info_enabled(filter: EnvFilter, target: &'static str) -> bool {
+    ///
+    /// Спрашиваем `Subscriber::enabled` у собственного `Dispatch` напрямую. `tracing::enabled!`
+    /// сначала читает глобальный кэш интереса статической точки вызова, общей для всех тестов
+    /// с одной целью: параллельные `with_default` гоняются за его пересборкой, и тест видит
+    /// чужой фильтр.
+    fn info_enabled(filter: EnvFilter, target: &str) -> bool {
         let subscriber = tracing_subscriber::fmt().with_env_filter(filter).finish();
-        tracing::subscriber::with_default(subscriber, || match target {
-            crane_siem::AUDIT_TARGET => {
-                tracing::enabled!(target: crane_siem::AUDIT_TARGET, tracing::Level::INFO)
-            }
-            crane_http::ACCESS_TARGET => {
-                tracing::enabled!(target: crane_http::ACCESS_TARGET, tracing::Level::INFO)
-            }
-            _ => tracing::enabled!(target: "crane::other", tracing::Level::INFO),
-        })
+        let metadata = tracing::Metadata::new(
+            "event",
+            target,
+            tracing::Level::INFO,
+            None,
+            None,
+            None,
+            tracing::field::FieldSet::new(&[], tracing::callsite::Identifier(&STUB)),
+            tracing::metadata::Kind::EVENT,
+        );
+        tracing::Dispatch::new(subscriber).enabled(&metadata)
     }
 
     #[test]
@@ -185,7 +221,7 @@ mod tests {
         // Arrange
         let envs = [
             Some("warn"),
-            Some("crane::audit=off,crane::access=off"),
+            Some("crane::audit=off,crane::access=off,crane::upstream=off"),
             Some("off"),
             Some("неразборчиво=="),
             None,
@@ -196,7 +232,7 @@ mod tests {
             envs.map(|env| SECURITY_TARGETS.map(|target| info_enabled(log_filter(env), target)));
 
         // Assert
-        assert_eq!(enabled, [[true, true]; 5]);
+        assert_eq!(enabled, [[true, true, true]; 5]);
     }
 
     #[test]

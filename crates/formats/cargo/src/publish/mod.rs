@@ -15,8 +15,22 @@ use metadata::PublishJson;
 pub struct CargoPublish {
     pub name: PackageName,
     pub version: Version,
-    pub metadata: FormatMetadata,
     pub crate_file: Bytes,
+    // Сырой JSON хранится до применения политики: см. `index_metadata`.
+    json: PublishJson,
+}
+
+impl CargoPublish {
+    /// Метаданные для хранения в индексе.
+    ///
+    /// `own_index` — адрес индекса хостящего репозитория (`sparse+…/index/`): зависимости на него
+    /// хранятся как «текущий реестр», crates.io приводится к каноническому адресу, зависимость
+    /// на любой другой реестр отвергается.
+    pub fn index_metadata(&self, own_index: &str) -> Result<FormatMetadata, MetadataError> {
+        let stored = self.json.clone().into_stored(own_index)?;
+        let stored = serde_json::to_string(&stored).map_err(MetadataError::Serialize)?;
+        Ok(FormatMetadata::new(stored))
+    }
 }
 
 impl fmt::Debug for CargoPublish {
@@ -45,6 +59,33 @@ pub enum PublishError {
     Version(#[source] VersionError),
 }
 
+/// Стабильный код отказа публикации из-за зависимости на сторонний реестр.
+pub const FOREIGN_REGISTRY_DEPENDENCY: &str = "foreign-registry-dependency";
+
+/// Зависимость ссылается на реестр, из которого CRANE публиковать не даёт.
+///
+/// Значения взяты из недоверенного тела и обрезаны до 128 символов; в `Display` попадает
+/// только имя зависимости.
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "зависимость {dependency:?} указывает на сторонний реестр: зависимости из сторонних \
+     реестров запрещены, используйте зависимость с crates.io или из этого реестра"
+)]
+pub struct ForeignRegistry {
+    pub dependency: String,
+    pub registry: String,
+}
+
+/// Ошибка построения метаданных индекса.
+#[derive(Debug, thiserror::Error)]
+pub enum MetadataError {
+    #[error(transparent)]
+    Foreign(#[from] ForeignRegistry),
+    // По построению недостижима (строковые ключи), но `unwrap` запрещён.
+    #[error("метаданные не сериализуются")]
+    Serialize(#[source] serde_json::Error),
+}
+
 /// Отрезает от начала кадр `u32 LE длина` + данные без копирования.
 fn take_frame(buf: &mut Bytes) -> Result<Bytes, PublishError> {
     let (header, tail) = buf
@@ -69,11 +110,10 @@ pub fn parse_publish(body: Bytes) -> Result<CargoPublish, PublishError> {
     let parsed: PublishJson = serde_json::from_slice(&json).map_err(PublishError::Json)?;
     let name = PackageName::parse(Format::Cargo, &parsed.name).map_err(PublishError::Name)?;
     let version = Version::parse(Format::Cargo, &parsed.vers).map_err(PublishError::Version)?;
-    let stored = serde_json::to_string(&parsed.into_stored()).map_err(PublishError::Json)?;
     Ok(CargoPublish {
         name,
         version,
-        metadata: FormatMetadata::new(stored),
         crate_file,
+        json: parsed,
     })
 }

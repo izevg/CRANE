@@ -5,8 +5,13 @@
 )]
 
 use bytes::Bytes;
-use crane_format_cargo::{PublishError, parse_publish};
+use crane_domain::registry::FormatMetadata;
+use crane_format_cargo::{MetadataError, PublishError, parse_publish};
 use serde_json::{Value, json};
+
+const OWN_INDEX: &str = "sparse+https://crane.example/cargo/internal/index/";
+const CRATES_IO_GIT: &str = "https://github.com/rust-lang/crates.io-index";
+const CRATES_IO_SPARSE: &str = "sparse+https://index.crates.io/";
 
 fn realistic_json() -> Value {
     json!({
@@ -65,7 +70,7 @@ fn body_of(value: &Value, krate: &[u8]) -> Vec<u8> {
 
 fn stored(body: Vec<u8>) -> Value {
     let publish = parse_publish(Bytes::from(body)).unwrap();
-    serde_json::from_str(publish.metadata.as_str()).unwrap()
+    serde_json::from_str(publish.index_metadata(OWN_INDEX).unwrap().as_str()).unwrap()
 }
 
 #[test]
@@ -279,4 +284,86 @@ fn invalid_name_and_version_are_reported_separately() {
 
     // Assert
     assert_eq!(kinds, ["name", "version"]);
+}
+
+/// Тело публикации с одной зависимостью, у которой задан `registry`.
+fn body_with_registry(registry: &Value) -> Vec<u8> {
+    body_of(
+        &json!({
+            "name": "demo", "vers": "1.0.0",
+            "deps": [{ "name": "dep", "version_req": "^1", "registry": registry }]
+        }),
+        b"x",
+    )
+}
+
+/// Сохранённое поле `registry` либо признак отказа публикации.
+fn registry_outcome(registry: &Value) -> Result<Value, &'static str> {
+    let publish = parse_publish(Bytes::from(body_with_registry(registry))).unwrap();
+    match publish.index_metadata(OWN_INDEX) {
+        Ok(metadata) => {
+            let meta: Value = serde_json::from_str(metadata.as_str()).unwrap();
+            Ok(meta["index"]["deps"][0]["registry"].clone())
+        }
+        Err(MetadataError::Foreign(_)) => Err("rejected"),
+        Err(MetadataError::Serialize(_)) => Err("other"),
+    }
+}
+
+#[test]
+fn dependency_registry_is_normalized_or_rejected() {
+    // Arrange
+    let cases = [
+        Value::Null,
+        json!(OWN_INDEX),
+        json!(OWN_INDEX.trim_end_matches('/')),
+        json!(CRATES_IO_GIT),
+        json!(CRATES_IO_SPARSE),
+        json!("sparse+https://evil.example/index/"),
+        json!("sparse+https://crane.example/cargo/other/index/"),
+        json!("https://crane.example/cargo/internal/index/"),
+        json!(""),
+    ];
+
+    // Act
+    let actual = cases.each_ref().map(registry_outcome);
+
+    // Assert
+    assert_eq!(
+        actual,
+        [
+            Ok(Value::Null),
+            Ok(Value::Null),
+            Ok(Value::Null),
+            Ok(json!(CRATES_IO_GIT)),
+            Ok(json!(CRATES_IO_GIT)),
+            Err("rejected"),
+            Err("rejected"),
+            Err("rejected"),
+            Err("rejected"),
+        ]
+    );
+}
+
+#[test]
+fn foreign_registry_error_clips_untrusted_values() {
+    // Arrange
+    let long = "x".repeat(1000);
+    let publish = parse_publish(Bytes::from(body_with_registry(&json!(long)))).unwrap();
+
+    // Act
+    let result = publish.index_metadata(OWN_INDEX);
+
+    // Assert
+    assert_eq!(foreign_echo(result), Some(("dep".to_owned(), 128)));
+}
+
+/// Имя зависимости и длина `registry` из отказа; `None`, если отказа нет.
+fn foreign_echo(result: Result<FormatMetadata, MetadataError>) -> Option<(String, usize)> {
+    match result {
+        Err(MetadataError::Foreign(foreign)) => {
+            Some((foreign.dependency, foreign.registry.chars().count()))
+        }
+        _ => None,
+    }
 }

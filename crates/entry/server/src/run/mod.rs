@@ -1,6 +1,7 @@
 //! Роли процесса: запуск HTTP-серверов и миграции.
 
 mod health;
+mod proxy;
 
 use std::future::IntoFuture;
 use std::net::SocketAddr;
@@ -10,10 +11,13 @@ use std::time::Duration;
 use axum::Router;
 use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
-use crane_http::{CargoSettings, StaticToken, admin_router, api_router};
+use crane_http::{
+    CargoSettings, FormatSettings, NpmSettings, ProxyRouters, StaticToken, admin_router, api_router,
+};
 use crane_memory::{MemoryBlobStore, MemoryCatalog};
 use crane_objstore::ObjectBlobStore;
 use crane_pg::PgCatalog;
+use crane_ports::proxy::{NoUpstream, UpstreamNames};
 use crane_ports::registry::{BlobStore, Catalog};
 use crane_ports::system::IdGen;
 use crane_siem::OcsfLogSink;
@@ -24,6 +28,7 @@ use tokio::net::TcpListener;
 use tokio::runtime::Builder;
 
 use crate::config::{Database, Settings, Storage};
+use crate::namespaces;
 use crate::system::{SystemClock, UuidV7Ids};
 pub(crate) use health::healthcheck;
 
@@ -40,8 +45,8 @@ pub(crate) fn serve(settings: Settings) -> Result<(), RunError> {
 
 /// Собирает роутеры API и admin над хранилищами из настроек. Отдельно от `serve`,
 /// чтобы сборку (выбор хранилищ, подключение, репозитории) проверяли тесты без сокетов.
-pub(crate) async fn routers(settings: Settings) -> Result<(Router, Router), RunError> {
-    match &settings.storage {
+pub(crate) async fn routers(mut settings: Settings) -> Result<(Router, Router), RunError> {
+    match &mut settings.storage {
         Storage::Memory => {
             assemble(
                 MemoryCatalog::default(),
@@ -50,10 +55,14 @@ pub(crate) async fn routers(settings: Settings) -> Result<(Router, Router), RunE
             )
             .await
         }
-        Storage::Durable { database, blobs } => {
+        Storage::Durable {
+            database,
+            blobs,
+            s3_key,
+        } => {
             // Подключаемся сразу: недоступная БД валит старт, а не первый запрос.
             let pool = connect(database).await?;
-            let store = ObjectBlobStore::from_url(blobs)
+            let store = ObjectBlobStore::from_url(blobs, s3_key.take())
                 .map_err(|error| format!("не удалось открыть CRANE_BLOBS: {error}"))?;
             assemble(PgCatalog::new(pool), store, settings).await
         }
@@ -70,6 +79,20 @@ async fn connect(database: &Database) -> Result<PgPool, RunError> {
         })
 }
 
+/// Настройки HTTP-слоя форматов: публичный адрес и предел публикации у всех общие.
+fn format_settings(public_url: String, max_publish_bytes: usize) -> FormatSettings {
+    FormatSettings {
+        cargo: CargoSettings {
+            public_url: public_url.clone(),
+            max_publish_bytes,
+        },
+        npm: NpmSettings {
+            public_url,
+            max_publish_bytes,
+        },
+    }
+}
+
 async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     catalog: C,
     blobs: B,
@@ -78,45 +101,70 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     // Параметры подключения с паролем нужны были только для подключения.
     drop(settings.storage);
     let ids = Arc::new(UuidV7Ids);
-    for name in &settings.cargo_repos {
-        catalog
-            .ensure_repository(Repository {
-                id: RepositoryId::new(ids.generate()),
-                format: Format::Cargo,
-                kind: RepositoryKind::Hosted,
-                name: name.clone(),
-            })
-            .await?;
+    for (format, names) in settings.repos.of_kind(RepositoryKind::Hosted) {
+        for name in names {
+            catalog
+                .ensure_repository(Repository {
+                    id: RepositoryId::new(ids.generate()),
+                    format,
+                    kind: RepositoryKind::Hosted,
+                    name: name.clone(),
+                })
+                .await?;
+        }
     }
+    let formats = format_settings(settings.public_url, settings.max_publish_bytes);
+    // Registry и движок делят один CAS: скачанные архивы лежат там же, где опубликованные.
+    let blobs = Arc::new(blobs);
+    // Движок и источники строятся до `Registry`: из того же движка берётся проверка, знает ли
+    // публичный реестр имя, а каталог ещё нужен, чтобы зарегистрировать proxy-репозитории.
+    let proxies = proxy::prepare_proxies(
+        &catalog,
+        ids.as_ref(),
+        Arc::clone(&blobs),
+        &settings.repos,
+        settings.proxy,
+    )
+    .await?;
+    let upstream: Arc<dyn UpstreamNames> = proxies
+        .as_ref()
+        .map_or_else(|| Arc::new(NoUpstream), proxy::Prepared::upstream_names);
     // Один приёмник на use cases и на слой auth; в v0.4.0 действия записи уйдут в журнал PG.
     let audit = Arc::new(OcsfLogSink::new(Arc::new(SystemClock), ids.clone()));
     let registry = Arc::new(Registry::new(
         catalog,
         blobs,
         Arc::new(SystemClock),
-        ids,
+        ids.clone(),
         audit.clone(),
+        upstream,
     ));
+    namespaces::reserve(&registry, ids.as_ref(), settings.namespaces).await?;
+    let proxy_repos = proxies.map_or_else(ProxyRouters::default, |proxies| {
+        proxies.mount(&registry, &formats)
+    });
     let admin = admin_router(registry.clone());
     // Сырой токен живёт только до этой строки: дальше остаётся его хэш.
     let token = StaticToken::new(settings.token.expose().as_bytes(), settings.principal);
     drop(settings.token);
     let api = api_router(
         registry,
-        CargoSettings {
-            public_url: settings.public_url,
-            max_publish_bytes: settings.max_publish_bytes,
-        },
+        formats,
         token,
         settings.trusted_proxies,
         audit,
+        proxy_repos,
     );
     Ok((api, admin))
 }
 
 async fn serve_async(settings: Settings) -> Result<(), RunError> {
     let (http_port, admin_port) = (settings.http_port, settings.admin_port);
-    let repos = settings.cargo_repos.clone();
+    let names = |format, kind| settings.repos.names(format, kind).to_vec();
+    let repos = names(Format::Cargo, RepositoryKind::Hosted);
+    let proxy_repos = names(Format::Cargo, RepositoryKind::Proxy);
+    let npm_repos = names(Format::Npm, RepositoryKind::Hosted);
+    let npm_proxy_repos = names(Format::Npm, RepositoryKind::Proxy);
     let (api, admin) = routers(settings).await?;
 
     let api_listener = bind(http_port).await?;
@@ -125,6 +173,9 @@ async fn serve_async(settings: Settings) -> Result<(), RunError> {
         http_port,
         admin_port,
         repos = ?repos,
+        proxy_repos = ?proxy_repos,
+        npm_repos = ?npm_repos,
+        npm_proxy_repos = ?npm_proxy_repos,
         "сервер запущен"
     );
 
@@ -207,4 +258,5 @@ async fn terminate() {
 }
 
 #[cfg(test)]
+#[path = "tests/stack.rs"]
 mod stack_tests;

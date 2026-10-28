@@ -1,3 +1,7 @@
+use std::time::{Duration, SystemTime};
+
+use crate::proxy::age;
+
 /// Состояние версии (SQL enum `ver_state`). `Staging` — состояние загрузки, не версии.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VersionState {
@@ -35,6 +39,21 @@ impl VersionState {
         } else {
             Err(TransitionError { from: self, to })
         }
+    }
+}
+
+/// Политика удаления: опубликованную версию можно удалить только в течение `window`.
+/// Дальше остаётся только блокировка (Blocked): ломать зависимых нельзя.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeletePolicy {
+    pub window: Duration,
+}
+
+impl DeletePolicy {
+    /// Возраст ровно `window` ещё допустим. `published_at` в будущем (расхождение часов) даёт возраст 0.
+    #[must_use]
+    pub fn permits(&self, published_at: SystemTime, now: SystemTime) -> bool {
+        age(published_at, now) <= self.window
     }
 }
 
@@ -90,5 +109,41 @@ mod tests {
                 to: Released
             })
         );
+    }
+
+    #[test]
+    fn delete_policy_permits_up_to_and_including_window() {
+        // Arrange
+        let window = Duration::from_secs(100);
+        let policy = DeletePolicy { window };
+        let published = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+        let cases = [
+            Duration::ZERO,
+            Duration::from_secs(99),
+            window,
+            Duration::from_secs(101),
+        ];
+
+        // Act
+        let actual = cases.map(|elapsed| policy.permits(published, published + elapsed));
+
+        // Assert
+        assert_eq!(actual, [true, true, true, false]);
+    }
+
+    #[test]
+    fn delete_policy_treats_future_publication_as_age_zero() {
+        // Arrange
+        let policy = DeletePolicy {
+            window: Duration::ZERO,
+        };
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+        let published = now + Duration::from_secs(60);
+
+        // Act
+        let permitted = policy.permits(published, now);
+
+        // Assert
+        assert!(permitted);
     }
 }

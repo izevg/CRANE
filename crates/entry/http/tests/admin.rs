@@ -16,7 +16,8 @@ use axum::http::{Request, StatusCode};
 use crane_app::registry::Registry;
 use crane_domain::registry::Sha256;
 use crane_http::admin_router;
-use crane_memory::{FixedClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_ports::proxy::NoUpstream;
 use crane_ports::registry::{BlobError, BlobStore, ByteStream, Digests, Staged};
 use http_body_util::BodyExt;
 use serde_json::Value;
@@ -27,6 +28,7 @@ use tower::ServiceExt;
 #[derive(Clone, Copy)]
 enum Probe {
     Fails,
+    Unreachable,
     Hangs,
 }
 
@@ -47,6 +49,7 @@ impl BlobStore for ProbeBlobs {
         async move {
             match probe {
                 Probe::Fails => Err(BlobError::Backend("s3://b?key=SECRETPW".into())),
+                Probe::Unreachable => Err(BlobError::Unreachable("s3://b?key=SECRETPW".into())),
                 Probe::Hangs => pending().await,
             }
         }
@@ -57,9 +60,10 @@ fn registry<B: BlobStore>(blobs: B) -> Arc<Registry<MemoryCatalog, B>> {
     Arc::new(Registry::new(
         MemoryCatalog::default(),
         blobs,
-        Arc::new(FixedClock::new(SystemTime::UNIX_EPOCH)),
+        Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH)),
         Arc::new(SequentialIdGen::default()),
         Arc::new(MemoryAudit::default()),
+        Arc::new(NoUpstream),
     ))
 }
 
@@ -76,6 +80,25 @@ fn get(router: &Router, uri: &str) -> (StatusCode, String, Value) {
             .map_or_else(String::new, |value| value.to_str().unwrap().to_owned());
         let json = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
         (parts.status, content_type, json)
+    })
+}
+
+fn get_with_retry_after(router: &Router, uri: &str) -> (StatusCode, Option<String>, Value) {
+    let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    runtime.block_on(async {
+        let request = Request::builder().uri(uri).body(Body::empty()).unwrap();
+        let response = router.clone().oneshot(request).await.unwrap();
+        let (parts, body) = response.into_parts();
+        let bytes = body.collect().await.unwrap().to_bytes();
+        let retry_after = parts
+            .headers
+            .get("retry-after")
+            .map(|value| value.to_str().unwrap().to_owned());
+        (
+            parts.status,
+            retry_after,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
     })
 }
 
@@ -104,7 +127,34 @@ fn ready_with_failing_store_is_problem_json_503_without_leaking_the_cause() {
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(content_type, "application/problem+json");
     assert_eq!(body["title"], "Service Unavailable");
-    assert_eq!(body["detail"], "хранилище недоступно");
+    assert_eq!(body["detail"], "хранилище не готово");
+    assert_eq!(body["type"], "about:blank");
+    assert!(!body.to_string().contains("SECRETPW"), "{body}");
+}
+
+#[test]
+fn ready_with_unreachable_store_is_503_with_its_own_type_and_retry_after() {
+    // Arrange
+    let router = admin_router(registry(ProbeBlobs(Probe::Unreachable)));
+
+    // Act
+    let (status, retry_after, body) = get_with_retry_after(&router, "/healthz/ready");
+
+    // Assert
+    assert_eq!(
+        (
+            status,
+            retry_after.as_deref(),
+            &body["type"],
+            &body["detail"]
+        ),
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Some("10"),
+            &Value::from("urn:crane:problem:storage-unreachable"),
+            &Value::from("хранилище временно недоступно")
+        )
+    );
     assert!(!body.to_string().contains("SECRETPW"), "{body}");
 }
 

@@ -8,8 +8,10 @@ tasks:
     silent: true
 
   install:
-    desc: Зависимости и git hooks
-    cmds: [pnpm install]
+    desc: Зависимости, git hooks и типы API (orval)
+    cmds:
+      - pnpm install
+      - pnpm --filter web run gen:api
 
   check:
     desc: "Быстрые проверки (как pre-push): Rust, web, структура, tools"
@@ -25,6 +27,10 @@ tasks:
   structure:
     desc: Правило четырёх, слои крейтов, AAA в тестах
     cmds: [node tools/lint-structure/index.ts]
+
+  structure:report:
+    desc: Размеры файлов - самые большие и все от порога предупреждения (не блокирует)
+    cmds: [node tools/lint-structure/index.ts --report]
 
   lint:
     desc: Biome на весь репозиторий (tools, конфиги, web)
@@ -66,6 +72,22 @@ tasks:
       - >-
         CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
         cargo test -p crane-pg
+
+  rust:test:valkey:
+    desc: "Тесты адаптера Valkey на живом сервере (нужны Docker и .env из .env.dist)"
+    deps: [secrets:init]
+    # .env читается только здесь: остальные задачи не должны неявно получать CRANE_TEST_VALKEY_URL.
+    dotenv: [".env"]
+    # Здесь отсутствие Valkey - ошибка, а не повод пропустить тесты.
+    env:
+      CRANE_TEST_REQUIRE_VALKEY: "1"
+    cmds:
+      - docker compose -f docker-compose.dev.yaml up -d --wait valkey
+      - >-
+        CRANE_TEST_VALKEY_URL=${CRANE_TEST_VALKEY_URL:-valkey://crane:$(cat "$VALKEY_PASSWORD_SECRET")@127.0.0.1:$VALKEY_PORT}
+        CRANE_TEST_VALKEY_ADMIN_URL=${CRANE_TEST_VALKEY_ADMIN_URL:-valkey://crane-test:$(cat "$VALKEY_PASSWORD_SECRET")@127.0.0.1:$VALKEY_PORT}
+        cargo test -p crane-valkey
+
   rust:check:
     desc: fmt, clippy, test, deny
     cmds:
@@ -75,16 +97,23 @@ tasks:
       - task: rust:deny
 
   web:check:
-    desc: typecheck, Steiger, knip, depcruise
+    desc: генерация типов API (orval), typecheck, Steiger, knip, depcruise
     cmds: [pnpm --filter web run check]
   web:test:
-    desc: Vitest
+    desc: Vitest — проекты unit (jsdom) и storybook (Chromium; один раз `pnpm --filter web exec playwright install chromium`)
     cmds: [pnpm --filter web run test]
+
+  web:storybook:
+    desc: Storybook (dev, порт 6006)
+    cmds: [pnpm --filter web run storybook]
+  web:storybook:build:
+    desc: Статическая сборка Storybook (web/storybook-static)
+    cmds: [pnpm --filter web run build-storybook]
 
   deploy:check:
     desc: Compose-файлы и Helm-чарт (docker compose config, helm lint, helm template)
     cmds:
-      - docker compose --env-file .env.dist --profile cache --profile scan --profile s3 config -q
+      - docker compose --env-file .env.dist -f docker-compose.yaml -f docker-compose.s3.yaml -f docker-compose.cache.yaml --profile scan config -q
       - docker compose --env-file .env.dist -f docker-compose.dev.yaml --profile s3 --profile scan config -q
       - helm lint deploy/helm/crane --set existingSecret=crane-env
       - helm template crane deploy/helm/crane --set existingSecret=crane-env --set ingress.enabled=true >/dev/null
@@ -97,26 +126,40 @@ tasks:
     desc: "E2E: стенд compose + cargo двух последних стабильных версий (нужен Docker)"
     cmds: ["node tools/dogfood/index.ts --cargo latest,previous"]
 
+  dogfood:full:
+    desc: "Полный dogfood: CRANE публикует себя в свой реестр и собирается из него, в том числе без upstream (нужен Docker, до часа на слабой машине)"
+    cmds: ["node tools/dogfood/index.ts --full"]
+
   gate:
     desc: "Полный гейт перед PR release/* → main (юниты, e2e, мутации по дифу релиза, Playwright). В CI не запускается"
     vars:
       BASE: '{{.BASE | default "origin/main"}}'
-    # .env и флаг видны только шагам самого gate (в подзадачи они не передаются): мутационному
-    # прогону нужна БД, иначе все тесты крейта-адаптера пропускаются и мутанты выживают.
-    dotenv: [".env"]
+      # Параллельные сборки cargo-mutants (task gate JOBS=3). Valkey общий, а тесты адаптера делают
+      # FLUSHDB: на ошибках гонки мутант ложно считается пойманным, поэтому по умолчанию один поток.
+      JOBS: '{{.JOBS | default "1"}}'
+    # Флаги видны только шагам самого gate (в подзадачи они не передаются): мутационному прогону
+    # нужны БД и Valkey, иначе все тесты крейтов-адаптеров пропускаются и мутанты выживают.
+    # .env читает только шаг мутаций: dotenv на уровне задачи экспортирует CRANE_IMAGE и прочее
+    # в окружение стенда dogfood, а у compose окружение важнее --env-file, и стенд берёт чужой образ.
     env:
       CRANE_TEST_REQUIRE_DB: "1"
+      CRANE_TEST_REQUIRE_VALKEY: "1"
     cmds:
       - task: check
-      # Поднимает PostgreSQL: шаг cargo mutants ниже рассчитывает, что БД уже работает.
+      # Поднимают PostgreSQL и Valkey: шаг cargo mutants ниже рассчитывает, что они уже работают.
       - task: rust:test:pg
-      - task: e2e
+      - task: rust:test:valkey
+      # Один стенд: e2e на двух версиях cargo, затем полный dogfood на latest (офлайн необратим, он последний).
+      - node tools/dogfood/index.ts --cargo latest,previous --full
       - mkdir -p out
       - git diff {{.BASE}}...HEAD > out/gate.diff
       - >-
+        . ./.env;
         [ ! -s out/gate.diff ] ||
         CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
-        cargo mutants --workspace --in-diff out/gate.diff
+        CRANE_TEST_VALKEY_URL=${CRANE_TEST_VALKEY_URL:-valkey://crane:$(cat "$VALKEY_PASSWORD_SECRET")@127.0.0.1:$VALKEY_PORT}
+        CRANE_TEST_VALKEY_ADMIN_URL=${CRANE_TEST_VALKEY_ADMIN_URL:-valkey://crane-test:$(cat "$VALKEY_PASSWORD_SECRET")@127.0.0.1:$VALKEY_PORT}
+        cargo mutants --workspace -j {{.JOBS}} --in-diff out/gate.diff
       - |
         if find web/src -name '*.test.*' | grep -q .; then
           pnpm --filter web run mutate

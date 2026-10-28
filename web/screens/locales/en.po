@@ -1,0 +1,1148 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-10-27 21:59+0300\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: en\n"
+
+msgid " — без секретов."
+msgstr " — no secrets."
+
+#. placeholder {0}: row.expiresInDays
+msgid "{0, plural, one {через # день} few {через # дня} many {через # дней} other {через # дня}}"
+msgstr "{0, plural, one {in # day} other {in # days}}"
+
+msgid "{days, plural, one {# день назад} few {# дня назад} many {# дней назад} other {# дня назад}}"
+msgstr "{days, plural, one {# day ago} other {# days ago}}"
+
+msgid "{days, plural, one {не использовался # день} few {не использовался # дня} many {не использовался # дней} other {не использовался # дня}}"
+msgstr "{days, plural, one {unused for # day} other {unused for # days}}"
+
+msgid "{initials}, аккаунт: {name}"
+msgstr "{initials}, account: {name}"
+
+msgid "{repo}: публикация"
+msgstr "{repo}: publish"
+
+msgid "{repo}: чтение"
+msgstr "{repo}: read"
+
+msgid "@acme/ui · npm · SLA истёк"
+msgstr "@acme/ui · npm · SLA expired"
+
+msgid "1 % объектов: 4 812 из 481 200"
+msgstr "1% of objects: 4,812 of 481,200"
+
+msgid "1 ч"
+msgstr "1 h"
+
+msgid "12 мар 2025"
+msgstr "Mar 12, 2025"
+
+msgid "174 версии · 47 ГБ"
+msgstr "174 versions · 47 GB"
+
+msgid "24 ч"
+msgstr "24 h"
+
+msgid "27 окт. 2026, 03:10 · 12 мин · запустил {runBy}"
+msgstr "Oct 27, 2026, 03:10 · 12 min · started by {runBy}"
+
+msgid "27.10.2026 · блок 18 442"
+msgstr "27.10.2026 · block 18,442"
+
+msgid "28 окт. 2026, 03:10 по расписанию"
+msgstr "Oct 28, 2026, 03:10 on schedule"
+
+msgid "3 правила"
+msgstr "3 rules"
+
+msgid "30 дней"
+msgstr "30 days"
+
+msgid "38 результатов · 74 мс"
+msgstr "38 results · 74 ms"
+
+msgid "498 версий · 71 ГБ"
+msgstr "498 versions · 71 GB"
+
+msgid "6 ч"
+msgstr "6 h"
+
+msgid "612 версий · 94 ГБ"
+msgstr "612 versions · 94 GB"
+
+msgid "7 дн"
+msgstr "7 d"
+
+msgid "7 дней"
+msgstr "7 days"
+
+msgid "90 дней"
+msgstr "90 days"
+
+msgid "IP-подсеть"
+msgstr "IP subnet"
+
+msgid "JSON"
+msgstr "JSON"
+
+msgid "JSON события"
+msgstr "Event JSON"
+
+msgid "LLM-шлюз"
+msgstr "LLM gateway"
+
+msgid "lodash 4.17.21 выпущена из карантина"
+msgstr "lodash 4.17.21 released from quarantine"
+
+msgid "npmjs недоступен"
+msgstr "npmjs unavailable"
+
+msgid "P0 без действия более 1 часа: CVE-2026-31337 в @acme/ui 1.4.2"
+msgstr "P0 with no action for over 1 hour: CVE-2026-31337 in @acme/ui 1.4.2"
+
+msgid "P0 без действия: CVE-2026-31337 в @acme/ui 1.4.2"
+msgstr "P0 with no action: CVE-2026-31337 in @acme/ui 1.4.2"
+
+msgid "P1 · 1 находка"
+msgstr "P1 · 1 finding"
+
+msgid "p50 / p95 / p99 за 24 ч"
+msgstr "p50 / p95 / p99 over 24 h"
+
+msgid "p95 0,4 мс"
+msgstr "p95 0.4 ms"
+
+msgid "p95 1,8 мс"
+msgstr "p95 1.8 ms"
+
+msgid "p95 22 мс"
+msgstr "p95 22 ms"
+
+msgid "request_id или ресурс"
+msgstr "request_id or resource"
+
+msgid "RPO < 5 мин"
+msgstr "RPO < 5 min"
+
+msgid "SHA-256 подтверждён"
+msgstr "SHA-256 verified"
+
+msgid "SLA: осталось 2 дн"
+msgstr "SLA: 2 days left"
+
+msgid "SLO {SLO_MS} мс"
+msgstr "SLO {SLO_MS} ms"
+
+msgid "Snapshot-сборки старше 30 дн · {mavenRepository}"
+msgstr "Snapshot builds older than 30 d · {mavenRepository}"
+
+msgid "Upstream npmjs недоступен"
+msgstr "Upstream npmjs unavailable"
+
+msgid "Upstream npmjs недоступен: показаны данные от 25 окт (stale-if-error, до 7 дней)"
+msgstr "Upstream npmjs unavailable: showing data from Oct 25 (stale-if-error, up to 7 days)"
+
+msgid "Upstream доступны"
+msgstr "Upstreams available"
+
+msgid "VEX"
+msgstr "VEX"
+
+msgid "Workload"
+msgstr "Workload"
+
+msgid "workspace billing · 34 из 40 ГБ"
+msgstr "workspace billing · 34 of 40 GB"
+
+msgid "Workspace: {workspace}"
+msgstr "Workspace: {workspace}"
+
+msgid "Workspace: все"
+msgstr "Workspace: all"
+
+msgid "Агент"
+msgstr "Agent"
+
+msgid "Активен"
+msgstr "Active"
+
+msgid "Активные"
+msgstr "Active"
+
+msgid "Актор"
+msgstr "Actor"
+
+msgid "Актор (псевдоним)"
+msgstr "Actor (alias)"
+
+msgid "Ассистенты недоступны: поиск работает без семантики"
+msgstr "Assistants unavailable: search works without semantics"
+
+msgid "база v2026.10.27"
+msgstr "database v2026.10.27"
+
+msgid "Безопасность"
+msgstr "Security"
+
+msgid "Библиотека интерфейсных компонентов команды web. Владелец: Иванов И."
+msgstr "UI component library of the web team. Owner: Ivanov I."
+
+msgid "Ближайшие удаления: 1 284 версии · 212 ГБ"
+msgstr "Upcoming deletions: 1,284 versions · 212 GB"
+
+msgid "Будут показаны логин и полный IP-адрес актора."
+msgstr "The actor's login and full IP address will be shown."
+
+msgid "Быстрые действия"
+msgstr "Quick actions"
+
+msgid "В избранное"
+msgstr "Add to favorites"
+
+msgid "Версии"
+msgstr "Versions"
+
+msgid "Версии @acme/ui"
+msgstr "@acme/ui versions"
+
+msgid "Версии 48"
+msgstr "Versions 48"
+
+msgid "Версии без загрузок 18 мес · {npmRepository}"
+msgstr "Versions with no downloads in 18 mo · {npmRepository}"
+
+msgid "Версий"
+msgstr "Versions"
+
+msgid "Версий с такими условиями нет"
+msgstr "No versions match these filters"
+
+msgid "Версия"
+msgstr "Version"
+
+msgid "Версия 1.4.2"
+msgstr "Version 1.4.2"
+
+msgid "Включён режим разделения обязанностей: действия требуют второго подтверждения"
+msgstr "Separation of duties is on: actions need a second approval"
+
+msgid "Владелец"
+msgstr "Owner"
+
+msgid "Возможно, вы искали "
+msgstr "Did you mean "
+
+msgid "Время"
+msgstr "Time"
+
+msgid "Время UTC"
+msgstr "Time (UTC)"
+
+msgid "Все"
+msgstr "All"
+
+msgid "Всё время"
+msgstr "All time"
+
+msgid "Все действия"
+msgstr "All actions"
+
+msgid "Все каналы"
+msgstr "All channels"
+
+msgid "Все репозитории"
+msgstr "All repositories"
+
+msgid "Вход из терминала"
+msgstr "Terminal sign-in"
+
+msgid "Выпустить"
+msgstr "Issue"
+
+msgid "Выпустить токен"
+msgstr "Issue a token"
+
+msgid "Выпустить токен для acme-ci"
+msgstr "Issue a token for acme-ci"
+
+msgid "Выпущенные"
+msgstr "Released"
+
+msgid "Гейт безопасности: отказ"
+msgstr "Security gate: denied"
+
+msgid "Данные видны только в этой панели"
+msgstr "The data is visible only in this panel"
+
+msgid "Данные от 25 окт, stale-if-error"
+msgstr "Data from Oct 25, stale-if-error"
+
+msgid "Деградация"
+msgstr "Degraded"
+
+msgid "Дедупликация сэкономила 4,2 ТБ"
+msgstr "Deduplication saved 4.2 TB"
+
+msgid "Действие"
+msgstr "Action"
+
+msgid "Динамика скачиваний"
+msgstr "Download trend"
+
+msgid "До 64 символов, видно только вам"
+msgstr "Up to 64 characters, visible only to you"
+
+msgid "Долгоживущий"
+msgstr "Long-lived"
+
+msgid "Доли объёма по командам"
+msgstr "Volume share by team"
+
+msgid "Доли объёма по форматам"
+msgstr "Volume share by format"
+
+msgid "Доля"
+msgstr "Share"
+
+msgid "Доступ"
+msgstr "Access"
+
+msgid "Ждёт AppSec"
+msgstr "Awaiting AppSec"
+
+msgid "Журнал"
+msgstr "Log"
+
+msgid "Журнал действий"
+msgstr "Activity log"
+
+msgid "За 30 дней: 12 340 скачиваний, рост к началу периода, максимум 912 в сутки 27 окт"
+msgstr "Last 30 days: 12,340 downloads, up from the start of the period, peak 912 per day on Oct 27"
+
+msgid "Заблокированные"
+msgstr "Blocked"
+
+msgid "Загрузить ещё"
+msgstr "Load more"
+
+msgid "Загрузок за 30 дн"
+msgstr "Downloads in 30 d"
+
+msgid "Задержки за 24 ч, шаг 5 мин. p95: в среднем {average} мс, максимум {peak} мс в {peakTime}. p99 выше SLO {SLO_MS} мс {overMinutes} мин из {totalMinutes}."
+msgstr "Latency over 24 h, 5 min step. p95: average {average} ms, peak {peak} ms at {peakTime}. p99 above the {SLO_MS} ms SLO for {overMinutes} min of {totalMinutes}."
+
+msgid "Запрос на продвижение в release"
+msgstr "Promotion request to release"
+
+msgid "Запросите роль maintainer у владельца workspace"
+msgstr "Ask the workspace owner for the maintainer role"
+
+msgid "Запросить доступ"
+msgstr "Request access"
+
+msgid "Запросить одобрение"
+msgstr "Request approval"
+
+msgid "Запросить одобрение…"
+msgstr "Request approval…"
+
+msgid "Запросы и задержки"
+msgstr "Requests and latency"
+
+msgid "Запустит асинхронную проверку, откроется E7"
+msgstr "Starts an asynchronous check and opens E7"
+
+msgid "Звено проверено, якорь 14:00"
+msgstr "Link verified, anchor 14:00"
+
+msgid "Иванов И."
+msgstr "Ivanov I."
+
+msgid "из OIDC CI"
+msgstr "from OIDC CI"
+
+msgid "Избранное"
+msgstr "Favorites"
+
+msgid "Избранные пакеты появятся здесь"
+msgstr "Favorite packages will appear here"
+
+msgid "Изменения манифеста"
+msgstr "Manifest changes"
+
+msgid "Изменения манифеста 1.4.1 → 1.4.2"
+msgstr "Manifest changes 1.4.1 → 1.4.2"
+
+msgid "Импорт из Nexus"
+msgstr "Import from Nexus"
+
+msgid "Имя пакета"
+msgstr "Package name"
+
+msgid "Исключения"
+msgstr "Exceptions"
+
+msgid "Истекает"
+msgstr "Expires"
+
+msgid "История"
+msgstr "History"
+
+msgid "История версии 1.4.2"
+msgstr "History of version 1.4.2"
+
+msgid "Источник"
+msgstr "Source"
+
+msgid "Каждый поиск записывается в журнал (audit.viewed)"
+msgstr "Every search is recorded in the log (audit.viewed)"
+
+msgid "Как опубликовать"
+msgstr "How to publish"
+
+msgid "Канал"
+msgstr "Channel"
+
+msgid "Карантин"
+msgstr "Quarantine"
+
+msgid "Каталог"
+msgstr "Catalog"
+
+msgid "Квота billing: 85% хранилища"
+msgstr "billing quota: 85% of storage"
+
+msgid "Кем"
+msgstr "By"
+
+msgid "Клиент"
+msgstr "Client"
+
+msgid "Команда"
+msgstr "Team"
+
+msgid "Коммит"
+msgstr "Commit"
+
+msgid "Компоненты интерфейса CRANE и внутренних порталов"
+msgstr "UI components for CRANE and internal portals"
+
+msgid "Контекст"
+msgstr "Context"
+
+msgid "Копировать JSON"
+msgstr "Copy JSON"
+
+msgid "Копировать команду входа"
+msgstr "Copy sign-in command"
+
+msgid "Лимит: {ACTIVE_TOKENS} из {TOKEN_LIMIT}"
+msgstr "Limit: {ACTIVE_TOKENS} of {TOKEN_LIMIT}"
+
+msgid "Лицензии: всё разрешено. CVE-2026-31337 в зависимости lodash 4.17.20."
+msgstr "Licenses: all allowed. CVE-2026-31337 in the lodash 4.17.20 dependency."
+
+msgid "Лицензия"
+msgstr "License"
+
+msgid "Любое решение"
+msgstr "Any decision"
+
+msgid "Максимум 90 дней — ограничено политикой"
+msgstr "Up to 90 days, limited by policy"
+
+msgid "Маскировано"
+msgstr "Masked"
+
+msgid "Мёртвые задачи: 3"
+msgstr "Dead jobs: 3"
+
+msgid "Метаданные"
+msgstr "Metadata"
+
+msgid "Метаданные версии"
+msgstr "Version metadata"
+
+msgid "Мои действия"
+msgstr "My actions"
+
+msgid "Мои пакеты"
+msgstr "My packages"
+
+msgid "Мои токены"
+msgstr "My tokens"
+
+msgid "мс"
+msgstr "ms"
+
+msgid "На главную"
+msgstr "Go to home"
+
+msgid "Название"
+msgstr "Name"
+
+msgid "Название или префикс"
+msgstr "Name or prefix"
+
+msgid "Назначить замену…"
+msgstr "Set a replacement…"
+
+msgid "Найти"
+msgstr "Search"
+
+msgid "Настроить retention"
+msgstr "Configure retention"
+
+msgid "Настройки"
+msgstr "Settings"
+
+msgid "Находка CVE-2026-31337 (P1) в lodash 4.17.20 · нет одобрения AppSec."
+msgstr "Finding CVE-2026-31337 (P1) in lodash 4.17.20 · no AppSec approval."
+
+msgid "Находки"
+msgstr "Findings"
+
+msgid "Не использовался"
+msgstr "Never used"
+
+msgid "Не истекает"
+msgstr "Does not expire"
+
+msgid "Не пройден"
+msgstr "Failed"
+
+msgid "Не удалось опубликовать"
+msgstr "Could not publish"
+
+msgid "Недавние"
+msgstr "Recent"
+
+msgid "Недавно открытые пакеты появятся здесь"
+msgstr "Recently opened packages will appear here"
+
+msgid "Недоступен"
+msgstr "Unavailable"
+
+msgid "Ничего не нашлось по «{query}»"
+msgstr "Nothing found for \"{query}\""
+
+msgid "Новый токен"
+msgstr "New token"
+
+msgid "Нужен MFA"
+msgstr "MFA required"
+
+msgid "Обзор"
+msgstr "Overview"
+
+msgid "Обоснование"
+msgstr "Justification"
+
+msgid "Обоснование: от {JUSTIFICATION_MIN} до {JUSTIFICATION_MAX} символов"
+msgstr "Justification: {JUSTIFICATION_MIN} to {JUSTIFICATION_MAX} characters"
+
+msgid "Образы без тега старше 14 дн · oci-hosted"
+msgstr "Untagged images older than 14 d · oci-hosted"
+
+msgid "Объём"
+msgstr "Volume"
+
+msgid "Объём по командам и форматам"
+msgstr "Volume by team and format"
+
+msgid "Объём хранилищ"
+msgstr "Storage volume"
+
+msgid "Объявить устаревшим…"
+msgstr "Deprecate…"
+
+msgid "Окно времени"
+msgstr "Time window"
+
+msgid "Описание"
+msgstr "Description"
+
+msgid "Опубликована"
+msgstr "Published"
+
+msgid "Опубликовать пакет"
+msgstr "Publish a package"
+
+msgid "Опубликуйте первый пакет в репозиторий вашего workspace или перенесите существующие из Nexus."
+msgstr "Publish your first package to your workspace repository or move existing ones from Nexus."
+
+msgid "Отзыв применяется за 5 секунд. Для CI используйте "
+msgstr "Revocation takes effect within 5 seconds. For CI, use "
+
+msgid "Отказ"
+msgstr "Denied"
+
+msgid "Открыть"
+msgstr "Open"
+
+msgid "Открыть диагностику"
+msgstr "Open diagnostics"
+
+msgid "Открыть диагностику по request_id"
+msgstr "Open diagnostics by request_id"
+
+msgid "Открыть находку"
+msgstr "Open finding"
+
+msgid "Открыть очередь"
+msgstr "Open queue"
+
+msgid "Открыть полностью"
+msgstr "Open in full"
+
+msgid "Открыть проверки"
+msgstr "Open checks"
+
+msgid "Отмена"
+msgstr "Cancel"
+
+#. placeholder {0}: row.revoked
+msgid "Отозван {0}"
+msgstr "Revoked {0}"
+
+msgid "Отозванные"
+msgstr "Revoked"
+
+msgid "Отозвать"
+msgstr "Revoke"
+
+msgid "Отозвать токены acme-platform"
+msgstr "Revoke acme-platform tokens"
+
+msgid "Отставание SIEM"
+msgstr "SIEM lag"
+
+msgid "Очереди"
+msgstr "Queues"
+
+msgid "Очередь задач"
+msgstr "Job queue"
+
+msgid "Пайплайн"
+msgstr "Pipeline"
+
+msgid "Пакет"
+msgstr "Package"
+
+msgid "Пакетов пока нет"
+msgstr "No packages yet"
+
+msgid "Пакеты workspace acme-platform"
+msgstr "acme-platform workspace packages"
+
+msgid "Пакеты ваших workspace во всех форматах"
+msgstr "Packages from your workspaces in all formats"
+
+msgid "Пакеты всех форматов в репозиториях, доступных вам"
+msgstr "Packages of all formats in repositories you can access"
+
+msgid "Период"
+msgstr "Period"
+
+msgid "Петрова А. (владелец workspace billing)"
+msgstr "Petrova A. (owner of the billing workspace)"
+
+msgid "Петрова А. одобрила запрос доступа к acme-billing-client"
+msgstr "Petrova A. approved the access request for acme-billing-client"
+
+msgid "пик 14:00 UTC"
+msgstr "peak 14:00 UTC"
+
+msgid "Платформа"
+msgstr "Platform"
+
+msgid "По workspace"
+msgstr "By workspace"
+
+msgid "По загрузкам"
+msgstr "By downloads"
+
+msgid "По командам"
+msgstr "By team"
+
+msgid "По форматам"
+msgstr "By format"
+
+msgid "Повторите действие после подтверждения доступа"
+msgstr "Repeat the action once access is confirmed"
+
+msgid "Повторить"
+msgstr "Retry"
+
+#. placeholder {0}: job.id
+msgid "Повторить {0}"
+msgstr "Retry {0}"
+
+msgid "Поиск"
+msgstr "Search"
+
+msgid "Поиск пакета"
+msgstr "Package search"
+
+msgid "Поиск пакетов"
+msgstr "Search packages"
+
+msgid "Поиск по версии или тегу"
+msgstr "Search by version or tag"
+
+msgid "Поиск по названию или префиксу"
+msgstr "Search by name or prefix"
+
+msgid "Покажет кандидатов на удаление; ничего не удаляет"
+msgstr "Shows deletion candidates; deletes nothing"
+
+msgid "Показывать устаревшие"
+msgstr "Show deprecated"
+
+msgid "политики доверия"
+msgstr "trust policy"
+
+msgid "Попадание в кэш"
+msgstr "Cache hit"
+
+msgid "Попросите владельца репозитория npm-hosted поднять лимит размера"
+msgstr "Ask the npm-hosted repository owner to raise the size limit"
+
+#. placeholder {0}: job.attempts
+#. placeholder {1}: job.error
+msgid "попыток {0} · Последняя ошибка: {1}"
+msgstr "attempts {0} · Last error: {1}"
+
+msgid "порог 30 с"
+msgstr "threshold 30 s"
+
+msgid "Последнее использование"
+msgstr "Last used"
+
+msgid "Последние 24 часа"
+msgstr "Last 24 hours"
+
+msgid "Последние 30 дней"
+msgstr "Last 30 days"
+
+msgid "Последние 7 дней"
+msgstr "Last 7 days"
+
+msgid "Последние версии"
+msgstr "Latest versions"
+
+msgid "Последние версии @acme/ui"
+msgstr "Latest versions of @acme/ui"
+
+msgid "Последний бэкап"
+msgstr "Last backup"
+
+msgid "Последний якорь WORM"
+msgstr "Last WORM anchor"
+
+msgid "Последняя"
+msgstr "Latest"
+
+msgid "Последняя проверка"
+msgstr "Last check"
+
+msgid "Поставит загрузку зависимостей в очередь"
+msgstr "Queues a download of the dependencies"
+
+msgid "Потребителей"
+msgstr "Consumers"
+
+msgid "Потребители"
+msgstr "Consumers"
+
+msgid "Потребуется подтверждение входа (MFA)"
+msgstr "Sign-in confirmation (MFA) is required"
+
+msgid "Права"
+msgstr "Permissions"
+
+msgid "Права по репозиториям"
+msgstr "Permissions by repository"
+
+#. placeholder {0}: row.name
+msgid "Права токена {0}"
+msgstr "Permissions of token {0}"
+
+msgid "Правила"
+msgstr "Rules"
+
+msgid "Правило"
+msgstr "Rule"
+
+msgid "правило 1"
+msgstr "rule 1"
+
+msgid "правило 2"
+msgstr "rule 2"
+
+msgid "правило 3"
+msgstr "rule 3"
+
+msgid "Превышен размер публикации: 14 МБ при лимите 10 МБ"
+msgstr "Publish size exceeded: 14 MB with a 10 MB limit"
+
+msgid "Префикс"
+msgstr "Prefix"
+
+msgid "Применить retention"
+msgstr "Apply retention"
+
+msgid "Пробный прогон retention"
+msgstr "Retention dry run"
+
+msgid "Проверено"
+msgstr "Checked"
+
+msgid "проверено 14:00 UTC"
+msgstr "checked 14:00 UTC"
+
+msgid "Проверить целостность"
+msgstr "Check integrity"
+
+msgid "Проверка целостности: 0 ошибок, выборка 1 %"
+msgstr "Integrity check: 0 errors, 1% sample"
+
+msgid "Проверьте формат: «format:npm» ищет только среди npm-пакетов"
+msgstr "Check the format: \"format:npm\" searches only npm packages"
+
+msgid "Прогреть кэш по lockfile"
+msgstr "Warm the cache from a lockfile"
+
+msgid "Продвижение в release заблокировано: 2 причины"
+msgstr "Promotion to release is blocked: 2 reasons"
+
+msgid "Происхождение последней версии"
+msgstr "Provenance of the latest version"
+
+msgid "Пространство имён"
+msgstr "Namespace"
+
+msgid "Публикация npm-пакетов из GitLab CI проекта platform/ui"
+msgstr "Publishing npm packages from the platform/ui GitLab CI project"
+
+msgid "Путь"
+msgstr "Path"
+
+msgid "Работает"
+msgstr "Operational"
+
+msgid "Раздел"
+msgstr "Section"
+
+msgid "Разделы версии"
+msgstr "Version sections"
+
+msgid "Разделы пакета"
+msgstr "Package sections"
+
+msgid "Разделы поиска"
+msgstr "Search sections"
+
+msgid "Разделы события"
+msgstr "Event sections"
+
+msgid "Размер"
+msgstr "Size"
+
+msgid "Разрез"
+msgstr "Breakdown"
+
+msgid "Разрешена"
+msgstr "Allowed"
+
+msgid "Разрешено"
+msgstr "Allowed"
+
+msgid "Раскрытие запишется в журнал"
+msgstr "The reveal will be recorded in the log"
+
+msgid "Раскрыть"
+msgstr "Reveal"
+
+msgid "Раскрыть данные"
+msgstr "Reveal data"
+
+msgid "Раскрыть данные события"
+msgstr "Reveal event data"
+
+msgid "Раскрыть данные события?"
+msgstr "Reveal event data?"
+
+msgid "Расхождений нет"
+msgstr "No discrepancies"
+
+msgid "Режим аудитора: данные маскированы"
+msgstr "Auditor mode: data is masked"
+
+msgid "Режим: норма"
+msgstr "Mode: normal"
+
+msgid "Результаты поиска"
+msgstr "Search results"
+
+msgid "Репозиториев"
+msgstr "Repositories"
+
+msgid "Репозиторий"
+msgstr "Repository"
+
+msgid "Ресурс"
+msgstr "Resource"
+
+msgid "Решение"
+msgstr "Decision"
+
+msgid "Риски"
+msgstr "Risks"
+
+msgid "Риски 1"
+msgstr "Risks 1"
+
+msgid "Робот"
+msgstr "Robot"
+
+msgid "с"
+msgstr "s"
+
+msgid "с 13:42"
+msgstr "since 13:42"
+
+msgid "с 13:42 · клиенты получают кэш до 7 дней"
+msgstr "since 13:42 · clients get the cache for up to 7 days"
+
+msgid "Сбросить"
+msgstr "Reset"
+
+msgid "Сбросить фильтры"
+msgstr "Reset filters"
+
+msgid "Сводка"
+msgstr "Summary"
+
+msgid "Сегодня"
+msgstr "Today"
+
+msgid "Секрет будет показан один раз после выпуска"
+msgstr "The secret is shown once after issue"
+
+msgid "Сессионный · 12 ч"
+msgstr "Session · 12 h"
+
+msgid "Сессия"
+msgstr "Session"
+
+msgid "Скан: найдена 1 уязвимость"
+msgstr "Scan: 1 vulnerability found"
+
+msgid "Скачать SBOM"
+msgstr "Download SBOM"
+
+msgid "Скачать SBOM и evidence"
+msgstr "Download SBOM and evidence"
+
+msgid "Скачивания"
+msgstr "Downloads"
+
+msgid "Скачивания за 30 дней"
+msgstr "Downloads in 30 days"
+
+msgid "Скопировать hash"
+msgstr "Copy hash"
+
+msgid "Скопировать prev_hash"
+msgstr "Copy prev_hash"
+
+msgid "Скопировать PURL"
+msgstr "Copy PURL"
+
+msgid "Скопировать request_id"
+msgstr "Copy request_id"
+
+msgid "Скопировать SHA-256"
+msgstr "Copy SHA-256"
+
+msgid "Скопировать SHA-256 файла {path}"
+msgstr "Copy SHA-256 of file {path}"
+
+msgid "Скопировать trace_id"
+msgstr "Copy trace_id"
+
+msgid "Скопировать команду"
+msgstr "Copy command"
+
+msgid "Скопировать коммит"
+msgstr "Copy commit"
+
+msgid "Скопировать префикс токена"
+msgstr "Copy token prefix"
+
+msgid "Следующая"
+msgstr "Next"
+
+msgid "Сначала новые"
+msgstr "Newest first"
+
+msgid "Сначала старые"
+msgstr "Oldest first"
+
+msgid "Событие"
+msgstr "Event"
+
+msgid "событий"
+msgstr "events"
+
+msgid "События"
+msgstr "Events"
+
+msgid "События журнала"
+msgstr "Log events"
+
+msgid "События за 24 ч"
+msgstr "Events in 24 h"
+
+msgid "События того же запроса ("
+msgstr "Events of the same request ("
+
+msgid "Создан"
+msgstr "Created"
+
+msgid "Сортировка"
+msgstr "Sort"
+
+msgid "Состояние"
+msgstr "State"
+
+msgid "Состояние версий"
+msgstr "Version state"
+
+msgid "Состояние компонентов"
+msgstr "Component status"
+
+msgid "Состояние токенов"
+msgstr "Token state"
+
+msgid "Сравнить с 1.4.1"
+msgstr "Compare with 1.4.1"
+
+msgid "Срок действия"
+msgstr "Expiry"
+
+msgid "старейшая 3 мин"
+msgstr "oldest 3 min"
+
+msgid "Статус платформы"
+msgstr "Platform status"
+
+msgid "таймаут 12 с · включена резервная модель"
+msgstr "timeout 12 s · fallback model enabled"
+
+msgid "ТБ"
+msgstr "TB"
+
+msgid "Тип"
+msgstr "Type"
+
+msgid "Тип актора"
+msgstr "Actor type"
+
+msgid "Токен crp_9f8e7d6c истекает через 3 дня"
+msgstr "Token crp_9f8e7d6c expires in 3 days"
+
+msgid "Токен нужен пакетным менеджерам и CLI. Для входа из терминала хватит cctl login."
+msgstr "The token is for package managers and the CLI. For terminal sign-in, cctl login is enough."
+
+msgid "Токен создан"
+msgstr "Token created"
+
+msgid "Токенов пока нет"
+msgstr "No tokens yet"
+
+msgid "Токены acme-platform"
+msgstr "acme-platform tokens"
+
+msgid "Токены для пакетных менеджеров и CLI. Секрет показывается один раз"
+msgstr "Tokens for package managers and the CLI. The secret is shown once"
+
+msgid "Токены доступа"
+msgstr "Access tokens"
+
+msgid "Токены не найдены"
+msgstr "No tokens found"
+
+msgid "Только чтение: основная БД недоступна, публикация отключена. Повторите через 2 мин"
+msgstr "Read-only: the primary database is unavailable, publishing is disabled. Try again in 2 min"
+
+msgid "Уберите фильтры по репозиторию или workspace"
+msgstr "Remove the repository or workspace filters"
+
+msgid "Удалённые"
+msgstr "Deleted"
+
+msgid "Удалит 1 284 версии (212 ГБ) без возможности отката"
+msgstr "Deletes 1,284 versions (212 GB) with no way back"
+
+msgid "Удалить…"
+msgstr "Delete…"
+
+msgid "Уменьшите пакет: уберите артефакты сборки и тестовые данные из файлов публикации"
+msgstr "Shrink the package: remove build artifacts and test data from the published files"
+
+msgid "Участники"
+msgstr "Members"
+
+msgid "Файлы"
+msgstr "Files"
+
+msgid "Файлы версии 1.4.2"
+msgstr "Files of version 1.4.2"
+
+msgid "Фильтры"
+msgstr "Filters"
+
+msgid "Флаги"
+msgstr "Flags"
+
+msgid "Формат"
+msgstr "Format"
+
+msgid "Формат пакета"
+msgstr "Package format"
+
+msgid "Форматы и workspace"
+msgstr "Formats and workspaces"
+
+msgid "Хранение онлайн 12 месяцев, далее WORM-архив"
+msgstr "Online retention 12 months, then WORM archive"
+
+msgid "Хранилищ"
+msgstr "Storages"
+
+msgid "Хранилища"
+msgstr "Storages"
+
+msgid "Хранилища, кэш, upstream и фоновые задачи"
+msgstr "Storages, cache, upstreams and background jobs"
+
+msgid "Целевая стадия"
+msgstr "Target stage"
+
+msgid "Целостна"
+msgstr "Intact"
+
+msgid "Цепочка"
+msgstr "Chain"
+
+msgid "Человек"
+msgstr "Human"
+
+msgid "Экспорт"
+msgstr "Export"

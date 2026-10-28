@@ -7,22 +7,24 @@
     reason = "dead_code: фикстуры общие для трёх тестовых бинарей, каждый берёт своё подмножество; unwrap в тестах = падение теста"
 )]
 
-use std::future::{Future, ready};
+pub(crate) mod faults;
+pub(crate) mod namespace;
+pub(crate) mod proxy;
+
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
 use crane_app::registry::{Coordinate, Publish, Registry, Upload};
 use crane_domain::access::{Caller, Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, PackageName, PackageVersion, Repository, RepositoryId,
-    RepositoryKind, Sha256, Version, VersionId, VersionState,
+    Asset, Checksum, Format, FormatMetadata, PackageName, PackageRef, PackageVersion, Repository,
+    RepositoryId, RepositoryKind, Sha1, Sha256, Sha512, Version, VersionId, VersionState,
 };
-use crane_memory::{FixedClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
-use crane_ports::registry::{
-    BlobError, BlobStore, ByteStream, Catalog, CatalogError, Digests, NewVersion, Staged,
-};
+use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_ports::proxy::{NoUpstream, UpstreamNames};
+use crane_ports::registry::{BlobStore, ByteStream, Catalog, NewVersion};
 use crane_ports::system::IdGen;
 use futures_executor::block_on;
 use futures_util::StreamExt;
@@ -32,6 +34,9 @@ pub(crate) const HOSTED: &str = "crates";
 pub(crate) const PROXY: &str = "mirror";
 /// sha256 от байт `hello`.
 const HELLO_SHA256: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+/// sha512 и sha1 от байт `hello`.
+const HELLO_SHA512: &str = "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043";
+const HELLO_SHA1: &str = "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d";
 pub(crate) const METADATA: &str = r#"{"deps":[]}"#;
 
 pub(crate) fn fixed_now() -> SystemTime {
@@ -65,6 +70,14 @@ pub(crate) fn hello_sha256() -> Sha256 {
     Sha256::from_hex(HELLO_SHA256).unwrap()
 }
 
+pub(crate) fn hello_sha512() -> Sha512 {
+    Sha512::from_hex(HELLO_SHA512).unwrap()
+}
+
+pub(crate) fn hello_sha1() -> Sha1 {
+    Sha1::from_hex(HELLO_SHA1).unwrap()
+}
+
 pub(crate) fn name(raw: &str) -> PackageName {
     PackageName::parse(Format::Cargo, raw).unwrap()
 }
@@ -79,6 +92,21 @@ pub(crate) fn coordinate(package: &str, raw_version: &str) -> Coordinate {
         repository: HOSTED.to_owned(),
         package: name(package),
         version: version(raw_version),
+    }
+}
+
+pub(crate) fn coordinate_in(repository: &str, package: &str, raw_version: &str) -> Coordinate {
+    Coordinate {
+        repository: repository.to_owned(),
+        ..coordinate(package, raw_version)
+    }
+}
+
+pub(crate) fn package_ref(repository: &str, package: &str) -> PackageRef {
+    PackageRef {
+        format: Format::Cargo,
+        repository: repository.to_owned(),
+        package: name(package),
     }
 }
 
@@ -98,16 +126,17 @@ pub(crate) fn publish_request(
     package: &str,
     raw_version: &str,
     chunks: &[&'static [u8]],
-    declared_sha256: Option<Sha256>,
+    declared: Vec<Checksum>,
 ) -> Publish {
     Publish {
         coordinate: coordinate(package, raw_version),
         file: Upload {
             path: asset_path(package, raw_version),
             body: body(chunks),
-            declared_sha256,
+            declared,
         },
-        metadata: FormatMetadata::new(METADATA.to_owned()),
+        metadata: Ok(FormatMetadata::new(METADATA.to_owned())),
+        tags: Vec::new(),
     }
 }
 
@@ -124,6 +153,7 @@ pub(crate) struct Seed {
     pub(crate) blobs: MemoryBlobStore,
     pub(crate) ids: Arc<SequentialIdGen>,
     audit: Arc<MemoryAudit>,
+    upstream: Arc<dyn UpstreamNames>,
     pub(crate) hosted: RepositoryId,
 }
 
@@ -137,6 +167,8 @@ impl Seed {
             blobs: MemoryBlobStore::default(),
             ids,
             audit: Arc::default(),
+            // По умолчанию публичного upstream нет: новые имена свободны.
+            upstream: Arc::new(NoUpstream),
             hosted,
         }
     }
@@ -184,6 +216,7 @@ impl Seed {
         raw_version: &str,
         state: VersionState,
         asset: Asset,
+        published_at: SystemTime,
     ) -> PackageVersion {
         block_on(self.catalog.publish_version(NewVersion {
             id: VersionId::new(self.ids.generate()),
@@ -191,9 +224,10 @@ impl Seed {
             package: name(package),
             version: version(raw_version),
             state,
-            published_at: fixed_now(),
+            published_at,
             assets: vec![asset],
             metadata: FormatMetadata::new(METADATA.to_owned()),
+            tags: Vec::new(),
         }))
         .unwrap()
     }
@@ -210,8 +244,20 @@ impl Seed {
         state: VersionState,
         content: &'static [u8],
     ) -> PackageVersion {
+        self.add_version_at(package, raw_version, state, content, fixed_now())
+    }
+
+    /// То же, но с заданным временем публикации (для окна удаления).
+    pub(crate) fn add_version_at(
+        &self,
+        package: &str,
+        raw_version: &str,
+        state: VersionState,
+        content: &'static [u8],
+        published_at: SystemTime,
+    ) -> PackageVersion {
         let asset = self.put_blob(&asset_path(package, raw_version), content);
-        self.insert(package, raw_version, state, asset)
+        self.insert(package, raw_version, state, asset, published_at)
     }
 
     /// Запись каталога со ссылкой на blob, которого в CAS нет.
@@ -221,7 +267,13 @@ impl Seed {
             sha256: Sha256::from([0xee; 32]),
             size: 1,
         };
-        self.insert(package, raw_version, VersionState::Released, asset)
+        self.insert(
+            package,
+            raw_version,
+            VersionState::Released,
+            asset,
+            fixed_now(),
+        )
     }
 
     pub(crate) fn registry_with<C: Catalog, B: BlobStore>(
@@ -229,229 +281,31 @@ impl Seed {
         wrap_catalog: impl FnOnce(MemoryCatalog) -> C,
         wrap_blobs: impl FnOnce(MemoryBlobStore) -> B,
     ) -> Registry<C, B> {
+        self.registry_at_with(fixed_now(), wrap_catalog, wrap_blobs)
+    }
+
+    /// Реестр с часами, остановленными на `now`.
+    pub(crate) fn registry_at(self, now: SystemTime) -> Registry<MemoryCatalog, MemoryBlobStore> {
+        self.registry_at_with(now, |catalog| catalog, |blobs| blobs)
+    }
+
+    fn registry_at_with<C: Catalog, B: BlobStore>(
+        self,
+        now: SystemTime,
+        wrap_catalog: impl FnOnce(MemoryCatalog) -> C,
+        wrap_blobs: impl FnOnce(MemoryBlobStore) -> B,
+    ) -> Registry<C, B> {
         Registry::new(
             wrap_catalog(self.catalog),
             wrap_blobs(self.blobs),
-            Arc::new(FixedClock::new(fixed_now())),
+            Arc::new(ManualClock::new(now)),
             self.ids,
             self.audit,
+            self.upstream,
         )
     }
 
     pub(crate) fn registry(self) -> Registry<MemoryCatalog, MemoryBlobStore> {
         self.registry_with(|catalog| catalog, |blobs| blobs)
-    }
-}
-
-/// Каталог с «слепой» предпроверкой: `find_version` всегда `None`, остальное делегируется.
-/// Моделирует гонку: между предпроверкой и `publish_version` версию занял другой запрос.
-#[derive(Debug)]
-pub(crate) struct BlindCatalog(pub MemoryCatalog);
-
-impl Catalog for BlindCatalog {
-    fn ensure_repository(
-        &self,
-        repository: Repository,
-    ) -> impl Future<Output = Result<Repository, CatalogError>> + Send {
-        self.0.ensure_repository(repository)
-    }
-
-    fn find_repository(
-        &self,
-        format: Format,
-        name: &str,
-    ) -> impl Future<Output = Result<Option<Repository>, CatalogError>> + Send {
-        self.0.find_repository(format, name)
-    }
-
-    fn publish_version(
-        &self,
-        version: NewVersion,
-    ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
-        self.0.publish_version(version)
-    }
-
-    fn versions(
-        &self,
-        repository: RepositoryId,
-        package: &PackageName,
-    ) -> impl Future<Output = Result<Vec<PackageVersion>, CatalogError>> + Send {
-        self.0.versions(repository, package)
-    }
-
-    fn find_version(
-        &self,
-        _repository: RepositoryId,
-        _package: &PackageName,
-        _version: &Version,
-    ) -> impl Future<Output = Result<Option<PackageVersion>, CatalogError>> + Send {
-        ready(Ok(None))
-    }
-
-    fn set_yanked(
-        &self,
-        id: VersionId,
-        yanked: bool,
-    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
-        self.0.set_yanked(id, yanked)
-    }
-
-    fn transition(
-        &self,
-        id: VersionId,
-        from: VersionState,
-        to: VersionState,
-    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
-        self.0.transition(id, from, to)
-    }
-}
-
-/// Каталог, который не отвечает на `find_repository`; остальное делегируется.
-/// Моделирует недоступную БД для пробы готовности.
-#[derive(Debug)]
-pub(crate) struct DownCatalog(pub MemoryCatalog);
-
-impl Catalog for DownCatalog {
-    fn ensure_repository(
-        &self,
-        repository: Repository,
-    ) -> impl Future<Output = Result<Repository, CatalogError>> + Send {
-        self.0.ensure_repository(repository)
-    }
-
-    fn find_repository(
-        &self,
-        _format: Format,
-        _name: &str,
-    ) -> impl Future<Output = Result<Option<Repository>, CatalogError>> + Send {
-        ready(Err(CatalogError::Backend("БД недоступна".into())))
-    }
-
-    fn publish_version(
-        &self,
-        version: NewVersion,
-    ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
-        self.0.publish_version(version)
-    }
-
-    fn versions(
-        &self,
-        repository: RepositoryId,
-        package: &PackageName,
-    ) -> impl Future<Output = Result<Vec<PackageVersion>, CatalogError>> + Send {
-        self.0.versions(repository, package)
-    }
-
-    fn find_version(
-        &self,
-        repository: RepositoryId,
-        package: &PackageName,
-        version: &Version,
-    ) -> impl Future<Output = Result<Option<PackageVersion>, CatalogError>> + Send {
-        self.0.find_version(repository, package, version)
-    }
-
-    fn set_yanked(
-        &self,
-        id: VersionId,
-        yanked: bool,
-    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
-        self.0.set_yanked(id, yanked)
-    }
-
-    fn transition(
-        &self,
-        id: VersionId,
-        from: VersionState,
-        to: VersionState,
-    ) -> impl Future<Output = Result<(), CatalogError>> + Send {
-        self.0.transition(id, from, to)
-    }
-}
-
-/// Blob-хранилище, у которого `open` отвечает заданной ошибкой; остальное делегируется.
-#[derive(Debug)]
-pub(crate) struct OpenFailsBlobs {
-    inner: MemoryBlobStore,
-    error: fn() -> BlobError,
-}
-
-impl OpenFailsBlobs {
-    pub(crate) fn new(inner: MemoryBlobStore, error: fn() -> BlobError) -> Self {
-        Self { inner, error }
-    }
-}
-
-impl BlobStore for OpenFailsBlobs {
-    fn stage(&self, body: ByteStream) -> impl Future<Output = Result<Staged, BlobError>> + Send {
-        self.inner.stage(body)
-    }
-
-    fn commit(&self, staged: Staged) -> impl Future<Output = Result<Digests, BlobError>> + Send {
-        self.inner.commit(staged)
-    }
-
-    fn open(&self, _sha256: &Sha256) -> impl Future<Output = Result<ByteStream, BlobError>> + Send {
-        ready(Err((self.error)()))
-    }
-}
-
-/// Журнал попыток commit, общий с тестом.
-pub(crate) type CommitLog = Arc<Mutex<Vec<Sha256>>>;
-
-/// Blob-хранилище, записывающее попытки commit; при `fail_commit` commit завершается ошибкой.
-#[derive(Debug)]
-pub(crate) struct RecordingBlobs {
-    inner: MemoryBlobStore,
-    commits: CommitLog,
-    fail_commit: bool,
-}
-
-impl RecordingBlobs {
-    pub(crate) fn recording(inner: MemoryBlobStore, commits: CommitLog) -> Self {
-        Self {
-            inner,
-            commits,
-            fail_commit: false,
-        }
-    }
-
-    pub(crate) fn failing_commit(inner: MemoryBlobStore, commits: CommitLog) -> Self {
-        Self {
-            inner,
-            commits,
-            fail_commit: true,
-        }
-    }
-}
-
-pub(crate) fn commit_log() -> CommitLog {
-    Arc::default()
-}
-
-pub(crate) fn committed(log: &CommitLog) -> Vec<Sha256> {
-    log.lock().unwrap().clone()
-}
-
-impl BlobStore for RecordingBlobs {
-    fn stage(&self, body: ByteStream) -> impl Future<Output = Result<Staged, BlobError>> + Send {
-        self.inner.stage(body)
-    }
-
-    fn commit(&self, staged: Staged) -> impl Future<Output = Result<Digests, BlobError>> + Send {
-        self.commits.lock().unwrap().push(staged.digests().sha256);
-        let fail = self.fail_commit;
-        let inner = &self.inner;
-        async move {
-            if fail {
-                Err(BlobError::Backend("хранилище отказало".into()))
-            } else {
-                inner.commit(staged).await
-            }
-        }
-    }
-
-    fn open(&self, sha256: &Sha256) -> impl Future<Output = Result<ByteStream, BlobError>> + Send {
-        self.inner.open(sha256)
     }
 }

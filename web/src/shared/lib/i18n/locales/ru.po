@@ -1,0 +1,458 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-10-27 21:01+0300\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: ru\n"
+
+msgid " (откроется в новой вкладке)"
+msgstr " (откроется в новой вкладке)"
+
+msgid "— отличается на {distance, plural, one {# символ} few {# символа} many {# символов} other {# символа}} (возможный typosquat)"
+msgstr "— отличается на {distance, plural, one {# символ} few {# символа} many {# символов} other {# символа}} (возможный typosquat)"
+
+msgid ", требуется подтверждение входа"
+msgstr ", требуется подтверждение входа"
+
+msgid "{count, plural, one {{priority} · # находка} few {{priority} · # находки} many {{priority} · # находок} other {{priority} · # находки}}"
+msgstr "{count, plural, one {{priority} · # находка} few {{priority} · # находки} many {{priority} · # находок} other {{priority} · # находки}}"
+
+msgid "{count, plural, one {# непрочитанное} few {# непрочитанных} many {# непрочитанных} other {# непрочитанных}}"
+msgstr "{count, plural, one {# непрочитанное} few {# непрочитанных} many {# непрочитанных} other {# непрочитанных}}"
+
+msgid "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
+msgstr "{count, plural, one {Выбрана # строка} few {Выбрано # строки} many {Выбрано # строк} other {Выбрано # строки}}"
+
+msgid "{count} из {limit}"
+msgstr "{count} из {limit}"
+
+msgid "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
+msgstr "{downloads, plural, one {# загрузка за 30 дн} few {# загрузки за 30 дн} many {# загрузок за 30 дн} other {# загрузки за 30 дн}}"
+
+msgid "{JUSTIFICATION_MAX, plural, one {Максимум # символ} few {Максимум # символа} many {Максимум # символов} other {Максимум # символа}}"
+msgstr "{JUSTIFICATION_MAX, plural, one {Максимум # символ} few {Максимум # символа} many {Максимум # символов} other {Максимум # символа}}"
+
+msgid "{JUSTIFICATION_MIN, plural, one {Минимум # символ} few {Минимум # символа} many {Минимум # символов} other {Минимум # символа}}"
+msgstr "{JUSTIFICATION_MIN, plural, one {Минимум # символ} few {Минимум # символа} many {Минимум # символов} other {Минимум # символа}}"
+
+msgid "{label}: {shown}"
+msgstr "{label}: {shown}"
+
+msgid "{label}: {shown}, {toneLabel}"
+msgstr "{label}: {shown}, {toneLabel}"
+
+msgid "{left, plural, one {Остался # символ} few {Осталось # символа} many {Осталось # символов} other {Осталось # символа}}"
+msgstr "{left, plural, one {Остался # символ} few {Осталось # символа} many {Осталось # символов} other {Осталось # символа}}"
+
+msgid "{requestedLabel} недоступен для этого репозитория, показаны команды для {shownLabel}"
+msgstr "{requestedLabel} недоступен для этого репозитория, показаны команды для {shownLabel}"
+
+msgid "{shown}, уверенность {confidenceText}"
+msgstr "{shown}, уверенность {confidenceText}"
+
+msgid "{size, plural, one {# ключ} few {# ключа} many {# ключей} other {# ключа}}"
+msgstr "{size, plural, one {# ключ} few {# ключа} many {# ключей} other {# ключа}}"
+
+msgid "{size, plural, one {# элемент} few {# элемента} many {# элементов} other {# элемента}}"
+msgstr "{size, plural, one {# элемент} few {# элемента} many {# элементов} other {# элемента}}"
+
+msgid "{total, plural, one {Результатов: #} few {Результатов: #} many {Результатов: #} other {Результатов: #}}"
+msgstr "{total, plural, one {Результатов: #} few {Результатов: #} many {Результатов: #} other {Результатов: #}}"
+
+msgid "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
+msgstr "{unread, plural, one {Уведомления, # непрочитанное} few {Уведомления, # непрочитанных} many {Уведомления, # непрочитанных} other {Уведомления, # непрочитанных}}"
+
+msgid "CRANE, Реестр артефактов: на главную"
+msgstr "CRANE, Реестр артефактов: на главную"
+
+msgid "EOL"
+msgstr "EOL"
+
+msgid "Активен"
+msgstr "Активен"
+
+msgid "Безопасность"
+msgstr "Безопасность"
+
+msgid "Блокировка {id}"
+msgstr "Блокировка {id}"
+
+msgid "Было"
+msgstr "Было"
+
+msgid "Войдите снова, чтобы продолжить работу"
+msgstr "Войдите снова, чтобы продолжить работу"
+
+msgid "Время"
+msgstr "Время"
+
+msgid "Все"
+msgstr "Все"
+
+msgid "выбор"
+msgstr "выбор"
+
+msgid "Выбрать все загруженные"
+msgstr "Выбрать все загруженные"
+
+msgid "Выполняется…"
+msgstr "Выполняется…"
+
+msgid "Выпущена"
+msgstr "Выпущена"
+
+msgid "Главное меню"
+msgstr "Главное меню"
+
+msgid "Готово"
+msgstr "Готово"
+
+msgid "Действие «{actionLabel}» требует подтверждения вторым фактором"
+msgstr "Действие «{actionLabel}» требует подтверждения вторым фактором"
+
+msgid "Действия"
+msgstr "Действия"
+
+msgid "добавлено"
+msgstr "добавлено"
+
+msgid "Доступ"
+msgstr "Доступ"
+
+msgid "Другие действия"
+msgstr "Другие действия"
+
+msgid "Ещё {hidden}"
+msgstr "Ещё {hidden}"
+
+msgid "Заблокирована"
+msgstr "Заблокирована"
+
+msgid "Загрузка"
+msgstr "Загрузка"
+
+msgid "Загрузка текста"
+msgstr "Загрузка текста"
+
+msgid "закрыть"
+msgstr "закрыть"
+
+msgid "Закрыть"
+msgstr "Закрыть"
+
+msgid "Идентификатор запроса:"
+msgstr "Идентификатор запроса:"
+
+msgid "Изменение"
+msgstr "Изменение"
+
+msgid "Изменение: {change}"
+msgstr "Изменение: {change}"
+
+msgid "изменено: было {before}, стало {after}"
+msgstr "изменено: было {before}, стало {after}"
+
+msgid "Исправлено в {fixedIn}"
+msgstr "Исправлено в {fixedIn}"
+
+msgid "Ищем пакеты…"
+msgstr "Ищем пакеты…"
+
+msgid "К содержимому"
+msgstr "К содержимому"
+
+msgid "Карантин"
+msgstr "Карантин"
+
+msgid "Клиент пакетов"
+msgstr "Клиент пакетов"
+
+msgid "Код"
+msgstr "Код"
+
+msgid "Команда установки"
+msgstr "Команда установки"
+
+msgid "Командная палитра"
+msgstr "Командная палитра"
+
+msgid "Контакт: {contact}"
+msgstr "Контакт: {contact}"
+
+msgid "Копировать {path}"
+msgstr "Копировать {path}"
+
+msgid "Копировать JSON"
+msgstr "Копировать JSON"
+
+msgid "Копировать request_id"
+msgstr "Копировать request_id"
+
+msgid "Копировать команду установки"
+msgstr "Копировать команду установки"
+
+msgid "Копировать токен"
+msgstr "Копировать токен"
+
+msgid "Копировать: {title}"
+msgstr "Копировать: {title}"
+
+msgid "корень"
+msgstr "корень"
+
+msgid "Личное и справка"
+msgstr "Личное и справка"
+
+msgid "Массовые действия"
+msgstr "Массовые действия"
+
+msgid "модель {model}"
+msgstr "модель {model}"
+
+msgid "Навигационная цепочка"
+msgstr "Навигационная цепочка"
+
+msgid "Навигация по разделам реестра"
+msgstr "Навигация по разделам реестра"
+
+msgid "Настроить вручную"
+msgstr "Настроить вручную"
+
+msgid "Настроить вручную ({path})"
+msgstr "Настроить вручную ({path})"
+
+msgid "Не найдено или нет доступа"
+msgstr "Не найдено или нет доступа"
+
+msgid "Не удалось скопировать — выделите текст вручную"
+msgstr "Не удалось скопировать — выделите текст вручную"
+
+msgid "Недостаточно прав"
+msgstr "Недостаточно прав"
+
+msgid "Непрочитано."
+msgstr "Непрочитано."
+
+msgid "нет данных"
+msgstr "нет данных"
+
+msgid "Нет данных"
+msgstr "Нет данных"
+
+msgid "Нет соединения"
+msgstr "Нет соединения"
+
+msgid "Ничего не найдено"
+msgstr "Ничего не найдено"
+
+msgid "Ничего не найдено по фильтрам"
+msgstr "Ничего не найдено по фильтрам"
+
+msgid "Новых уведомлений нет"
+msgstr "Новых уведомлений нет"
+
+msgid "Номер версии нельзя использовать повторно"
+msgstr "Номер версии нельзя использовать повторно"
+
+msgid "обновлено"
+msgstr "обновлено"
+
+msgid "Оповещения"
+msgstr "Оповещения"
+
+msgid "Основное меню"
+msgstr "Основное меню"
+
+msgid "открыть"
+msgstr "открыть"
+
+msgid "Отмена"
+msgstr "Отмена"
+
+msgid "Отметьте, что сохранили токен"
+msgstr "Отметьте, что сохранили токен"
+
+msgid "Пакеты"
+msgstr "Пакеты"
+
+msgid "Пауза автообновления"
+msgstr "Пауза автообновления"
+
+msgid "Перейти"
+msgstr "Перейти"
+
+msgid "Перейти, найти пакет или действие"
+msgstr "Перейти, найти пакет или действие"
+
+msgid "Перейти, найти пакет или действие…"
+msgstr "Перейти, найти пакет или действие…"
+
+msgid "Переменные окружения"
+msgstr "Переменные окружения"
+
+msgid "Платформа"
+msgstr "Платформа"
+
+msgid "По правилу"
+msgstr "По правилу"
+
+msgid "Подробнее: {label}"
+msgstr "Подробнее: {label}"
+
+msgid "Подтвердите вход"
+msgstr "Подтвердите вход"
+
+msgid "Поиск и переходы"
+msgstr "Поиск и переходы"
+
+msgid "Показать графиком"
+msgstr "Показать графиком"
+
+msgid "Показать таблицей"
+msgstr "Показать таблицей"
+
+msgid "Поле"
+msgstr "Поле"
+
+msgid "После подтверждения вы вернётесь к действию, данные формы сохранятся"
+msgstr "После подтверждения вы вернётесь к действию, данные формы сохранятся"
+
+msgid "Последняя"
+msgstr "Последняя"
+
+msgid "Похоже на"
+msgstr "Похоже на"
+
+msgid "Правило: {ruleId}"
+msgstr "Правило: {ruleId}"
+
+msgid "Проверьте адрес или имя пакета"
+msgstr "Проверьте адрес или имя пакета"
+
+msgid "Проверьте сеть — данные обновятся, когда связь вернётся"
+msgstr "Проверьте сеть — данные обновятся, когда связь вернётся"
+
+msgid "Продолжить в Keycloak"
+msgstr "Продолжить в Keycloak"
+
+msgid "Прочие ({count})"
+msgstr "Прочие ({count})"
+
+msgid "Прочитать все"
+msgstr "Прочитать все"
+
+msgid "Развернуть {name}"
+msgstr "Развернуть {name}"
+
+msgid "Развернуть всё"
+msgstr "Развернуть всё"
+
+msgid "Реестр артефактов"
+msgstr "Реестр артефактов"
+
+msgid "Свернуть"
+msgstr "Свернуть"
+
+msgid "Свернуть {name}"
+msgstr "Свернуть {name}"
+
+msgid "Свернуть всё"
+msgstr "Свернуть всё"
+
+msgid "Свернуть: {text}"
+msgstr "Свернуть: {text}"
+
+msgid "Светлая"
+msgstr "Светлая"
+
+msgid "Сессия завершена"
+msgstr "Сессия завершена"
+
+msgid "Системная"
+msgstr "Системная"
+
+msgid "Скопировано"
+msgstr "Скопировано"
+
+msgid "Скопировать ID"
+msgstr "Скопировать ID"
+
+msgid "Скопировать идентификатор блокировки"
+msgstr "Скопировать идентификатор блокировки"
+
+msgid "Скопировать идентификатор запроса"
+msgstr "Скопировать идентификатор запроса"
+
+msgid "Скрыть остальные"
+msgstr "Скрыть остальные"
+
+msgid "Снять выделение"
+msgstr "Снять выделение"
+
+msgid "Содержимое"
+msgstr "Содержимое"
+
+msgid "Сохраните сейчас — больше мы его не покажем"
+msgstr "Сохраните сейчас — больше мы его не покажем"
+
+msgid "Справка"
+msgstr "Справка"
+
+msgid "Стало"
+msgstr "Стало"
+
+msgid "Тема оформления"
+msgstr "Тема оформления"
+
+msgid "Тема: {modeLabel}"
+msgstr "Тема: {modeLabel}"
+
+msgid "Тёмная"
+msgstr "Тёмная"
+
+msgid "Токен не показывается: используйте cctl или переменную окружения."
+msgstr "Токен не показывается: используйте cctl или переменную окружения."
+
+msgid "Точное совпадение"
+msgstr "Точное совпадение"
+
+msgid "Уведомления"
+msgstr "Уведомления"
+
+msgid "уверенность {confidenceText}"
+msgstr "уверенность {confidenceText}"
+
+msgid "Удалена"
+msgstr "Удалена"
+
+msgid "удалено"
+msgstr "удалено"
+
+msgid "Установка"
+msgstr "Установка"
+
+msgid "Устарел"
+msgstr "Устарел"
+
+msgid "Файл {path}"
+msgstr "Файл {path}"
+
+msgid "Шаг 1. Однократная настройка"
+msgstr "Шаг 1. Однократная настройка"
+
+msgid "Шаг 2. Установка"
+msgstr "Шаг 2. Установка"
+
+msgid "Экстренно"
+msgstr "Экстренно"
+
+msgid "Я сохранил токен"
+msgstr "Я сохранил токен"
+
+msgid "Язык интерфейса"
+msgstr "Язык интерфейса"
+
+msgid "Язык: {current}"
+msgstr "Язык: {current}"

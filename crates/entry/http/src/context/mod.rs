@@ -15,6 +15,7 @@ use axum::extract::{ConnectInfo, Request, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use axum::middleware::Next;
 use axum::response::Response;
+use crane_app::proxy::{CacheResult, ProxyError, UpstreamFailure};
 use crane_domain::access::{RequestContext, RequestId};
 use tracing::Instrument;
 use uuid::Uuid;
@@ -31,6 +32,68 @@ const USER_AGENT_MAX_CHARS: usize = 256;
 /// чтобы access-журнал знал «кто» даже для чтений.
 #[derive(Debug, Clone)]
 pub(crate) struct Actor(pub(crate) String);
+
+/// Откуда пришёл ответ proxy и почему upstream отказал: handler кладёт это в расширения ответа,
+/// `request_context` переносит в строку access-журнала (поля `cache`, `upstream_failure`, `upstream_reason`).
+/// Отказ egress пишется только сюда: access-журнал — журнал ИБ (14.9), второго события рядом не нужно.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CacheFacts {
+    cache: Option<&'static str>,
+    failure: Option<&'static str>,
+    reason: Option<String>,
+}
+
+impl CacheFacts {
+    /// Ответ из движка без ошибки; `StaleOnError` несёт и причину сбоя upstream.
+    pub(crate) fn served(result: &CacheResult) -> Self {
+        let (cache, failure) = match result {
+            CacheResult::Hit => ("hit", None),
+            CacheResult::Miss => ("miss", None),
+            CacheResult::Stale => ("stale", None),
+            CacheResult::StaleOnError(failure) => ("stale-on-error", Some(failure)),
+        };
+        let (failure, reason) = failure.map_or((None, None), upstream_failure);
+        Self {
+            cache: Some(cache),
+            failure,
+            reason,
+        }
+    }
+
+    /// Документ отдан, но tarball не проверить (нет sha512): факты документа плюс причина отказа.
+    pub(crate) fn weak_integrity(result: &CacheResult) -> Self {
+        Self {
+            failure: Some("weak-integrity"),
+            ..Self::served(result)
+        }
+    }
+
+    /// Ошибка движка; `NotFound`, недоступность хранилища и сбой бэкенда не про upstream, поэтому фактов нет.
+    pub(crate) fn failed(error: &ProxyError) -> Self {
+        let (failure, reason) = match error {
+            ProxyError::Upstream(failure) => upstream_failure(failure),
+            // Ожидаемый и полученный sha256 — событие цепочки поставки, их место в журнале.
+            ProxyError::DigestMismatch { .. } => (Some("digest-mismatch"), Some(error.to_string())),
+            ProxyError::TooLarge { .. } => (Some("too-large"), None),
+            ProxyError::NotFound | ProxyError::Unreachable(_) | ProxyError::Backend(_) => {
+                (None, None)
+            }
+        };
+        Self {
+            cache: None,
+            failure,
+            reason,
+        }
+    }
+}
+
+fn upstream_failure(failure: &UpstreamFailure) -> (Option<&'static str>, Option<String>) {
+    match failure {
+        UpstreamFailure::Refused(refusal) => (Some("refused"), Some(refusal.to_string())),
+        UpstreamFailure::Unavailable => (Some("unavailable"), None),
+        UpstreamFailure::Throttled => (Some("throttled"), None),
+    }
+}
 
 fn text<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers.get(name)?.to_str().ok()
@@ -102,6 +165,7 @@ pub(crate) async fn request_context(
         .extensions()
         .get::<Actor>()
         .map(|actor| actor.0.as_str());
+    let facts = response.extensions().get::<CacheFacts>();
     tracing::info!(
         target: ACCESS_TARGET,
         method = %method,
@@ -112,6 +176,9 @@ pub(crate) async fn request_context(
         client_ip = context.client_ip.map(tracing::field::display),
         user_agent = context.user_agent.as_deref(),
         actor,
+        cache = facts.and_then(|facts| facts.cache),
+        upstream_failure = facts.and_then(|facts| facts.failure),
+        upstream_reason = facts.and_then(|facts| facts.reason.as_deref()),
         "запрос обработан"
     );
     response

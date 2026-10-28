@@ -4,8 +4,13 @@
 Эталон замерен по git-истории и файлам (непустые строки, без lock-файлов,
 сгенерированного кода, импортированных спецификаций и бинарных файлов).
 Запуск: python3 tools/estimate-agent-hours.py [--start ГГГГ-ММ-ДД] [--holidays ГГГГ-ММ-ДД ...] [--gantt]
-С --start печатает календарь релизов по трём сценариям (рабочие дни пн–пт, нерабочие даты задаются --holidays).
+                                              [--parallel N] [--hours Ч] [--every-day]
+С --start печатает календарь релизов по трём сценариям (рабочие дни пн–пт, нерабочие даты задаются --holidays)
+и календарь base по наблюдению 27.10 (5 × 12, без выходных, OBSERVED) независимо от --parallel, --hours и --every-day.
+--parallel и --hours задают ёмкость (параллельных веток, часов в рабочий день; по умолчанию 4 × 8, BASE),
+--every-day снимает выходные (по умолчанию пн–пт); все три меняют все расчёты в днях и датах.
 С --gantt дополнительно печатает диаграмму Ганта (Mermaid) для базового сценария.
+Работы «после v1» считаются в итоге, но в календарь и диаграмму не попадают.
 """
 
 import argparse
@@ -26,6 +31,10 @@ REF_AGENT_H = sum(REF["agent_wall_h"]) / 2 * REF["parallel"]            # ≈ 16
 RATE = REF_AGENT_H / REF["product_kloc"]                               # агент-ч на KLOC кода продукта, полный цикл
 OPERATOR_RATIO = REF["operator_h"] / REF_AGENT_H                       # ≈ 0.12
 
+# Нагрузка и пентест требуют опубликованного проекта и реальной нагрузки (решение владельца 27.10.2026):
+# часы входят в итог, но в календарь и релизы не ставятся.
+POST_V1 = "после v1"
+
 # ---------- CRANE: модули ----------
 # (модуль, этап, KLOC кода продукта, язык, сложность относительно эталона)
 MODULES = [
@@ -33,11 +42,38 @@ MODULES = [
     ("Протоколы: npm, PyPI, Maven, NuGet, Cargo (sparse)", "P0", 24, "rust", 1.6),
     ("CAS, атомарная публикация, GC, retention, целостность", "P0", 6, "rust", 1.3),
     ("Proxy: TTL, SWR, singleflight, SSRF guard", "P0", 5, "rust", 1.4),
-    ("Доступ: OIDC, токены crp/crr/crci, обмен, Cedar, роли, SoD, эпохи", "P0", 7, "rust", 1.3),
+    # 7,5 KLOC: правила выпуска токенов (интерактивная сессия IdP, только сужение, step-up), защитные настройки
+    # репозитория отдельной операцией, step-up по списку 14.12, идемпотентность без хранения секретов
+    # OIDC на Keycloak входит в эту строку; generic-часть и команды — строки ниже (решения 30–44 в 19)
+    ("Доступ: OIDC, токены crp/crr/crci, обмен, Cedar, роли, SoD, эпохи", "P0", 7.5, "rust", 1.3),
+    ("Команды и владение: workspace, принципалы, role_binding во времени, group_mapping, атрибуция при выпуске", "P0", 1.5, "rust", 1.1),
+    ("Generic OIDC: IdentityVerifier, нормализатор claims, свежесть MFA, профиль Keycloak", "P0", 0.8, "rust", 1.2),
     ("Наблюдаемость: метрики, трассы, health, алерты", "P0", 3, "rust", 0.8),
+    ("Аудит скачиваний: поток download_event, партиции, часовой дайджест, запрос «кто скачал»", "P0", 1.5, "rust", 1.1),
+    ("След скачиваний в потоке: workspace, bytes, source, покрытие", "P0", 0.3, "rust", 1.0),
+    # чистая проверка конфигурации: без проверки бакета через S3 API и ключа-подтверждения (решение владельца 27.10.2026)
+    ("Проверка безопасной конфигурации при старте", "P0", 0.5, "rust", 1.0),
+    # отдельный origin пакетов (CRANE_PACKAGES_URL), заголовки nosniff, CSP sandbox и attachment на ответах протоколов,
+    # строгая CSP консоли (14.3, 15, 16.1); origin, заголовки и CSP — Rust, а санитайзер README
+    # без сырого HTML и внешних картинок — на стороне web (TS), объём учтён здесь
+    ("Отдача недоверенного содержимого: origin пакетов, nosniff, CSP, README без HTML", "P0", 0.4, "rust", 1.0),
+    # GCRA на Valkey (10.12) для неаутентифицированных и неуспешных запросов по principal и по IP, локальный запасной bucket
+    ("Rate limiting: GCRA по principal и по IP", "P0", 0.5, "rust", 1.1),
+    # строки package_version, asset и blob при первой выдаче артефакта proxy: хвост publish из 10.1 с принципалом upstream;
+    # нужны GC и crane restore verify (09, 10.2, 10.9)
+    ("Proxy-версии: строки при выдаче артефакта, asset и blob", "P0", 0.6, "rust", 1.3),
     ("SPA: каркас, каталог, карточка, администрирование", "P0", 14, "ts", 1.0),
+    # Замер web-кита 27.10.2026 (непустые строки .ts/.tsx/.css, без lock-файлов): web/src без тестов и stories 8,8 тыс.
+    # (примитивы, таблицы и диффы, метрики, оболочка, палитра, уведомления, разметка машинных значений);
+    # stories компонентов 5,2 и экраны-макеты S1–S10 4,6 тыс.; линтеры i18n и движения 0,6 + инфраструктура Lingui ~0,4 тыс.
+    # Каркас SPA выше — страницы, каталог и администрирование поверх кита, поэтому не пересекается с этими строками.
+    ("UI kit: примитивы, таблицы, метрики, оболочка, машинные значения", "P0", 9, "ts", 1.0),
+    ("i18n RU/EN: Lingui, каталоги, линтеры текстов и движения", "P0", 1, "ts", 1.0),
+    ("Storybook-витрина: stories компонентов и экраны-макеты S1–S10", "P0", 10, "ts", 1.0),
+    ("SPA: команды, участники, маппинги групп", "P0", 1.5, "ts", 1.0),
     ("CLI: login, setup шести клиентов, NuGet и Cargo credential provider, robots, publish", "P0", 3, "rust", 0.9),
-    ("GitLab workload identity, trust policy, provenance", "P1", 2, "rust", 1.3),
+    # 2,2 KLOC: запись только с ref_protected и списком имён, раздельные фазы шаблонов CI (10.5, 13)
+    ("GitLab workload identity, trust policy, provenance", "P1", 2.2, "rust", 1.3),
     # ~0,5 KLOC: таблица evidence и миграция, запись provenance из claims при publish из CI,
     # чтение для карточки версии. Остальные виды (SBOM, сканы) остаются в P2 и миграции не требуют.
     ("Evidence: таблица и provenance из claims", "P1", 0.5, "rust", 1.0),
@@ -46,6 +82,10 @@ MODULES = [
     ("Классы хранения, размещение, онлайн-перенос", "P1", 2, "rust", 1.3),
     ("CLI: diag, warm, readiness, export", "P1", 2, "rust", 0.9),
     ("SPA: рабочие столы ролей, диагностика", "P1", 7, "ts", 1.0),
+    ("Пакет для аудитора: отчёт о пересмотре доступа", "P1", 1, "rust", 1.0),
+    ("След команды: суточный агрегат, API usage, экспорт", "P1", 1.0, "rust", 1.0),
+    ("Владение и доступ: передача, межкомандный доступ, каталог Keycloak, admin events, SCIM 2.0", "P1", 1.8, "rust", 1.2),
+    ("SPA: след команды, передача владения, межкомандный доступ", "P1", 2.5, "ts", 1.0),
     ("Evidence, SBOM, Trivy, песочница анализа", "P2", 6.5, "rust", 1.3),
     # ~3 KLOC: три источника upstream (npm, PyPI, Maven) ~0,8 + проверка bundle, DSSE, цепочки Fulcio
     # и inclusion proof Rekor ~1 + trust root по TUF и офлайн-режим ~0,5 + PGP для Maven ~0,3
@@ -58,9 +98,16 @@ MODULES = [
     ("Лицензии: SPDX, политика, вирусность", "P2", 4, "rust", 1.2),
     ("Promotion, approvals, исключения", "P2", 4, "rust", 1.0),
     ("Уязвимости: фиды, сопоставление, P0–P4, VEX, экстренный режим", "P2", 9, "rust", 1.4),
+    # расширение served() (10.2): индекс правил deny в памяти реплики, окно карантина по времени публикации upstream
+    # для пяти форматов, фильтр документов с пересчётом dist-tags, проверка на пути артефакта, TTL md: до границы окна
+    ("Proxy-версии: видимость served(), фильтр документов, окно карантина upstream", "P2", 0.9, "rust", 1.3),
     ("Скоринг systemone", "P2", 2, "rust", 1.0),
     ("События безопасности: OCSF, SIEM, Sigma, SOAR", "P2", 5, "rust", 1.1),
+    # механизм экспорта (`/audit/exports`) строится один раз в P1-модуле «След команды…» и переиспользуется здесь
     ("Журнал действий: маскирование, раскрытие, экспорт, аудит доступа", "P2", 2, "rust", 1.0),
+    ("Выгрузка пакета для аудитора", "P2", 0.5, "rust", 1.0),
+    ("Матрица ответственности OSCAL", "P2", 0.5, "rust", 1.0),
+    ("След для аудитора и SIEM: маскированный доступ, правила Sigma по следу", "P2", 0.4, "rust", 1.0),
     ("SPA: рабочие столы AppSec и SecOps, журнал действий, «Мои действия»", "P2", 11, "ts", 1.0),
     ("Граф потребителей и impact", "P3", 4, "rust", 1.2),
     ("Поиск и LLM: FTS, pgvector, RAG, rerank", "P3", 4, "rust", 1.0),
@@ -72,19 +119,25 @@ LANG = {"rust": {"low": 1.3, "base": 1.6, "high": 2.0}, "ts": {"low": 1.0, "base
 EXTRA = [
     ("Матрица реальных клиентов: npm, pnpm, yarn, pip, uv, poetry, Maven, Gradle, dotnet, nuget, cargo", "P0", 44),
     ("Интеграция с реальными Keycloak, GitLab, Trivy, S3 на стенде", "P1", 30),
-    ("Нагрузочный стенд и оптимизация горячего пути", "P0", 25),
-    ("Исправление замечаний security review", "P2", 30),
+    ("Второй IdP на стенде: Authentik в compose, e2e входа и SCIM", "P1", 8),
+    ("Нагрузочный стенд профиля L и оптимизация горячего пути", POST_V1, 25),
+    # регрессия, а не ёмкость: ёмкость требует целевого железа и реальных VU, поэтому идёт после v1
+    ("Локальная проверка регрессии производительности: criterion, oha-смоук", "P0", 8),
+    ("Безопасность релизов CRANE: SLSA provenance, cosign, SBOM, CSAF/VEX", "P0", 12),
+    ("Исправление замечаний пентеста", POST_V1, 30),
     ("Подключение SIEM и SOAR на стенде", "P2", 15),
 ]
 # этапы календаря, которые не ускоряются агентами (рабочие дни)
 CALENDAR = [
-    ("Нагрузочный PoC на целевом железе", "P0", 3),
-    ("Security review и пентест", "P2", 7),
+    ("Нагрузочный PoC на целевом железе", POST_V1, 3),
+    ("Пентест (Strix) на реальном корпоративном реестре", POST_V1, 7),
+    # RC ждёт обратной связи, а не работы: длительность в днях календаря сценария, число веток её не ускоряет
     ("Release candidate: стабилизация и обратная связь", "P1", 5),  # допущение, уточняется по ходу
 ]
 SCENARIO_COMPLEXITY = {"low": 0.9, "base": 1.0, "high": 1.25}
-PARALLEL = 4             # одновременно работающих агентов
-AGENT_H_PER_DAY = 8      # часов работы агентов в рабочий день
+# ёмкость: (имя, параллельных веток, часов в рабочий день, работа и в выходные)
+BASE = ("база плана: 4 × 8 ч", 4, 8, False)  # на ней посчитаны даты ROADMAP
+OBSERVED = ("по наблюдению 27.10: 5 веток × 12 ч, 7 дней в неделю", 5, 12, True)  # обоснование — ROADMAP, «Как посчитаны даты»
 OPERATOR_FACTOR = 1.5    # Rust и безопасность требуют больше ревью, чем эталон
 
 
@@ -106,20 +159,26 @@ RELEASES = [
      [("Proxy:", 1), ("Протоколы:", 0.2)]),
     ("v0.3.0", "P0", "PyPI, Maven, NuGet",
      [("Протоколы:", 0.6)]),
-    ("v0.4.0", "P0", "Доступ, наблюдаемость, базовый UI, CLI",
-     [("Доступ:", 1), ("Наблюдаемость:", 1), ("SPA: каркас", 1), ("CLI: login", 1)]),
-    ("v0.5.0", "P0", "Полное ядро: матрица клиентов, нагрузка, поставка",
-     [("Матрица реальных клиентов", 1), ("Нагрузочный стенд", 1),
-      ("Ядро:", 0.65), ("CAS", 0.97), ("Протоколы:", 0.17)]),
-    ("v0.6.0", "P1", "Удобство: GitLab, диагностика, классы хранения, импорт из других реестров",
+    ("v0.4.0", "P0", "Доступ, команды, наблюдаемость, базовый UI, CLI",
+     [("Доступ:", 1), ("Команды и владение", 1), ("Generic OIDC", 1), ("Наблюдаемость:", 1), ("SPA: каркас", 1),
+      ("SPA: команды, участники", 1), ("UI kit:", 1), ("i18n RU/EN", 1), ("Storybook-витрина", 1),
+      ("CLI: login", 1), ("Аудит скачиваний", 1), ("След скачиваний в потоке", 1), ("Отдача недоверенного", 1), ("Rate limiting", 1)]),
+    ("v0.5.0", "P0", "Полное ядро: матрица клиентов, поставка",
+     [("Матрица реальных клиентов", 1), ("Локальная проверка регрессии", 1),
+      ("Ядро:", 0.65), ("CAS", 0.97), ("Протоколы:", 0.17), ("Проверка безопасной конфигурации", 1), ("Безопасность релизов", 1), ("Proxy-версии: строки", 1)]),
+    ("v0.6.0", "P1", "Удобство: GitLab, диагностика, классы хранения, импорт из других реестров, след команды, владение и межкомандный доступ, SCIM",
      [("GitLab", 1), ("Evidence: таблица", 1), ("Диагностика", 1), ("Импорт", 1), ("Классы", 1), ("CLI: diag", 1),
-      ("SPA: рабочие столы ролей", 1), ("Интеграция с реальными", 1)]),
+      ("SPA: рабочие столы ролей", 1), ("Интеграция с реальными", 1), ("Пакет для аудитора", 1),
+      ("След команды:", 1), ("Владение и доступ", 1), ("SPA: след команды", 1), ("Второй IdP", 1)]),
     ("v1.1.0", "P2", "Безопасность цепочки поставки",
      [("Evidence, SBOM", 1), ("Attestations", 1), ("Лицензии", 1), ("Promotion", 1), ("Уязвимости", 1), ("Скоринг", 1),
       ("События безопасности", 1), ("Журнал действий", 1), ("SPA: рабочие столы AppSec", 1),
-      ("Исправление замечаний", 1), ("Подключение SIEM", 1)]),
+      ("Подключение SIEM", 1), ("Выгрузка пакета", 1), ("Матрица ответственности", 1), ("Proxy-версии: видимость", 1),
+      ("След для аудитора", 1)]),
     ("v1.2.0", "P3", "Развитие: граф, поиск и LLM, A2A",
      [("Граф", 1), ("Поиск", 1), ("A2A", 1), ("SPA: AI", 1)]),
+    (POST_V1, POST_V1, "Проверка сообществом и на реальной нагрузке",
+     [("Нагрузочный стенд профиля L", 1), ("Исправление замечаний пентеста", 1)]),
 ]
 # выпущенные версии ставятся фактической датой, календарь от --start начинается со следующей
 DONE = {"v0.1.0": dt.date(2026, 10, 27)}
@@ -137,18 +196,25 @@ def estimate(scn):
     return by_stage
 
 
-def main():
+def main(cap):
     print(f"Эталон: {REF_AGENT_H:.0f} агент-ч, {RATE:.2f} агент-ч/KLOC, оператор {OPERATOR_RATIO:.2f} ч на агент-ч")
     rust = sum(m[2] for m in MODULES if m[3] == "rust"); ts = sum(m[2] for m in MODULES if m[3] == "ts")
     print(f"CRANE: Rust {rust:g} KLOC, TypeScript {ts} KLOC")
     for scn in ("low", "base", "high"):
         st = estimate(scn); total = sum(st.values())
-        cal = {s: d for _, s, d in CALENDAR}
-        print(f"\n[{scn}] всего {total:.0f} агент-ч, оператор {total * OPERATOR_RATIO * OPERATOR_FACTOR:.0f} ч")
-        for s in ("P0", "P1", "P2", "P3"):
-            dev_days = st[s] / (PARALLEL * AGENT_H_PER_DAY)
+        print(f"\n[{scn}] всего {total:.0f} агент-ч (из них {POST_V1}: {st[POST_V1]:.0f}), "
+              f"оператор {total * OPERATOR_RATIO * OPERATOR_FACTOR:.0f} ч")
+        for s in ("P0", "P1", "P2", "P3", POST_V1):
+            dev_days = st[s] / per_day(cap)
+            tail = ""
+            if s == POST_V1:
+                tail = f", календарь {sum(d for _, cs, d in CALENDAR if cs == s)} раб. дн., вне графика"
             print(f"  {s}: {st[s]:5.0f} агент-ч, разработка {dev_days:4.1f} раб. дн., "
-                  f"оператор {st[s] * OPERATOR_RATIO * OPERATOR_FACTOR:4.0f} ч")
+                  f"оператор {st[s] * OPERATOR_RATIO * OPERATOR_FACTOR:4.0f} ч{tail}")
+        if scn == "base":
+            hours = work_hours(scn)
+            print(f"  Чувствительность, не прогноз: если объём протоколов 50% оценки — "
+                  f"всего {total - hours[module(hours, 'Протоколы:')] / 2:.0f} агент-ч (base)")
     st = estimate("base")
     print("\nМодули (base):")
     for name, stage, kloc, lang, k in MODULES:
@@ -165,6 +231,13 @@ def work_hours(scn):
     return hours
 
 
+def module(hours, prefix):
+    """Имя единственного модуля или работы, начинающихся с prefix."""
+    matches = [n for n in hours if n.startswith(prefix)]
+    assert len(matches) == 1, f"префикс «{prefix}» → {matches}"
+    return matches[0]
+
+
 def release_hours(scn):
     hours = work_hours(scn)
     used = {name: 0.0 for name in hours}
@@ -172,91 +245,94 @@ def release_hours(scn):
     for version, stage, title, parts in RELEASES:
         total = 0.0
         for prefix, share in parts:
-            matches = [n for n in hours if n.startswith(prefix)]
-            assert len(matches) == 1, f"{version}: префикс «{prefix}» → {matches}"
-            total += hours[matches[0]] * share
-            used[matches[0]] += share
+            name = module(hours, prefix)
+            total += hours[name] * share
+            used[name] += share
         result.append((version, stage, title, total))
     unassigned = [n for n, u in used.items() if abs(u - 1) > 1e-9]
     assert not unassigned, f"модули не распределены по релизам ровно один раз: {unassigned}"
     return result
 
 
-def workday(start, offset):
+def workday(start, offset, every_day=False):
     """Дата рабочего дня с номером offset (0 — первый рабочий день не раньше start)."""
+    def off(day):  # --holidays действуют и без выходных
+        return day in HOLIDAYS or (not every_day and day.weekday() >= 5)
     day = start
-    while day.weekday() >= 5 or day in HOLIDAYS:
+    while off(day):
         day += dt.timedelta(days=1)
     for _ in range(offset):
         day += dt.timedelta(days=1)
-        while day.weekday() >= 5 or day in HOLIDAYS:
+        while off(day):
             day += dt.timedelta(days=1)
     return day
 
 
-def schedule(scn, start):
+def per_day(cap):
+    _, parallel, hours, _ = cap
+    return parallel * hours
+
+
+def schedule(scn, start, cap):
     """Календарь релизов. Время — в рабочих днях от start (дробное для работы агентов)."""
-    per_day = PARALLEL * AGENT_H_PER_DAY
     cal = {name: days for name, _, days in CALENDAR}
     rel = {v: (stage, title, h) for v, stage, title, h in release_hours(scn)}
     rows, t = [], 0.0
 
     def dev(version, begin):
         stage, title, h = rel[version]
-        end = begin + h / per_day
+        end = begin + h / per_day(cap)
         return title, h, begin, end
 
     def row(version, title, h, begin, end, note=""):
-        rows.append((version, title, h, workday(start, math.floor(begin)),
-                     workday(start, max(math.ceil(end) - 1, 0)), note))
+        rows.append((version, title, h, workday(start, math.floor(begin), cap[3]),
+                     workday(start, max(math.ceil(end) - 1, 0), cap[3]), note))
 
-    for v in ("v0.1.0", "v0.2.0", "v0.3.0", "v0.4.0"):
+    for v in ("v0.1.0", "v0.2.0", "v0.3.0", "v0.4.0", "v0.5.0"):
         if v in DONE:
             rows.append((v, rel[v][1], rel[v][2], DONE[v], DONE[v], "готово"))
             continue
         title, h, b, t = dev(v, t)
         row(v, title, h, b, t)
-    title, h, b, e = dev("v0.5.0", t)
-    t = max(e, b + cal["Нагрузочный PoC на целевом железе"])
-    row("v0.5.0", title, h, b, t, "нагрузочный PoC на железе идёт параллельно")
     title, h, b, p1 = dev("v0.6.0", t)
     row("v0.6.0", title, h, b, p1)
     ga = math.ceil(p1) + cal["Release candidate: стабилизация и обратная связь"]
     row("v1.0.0", "Релиз 1.0 (P0 + P1)", 0, p1, ga, "release candidate")
     title, h, b, p2 = dev("v1.1.0", p1)
-    sec = max(math.ceil(p2) + cal["Security review и пентест"], ga)
-    row("v1.1.0", title, h, b, sec, "security review и пентест")
+    end = max(p2, ga)  # 1.1.0 выходит не раньше 1.0.0: порядок версий
+    row("v1.1.0", title, h, b, end)
     title, h, b, p3 = dev("v1.2.0", p2)
-    row("v1.2.0", title, h, b, max(p3, sec))
+    row("v1.2.0", title, h, b, max(p3, end))
     return rows
 
 
-def print_schedule(start):
-    for scn in ("low", "base", "high"):
-        print(f"\nКалендарь [{scn}] от {start.isoformat()} (4 агента × 8 ч, рабочие дни пн–пт):")
-        for version, title, h, b, e, note in schedule(scn, start):
-            hrs = f"{h:4.0f} агент-ч" if h else " " * 11
-            tail = f"  ({note})" if note else ""
-            print(f"  {version:7} {b.isoformat()} → {e.isoformat()}  {hrs}  {title}{tail}")
+def print_schedule(start, scn, cap):
+    name, _, _, every_day = cap
+    mode = "все дни недели" if every_day else "рабочие дни пн–пт"
+    print(f"\nКалендарь [{scn}] от {start.isoformat()} ({name}, {mode}):")
+    for version, title, h, b, e, note in schedule(scn, start, cap):
+        hrs = f"{h:4.0f} агент-ч" if h else " " * 11
+        tail = f"  ({note})" if note else ""
+        print(f"  {version:7} {b.isoformat()} → {e.isoformat()}  {hrs}  {title}{tail}")
 
 
-def print_gantt(start):
+def print_gantt(start, cap):
     """Диаграмма Ганта (Mermaid) для базового сценария."""
     sections = {"P0": "P0 ядро", "P1": "P1 удобство", "P2": "P2 безопасность", "P3": "P3 развитие"}
     stage = {v: st for v, st, _, _ in RELEASES}
     stage["v1.0.0"] = "P1"
     print("```mermaid")
     print('%%{init: {"gantt": {"fontSize": 14, "sectionFontSize": 14, "barHeight": 26, "barGap": 6, "leftPadding": 150}}}%%')
-    print("gantt\n  todayMarker off\n  dateFormat YYYY-MM-DD\n  axisFormat %d.%m\n  excludes weekends")
+    print("gantt\n  todayMarker off\n  dateFormat YYYY-MM-DD\n  axisFormat %d.%m" + ("" if cap[3] else "\n  excludes weekends"))
     current = None
-    for version, title, _, b, e, note in schedule("base", start):
+    for version, title, _, b, e, note in schedule("base", start, cap):
         if stage[version] != current:
             current = stage[version]
             print(f"  section {sections[current]}")
         label = f"{version} {title.split(':')[0]}".replace(":", " ").replace("(", "").replace(")", "")
         days, day = 0, b
         while day <= e:  # Mermaid с excludes weekends считает только рабочие дни
-            days += day.weekday() < 5 and day not in HOLIDAYS
+            days += (cap[3] or day.weekday() < 5) and day not in HOLIDAYS
             day += dt.timedelta(days=1)
         tag = "done, " if version in DONE else ""
         print(f"  {label} :{tag}{b.isoformat()}, {max(days, 1)}d")
@@ -269,10 +345,21 @@ if __name__ == "__main__":
     parser.add_argument("--holidays", type=dt.date.fromisoformat, nargs="*", default=[],
                         help="нерабочие даты сверх выходных")
     parser.add_argument("--gantt", action="store_true", help="диаграмма Ганта (Mermaid), нужен --start")
+    parser.add_argument("--parallel", type=int, default=BASE[1],
+                        help="параллельных веток (единица нормы эталона), по умолчанию %(default)s")
+    parser.add_argument("--every-day", action="store_true", help="календарь без выходных (по умолчанию пн–пт)")
+    parser.add_argument("--hours", type=float, default=BASE[2],
+                        help="часов работы в рабочий день, 0 < ч ≤ 24, по умолчанию %(default)s")
     args = parser.parse_args()
+    if args.parallel <= 0 or not 0 < args.hours <= 24:
+        parser.error("ёмкость: --parallel > 0 и 0 < --hours ≤ 24")
     HOLIDAYS.update(args.holidays)
-    main()
+    cap = (args.parallel, args.hours, args.every_day)
+    cap = BASE if cap == BASE[1:] else (f"ёмкость: {args.parallel} × {args.hours:g} ч", *cap)
+    main(cap)
     if args.start:
-        print_schedule(args.start)
+        for scn in ("low", "base", "high"):
+            print_schedule(args.start, scn, cap)
+        print_schedule(args.start, "base", OBSERVED)
         if args.gantt:
-            print_gantt(args.start)
+            print_gantt(args.start, cap)

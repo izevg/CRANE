@@ -1,0 +1,106 @@
+import { Meter } from "@base-ui/react/meter";
+import { useLingui } from "@lingui/react/macro";
+import { cx, type WithClassName } from "~/shared/lib/core";
+import { useTextFormat } from "~/shared/lib/i18n";
+import { Badge, TONE_STRONG, type Tone } from "~/shared/ui/primitives";
+import { SCORE_MAX, SCORE_MIN, scoreTexts } from "./score";
+
+type ScoreBarProps = WithClassName<{
+  /** Подпись оценки, уже переведённая вызывающим («Релевантность эксплуатации»). */
+  label: string;
+  /** 0..1; значения вне диапазона обрезаются. */
+  value: number;
+  /** Уверенность модели 0..1. */
+  confidence?: number;
+  /** Главные факторы оценки. */
+  factors?: readonly string[];
+  /** Модель-источник: «systemone v3.1». */
+  model?: string;
+  /** Тон полосы: решает вызывающий (пороги и смысл оценки — не забота компонента). */
+  tone: Tone;
+  /** Пояснения под полосой: «низкая уверенность, не влияет на политику». */
+  notes?: readonly string[];
+  /** Визуально вторичная оценка (например, теневая модель): значение приглушено. */
+  secondary?: boolean;
+  /** Бейдж рядом с моделью: «shadow». */
+  badge?: string;
+}>;
+
+/**
+ * Оценка модели 0..1 на Base UI `Meter` (роль `meter`, `aria-valuetext` «0,88, уверенность 0,92»).
+ * Полоса одного тона, без градиентов. Компонент ничего не знает о доменных порогах: тон, пояснения
+ * и признак вторичности приходят готовыми.
+ */
+export function ScoreBar({
+  label,
+  value,
+  confidence,
+  factors = [],
+  model,
+  tone,
+  notes = [],
+  secondary = false,
+  badge,
+  className,
+}: ScoreBarProps) {
+  const { t } = useLingui();
+  const text = useTextFormat();
+  const { score, shown, confidence: confidenceText } = scoreTexts(value, confidence, text);
+  const valueText = confidenceText === null ? shown : t`${shown}, уверенность ${confidenceText}`;
+
+  return (
+    <div
+      data-slot="score-bar"
+      data-secondary={secondary || undefined}
+      className={cx("flex flex-col gap-1.5", className)}
+    >
+      <Meter.Root
+        value={score}
+        min={SCORE_MIN}
+        max={SCORE_MAX}
+        aria-valuetext={valueText}
+        className="flex flex-col gap-1"
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <Meter.Label className="min-w-0 truncate text-body">{label}</Meter.Label>
+          <span
+            aria-hidden="true"
+            className={cx(
+              "text-body font-semibold tabular-nums",
+              secondary ? "text-muted-foreground" : "text-foreground",
+            )}
+          >
+            {shown}
+          </span>
+        </div>
+        <Meter.Track className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <Meter.Indicator
+            data-tone={tone}
+            className={cx("h-full rounded-full", TONE_STRONG[tone])}
+          />
+        </Meter.Track>
+      </Meter.Root>
+      {confidenceText === null ? null : (
+        <span className="text-caption text-muted-foreground tabular-nums">
+          {t`уверенность ${confidenceText}`}
+        </span>
+      )}
+      {factors.length > 0 ? (
+        <ul className="flex flex-wrap gap-1">
+          {factors.map((factor) => (
+            <li key={factor}>
+              <Badge variant="secondary">{factor}</Badge>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
+        {model === undefined ? null : <span>{t`модель ${model}`}</span>}
+        {badge === undefined ? null : <Badge variant="outline">{badge}</Badge>}
+        {notes.map((note) => (
+          <span key={note}>{note}</span>
+        ))}
+      </div>
+    </div>
+  );
+}

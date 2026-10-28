@@ -1,6 +1,6 @@
 # 5. C4 · Уровень 1: системный контекст
 
-CRANE стоит между командами, их CI и внешними источниками пакетов. Идентичность приходит из Keycloak, контекст сборок из GitLab, результаты анализа из Trivy и SonarQube, сведения об уязвимостях из открытых фидов. AI-контур даёт два разных вида функций: оценки риска (модели systemone) и тексты (LLM). События безопасности уходят в SIEM и SOAR, внешние агенты работают с CRANE через его A2A-агента.
+CRANE стоит между командами, их CI и внешними источниками пакетов. Идентичность приходит от OIDC-провайдера (Keycloak по умолчанию), контекст сборок из GitLab, результаты анализа из Trivy и SonarQube, сведения об уязвимостях из открытых фидов. AI-контур даёт два разных вида функций: оценки риска (модели systemone) и тексты (LLM). События безопасности уходят в SIEM и SOAR, внешние агенты работают с CRANE через его A2A-агента.
 
 ```mermaid
 flowchart LR
@@ -16,7 +16,7 @@ flowchart LR
   sq["<b>SonarQube</b><br>quality gate"]:::ext
   nx["<b>Nexus</b><br>источник миграции"]:::ext
   SR["<b>CRANE</b><br>hosted и proxy репозитории<br>Maven · npm · PyPI · NuGet · Cargo<br>каталог · политики · evidence · аудит"]:::sys
-  kc["<b>Keycloak</b><br>OIDC, группы, роли"]:::ext
+  kc["<b>OIDC-провайдер</b><br>Keycloak по умолчанию<br>OIDC, группы, роли"]:::ext
   gli["<b>GitLab API</b><br>issues, проекты"]:::ext
   tr["<b>Trivy</b><br>CVE и SBOM"]:::ext
   ai["<b>AI-контур</b><br>systemone: оценки риска<br>LLM: объяснения, A2A<br>embedder, reranker"]:::ext
@@ -42,7 +42,7 @@ flowchart LR
 
 | Внешняя система | Направление | Что передаётся |
 | --- | --- | --- |
-| Keycloak | CRANE ↔ KC | OIDC: Authorization Code + PKCE для UI, Device Grant для CLI, Client Credentials для автоматизации; проверка JWT, группы и client roles; back-channel logout и сверка пользователей. Пакетным менеджерам CRANE выдаёт собственные токены, привязанные к личности из Keycloak (раздел 13). Keycloak отвечает за «кто», CRANE за «что можно». |
+| OIDC-провайдер (Keycloak по умолчанию) | CRANE ↔ IdP | OIDC: Authorization Code + PKCE для UI, Device Grant для CLI, Client Credentials для автоматизации; проверка JWT, группы и роли (отображаются на команды и роли через `group_mapping`); back-channel logout; для Keycloak сверка пользователей через Admin REST и admin events, для других провайдеров SCIM 2.0. Пакетным менеджерам CRANE выдаёт собственные токены, привязанные к личности из IdP (раздел 13). IdP отвечает за «кто», CRANE за «что можно». |
 | GitLab | двусторонне | CI job предъявляет ID token (JWT), получает краткоживущий credential. CRANE создаёт issues, читает метаданные проектов, принимает SBOM и provenance. |
 | Trivy | CRANE → Trivy | Trivy в режиме server; CRANE отправляет SBOM или распакованный в песочнице артефакт, получает отчёт с версией сканера и базы. |
 | SonarQube | SQ → CRANE | Webhook quality gate или pull через API, привязка к commit SHA. |

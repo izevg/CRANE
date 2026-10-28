@@ -9,9 +9,13 @@
 mod common;
 
 use axum::http::Method;
-use common::{Api, PRINCIPAL, REPO};
+use common::cargo::publish_body_with_registry;
+use common::{Api, PRINCIPAL, REPO, TOKEN};
+use crane_app::registry::Coordinate;
 use crane_domain::access::{Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
+use crane_domain::registry::{Format, PackageName, Version};
+use serde_json::json;
 
 const CONFIG_URL: &str = "/cargo/internal/index/config.json";
 const CRATE: &[u8] = b"bytes";
@@ -46,7 +50,8 @@ fn rejected_token_records_one_failed_authentication_with_request_context() {
             },
             action: AuditAction::Authenticate,
             outcome: Outcome::Failure {
-                reason: "токен отвергнут".to_owned()
+                reason: "токен отвергнут".to_owned(),
+                code: None
             },
         }]
     );
@@ -79,7 +84,7 @@ fn accepted_token_records_no_authentication_event() {
 }
 
 #[test]
-fn publish_records_one_success_attributed_to_the_configured_principal() {
+fn publish_records_success_attributed_to_the_configured_principal() {
     // Arrange
     let api = Api::new();
 
@@ -89,7 +94,8 @@ fn publish_records_one_success_attributed_to_the_configured_principal() {
     // Assert
     assert_eq!(reply.status, 200);
     let events = api.audit_events();
-    assert_eq!(events.len(), 1);
+    // Публикация нового имени даёт два события: Publish и захват имени Reserve.
+    assert_eq!(events.len(), 2);
     assert_eq!(
         (
             events[0].actor.clone(),
@@ -120,5 +126,69 @@ fn reads_add_no_events_to_the_journal() {
 
     // Assert
     assert_eq!(reply.status, 200);
-    assert_eq!(api.audit_events().len(), 1, "только событие публикации");
+    assert_eq!(
+        api.audit_events().len(),
+        2,
+        "только события публикации: Publish и Reserve"
+    );
+}
+
+#[test]
+fn publish_with_foreign_dependency_registry_is_rejected_and_audited() {
+    // Arrange
+    let api = Api::new();
+    let body = publish_body_with_registry(
+        "demo-crate",
+        "1.0.0",
+        CRATE,
+        &json!("sparse+https://evil.example/index/"),
+    );
+    let headers = [("authorization", TOKEN)];
+
+    // Act
+    let reply = api.with_headers(
+        Method::PUT,
+        &format!("/cargo/{REPO}/api/v1/crates/new"),
+        &headers,
+        body,
+    );
+
+    // Assert
+    assert_eq!(
+        (
+            reply.status.as_u16(),
+            reply.detail().contains("serde"),
+            api.audit_events(),
+            api.index_text("demo-crate").status.as_u16(),
+        ),
+        (
+            400,
+            true,
+            vec![AuditEvent {
+                actor: Some(Principal {
+                    id: PRINCIPAL.to_owned(),
+                    kind: PrincipalKind::Robot
+                }),
+                request: RequestContext {
+                    request_id: RequestId::parse(reply.header("x-request-id")).unwrap(),
+                    trace_id: None,
+                    client_ip: None,
+                    user_agent: None,
+                },
+                action: AuditAction::Publish(Coordinate {
+                    format: Format::Cargo,
+                    repository: REPO.to_owned(),
+                    package: PackageName::parse(Format::Cargo, "demo-crate").unwrap(),
+                    version: Version::parse(Format::Cargo, "1.0.0").unwrap(),
+                }),
+                outcome: Outcome::Failure {
+                    code: Some("foreign-registry-dependency"),
+                    reason: "сторонний реестр: зависимость \"serde\", \
+                             registry \"sparse+https://evil.example/index/\""
+                        .to_owned()
+                },
+            }],
+            404,
+        )
+    );
 }

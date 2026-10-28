@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "project": ["src/**/*.{ts,tsx}", "*.config.ts"],
+  "project": ["src/**/*.{ts,tsx,css}", "*.config.ts"],
   "treatConfigHintsAsErrors": true,
   "rules": {
     "files": "error",
@@ -17,5 +17,5 @@
     "enumMembers": "error",
     "duplicates": "error"
   },
-  "entry": ["steiger.config.ts"]
+  "entry": ["steiger.config.ts", "lingui.config.ts"]
 }

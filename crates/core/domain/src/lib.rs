@@ -4,4 +4,5 @@
 
 pub mod access;
 pub mod audit;
+pub mod proxy;
 pub mod registry;

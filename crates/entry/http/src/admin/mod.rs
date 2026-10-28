@@ -8,7 +8,7 @@ use axum::extract::State;
 use axum::middleware::from_fn;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use crane_app::registry::Registry;
+use crane_app::registry::{Registry, RegistryError};
 use crane_ports::registry::{BlobStore, Catalog};
 use tokio::time::timeout;
 
@@ -45,12 +45,16 @@ async fn ready<C: Catalog + 'static, B: BlobStore + 'static>(
     match timeout(READY_BUDGET, registry.ready()).await {
         Ok(Ok(())) => "ok".into_response(),
         Ok(Err(error)) => {
-            tracing::warn!(error = %chain(&error), "хранилище недоступно");
-            Problem::storage_unavailable().into_response()
+            tracing::warn!(error = %chain(&error), "хранилище не готово");
+            match error {
+                RegistryError::Unreachable(_) => Problem::unreachable(),
+                _ => Problem::not_ready(),
+            }
+            .into_response()
         }
         Err(_) => {
             tracing::warn!("проба хранилищ не уложилась в {READY_BUDGET:?}");
-            Problem::storage_unavailable().into_response()
+            Problem::unreachable().into_response()
         }
     }
 }

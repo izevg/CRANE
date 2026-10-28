@@ -61,6 +61,7 @@ mod tests {
     use crane_app::registry::Registry;
     use crane_http::admin_router;
     use crane_memory::{MemoryAudit, MemoryBlobStore, MemoryCatalog};
+    use crane_ports::proxy::NoUpstream;
     use tokio::net::TcpListener;
 
     use super::*;
@@ -74,6 +75,7 @@ mod tests {
             Arc::new(SystemClock),
             Arc::new(UuidV7Ids),
             Arc::new(MemoryAudit::default()),
+            Arc::new(NoUpstream),
         )))
     }
 

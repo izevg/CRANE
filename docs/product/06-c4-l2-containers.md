@@ -21,7 +21,7 @@ flowchart LR
     s3[("<b>S3 хранилище</b><br>CAS blobs, staging,<br>evidence, бэкапы")]:::store
   end
   trivy["Trivy server"]:::ext
-  kc["Keycloak"]:::ext
+  kc["OIDC-провайдер<br>(Keycloak по умолчанию)"]:::ext
   ai["AI-контур<br>systemone, LLM"]:::ext
   feeds["Фиды уязвимостей"]:::ext
   siem["SIEM / SOAR"]:::ext

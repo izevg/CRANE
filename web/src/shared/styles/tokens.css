@@ -1,0 +1,209 @@
+/* Токены веб-консоли CRANE. Палитра и форма перенесены из UI kit BRICK без изменений. */
+:root {
+  color-scheme: light;
+
+  /* shadcn semantic */
+  --background: #f9f9f9;
+  --foreground: #29303e;
+  --card: #ffffff;
+  --card-foreground: #29303e;
+  --popover: #ffffff;
+  --popover-foreground: #29303e;
+  --primary: #951b81; /* заливка кнопок (одинаково в обеих темах) */
+  --primary-hover: #7b166b;
+  --primary-active: #6a135c;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f3f3;
+  --secondary-foreground: #29303e;
+  --muted: #f2f3f3;
+  --muted-foreground: #505561; /* 7.5:1 на белом */
+  --accent: #f2f3f3; /* hover пунктов меню/строк */
+  --accent-foreground: #29303e;
+  --destructive: #ba1a1a;
+  --destructive-foreground: #ffffff;
+  --border: #e5e6e8;
+  --input: #80858e; /* бордер инпутов 3.7:1 (WCAG 1.4.11) */
+  --ring: #951b81;
+
+  /* бренд/расширения */
+  --brand: #951b81; /* акцентный ТЕКСТ, активный пункт, ключевые числа */
+  --brand-container: #f9f1f7; /* selected/active bg */
+  --brand-border: #e8cde3;
+  --brand-gradient: linear-gradient(
+    90deg,
+    #831f82 0%,
+    #c7017f 60%,
+    #e30613 100%
+  ); /* только логотип */
+  --hint: #656a74; /* placeholder, caption 5.4:1 */
+  --surface-high: #e5e6e8;
+  --surface-highest: #d0d1d5;
+  --inverse: #29303e;
+  --inverse-foreground: #f9f9f9;
+
+  /* Цветовая разметка машинных значений (patterns §«Машинные значения»); буквы остаются --foreground */
+  --char-digit: #4338ca;
+  --char-symbol: #2f7065;
+  /* На инверсной поверхности (Tooltip) значения меняются местами: светлая тема даёт тёмный тултип */
+  --char-digit-inverse: #a99cf7;
+  --char-symbol-inverse: #8ab8ad;
+  --scrim: rgb(41 48 62 / 0.5);
+
+  /* статусы: fg (текст/иконка), bg (контейнер), strong (точка/линия) */
+  --success: #166534;
+  --success-bg: #dcfce7;
+  --success-strong: #059669;
+  --warning: #b45309;
+  --warning-bg: #fffbeb;
+  --warning-strong: #d97706;
+  --error: #be123c;
+  --error-bg: #fff1f2;
+  --error-strong: #d81a45;
+  --info: #0369a1;
+  --info-bg: #f0f9ff;
+  --info-strong: #0369a1;
+
+  /* графики */
+  --chart-1: #951b81; /* основной ряд */
+  --chart-2: #505561; /* вторичный */
+  --chart-3: #0369a1;
+  --chart-4: #d97706;
+  --chart-5: #059669;
+  --chart-grid: #e5e6e8;
+  --chart-slo: #d97706; /* пунктир «SLO 10 мс» */
+
+  /* сайдбар */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #29303e;
+  --sidebar-accent: #f9f1f7;
+  --sidebar-accent-foreground: #951b81;
+  --sidebar-border: #e5e6e8;
+
+  /* раскладка: высота topbar нужна для scroll-padding (WCAG 2.4.11) */
+  --topbar-height: 56px;
+
+  /* форма */
+  --radius: 12px; /* контролы */
+  --radius-card: 16px;
+  --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --shadow-card:
+    0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -2px rgba(0, 0, 0, 0.03),
+    0 0 0 1px rgba(229, 230, 232, 0.8);
+
+  /* семантические токены кита, 42 §3 */
+  --highlight: var(--brand-container);
+  --highlight-foreground: var(--foreground);
+  --highlight-ring: var(--brand-border);
+  --series-p50: #80858e;
+  --series-p95: #505561;
+  --series-p99: var(--brand);
+  --series-slo: var(--chart-slo);
+  --diff-add-bg: var(--success-bg);
+  --diff-add-fg: var(--success);
+  --diff-del-bg: var(--error-bg);
+  --diff-del-fg: var(--error);
+  --diff-mod-bg: var(--brand-container);
+  --diff-mod-fg: var(--brand);
+  --code-bg: var(--muted);
+  --code-key: var(--muted-foreground);
+  --code-string: var(--foreground);
+  --code-number: var(--brand);
+  --code-null: var(--hint);
+  --code-punct: var(--hint);
+  --code-line-no: var(--hint);
+  --bar-track: var(--surface-high);
+  --row-selected-bg: var(--brand-container);
+  --row-selected-bar: var(--brand);
+  --row-hover-bg: var(--muted);
+
+  /* окружение (EnvPill), 42 §3 */
+  --env-prod-bg: var(--error-bg);
+  --env-prod-fg: var(--error);
+  --env-stage-bg: var(--warning-bg);
+  --env-stage-fg: var(--warning);
+  --env-dev-bg: var(--muted);
+  --env-dev-fg: var(--muted-foreground);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #14171d;
+  --foreground: #ecedef;
+  --card: #1a1e26;
+  --card-foreground: #ecedef;
+  --popover: #1f242d;
+  --popover-foreground: #ecedef;
+  --primary: #951b81;
+  --primary-hover: #a8248f;
+  --primary-active: #7b166b;
+  --primary-foreground: #ffffff;
+  --secondary: #222733;
+  --secondary-foreground: #ecedef;
+  --muted: #222733;
+  --muted-foreground: #b4b8c0;
+  --accent: #262c38;
+  --accent-foreground: #ecedef;
+  --destructive: #ffb4ab;
+  --destructive-foreground: #5c1a16;
+  --border: #343a48;
+  --input: #6e7480;
+  --ring: #e07acb;
+
+  --brand: #e07acb;
+  --brand-container: #3a1a35;
+  --brand-border: #5e2a55;
+  --hint: #8d929c;
+  --surface-high: #29303e;
+  --surface-highest: #343a48;
+  --inverse: #ecedef;
+  --inverse-foreground: #29303e;
+
+  --char-digit: #a99cf7;
+  --char-symbol: #8ab8ad;
+  --char-digit-inverse: #4338ca;
+  --char-symbol-inverse: #2f7065;
+  --scrim: rgb(0 0 0 / 0.6);
+
+  --success: #86efac;
+  --success-bg: #14341f;
+  --success-strong: #34d399;
+  --warning: #fcd34d;
+  --warning-bg: #33270f;
+  --warning-strong: #f59e0b;
+  --error: #ffb4ab;
+  --error-bg: #5c1a16;
+  --error-strong: #f2877d;
+  --info: #7dd3fc;
+  --info-bg: #11293a;
+  --info-strong: #7dd3fc;
+
+  --chart-1: #e07acb;
+  --chart-2: #b4b8c0;
+  --chart-3: #7dd3fc;
+  --chart-4: #fbbf24;
+  --chart-5: #34d399;
+  --chart-grid: #343a48;
+  --chart-slo: #fbbf24;
+
+  --series-p50: #6e7480;
+  --series-p95: #b4b8c0;
+  --code-bg: #222733;
+  --code-key: #b4b8c0;
+  --code-string: #ecedef;
+  --code-number: #e07acb;
+  --code-null: #8d929c;
+  --code-punct: #8d929c;
+  --bar-track: #343a48;
+
+  --sidebar: #1a1e26;
+  --sidebar-foreground: #ecedef;
+  --sidebar-accent: #3a1a35;
+  --sidebar-accent-foreground: #e07acb;
+  --sidebar-border: #343a48;
+
+  --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+  --shadow-card:
+    0 4px 6px -1px rgba(0, 0, 0, 0.35), 0 2px 4px -2px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(52, 58, 72, 0.9);
+}

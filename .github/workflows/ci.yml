@@ -12,8 +12,12 @@ permissions:
   contents: read
 
 jobs:
-  branch-flow:
-    name: branch-flow
+  # Пока репозиторий приватный, минуты Actions платные, а каждая джоба округляется
+  # вверх до минуты. Поэтому PR в release/* получает одну дешёвую джобу: направление,
+  # заголовок, атрибуция. Сборка и тесты уже прошли локально (lefthook, task check),
+  # в CI они идут только на релизный PR в main — один раз на веху (DEBT 16).
+  pr:
+    name: pr
     runs-on: ubuntu-latest
     steps:
       - name: Проверить направление PR
@@ -27,12 +31,8 @@ jobs:
             [[ "$HEAD" =~ ^release/ ]] && { echo "В release/* принимаются feature-ветки, не release"; exit 1; }
           fi
           echo "ok: $HEAD → $BASE"
-
-  title:
-    name: title
-    runs-on: ubuntu-latest
-    steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: "${{ github.base_ref == 'main' && '0' || '1' }}" }
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -46,16 +46,9 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           printf 'chore: check\n\n%s\n' "$PR_BODY" | pnpm exec commitlint
-
-  gate-mark:
-    name: gate-mark
-    # Полный гейт — один раз на веху, перед слиянием релиза в main (GITFLOW.md).
-    if: github.base_ref == 'main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+      # Полный гейт — один раз на веху, перед слиянием релиза в main (GITFLOW.md).
       - name: Отметка о локальном мутационном гейте (task gate)
+        if: github.base_ref == 'main'
         env:
           BODY: ${{ github.event.pull_request.body }}
         run: |
@@ -67,6 +60,7 @@ jobs:
 
   structure:
     name: structure
+    if: github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,26 +68,21 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version-file: .nvmrc, cache: pnpm }
       - uses: dtolnay/rust-toolchain@stable
+      - uses: azure/setup-helm@v4
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run test:tools
       - name: Правило четырёх и слои крейтов
         run: pnpm run lint:structure
-
-  deploy:
-    name: deploy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
       - name: Compose-файлы и Helm-чарт
         run: |
-          docker compose --env-file .env.dist --profile cache --profile scan --profile s3 config -q
+          docker compose --env-file .env.dist -f docker-compose.yaml -f docker-compose.cache.yaml --profile scan --profile s3 config -q
           docker compose --env-file .env.dist -f docker-compose.dev.yaml --profile s3 --profile scan config -q
           helm lint deploy/helm/crane --set existingSecret=crane-env
           helm template crane deploy/helm/crane --set existingSecret=crane-env --set ingress.enabled=true >/dev/null
 
   rust:
     name: rust
+    if: github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -107,6 +96,7 @@ jobs:
 
   web:
     name: web
+    if: github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -116,4 +106,12 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: typecheck, biome, steiger, knip, depcruise
         run: pnpm --filter web run check
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --filter web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
+      - run: pnpm --filter web exec playwright install --with-deps chromium
       - run: pnpm --filter web run test

@@ -15,6 +15,7 @@ crane-domain = { path = "../../../core/domain" }
 crane-ports = { path = "../../../core/ports" }
 # TLS на aws-lc-rs: тот же криптопровайдер, что у object_store[aws]. Без json и макросов, запросы пишутся вручную.
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "migrate", "uuid", "time", "tls-rustls-aws-lc-rs"] }
+thiserror = "2"
 time = "0.3"
 uuid = "1"
 

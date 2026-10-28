@@ -48,8 +48,8 @@ The single entry point is the [Taskfile](Taskfile.yml) (`task --list`).
 | Rust: fmt, clippy, test, deny | `task rust:check` |
 | PostgreSQL tests | `task rust:test:pg` (needs `.env` from `.env.dist` and Docker) |
 | Web: types, Biome, Steiger, knip, depcruise | `task web:check` · unit tests: `task web:test` |
-| File structure and crate layers | `task structure` |
-| Dogfood: throwaway compose stand + real cargo | `task dogfood` (latest stable) · `task e2e` (two latest stable; part of `task gate`). Needs Docker and Compose with repeated `--env-file` (tested on v5.6.1) |
+| File structure, file size and crate layers | `task structure` · non-gating size report: `task structure:report` |
+| Dogfood: throwaway compose stand + real cargo | `task dogfood` (latest stable) · `task e2e` (two latest stable) · `task dogfood:full` (publishes CRANE to its own registry, builds it from there, then builds offline; `task gate` runs it in the same stand after the e2e scenarios). Needs Docker and Compose with repeated `--env-file` (tested on v5.6.1) |
 | Checks before a PR to `release/*` | `task check` + the tests the change touches (`task rust:test:pg` for storage, `task e2e` for HTTP, server and delivery) + a manual mutants table in the PR description |
 | Full gate before the release PR `release/*` → `main` | `task gate` (unit tests + cargo-mutants and Stryker mutations over the whole release diff against `main` + e2e + Playwright) |
 | Prune worktrees of merged branches | `task worktrees:prune` (dry-run) · `task worktrees:prune -- --apply` |
@@ -69,12 +69,21 @@ Applies to `crates/`, `web/src/`, `cli/`. Checked by `tools/lint-structure` in t
 1. No more than **4 files** per folder.
 2. No more than **8 subfolders** per folder.
 3. **Mixed folders are forbidden**: a folder contains either files or subfolders.
+4. **Big files are forbidden: no file longer than 400 lines** (physical lines, as `wc -l` counts them; comments, blank lines and tests included). A file over 400 lines cannot be read in one sitting or reviewed properly, and it hides several concepts. Rules 1-3 apply to `crates/`, `web/src/`, `cli/`; rule 4 applies to `.rs`, `.ts`, `.tsx` under `crates/`, `web/src/`, `web/screens/`, `web/test/`, `cli/`, `tools/`. Only `generated/` and `migrations/` are exempt (`web/e2e` and `web/.storybook` are outside the roots by the owner's decision). `task structure` fails on it and lists offenders largest first; `task structure:report` (non-gating) lists the 20 largest files and everything from 320 lines (80% of the limit) so that the queue is visible before it breaks.
 
 Not counted: manifests and configs (`Cargo.toml`, `package.json`, `tsconfig*.json`, …), test files (`*.test.*`, `*.spec.*`), the `tests/`, `migrations/` and `generated/` directories, dotfiles. Entry files (`lib.rs`, `main.rs`, `mod.rs`, `index.ts`) do not make a folder "mixed" but do count toward the limit of 4 files. Consequence for Rust: a module with submodules is `foo/mod.rs` + `foo/…`, not `foo.rs` next to `foo/`. If you exceed the limit, extract a subfolder by meaning; do not hide files in `misc/`.
+
+Splitting a file that is too long:
+
+- Split by meaning (one concept, one behaviour or one section per file), never `part1`/`misc`/`utils`.
+- **Rust unit tests.** Keep `mod tests` inline while the file fits. When it does not, move the test module into a sibling `tests/` folder under the same file name, declared as the last top-level item of the module: `#[cfg(test)] #[path = "tests/<file>.rs"] mod tests;` (`foo/egress.rs` -> `foo/tests/egress.rs`, `foo/mod.rs` -> `foo/tests/mod.rs`). The body moves unchanged (`use super::*;` keeps access to private items); the `#[allow(..., reason = ...)]` becomes `#![allow(...)]` at the top of the file. `tests/` is exempt from the rule of four and from mutation testing, and is still checked by AAA. Never put `#[path]` inside an inline `mod x { }`.
+- **Rust integration tests.** Every top-level file in `tests/` is a separate binary that links all dependencies and recompiles `common`. Do not split by adding top-level files: turn `tests/<name>.rs` into `tests/<name>/main.rs` (shared attributes, `#[path = "../common/mod.rs"] mod common;`, `mod` declarations) plus one module per behaviour. Split oversized helpers inside `tests/common/` by meaning.
+- **TypeScript tests.** Split `x.test.ts` by subject into `x.<subject>.test.ts`; helpers shared by those files live in `x.fixtures.ts`.
 
 ## Code style
 
 - **Rust:** "boring Rust" (section 3): no custom procedural macros and no type-level magic. Lints live in `[workspace.lints]` in `Cargo.toml` (`unsafe_code = forbid`; `unwrap`, `panic`, `todo`, `dbg!`, `println!` are forbidden); `rustfmt.toml`, `clippy.toml`. Errors: `thiserror` in `domain` and `app`, `problem+json` at the HTTP boundary.
+- **Function length.** clippy `too-many-lines-threshold = 60` (code lines only: clippy skips blank lines and comments); Biome `noExcessiveLinesPerFunction` at 80 lines with blank lines skipped (Biome counts comments, and JSX is more verbose, hence 80 and not 60), off for `*.test.*` (`describe` is a container Biome cannot skip; AAA and the file limit already bound test bodies). Stories are not exempt. Cut a long function into named steps by meaning, not into "first half / second half". Cut it into named steps that take the shared context as one parameter; do not move closures into an object only to destructure it back. The only allowed exemption is a table-driven Rust test whose long `cases` table is data: `#[expect(clippy::too_many_lines, reason = "...")]` (`expect`, so the attribute fails when the table shrinks); extracting the table into a function would break AAA.
 - **serde:** `#[derive(Serialize, Deserialize)]` is allowed only at the wire-format boundary: in `formats` (protocols) and `entry` (the HTTP protocol, configuration). It is forbidden in `domain`, `ports` and `app`; errors there use `thiserror`. Reason: parsing the JSON and XML of five formats by hand is thousands of lines.
 - **TypeScript wherever possible:** scripts, configs and tools are written in `.ts` (Node 24 runs them directly, erasable syntax only: no `enum` and no `namespace`). `.mjs` files are forbidden in the repository; `.js`/`.cjs` only where a tool does not support TS.
 - **TypeScript:** strict, Biome (format and lint), no `any`, no `console`, no `!`. The `~/` alias points to `src/`.

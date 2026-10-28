@@ -7,10 +7,12 @@ SPA на React строится на собственном UI kit на Base UI:
 | Задача | Решение (лицензия) |
 | --- | --- |
 | Каркас | React 19, TypeScript, Vite (MIT) |
-| Компоненты | Собственный UI kit на Base UI (MIT), Tailwind CSS (MIT), lucide-react (ISC), sonner (MIT), motion (MIT) |
+| Компоненты | Собственный UI kit на Base UI (MIT), Tailwind CSS (MIT), lucide-react (ISC), sonner (MIT); анимации — CSS-токены кита и Base UI |
 | Данные | TanStack Query, Router, Table, Virtual (MIT); клиент API генерируется из OpenAPI (orval, MIT) |
 | Графики и граф зависимостей | Recharts (MIT), xyflow / React Flow (MIT) |
-| Markdown README | react-markdown + rehype-sanitize (MIT), подсветка Shiki (MIT) |
+| Markdown README | react-markdown + rehype-sanitize (MIT), подсветка Shiki (MIT); без сырого HTML и внешних картинок |
+| Интерфейс RU/EN | Lingui (MIT): исходный язык ru, локали ru и en; тексты в коде макросами `t`, `msg`, `plural`, переводы в каталогах `.po` |
+| Шрифты | Onest (текст и заголовки) и JetBrains Mono без лигатур (машинные значения и код); оба под OFL-1.1, self-hosted через fontsource |
 | Тесты | Vitest, Testing Library (MIT), Playwright (Apache-2.0), Storybook (MIT) |
 
 ## Структура кода: FSD и правило четырёх
@@ -39,5 +41,15 @@ SPA на React строится на собственном UI kit на Base UI:
 -   Списки любого размера с виртуализацией; prefetch карточки по наведению.
 -   Первая загрузка SPA меньше 250 КБ gzip, остальное лениво по маршрутам.
 -   Доступность WCAG 2.2 AA (контрасты уже заложены в токенах кита), светлая и тёмная темы.
+-   Интерфейс на русском и английском (RU/EN) обязателен: нет захардкоженных видимых строк, язык переключается в самом интерфейсе.
 -   Командная палитра (Ctrl K: переходы и поиск пакетов по ссылкам из `GET /me`) и центр уведомлений (те же события, что уходят в почту и вебхуки) — с первой версии UI.
 -   Композиция, паттерны и экраны — [docs/ui/](../ui/README.md); контракт данных — `docs/api/admin.openapi.yaml`.
+
+## Безопасность отдачи
+
+README, metadata и evidence пакетов недоверенны (14.3), поэтому консоль работает со строгой политикой.
+
+-   **CSP консоли:** `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`.
+-   **Заголовки:** `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `Cross-Origin-Opener-Policy: same-origin`.
+-   Inline-скриптов и `unsafe-eval` нет; исключение требует отдельного решения.
+-   **README:** react-markdown + rehype-sanitize. Сырой HTML не пропускается (`rehype-raw` запрещён). Внешние картинки не загружаются, а показываются ссылкой: иначе пиксель слежки следил бы за AppSec и SecOps; политика `img-src` это обеспечивает. Ссылки получают `rel="noopener noreferrer nofollow"`, iframe и формы вырезаются.

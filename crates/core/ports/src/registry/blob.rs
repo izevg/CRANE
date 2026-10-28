@@ -1,19 +1,15 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use bytes::Bytes;
 use crane_domain::registry::Sha256;
 use futures_core::Stream;
 
+use super::Digests;
+
 /// Поток байт тела артефакта; ошибка чтения — `io::Error`.
 pub type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, std::io::Error>> + Send>>;
-
-/// SHA-256 и размер содержимого.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Digests {
-    pub sha256: Sha256,
-    pub size: u64,
-}
 
 /// Непрозрачный ключ временного объекта; смысл знает только породивший его адаптер.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +60,9 @@ pub enum BlobError {
     /// Входной поток оборвался: это ошибка запроса клиента, а не хранилища.
     #[error("ошибка чтения тела запроса")]
     Body(#[source] std::io::Error),
+    /// Хранилище не отвечает (соединение, таймаут, 5xx): повтор позже имеет смысл.
+    #[error("хранилище не отвечает")]
+    Unreachable(#[source] Box<dyn std::error::Error + Send + Sync>),
     #[error("ошибка хранилища blob")]
     Backend(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
@@ -73,7 +72,8 @@ pub enum BlobError {
 /// Сверка с дайджестом, заявленным клиентом, не дело стора: это правило use case.
 pub trait BlobStore: Send + Sync {
     /// Сохраняет поток во временную зону и считает дайджесты.
-    /// Обрыв потока даёт `BlobError::Body`; staged-объект при этом не создаётся.
+    /// Обрыв потока даёт `BlobError::Body` с ошибкой потока без изменений (вызывающий различает по ней причину);
+    /// staged-объект при этом не создаётся.
     fn stage(&self, body: ByteStream) -> impl Future<Output = Result<Staged, BlobError>> + Send;
 
     /// Переносит staged-объект в CAS по его SHA-256.
@@ -86,4 +86,20 @@ pub trait BlobStore: Send + Sync {
 
     /// Открывает закоммиченный blob. Staged-объекты недоступны: `NotFound`.
     fn open(&self, sha256: &Sha256) -> impl Future<Output = Result<ByteStream, BlobError>> + Send;
+}
+
+// Registry и ProxyEngine обязаны делить один CAS, а `Clone` у хранилища молча скопировал бы
+// состояние memory-CAS вместо разделения: общий доступ выражаем явно через `Arc`.
+impl<T: BlobStore + ?Sized> BlobStore for Arc<T> {
+    fn stage(&self, body: ByteStream) -> impl Future<Output = Result<Staged, BlobError>> + Send {
+        (**self).stage(body)
+    }
+
+    fn commit(&self, staged: Staged) -> impl Future<Output = Result<Digests, BlobError>> + Send {
+        (**self).commit(staged)
+    }
+
+    fn open(&self, sha256: &Sha256) -> impl Future<Output = Result<ByteStream, BlobError>> + Send {
+        (**self).open(sha256)
+    }
 }

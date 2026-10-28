@@ -138,7 +138,7 @@ flowchart LR
 | --- | --- |
 | **Throughput** | Enterprise profile target of ~50,000 RPS; the download hot path never touches the database |
 | **Smallest profile** | One VM, 2 vCPU / 4 GB, PostgreSQL and a local disk only |
-| **Availability** | 99.99% for downloads across three zones; reads keep working when the primary database fails |
+| **Availability** | 99.99% for downloads across three zones; when the catalog (PostgreSQL) is unreachable, all protocol requests, reads included, get 503 + Retry-After: without the catalog reservations, blocks and quarantine cannot be checked (fail closed, decision 46) |
 | **Vulnerability detection** | ≤ 15 minutes from advisory publication to an owner's task |
 | **Dependency licenses** | Permissive OSS only: MIT, Apache-2.0, BSD, ISC; enforced by `cargo-deny` |
 
@@ -201,7 +201,7 @@ The documentation is currently in Russian; an English translation is planned.
 
 ## Roadmap
 
-Effort is estimated in agent-hours, calibrated against a measured real project ([section 18](docs/product/18-plan-team-budget.md)); the baseline scenario is about 770 agent-hours.
+Effort is estimated in agent-hours, calibrated against a measured real project ([section 18](docs/product/18-plan-team-budget.md)); the baseline scenario is about 800 agent-hours.
 
 - [x] Solution architecture and guidebook
 - [x] Effort estimate and roadmap
@@ -216,11 +216,15 @@ Open decisions: [section 19](docs/product/19-risks-open-decisions.md).
 
 The project is in the design stage, so the most valuable contribution right now is an architecture review: open an issue that links to the relevant documentation section. Repository layout, documentation and code guidelines, DCO sign-off and the review process are in [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md). By participating, you agree to the [Code of Conduct](CODE_OF_CONDUCT-EN.md).
 
-**Security issues** in CRANE must not be reported in public issues: private reporting, timelines and scope are in [SECURITY-EN.md](SECURITY-EN.md).
+**Dogfooding.** `task dogfood:full` starts a throwaway stand, publishes every CRANE crate to it, builds the server from CRANE's own registry (external dependencies go through the crates.io proxy) and repeats the build with the upstream unreachable. Details: [section 16.7](docs/product/16-deployment.md) (in Russian).
+
+**Security issues** in CRANE must not be reported in public issues: private reporting and scope are in [SECURITY-EN.md](SECURITY-EN.md).
 
 ## License
 
 [Apache License 2.0](LICENSE): an explicit patent grant and compatibility with the whole stack. See also [NOTICE](NOTICE).
+
+CRANE is pure OSS with no SLA or guaranteed support period; release security is best effort; the CRA position is in [SECURITY-EN.md](SECURITY-EN.md).
 
 <div align="center">
 <sub>Logo and artwork: <a href="brand/">brand/</a></sub>

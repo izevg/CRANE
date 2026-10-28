@@ -8,11 +8,15 @@ export interface ExecOptions {
   /** Значения идут в окружение docker CLI, в argv попадают только имена: секреты не видны в `ps`. */
   env?: Record<string, string>;
   input?: string;
+  /** По умолчанию как у exec.ts; долгим сборкам передают больше. */
+  timeoutMs?: number;
 }
 
 export interface Client {
   /** Выполняет команду в контейнере; код выхода не проверяет. */
   exec(cmd: string[], options?: ExecOptions): Result;
+  /** Копирует содержимое каталога хоста в каталог контейнера (создаётся, владелец root). */
+  copyIn(hostDir: string, to: string): void;
   /** Пишет файл (путь относительно /work), недостающие каталоги создаёт. */
   write(path: string, text: string): void;
   stop(): void;
@@ -44,6 +48,9 @@ export function startClient(stand: Stand, image: string, env: Record<string, str
     if (options.input !== undefined) {
       call.input = options.input;
     }
+    if (options.timeoutMs !== undefined) {
+      call.timeoutMs = options.timeoutMs;
+    }
     return run(
       "docker",
       [
@@ -64,6 +71,10 @@ export function startClient(stand: Stand, image: string, env: Record<string, str
       if (result.status !== 0) {
         throw new Error(`не записать ${path}: ${result.stderr.trim()}`);
       }
+    },
+    copyIn(hostDir, to) {
+      runOk("docker", ["exec", container, "mkdir", "-p", to]);
+      runOk("docker", ["cp", `${hostDir}/.`, `${container}:${to}`]);
     },
     stop() {
       run("docker", ["rm", "-f", container]);

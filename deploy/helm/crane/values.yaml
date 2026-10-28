@@ -2,6 +2,8 @@ image:
   repository: crane/crane
   # По умолчанию appVersion чарта
   tag: ""
+  # Digest индекса образа (`sha256:…`). Если задан, образ ссылается как repository:tag@digest и выбирает его digest.
+  digest: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -9,6 +11,10 @@ imagePullSecrets: []
 # Внешние сервисы организации (PostgreSQL, Valkey, S3 не входят в чарт).
 # Секрет с ключами CRANE_DATABASE_URL (обязателен) и CRANE_CACHE, CRANE_BLOBS (по необходимости)
 # создаётся вне чарта: external-secrets, sealed-secrets или вручную.
+# Требования к PostgreSQL: 17+, pgvector >= 0.8, pg_trgm. `crane migrate` создаёт расширения сам, если у роли есть права:
+# vector недоверенное (нужен суперпользователь), pg_trgm доверенное (хватает CREATE на базе). Иначе администратор заранее
+# выполняет `CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;`, а migrate без них не стартует.
+# Требования к внешнему Valkey: `maxmemory` и `maxmemory-policy allkeys-lru` (ключи артефактов живут без TTL).
 existingSecret: ""
 config:
   cache: memory
@@ -38,6 +44,7 @@ service:
   type: ClusterIP
   port: 80
 
+# Ingress, которому доверяют (CRANE_TRUSTED_PROXIES), обязан перезаписывать X-Request-Id: docs/product/16-deployment.md, раздел 16.2.
 ingress:
   enabled: false
   className: ""

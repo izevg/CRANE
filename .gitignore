@@ -10,6 +10,7 @@ test-results/
 mutants.out*/
 .stryker-tmp/
 reports/
+web/src/shared/api/generated/
 
 # Зависимости
 # Без косой черты: Orca подключает node_modules в worktree символической ссылкой, а не каталогом.
