@@ -39,18 +39,28 @@ impl OrderKeyBuilder {
     /// Число: байт длины и big-endian без ведущих нулей. Длиннее значит больше, поэтому 9 < 10.
     #[must_use]
     pub fn number(mut self, value: u64) -> Self {
-        let digits: Vec<u8> = value
-            .to_be_bytes()
-            .into_iter()
-            .skip_while(|byte| *byte == 0)
-            .collect();
+        let bytes = value.to_be_bytes();
+        let leading_zeros = bytes.iter().take_while(|byte| **byte == 0).count();
+        let significant = &bytes[leading_zeros..];
         #[expect(
             clippy::cast_possible_truncation,
             reason = "у u64 не больше восьми значащих байт"
         )]
-        self.0.push(digits.len() as u8);
-        self.0.extend_from_slice(&digits);
+        self.0.push(significant.len() as u8);
+        self.0.extend_from_slice(significant);
         self
+    }
+
+    /// Число произвольной длины, заданное десятичными цифрами (идентификатор pre-release,
+    /// сегмент версии), не помещающееся в `u64`. Порядок по значению: без ведущих нулей,
+    /// сначала длина, затем цифры. Вызывающий передаёт только ASCII-цифры.
+    #[must_use]
+    pub fn digits(self, digits: &str) -> Self {
+        let significant = digits.trim_start_matches('0');
+        // Длина в цифрах не превышает размера строки в памяти, а `usize` помещается в `u64`.
+        let mut keyed = self.number(significant.len() as u64);
+        keyed.0.extend_from_slice(significant.as_bytes());
+        keyed
     }
 
     /// Текст: нулевой байт экранируется, в конце терминатор. Префикс меньше продолжения.

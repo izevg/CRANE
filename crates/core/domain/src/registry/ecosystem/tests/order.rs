@@ -140,3 +140,54 @@ fn rank_orders_variants_before_the_rest_of_the_key() {
     // Assert
     assert_eq!(ordering, Ordering::Less);
 }
+
+fn digits(value: &str) -> OrderKey {
+    OrderKeyBuilder::new().digits(value).finish()
+}
+
+#[test]
+fn digits_compare_by_value_whatever_their_length() {
+    // Arrange
+    let pairs = [
+        (digits("9"), digits("10")),
+        (digits("2"), digits("100")),
+        (
+            digits("99999999999999999999"),
+            digits("100000000000000000000"),
+        ),
+        (digits("0"), digits("1")),
+        (digits("007"), digits("7")),
+        (digits("10"), digits("9")),
+    ];
+
+    // Act
+    let actual = pairs.map(|(a, b)| a.cmp(&b));
+
+    // Assert
+    assert_eq!(
+        actual,
+        [
+            Ordering::Less,
+            Ordering::Less,
+            Ordering::Less,
+            Ordering::Less,
+            Ordering::Equal,
+            Ordering::Greater,
+        ]
+    );
+}
+
+#[test]
+fn digits_keep_following_elements_out_of_the_comparison() {
+    // Arrange
+    let (short, long) = (
+        OrderKeyBuilder::new().digits("9").text("z").finish(),
+        OrderKeyBuilder::new().digits("10").text("a").finish(),
+    );
+
+    // Act
+    let ordering = short.cmp(&long);
+
+    // Assert
+    assert_eq!(ordering, Ordering::Less);
+}

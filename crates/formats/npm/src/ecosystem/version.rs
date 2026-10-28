@@ -42,8 +42,8 @@ fn order_key(version: &semver::Version) -> OrderKey {
         .split('.')
         .fold(core.rank(RANK_PRERELEASE), |builder, id| {
             if id.bytes().all(|b| b.is_ascii_digit()) {
-                // Число произвольной длины: сначала длина цифр (без ведущих нулей по SemVer), затем цифры.
-                builder.rank(RANK_NUMERIC).number(id.len() as u64).text(id)
+                // Число произвольной длины: порядок по значению даёт `digits`.
+                builder.rank(RANK_NUMERIC).digits(id)
             } else {
                 builder.rank(RANK_ALPHANUMERIC).text(id)
             }
