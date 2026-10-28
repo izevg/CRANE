@@ -1,6 +1,7 @@
 //! Репозитории формата: списки hosted и proxy и предел размера публикации.
 
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 use crane_domain::registry::{Format, RepositoryKind};
 use crane_domain::settings::{Kind, SettingDef, Unit};
@@ -28,15 +29,15 @@ pub(super) const SETTINGS: [SettingDef; 1] = [SettingDef {
 }];
 
 /// Определения списков всех форматов, выведенные из `REPO_VARS`: новый формат ключ не дописывает.
-/// Имена ключей строятся во время работы, поэтому живут вечно (`Box::leak`); вызывается один раз
-/// на процесс из `config::definitions`, утечка ограничена размером `REPO_VARS`.
-pub(super) fn list_settings() -> Vec<SettingDef> {
-    list_vars()
-        .map(|var| SettingDef {
-            key: Box::leak(key_of(var).into_boxed_str()),
-            ..setting(GROUP, "", var, Kind::List)
-        })
-        .collect()
+/// Имена ключей строятся из имён переменных один раз и живут в статике, поэтому вызывать можно
+/// сколько угодно.
+pub(super) fn list_settings() -> impl Iterator<Item = SettingDef> {
+    static KEYS: OnceLock<Vec<String>> = OnceLock::new();
+    let keys = KEYS.get_or_init(|| list_vars().map(key_of).collect());
+    list_vars().zip(keys).map(|(var, key)| SettingDef {
+        key: key.as_str(),
+        ..setting(GROUP, "", var, Kind::List)
+    })
 }
 
 /// Имена переменных списков всех форматов. Новый формат сюда не дописывается: достаточно `REPO_VARS`.

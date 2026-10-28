@@ -55,8 +55,7 @@ fn vars() -> impl Iterator<Item = &'static str> {
     .chain(repos::list_vars())
 }
 
-/// Определения всех ключей настроек. Ключ списка репозиториев строится из `REPO_VARS`, поэтому
-/// таблица собирается один раз на процесс (см. `repos::list_settings`).
+/// Определения всех ключей настроек, собранные один раз на процесс.
 pub(crate) fn definitions() -> &'static [SettingDef] {
     static ALL: OnceLock<Vec<SettingDef>> = OnceLock::new();
     ALL.get_or_init(|| {
