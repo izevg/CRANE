@@ -1,4 +1,4 @@
-// Одноразовый стенд: те же docker-compose.yaml, docker-compose.s3.yaml и docker-compose.cache.yaml, что у оператора, с отдельным проектом, секретами,
+// Одноразовый стенд: те же deploy/compose/docker-compose.yaml, docker-compose.s3.yaml и docker-compose.cache.yaml, что у оператора, с отдельным проектом, секретами,
 // подсетью и портами. Всё, что создано, снимается в down(), в том числе после сбоя.
 import { randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -93,13 +93,14 @@ const SECRET_FILES = {
 const WRONG_TOKEN_NAME = "неверный токен";
 const S3_ENDPOINT = "http://seaweedfs:8333";
 // Стенд = Valkey + S3 + PostgreSQL: те же override-файлы, что включает оператор.
+const DOCKERFILE = "deploy/docker/Dockerfile";
 const COMPOSE_MODES = [
   "-f",
-  "docker-compose.yaml",
+  "deploy/compose/docker-compose.yaml",
   "-f",
-  "docker-compose.s3.yaml",
+  "deploy/compose/docker-compose.s3.yaml",
   "-f",
-  "docker-compose.cache.yaml",
+  "deploy/compose/docker-compose.cache.yaml",
 ];
 /**
  * Имя proxy-репозитория crates.io для цели cargo с номером `index`: `/cargo/<имя>/`. Ключ кэша включает
@@ -167,7 +168,7 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
         secrets.push({ name: file, value: readSecret(secretPaths, variable) });
       }
       log(`стенд ${project}: сборка образа ${image}`);
-      docker(["build", "-t", image, root], { timeoutMs: BUILD_TIMEOUT_MS });
+      docker(["build", "-f", DOCKERFILE, "-t", image, root], { timeoutMs: BUILD_TIMEOUT_MS });
       startCompose(
         overrides,
         {
@@ -206,6 +207,8 @@ export function describeStand(root: string, proxyRepos: string[]): Stand {
 function composeCommand(project: string, overrides: string): string[] {
   return [
     "compose",
+    "--project-directory",
+    ".",
     "-p",
     project,
     ...COMPOSE_MODES,

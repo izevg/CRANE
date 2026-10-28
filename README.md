@@ -11,7 +11,7 @@
 
 [![Статус: проектирование](https://img.shields.io/badge/статус-проектирование-951b81?style=flat-square)](docs/product/README.md)
 [![Лицензия Apache-2.0](https://img.shields.io/badge/лицензия-Apache--2.0-29303e?style=flat-square)](LICENSE)
-[![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa?style=flat-square)](CODE_OF_CONDUCT.md)
+[![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa?style=flat-square)](.github/CODE_OF_CONDUCT.md)
 [![Rust](https://img.shields.io/badge/Rust-tokio%20·%20axum-b7410e?style=flat-square&logo=rust&logoColor=white)](docs/product/03-load-forecast-rust-vs-fastapi.md)
 [![PostgreSQL 17+](https://img.shields.io/badge/PostgreSQL-17%2B-336791?style=flat-square&logo=postgresql&logoColor=white)](docs/product/09-data-structures.md)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm-326ce5?style=flat-square&logo=kubernetes&logoColor=white)](docs/product/16-deployment.md)
@@ -214,17 +214,17 @@ publish:
 
 ## Участие
 
-Проект на стадии проектирования, поэтому самый ценный вклад сейчас — ревью архитектуры: issue со ссылкой на раздел документации. Как устроен репозиторий, правила для документации и кода, подпись DCO и порядок ревью — в [CONTRIBUTING.md](CONTRIBUTING.md). Участвуя, вы принимаете [Кодекс поведения](CODE_OF_CONDUCT.md).
+Проект на стадии проектирования, поэтому самый ценный вклад сейчас — ревью архитектуры: issue со ссылкой на раздел документации. Как устроен репозиторий, правила для документации и кода, подпись DCO и порядок ревью — в [CONTRIBUTING.md](.github/CONTRIBUTING.md). Участвуя, вы принимаете [Кодекс поведения](.github/CODE_OF_CONDUCT.md).
 
 **Проверка на себе.** `task dogfood:full` поднимает одноразовый стенд, публикует в него все крейты CRANE, собирает сервер из собственного реестра (внешние зависимости идут через proxy crates.io) и повторяет сборку без доступа к upstream. Подробности: [раздел 16.7](docs/product/16-deployment.md).
 
-**Уязвимости** в CRANE не публикуйте в открытых issue: порядок приватного сообщения и область действия — в [SECURITY.md](SECURITY.md).
+**Уязвимости** в CRANE не публикуйте в открытых issue: порядок приватного сообщения и область действия — в [SECURITY.md](.github/SECURITY.md).
 
 ## Лицензия
 
-[Apache License 2.0](LICENSE): явный патентный грант и совместимость со всем стеком. Краткое изложение на русском — [LICENSE-RU.md](LICENSE-RU.md), уведомления — [NOTICE](NOTICE).
+[Apache License 2.0](LICENSE): явный патентный грант и совместимость со всем стеком. Краткое изложение на русском — [LICENSE-RU.md](docs/LICENSE-RU.md), уведомления — [NOTICE](NOTICE).
 
-CRANE — чистый OSS без SLA и гарантированного срока поддержки; безопасность релизов best effort; позиция по CRA — в [SECURITY.md](SECURITY.md).
+CRANE — чистый OSS без SLA и гарантированного срока поддержки; безопасность релизов best effort; позиция по CRA — в [SECURITY.md](.github/SECURITY.md).
 
 <div align="center">
 <sub>Логотип и графика: <a href="brand/">brand/</a></sub>

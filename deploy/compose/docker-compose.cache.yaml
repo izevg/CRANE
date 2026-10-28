@@ -1,8 +1,9 @@
 # Valkey-режим (раздел 16.1 docs/product): общий кэш реплик CRANE вместо кэша memory.
 # Это override к docker-compose.yaml, а не профиль: он меняет настройку самого crane (секрет cache_url,
 # сеть, зависимость от valkey), а профиль так не умеет. Подключение, одним из двух способов:
-#   COMPOSE_FILE=docker-compose.yaml:docker-compose.cache.yaml      (строка в .env)
-#   docker compose -f docker-compose.yaml -f docker-compose.cache.yaml up -d
+#   COMPOSE_FILE=deploy/compose/docker-compose.yaml:deploy/compose/docker-compose.cache.yaml      (строка в .env)
+#   docker compose --project-directory . -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.cache.yaml up -d
+# (`--project-directory .` нужен в обоих способах: пути и .env считаются от корня репозитория)
 # Нужны файлы секретов VALKEY_PASSWORD_SECRET и CRANE_CACHE_URL_SECRET (`task secrets:init` создаёт их);
 # Адрес Valkey с паролем лежит только в секрете cache_url; CRANE_CACHE не задаётся.
 # Кэш хранит тела документов и указатели на CAS: Valkey требует аутентификацию (пользователь default выключен)

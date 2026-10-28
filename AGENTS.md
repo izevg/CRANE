@@ -140,5 +140,5 @@ The full description (branch diagram, versioning, tag rules, release procedure) 
 
 ## Documentation
 
-- `docs/product/` is maintained in Russian; the root files (README, CONTRIBUTING, SECURITY, code of conduct) are Russian with an `-EN` mirror. `AGENTS.md` and `CLAUDE.md` are English only. After edits, build the guidebook (`tools/build-guidebook.sh`, `--strict` mode).
+- `docs/product/` is maintained in Russian; README (root) and the community files in `.github/` (CONTRIBUTING, SECURITY, code of conduct) are Russian with an `-EN` mirror. `AGENTS.md` and `CLAUDE.md` are English only. After edits, build the guidebook (`tools/build-guidebook.sh`, `--strict` mode).
 - If you add or remove functionality, update `tools/estimate-agent-hours.py` and the numbers in sections 1 and 18.

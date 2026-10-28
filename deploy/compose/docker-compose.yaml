@@ -1,14 +1,16 @@
 # Single node (раздел 16.1 docs/product): caddy, crane (роль all), postgres, локальный том blobs.
-# Запуск: cp .env.dist .env, создать файлы секретов (см. .env.dist), затем docker compose up -d
+# Запуск из корня репозитория: cp .env.dist .env, создать файлы секретов (см. .env.dist), затем
+#   docker compose --project-directory . -f deploy/compose/docker-compose.yaml up -d
+# `--project-directory .` обязателен: пути в файлах (./deploy/caddy, ./secrets) и .env считаются от корня, а не от deploy/compose.
 # Значения только из .env; пропущенная переменная останавливает запуск.
 # Секреты (токен, пароль PostgreSQL, URL каталога) лежат в файлах и монтируются в /run/secrets:
 # ни в переменных окружения, ни в этом файле их нет.
 # Профиль: scan (analyzer + trivy). Остальные режимы описаны override-файлами, а не профилями:
 # они меняют настройку самого crane (ключи, сети, зависимости). Подключаются через COMPOSE_FILE (строка в .env)
 # или несколькими -f:
-#   docker-compose.s3.yaml     S3 (SeaweedFS) вместо локального тома blobs
-#   docker-compose.cache.yaml  Valkey с обязательной аутентификацией в изолированной сети cache
-#   COMPOSE_FILE=docker-compose.yaml:docker-compose.s3.yaml:docker-compose.cache.yaml
+#   deploy/compose/docker-compose.s3.yaml     S3 (SeaweedFS) вместо локального тома blobs
+#   deploy/compose/docker-compose.cache.yaml  Valkey с обязательной аутентификацией в изолированной сети cache
+#   COMPOSE_FILE=deploy/compose/docker-compose.yaml:deploy/compose/docker-compose.s3.yaml:deploy/compose/docker-compose.cache.yaml
 # По умолчанию single-node работает с кэшем memory (CRANE_CACHE не задан) и локальным томом, секретов Valkey и S3 не требует.
 name: crane
 

@@ -1,8 +1,9 @@
 # S3-режим (раздел 16.1 docs/product): SeaweedFS вместо локального тома blobs.
 # Это override к docker-compose.yaml, а не профиль: он меняет настройку самого crane (ключи, зависимости,
 # тома), а профиль так не умеет. Подключение, одним из двух способов:
-#   COMPOSE_FILE=docker-compose.yaml:docker-compose.s3.yaml      (строка в .env)
-#   docker compose -f docker-compose.yaml -f docker-compose.s3.yaml up -d
+#   COMPOSE_FILE=deploy/compose/docker-compose.yaml:deploy/compose/docker-compose.s3.yaml      (строка в .env)
+#   docker compose --project-directory . -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.s3.yaml up -d
+# (`--project-directory .` нужен в обоих способах: пути и .env считаются от корня репозитория)
 # Нужны файлы секретов S3_ACCESS_KEY_ID_SECRET и S3_SECRET_ACCESS_KEY_SECRET (`task secrets:init` создаёт их) и CRANE_BLOBS=s3://<S3_BUCKET>?endpoint=http://seaweedfs:8333&allow_http=true.
 # Ключи S3 лежат только в файлах: в окружении, в URL и в аргументах команд их нет.
 
