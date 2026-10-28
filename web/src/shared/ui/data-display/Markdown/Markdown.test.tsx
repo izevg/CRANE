@@ -32,7 +32,7 @@ describe("Markdown", () => {
     // Assert
     const link = await screen.findByRole("link", { name: SITE_LINK });
     expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer nofollow");
   });
 
   it("ссылка javascript: теряет адрес и не становится ссылкой", async () => {
