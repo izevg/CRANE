@@ -318,6 +318,8 @@ GCRA по адресу клиента на слое HTTP (адрес с учёт
 | `PUT /onboarding/steps/{step}` | валидировать и сохранить ключи шага | Bearer мастера | `SettingChanged` по каждому ключу |
 | `POST /onboarding/steps/{step}/probe` | проверка связи без сохранения | Bearer мастера | нет |
 | `POST /onboarding/completion` | завершить мастер | Bearer мастера | `OnboardingCompleted` |
+| `GET /me` | профиль и навигация по смонтированным разделам | Bearer | нет |
+| `GET /status` | версия, режим и фаза; `restart_required` только под токеном | публично / Bearer | нет |
 | `GET /settings`, `GET /settings/{key}` | итоговые значения с источниками | `settings:read` | нет |
 | `PUT /settings/{key}` | записать значение (`If-None-Match: *` при создании, `If-Match` с версией при обновлении) | `settings:write` | `SettingChanged` / `SettingRejected` |
 | `DELETE /settings/{key}` | убрать значение из БД (`If-Match`) | `settings:write` | `SettingDeleted` / `SettingRejected` |

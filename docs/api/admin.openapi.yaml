@@ -464,7 +464,7 @@ paths:
       description: 'Роли: любой аутентифицированный.'
       operationId: getMe
       x-crane-phase: P0
-      x-crane-since: v0.4.0
+      x-crane-since: v0.3.0
       x-crane-action: me:read
       x-crane-step-up: false
       x-crane-audit: null
