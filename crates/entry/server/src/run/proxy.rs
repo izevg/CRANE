@@ -1,6 +1,6 @@
 //! Сборка proxy-репозиториев: один движок на процесс для всех форматов, router на каждое имя.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use axum::Router;
@@ -62,6 +62,11 @@ pub(super) struct Prepared<B> {
 }
 
 impl<B: BlobStore + 'static> Prepared<B> {
+    /// Форматы, у которых есть источник проверки публичных имён.
+    pub(super) fn checked_formats(&self) -> BTreeSet<Format> {
+        self.sources.keys().copied().collect()
+    }
+
     /// Что публичные реестры знают об имени.
     pub(super) fn upstream_names(&self) -> Arc<dyn UpstreamNames> {
         Arc::new(EngineUpstreamNames::new(
@@ -102,6 +107,31 @@ fn limits(max_artifact_bytes: u64) -> ProxyLimits {
     ProxyLimits {
         max_artifact_bytes,
         ..ProxyLimits::DEFAULT
+    }
+}
+
+/// Форматы с hosted-репозиториями, но без источника проверки публичных имён: первая загрузка
+/// публичного имени в них не отличается от загрузки нового, пока имя не зарезервировано.
+pub(super) fn formats_without_name_check(repos: &Repos, checked: &BTreeSet<Format>) -> Vec<Format> {
+    Format::ALL
+        .into_iter()
+        .filter(|format| !repos.names(*format, RepositoryKind::Hosted).is_empty())
+        .filter(|format| !checked.contains(format))
+        .collect()
+}
+
+/// Предупреждает в журнал о каждом формате, чьи публичные имена не проверяются.
+pub(super) fn warn_unchecked_names<B: BlobStore + 'static>(
+    repos: &Repos,
+    proxies: Option<&Prepared<B>>,
+) {
+    let checked = proxies.map(Prepared::checked_formats).unwrap_or_default();
+    for format in formats_without_name_check(repos, &checked) {
+        tracing::warn!(
+            format = format.as_str(),
+            "hosted {} без проверки публичных имён: настройте proxy формата или CRANE_NAMESPACES",
+            format.as_str()
+        );
     }
 }
 
