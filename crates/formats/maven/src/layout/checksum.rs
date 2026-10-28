@@ -1,4 +1,5 @@
-use crane_domain::registry::DigestError;
+use crane_domain::registry::{DigestError, Digests};
+use md5::Md5;
 use sha1::{Digest, Sha1};
 use sha2::{Sha256, Sha512};
 
@@ -43,18 +44,25 @@ impl Algorithm {
     }
 
     /// Сумма байтов документа (`maven-metadata.xml`) в hex нижнего регистра. Файлы версий
-    /// берут сумму из дайджестов каталога, а не пересчитывают.
-    ///
-    /// `None` — для алгоритма без реализации: `Md5` появится вместе с дайджестами каталога.
-    // FIXME(v0.3.0): `Md5` считается после PR дайджестов (в lock нет `md-5` 0.10): тогда `hash`
-    // перестанет быть `Option`.
+    /// берут сумму из дайджестов каталога ([`Algorithm::of`]), а не пересчитывают.
     #[must_use]
-    pub fn hash(self, bytes: &[u8]) -> Option<String> {
+    pub fn hash(self, bytes: &[u8]) -> String {
         match self {
-            Self::Md5 => None,
-            Self::Sha1 => Some(format!("{:x}", Sha1::digest(bytes))),
-            Self::Sha256 => Some(format!("{:x}", Sha256::digest(bytes))),
-            Self::Sha512 => Some(format!("{:x}", Sha512::digest(bytes))),
+            Self::Md5 => format!("{:x}", Md5::digest(bytes)),
+            Self::Sha1 => format!("{:x}", Sha1::digest(bytes)),
+            Self::Sha256 => format!("{:x}", Sha256::digest(bytes)),
+            Self::Sha512 => format!("{:x}", Sha512::digest(bytes)),
+        }
+    }
+
+    /// Сумма файла версии из дайджестов каталога, посчитанных при записи, в hex нижнего регистра.
+    #[must_use]
+    pub fn of(self, digests: &Digests) -> String {
+        match self {
+            Self::Md5 => digests.md5.to_string(),
+            Self::Sha1 => digests.sha1.to_string(),
+            Self::Sha256 => digests.sha256.to_string(),
+            Self::Sha512 => digests.sha512.to_string(),
         }
     }
 

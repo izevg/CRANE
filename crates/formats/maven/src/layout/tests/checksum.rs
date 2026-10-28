@@ -1,7 +1,8 @@
-use crane_domain::registry::DigestError;
+use crane_domain::registry::{DigestError, Digests, Md5, Sha1, Sha256, Sha512};
 
 use crate::layout::Algorithm;
 
+const MD5_OF_ABC: &str = "900150983cd24fb0d6963f7d28e17f72";
 const SHA1_OF_ABC: &str = "a9993e364706816aba3e25717850c26c9cd0d89d";
 const SHA256_OF_ABC: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 const SHA512_OF_ABC: &str = "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a\
@@ -19,10 +20,10 @@ fn document_hash_is_lowercase_hex_of_the_algorithm() {
     assert_eq!(
         actual,
         [
-            None,
-            Some(SHA1_OF_ABC.to_owned()),
-            Some(SHA256_OF_ABC.to_owned()),
-            Some(SHA512_OF_ABC.to_owned()),
+            MD5_OF_ABC.to_owned(),
+            SHA1_OF_ABC.to_owned(),
+            SHA256_OF_ABC.to_owned(),
+            SHA512_OF_ABC.to_owned(),
         ]
     );
 }
@@ -122,4 +123,30 @@ fn declared_sum_with_a_non_hex_character_is_rejected() {
 
     // Assert
     assert_eq!(result, Err(DigestError::InvalidChar('g')));
+}
+
+#[test]
+fn file_sum_is_taken_from_catalog_digests() {
+    // Arrange
+    let digests = Digests {
+        sha256: Sha256::from([1; 32]),
+        sha512: Sha512::from([2; 64]),
+        sha1: Sha1::from([3; 20]),
+        md5: Md5::from([4; 16]),
+        size: 0,
+    };
+
+    // Act
+    let actual = Algorithm::ALL.map(|algorithm| algorithm.of(&digests));
+
+    // Assert
+    assert_eq!(
+        actual,
+        [
+            "04".repeat(16),
+            "03".repeat(20),
+            "01".repeat(32),
+            "02".repeat(64),
+        ]
+    );
 }

@@ -392,9 +392,11 @@ version = "0.2.0"
 dependencies = [
  "crane-domain",
  "crane-ports",
+ "md-5 0.10.6",
  "sha1 0.10.7",
  "sha2 0.10.9",
  "thiserror",
+ "time",
  "uuid",
 ]
 
