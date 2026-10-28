@@ -10,10 +10,20 @@ const HTTP_NOT_FOUND = 404;
 const NPM_SCHEME = "Bearer";
 const FIRST_SEGMENT_END = 2;
 const SECOND_SEGMENT_END = 4;
+const SHORT_NAME_MAX = 2;
+const THREE_CHARS = 3;
 
-/** Раскладка sparse-индекса crates.io для имён длиной не меньше четырёх символов. */
-export const indexPath = (name: string): string =>
-  `${name.slice(0, FIRST_SEGMENT_END)}/${name.slice(FIRST_SEGMENT_END, SECOND_SEGMENT_END)}/${name}`;
+/** Раскладка sparse-индекса (crates/formats/cargo/src/index/mod.rs::index_path); имя в нижнем регистре. */
+export function indexPath(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.length <= SHORT_NAME_MAX) {
+    return `${lower.length}/${lower}`;
+  }
+  if (lower.length === THREE_CHARS) {
+    return `3/${lower.slice(0, 1)}/${lower}`;
+  }
+  return `${lower.slice(0, FIRST_SEGMENT_END)}/${lower.slice(FIRST_SEGMENT_END, SECOND_SEGMENT_END)}/${lower}`;
+}
 
 /** User-Agent curl из `authorizedCurl`: по нему аудит отличает отказ proxy от событий клиента пакетов. */
 export const CURL_AGENT = "curl/";
