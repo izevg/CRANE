@@ -3,29 +3,35 @@
 mod health;
 mod proxy;
 
+use std::collections::BTreeMap;
 use std::future::IntoFuture;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
 use crane_app::registry::Registry;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
+use crane_domain::settings::{Stored, Version};
 use crane_http::{FormatSettings, StaticToken, admin_router, api_router};
 use crane_memory::{MemoryBlobStore, MemoryCatalog};
 use crane_objstore::ObjectBlobStore;
-use crane_pg::PgCatalog;
+use crane_pg::{PgCatalog, PgSettings};
 use crane_ports::proxy::{NoUpstream, UpstreamNames};
 use crane_ports::registry::{BlobStore, Catalog};
+use crane_ports::settings::SettingsStore;
 use crane_ports::system::IdGen;
 use crane_siem::OcsfLogSink;
 use futures_util::future::{self, Either};
 use sqlx::PgPool;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tokio::net::TcpListener;
 use tokio::runtime::Builder;
 
-use crate::config::{Database, Settings, Storage};
+use crate::config::{
+    Blobs, Config, ConfigSchema, Database, Lookup, ReadFile, StoredLayer, definition, settings_key,
+};
 use crate::ecosystem::ecosystem;
 use crate::namespaces;
 use crate::system::{SystemClock, UuidV7Ids};
@@ -37,41 +43,121 @@ const DB_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) type RunError = Box<dyn std::error::Error + Send + Sync>;
 
-pub(crate) fn serve(settings: Settings) -> Result<(), RunError> {
+pub(crate) fn serve(var: Lookup, read_file: ReadFile) -> Result<(), RunError> {
     let runtime = Builder::new_multi_thread().enable_all().build()?;
-    runtime.block_on(serve_async(settings))
+    runtime.block_on(serve_async(var, read_file))
 }
 
-/// Собирает роутеры API и admin над хранилищами из настроек. Отдельно от `serve`,
-/// чтобы сборку (выбор хранилищ, подключение, репозитории) проверяли тесты без сокетов.
-pub(crate) async fn routers(mut settings: Settings) -> Result<(Router, Router), RunError> {
-    match &mut settings.storage {
-        Storage::Memory => {
-            assemble(
-                MemoryCatalog::default(),
-                MemoryBlobStore::default(),
-                settings,
-            )
-            .await
-        }
-        Storage::Durable {
-            database,
-            blobs,
-            s3_key,
-        } => {
+/// Разобранная конфигурация и то, что нужно для остальной сборки.
+pub(crate) struct Loaded {
+    config: Config,
+    /// Пул каталога; `None` при `memory`.
+    pool: Option<PgPool>,
+    settings: SettingsWiring,
+}
+
+/// Передача B4a: схема консоли и версии строк, с которыми процесс стартовал
+/// (по ним `restart_required` отличает применённые настройки от ожидающих).
+pub(crate) struct SettingsWiring {
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "потребитель — HTTP настроек в B4a")
+    )]
+    schema: Arc<ConfigSchema>,
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "потребитель — HTTP настроек в B4a")
+    )]
+    started: BTreeMap<String, Version>,
+}
+
+/// Собранные роутеры и данные для HTTP настроек.
+pub(crate) struct Served {
+    pub(crate) api: Router,
+    pub(crate) admin: Router,
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "потребитель — HTTP настроек в B4a")
+    )]
+    settings: SettingsWiring,
+}
+
+/// Слои конфигурации: env + файл (`var`), затем строки БД. Приоритет env > файл > БД > умолчание.
+/// Любая ошибка разбора валит старт: нечитаемый секрет не подменяется умолчанием.
+pub(crate) async fn load(var: Lookup, read_file: ReadFile) -> Result<Loaded, RunError> {
+    let inherited = |name: &str| var(name);
+    let reader = |path: &Path| read_file(path);
+    let database = Database::from_env(&inherited, &reader)?;
+    let key = settings_key(&inherited, &reader, database.persistent())?;
+    let (pool, rows) = read_stored(&database, key).await?;
+    let (layer, ignored) = StoredLayer::new(&inherited, &rows, &[])?;
+    for (key, why) in &ignored {
+        // Значений в журнале нет: только ключ и причина.
+        tracing::warn!(key, reason = ?why, "строка настройки в БД не действует");
+    }
+    let config = Config::from_layers(&inherited, &layer, &reader)?;
+    // Только ключи консоли: скрытая или неизвестная строка не должна давать ложный `restart_required`.
+    let started = rows
+        .iter()
+        .filter(|(key, _)| definition(key).is_some_and(|def| def.console))
+        .map(|(key, row)| (key.clone(), row.version))
+        .collect();
+    let schema = Arc::new(ConfigSchema::new(var, read_file, database.persistent()));
+    Ok(Loaded {
+        config,
+        pool,
+        settings: SettingsWiring { schema, started },
+    })
+}
+
+/// Строки слоя БД; в памяти хранилища настроек нет, слой пуст.
+async fn read_stored(
+    database: &Database,
+    key: Option<crane_pg::SettingsKey>,
+) -> Result<(Option<PgPool>, BTreeMap<String, Stored>), RunError> {
+    match database {
+        Database::Memory => Ok((None, BTreeMap::new())),
+        Database::Postgres(options) => {
             // Подключаемся сразу: недоступная БД валит старт, а не первый запрос.
-            let pool = connect(database).await?;
-            let store = ObjectBlobStore::from_url(blobs, s3_key.take())
-                .map_err(|error| format!("не удалось открыть CRANE_BLOBS: {error}"))?;
-            assemble(PgCatalog::new(pool), store, settings).await
+            let pool = connect(options).await?;
+            let store = PgSettings::new(pool.clone(), Arc::new(SystemClock), key);
+            let rows = store.list().await?;
+            Ok((Some(pool), rows))
         }
     }
 }
 
-async fn connect(database: &Database) -> Result<PgPool, RunError> {
+/// Собирает роутеры API и admin над хранилищами из настроек. Отдельно от `serve`,
+/// чтобы сборку (выбор хранилищ, репозитории) проверяли тесты без сокетов.
+pub(crate) async fn routers(loaded: Loaded) -> Result<Served, RunError> {
+    let Loaded {
+        mut config,
+        pool,
+        settings,
+    } = loaded;
+    let (api, admin) = match pool {
+        None => assemble(MemoryCatalog::default(), MemoryBlobStore::default(), config).await?,
+        Some(pool) => {
+            // Постоянный каталог проверка пары оставляет только с постоянным blob.
+            let Blobs::Durable { url, s3_key } = &mut config.blobs else {
+                return Err("каталог в PostgreSQL требует постоянного CRANE_BLOBS".into());
+            };
+            let store = ObjectBlobStore::from_url(url, s3_key.take())
+                .map_err(|error| format!("не удалось открыть CRANE_BLOBS: {error}"))?;
+            assemble(PgCatalog::new(pool), store, config).await?
+        }
+    };
+    Ok(Served {
+        api,
+        admin,
+        settings,
+    })
+}
+
+async fn connect(options: &PgConnectOptions) -> Result<PgPool, RunError> {
     PgPoolOptions::new()
         .acquire_timeout(DB_ACQUIRE_TIMEOUT)
-        .connect_with(database.options().clone())
+        .connect_with(options.clone())
         .await
         .map_err(|error| {
             format!("не удалось подключиться к PostgreSQL (CRANE_DATABASE_URL): {error}").into()
@@ -81,12 +167,12 @@ async fn connect(database: &Database) -> Result<PgPool, RunError> {
 async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     catalog: C,
     blobs: B,
-    settings: Settings,
+    config: Config,
 ) -> Result<(Router, Router), RunError> {
-    // Параметры подключения с паролем нужны были только для подключения.
-    drop(settings.storage);
+    // Ключ S3 нужен был только для открытия blob-хранилища.
+    drop(config.blobs);
     let ids = Arc::new(UuidV7Ids);
-    for (format, names) in settings.repos.of_kind(RepositoryKind::Hosted) {
+    for (format, names) in config.repos.of_kind(RepositoryKind::Hosted) {
         for name in names {
             catalog
                 .ensure_repository(Repository {
@@ -100,8 +186,8 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     }
     // Публичный адрес и предел публикации у всех форматов общие.
     let formats = FormatSettings {
-        public_url: settings.public_url,
-        max_publish_bytes: settings.max_publish_bytes,
+        public_url: config.public_url,
+        max_publish_bytes: config.max_publish_bytes,
     };
     // Registry и движок делят один CAS: скачанные архивы лежат там же, где опубликованные.
     let blobs = Arc::new(blobs);
@@ -111,8 +197,8 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         &catalog,
         ids.as_ref(),
         Arc::clone(&blobs),
-        &settings.repos,
-        settings.proxy,
+        &config.repos,
+        config.proxy,
     )
     .await?;
     let upstream: Arc<dyn UpstreamNames> = proxies
@@ -129,34 +215,35 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         upstream,
         ecosystem,
     ));
-    namespaces::reserve(&registry, ids.as_ref(), settings.namespaces).await?;
+    namespaces::reserve(&registry, ids.as_ref(), config.namespaces).await?;
     let proxy_repos = proxies.map_or_else(
         || Ok(Vec::new()),
         |proxies| proxies.mount(&registry, &formats),
     )?;
     let admin = admin_router(registry.clone());
     // Сырой токен живёт только до этой строки: дальше остаётся его хэш.
-    let token = StaticToken::new(settings.token.expose().as_bytes(), settings.principal);
-    drop(settings.token);
+    let token = StaticToken::new(config.token.expose().as_bytes(), config.principal);
+    drop(config.token);
     let api = api_router(
         &registry,
         &formats,
         token,
-        settings.trusted_proxies,
+        config.trusted_proxies,
         audit,
         proxy_repos,
     );
     Ok((api, admin))
 }
 
-async fn serve_async(settings: Settings) -> Result<(), RunError> {
-    let (http_port, admin_port) = (settings.http_port, settings.admin_port);
-    let names = |format, kind| settings.repos.names(format, kind).to_vec();
+async fn serve_async(var: Lookup, read_file: ReadFile) -> Result<(), RunError> {
+    let loaded = load(var, read_file).await?;
+    let (http_port, admin_port) = (loaded.config.http_port, loaded.config.admin_port);
+    let names = |format, kind| loaded.config.repos.names(format, kind).to_vec();
     let repos = names(Format::Cargo, RepositoryKind::Hosted);
     let proxy_repos = names(Format::Cargo, RepositoryKind::Proxy);
     let npm_repos = names(Format::Npm, RepositoryKind::Hosted);
     let npm_proxy_repos = names(Format::Npm, RepositoryKind::Proxy);
-    let (api, admin) = routers(settings).await?;
+    let Served { api, admin, .. } = routers(loaded).await?;
 
     let api_listener = bind(http_port).await?;
     let admin_listener = bind(admin_port).await?;
@@ -192,18 +279,17 @@ async fn bind(port: u16) -> Result<TcpListener, RunError> {
         .map_err(|error| format!("не удалось занять порт {port}: {error}").into())
 }
 
-pub(crate) fn migrate(storage: Storage) -> Result<(), RunError> {
-    match storage {
-        Storage::Memory => {
+pub(crate) fn migrate(database: Database) -> Result<(), RunError> {
+    match database {
+        Database::Memory => {
             tracing::info!("хранилище в памяти: миграций нет");
             Ok(())
         }
-        // Blob-хранилище миграциям не нужно: его URL уже разобран при чтении конфигурации.
-        Storage::Durable { database, .. } => {
+        Database::Postgres(options) => {
             let runtime = Builder::new_current_thread().enable_all().build()?;
             runtime.block_on(async {
-                let pool = connect(&database).await?;
-                drop(database);
+                let pool = connect(&options).await?;
+                drop(options);
                 crane_pg::migrate(&pool)
                     .await
                     .map_err(|error| format!("миграции PostgreSQL не применены: {error}"))?;
@@ -249,5 +335,8 @@ async fn terminate() {
 }
 
 #[cfg(test)]
+#[path = "tests/settings.rs"]
+mod settings_tests;
+#[cfg(test)]
 #[path = "tests/stack.rs"]
-mod stack_tests;
+mod stack;

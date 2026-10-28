@@ -3,14 +3,20 @@
 use std::str::FromStr;
 
 use crane_domain::registry::{Format, Namespace, NamespacePattern, WorkspaceId};
+use crane_domain::settings::{Kind, SettingDef};
 use uuid::Uuid;
 
 use super::ConfigError;
+use super::source::setting;
 use crate::ecosystem::ecosystem;
 
 pub(super) const NAMESPACES: &str = "CRANE_NAMESPACES";
 
+pub(super) const GROUP: &str = "namespaces";
+
 pub(super) const VARS: [&str; 1] = [NAMESPACES];
+
+pub(super) const SETTINGS: [SettingDef; 1] = [setting(GROUP, "namespaces", NAMESPACES, Kind::List)];
 
 fn invalid(reason: &'static str) -> ConfigError {
     ConfigError::Invalid {

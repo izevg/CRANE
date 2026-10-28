@@ -3,9 +3,10 @@
 use std::collections::BTreeMap;
 
 use crane_domain::registry::{Format, RepositoryKind};
+use crane_domain::settings::{Kind, SettingDef, Unit};
 
 use super::ConfigError;
-use super::source::number;
+use super::source::{key_of, number, setting};
 
 const CARGO_REPOS: &str = "CRANE_CARGO_REPOS";
 const CARGO_PROXY_REPOS: &str = "CRANE_CARGO_PROXY_REPOS";
@@ -17,6 +18,26 @@ const DEFAULT_MAX_PUBLISH_BYTES: usize = 10 * 1024 * 1024;
 
 /// Имена переменных без списков: те выводятся из `REPO_VARS` (`list_vars`).
 pub(super) const VARS: [&str; 1] = [MAX_PUBLISH_BYTES];
+
+pub(super) const GROUP: &str = "repos";
+
+/// Списки репозиториев здесь не перечислены: их определения строит `list_settings`.
+pub(super) const SETTINGS: [SettingDef; 1] = [SettingDef {
+    unit: Some(Unit::Bytes),
+    ..setting(GROUP, "max_publish_bytes", MAX_PUBLISH_BYTES, Kind::Number)
+}];
+
+/// Определения списков всех форматов, выведенные из `REPO_VARS`: новый формат ключ не дописывает.
+/// Имена ключей строятся во время работы, поэтому живут вечно (`Box::leak`); вызывается один раз
+/// на процесс из `config::definitions`, утечка ограничена размером `REPO_VARS`.
+pub(super) fn list_settings() -> Vec<SettingDef> {
+    list_vars()
+        .map(|var| SettingDef {
+            key: Box::leak(key_of(var).into_boxed_str()),
+            ..setting(GROUP, "", var, Kind::List)
+        })
+        .collect()
+}
 
 /// Имена переменных списков всех форматов. Новый формат сюда не дописывается: достаточно `REPO_VARS`.
 pub(super) fn list_vars() -> impl Iterator<Item = &'static str> {

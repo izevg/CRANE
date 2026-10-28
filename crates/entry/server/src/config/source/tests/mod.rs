@@ -6,7 +6,7 @@
 
 use super::*;
 
-use crate::config::Settings;
+use crate::config::Config;
 use crate::config::network::PUBLIC_URL;
 use crate::config::storage::{BLOBS, DATABASE_URL};
 use crate::config::tests::{MIN, env, error_of, file_lookup, no_files, with};
@@ -26,7 +26,7 @@ fn token_comes_from_file_without_trailing_newline() {
     };
 
     // Act
-    let settings = Settings::from_env(&env(&pairs), &read).unwrap();
+    let settings = Config::from_env(&env(&pairs), &read).unwrap();
 
     // Assert
     assert_eq!(settings.token.expose(), "file-token");
@@ -42,7 +42,7 @@ fn token_file_keeps_inner_whitespace() {
     let read = |_: &Path| Ok(" a b \n".to_owned());
 
     // Act
-    let settings = Settings::from_env(&env(&pairs), &read).unwrap();
+    let settings = Config::from_env(&env(&pairs), &read).unwrap();
 
     // Assert
     assert_eq!(settings.token.expose(), " a b ");
@@ -90,7 +90,7 @@ fn empty_tokens_are_rejected_from_env_and_from_file() {
 
     // Act
     let errors =
-        [from_env, from_file].map(|pairs| Settings::from_env(&env(&pairs), &read).err().unwrap());
+        [from_env, from_file].map(|pairs| Config::from_env(&env(&pairs), &read).err().unwrap());
 
     // Assert
     let empty = || ConfigError::Invalid {
@@ -135,7 +135,7 @@ fn token_in_file_conflicts_with_token_file_in_env() {
     );
 
     // Act
-    let error = Settings::from_env(&get, &no_files).err().unwrap();
+    let error = Config::from_env(&get, &no_files).err().unwrap();
 
     // Assert
     assert_eq!(

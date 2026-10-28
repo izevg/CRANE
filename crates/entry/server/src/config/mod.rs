@@ -15,18 +15,25 @@ mod token;
 
 use std::io;
 use std::path::Path;
+use std::sync::{Arc, OnceLock};
 
 use crane_domain::access::Principal;
 use crane_domain::registry::Namespace;
-use crane_domain::settings::Secret;
+use crane_domain::settings::{Secret, SettingDef};
 use crane_http::TrustedProxies;
+use crane_pg::KeyError;
 use source::secret;
 
 pub(crate) use network::admin_port;
 pub(crate) use proxy::{Cache, Proxy};
 pub(crate) use repos::{Repos, proxy_var};
-pub(crate) use source::layered;
-pub(crate) use storage::{Database, Storage};
+pub(crate) use source::{ConfigSchema, StoredLayer, layered};
+pub(crate) use storage::{Blobs, Database, settings_key};
+
+/// Поиск значения по имени переменной в слое env + файл; разделяется со схемой настроек.
+pub(crate) type Lookup = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+/// Чтение файла (секреты, `CRANE_CONFIG`); разделяется со схемой настроек.
+pub(crate) type ReadFile = Arc<dyn Fn(&Path) -> io::Result<String> + Send + Sync>;
 
 /// Значение «в памяти» для хранилища, blob и кэша.
 const MEMORY: &str = "memory";
@@ -46,6 +53,31 @@ fn vars() -> impl Iterator<Item = &'static str> {
     .flatten()
     .copied()
     .chain(repos::list_vars())
+}
+
+/// Определения всех ключей настроек. Ключ списка репозиториев строится из `REPO_VARS`, поэтому
+/// таблица собирается один раз на процесс (см. `repos::list_settings`).
+pub(crate) fn definitions() -> &'static [SettingDef] {
+    static ALL: OnceLock<Vec<SettingDef>> = OnceLock::new();
+    ALL.get_or_init(|| {
+        [
+            network::SETTINGS.as_slice(),
+            token::SETTINGS.as_slice(),
+            storage::SETTINGS.as_slice(),
+            proxy::SETTINGS.as_slice(),
+            repos::SETTINGS.as_slice(),
+            namespaces::SETTINGS.as_slice(),
+        ]
+        .into_iter()
+        .flatten()
+        .copied()
+        .chain(repos::list_settings())
+        .collect()
+    })
+}
+
+pub(crate) fn definition(key: &str) -> Option<&'static SettingDef> {
+    definitions().iter().find(|def| def.key == key)
 }
 
 /// Ошибка конфигурации. Значения секретных переменных в тексте не появляются никогда.
@@ -90,6 +122,15 @@ pub(crate) enum ConfigError {
         storage::S3_SECRET_FILE
     )]
     S3KeyWithMemory,
+    /// Строка секрета в БД не открывается: причина называет только отпечатки ключей, без значений.
+    #[error("настройка `{key}` в БД не читается: {reason}")]
+    Unreadable { key: String, reason: String },
+    /// `KeyError` называет только длину ключа, содержимое не цитирует.
+    #[error("{}: {reason}", storage::SETTINGS_KEY)]
+    SettingsKey { reason: KeyError },
+    /// Ключ шифрования при `memory` не нужен: мёртвая конфигурация хуже ошибки.
+    #[error("{}: ключ шифрования не нужен при memory", storage::SETTINGS_KEY)]
+    SettingsKeyWithMemory,
     #[error("неизвестный ключ `{key}` в файле конфигурации")]
     UnknownKey { key: String },
     #[error("некорректное значение ключа `{key}` в файле конфигурации: {reason}")]
@@ -105,7 +146,30 @@ pub(crate) enum ConfigError {
     },
 }
 
-pub(crate) struct Settings {
+impl ConfigError {
+    /// Переменная, из-за которой разбор отказал; по ней схема находит ключ настройки.
+    /// `None`, когда ошибка относится к файлу или к строке БД, а не к переменной.
+    pub(crate) fn var(&self) -> Option<&'static str> {
+        match self {
+            Self::Missing { var }
+            | Self::Invalid { var, .. }
+            | Self::Unsupported { var, .. }
+            | Self::SecretFile { var, .. } => Some(var),
+            Self::Conflict { first, .. } => Some(first),
+            Self::MixedStorage | Self::S3KeyWithMemory | Self::BlobsKey { .. } => {
+                Some(storage::BLOBS)
+            }
+            Self::SettingsKey { .. } | Self::SettingsKeyWithMemory => Some(storage::SETTINGS_KEY),
+            Self::Unreadable { .. }
+            | Self::UnknownKey { .. }
+            | Self::FileValue { .. }
+            | Self::FileRead { .. }
+            | Self::FileParse { .. } => None,
+        }
+    }
+}
+
+pub(crate) struct Config {
     /// Кому принадлежит статический токен: попадает в аудит и в ответ `owners`.
     pub(crate) principal: Principal,
     pub(crate) trusted_proxies: TrustedProxies,
@@ -116,13 +180,27 @@ pub(crate) struct Settings {
     /// Hosted- и proxy-репозитории по форматам.
     pub(crate) repos: Repos,
     pub(crate) max_publish_bytes: usize,
-    pub(crate) storage: Storage,
+    /// Blob-хранилище; каталог (`Database`) живёт отдельно: пароль БД в `Config` не попадает.
+    pub(crate) blobs: Blobs,
     pub(crate) proxy: Proxy,
     /// Резервирования платформы (`CRANE_NAMESPACES`), применяются при старте.
     pub(crate) namespaces: Vec<Namespace>,
 }
 
-impl Settings {
+impl Config {
+    /// Конфигурация над слоями env + файл (`inherited`) и БД (`stored`). Приоритет решает
+    /// `StoredLayer` по ключу, здесь слои лишь склеиваются в один поиск по имени переменной.
+    pub(crate) fn from_layers(
+        inherited: &impl Fn(&str) -> Option<String>,
+        stored: &StoredLayer,
+        read_file: &impl Fn(&Path) -> io::Result<String>,
+    ) -> Result<Self, ConfigError> {
+        Self::from_env(
+            &|name: &str| inherited(name).or_else(|| stored.get(name)),
+            read_file,
+        )
+    }
+
     /// Порядок вычисления полей определяет, какая из неверных переменных будет названа первой:
     /// репозитории, кэш, предел proxy, затем остальное, хранилище последним.
     pub(crate) fn from_env(
@@ -140,10 +218,43 @@ impl Settings {
             token: secret(var, read_file, token::TOKEN, token::TOKEN_FILE)?,
             repos,
             max_publish_bytes: repos::max_publish_bytes(var)?,
-            storage: Storage::from_env(var, read_file)?,
+            blobs: Blobs::from_env(var, read_file, storage::is_persistent(var, read_file)?)?,
             proxy,
             namespaces: namespaces::from_env(var)?,
         })
+    }
+}
+
+impl Config {
+    /// Прогон одной секции без остальных: первая ошибка чужой секции не должна заслонять свою.
+    /// Секции со связанными инвариантами (`storage`) получают режим каталога отдельно.
+    pub(crate) fn check_section(
+        group: &str,
+        var: &impl Fn(&str) -> Option<String>,
+        read_file: &impl Fn(&Path) -> io::Result<String>,
+        persistent: bool,
+    ) -> Vec<ConfigError> {
+        let errors = match group {
+            network::GROUP => vec![
+                network::http_port(var).err(),
+                admin_port(var).err(),
+                network::public_url(var).err(),
+                network::trusted_proxies(var).err(),
+            ],
+            token::GROUP => vec![
+                token::principal(var).err(),
+                secret(var, read_file, token::TOKEN, token::TOKEN_FILE).err(),
+            ],
+            storage::GROUP => vec![Blobs::from_env(var, read_file, persistent).err()],
+            proxy::GROUP => vec![Proxy::from_env(var, read_file).err()],
+            repos::GROUP => vec![
+                Repos::from_env(var).err(),
+                repos::max_publish_bytes(var).err(),
+            ],
+            namespaces::GROUP => vec![namespaces::from_env(var).err()],
+            _ => Vec::new(),
+        };
+        errors.into_iter().flatten().collect()
     }
 }
 
