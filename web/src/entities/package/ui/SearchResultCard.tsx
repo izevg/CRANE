@@ -18,13 +18,16 @@ type SearchResultCardProps = {
   item: SearchItem;
   /** Страница пакета (маршрут SPA): единственная ссылка карточки. `_links` API здесь не читается. */
   href: string;
-  /** Страница настоящего пакета для предупреждения о typosquat; без неё имя показывается без ссылки. */
+  /**
+   * Страница настоящего пакета (маршрут SPA). Карточка `_links` не читает: страница строит маршрут из
+   * `similarToHref(item)` и не передаёт проп, если ссылки `crane:similar-to` нет. Нет пропа — имя и PURL текстом.
+   */
   typosquatHref?: string;
 };
 
 function TyposquatNotice({ typosquat, href }: { typosquat: Typosquat; href: string | undefined }) {
   const { t } = useLingui();
-  const { similar_to: similarTo, distance } = typosquat;
+  const { similar_to: name, similar_to_purl: purl, distance } = typosquat;
   return (
     <Callout
       tone="warning"
@@ -32,12 +35,13 @@ function TyposquatNotice({ typosquat, href }: { typosquat: Typosquat; href: stri
     >
       <span>{t`Похоже на`}</span>
       {href === undefined ? (
-        <span className="font-mono wrap-anywhere">{similarTo}</span>
+        <span className="wrap-anywhere">{name}</span>
       ) : (
-        <Link href={href} className="font-mono underline wrap-anywhere">
-          {similarTo}
+        <Link href={href} className="underline wrap-anywhere">
+          {name}
         </Link>
       )}
+      <span className="wrap-anywhere text-muted-foreground">{`(${purl})`}</span>
       <span>
         {t`— отличается на ${plural(distance, {
           one: "# символ",
@@ -81,7 +85,9 @@ export function SearchResultCard({ item, href, typosquatHref }: SearchResultCard
       className="flex min-w-0 flex-col gap-1.5 rounded-xl bg-card p-4 shadow-card"
     >
       {item.exact_match ? <p className="text-overline text-brand">{t`Точное совпадение`}</p> : null}
-      {item.typosquat ? <TyposquatNotice typosquat={item.typosquat} href={typosquatHref} /> : null}
+      {item.typosquat == null ? null : (
+        <TyposquatNotice typosquat={item.typosquat} href={typosquatHref} />
+      )}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <h3 id={titleId} className="min-w-0 text-h3 wrap-anywhere">
           <Link href={href} className="text-foreground hover:text-brand">

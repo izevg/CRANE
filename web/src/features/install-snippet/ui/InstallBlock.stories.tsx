@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type ComponentProps, useCallback, useState } from "react";
 import { expect, fn, spyOn, userEvent, within } from "storybook/test";
+import type { InstallClient } from "~/shared/api";
 import { InstallBlock } from "../index";
 
 // Ссылка на переменную окружения собирается из частей, чтобы линтер не принял её за шаблонную строку.
@@ -12,7 +13,9 @@ const VIEWPORTS = {
   mobile: { name: "Телефон 390", styles: { width: "390px", height: "844px" } },
 };
 
-const NPM = {
+const NPM: NonNullable<ComponentProps<typeof InstallBlock>["instructions"]> = {
+  client: "npm",
+  available_clients: ["npm", "pnpm", "yarn"],
   setup_steps: [{ title: "Вход и настройка npm", code: "cctl login\ncctl setup npm" }],
   manual_config: {
     path: ".npmrc",
@@ -21,18 +24,32 @@ const NPM = {
   install: { code: "npm i @acme/ui@1.4.2" },
 };
 
-/** Страница держит выбранного клиента; в истории это локальное состояние, а выбор ещё и уходит в `onClientChange`. */
+/** Страница держит предпочтение; в истории это локальное состояние, а выбор ещё и уходит в `onClientChange`. */
 function Controlled(props: ComponentProps<typeof InstallBlock>) {
-  const [client, setClient] = useState(props.client);
-  const { onClientChange: notify } = props;
+  const [preferred, setPreferred] = useState(props.preferred);
+  const { onClientChange: notify, instructions } = props;
   const change = useCallback(
-    (next: ComponentProps<typeof InstallBlock>["client"]) => {
-      setClient(next);
+    (next: InstallClient) => {
+      setPreferred(next);
       notify(next);
     },
     [notify],
   );
-  return <InstallBlock {...props} client={client} onClientChange={change} />;
+  // «Сервер» отвечает сразу для выбранного клиента, если он есть в списке; истории загрузки и подмены задают ответ сами
+  const answered =
+    instructions === undefined || preferred === undefined || props.loading === true
+      ? instructions
+      : instructions.available_clients.includes(preferred)
+        ? { ...instructions, client: preferred }
+        : instructions;
+  return (
+    <InstallBlock
+      {...props}
+      preferred={preferred}
+      instructions={answered}
+      onClientChange={change}
+    />
+  );
 }
 
 const meta = {
@@ -46,8 +63,7 @@ const meta = {
     spyOn(navigator.clipboard, "writeText").mockResolvedValue();
   },
   args: {
-    format: "npm",
-    client: "npm",
+    preferred: "npm",
     instructions: NPM,
     onClientChange,
     envHref: "/help/environment",
@@ -77,9 +93,10 @@ export const Npm: Story = {
 export const Pypi: Story = {
   name: "PyPI: pip, uv, poetry",
   args: {
-    format: "pypi",
-    client: "pip",
+    preferred: "pip",
     instructions: {
+      client: "pip",
+      available_clients: ["pip", "uv", "poetry"],
       setup_steps: [{ title: "Вход и настройка pip", code: "cctl login\ncctl setup pypi" }],
       manual_config: {
         path: "pip.conf",
@@ -93,9 +110,10 @@ export const Pypi: Story = {
 export const Maven: Story = {
   name: "Maven: Maven и Gradle",
   args: {
-    format: "maven",
-    client: "maven",
+    preferred: "maven",
     instructions: {
+      client: "maven",
+      available_clients: ["maven", "gradle"],
       setup_steps: [{ title: "Вход и настройка Maven", code: "cctl login\ncctl setup maven" }],
       manual_config: {
         path: "settings.xml",
@@ -111,9 +129,10 @@ export const Maven: Story = {
 export const Cargo: Story = {
   name: "Cargo: один клиент",
   args: {
-    format: "cargo",
-    client: "cargo",
+    preferred: "cargo",
     instructions: {
+      client: "cargo",
+      available_clients: ["cargo"],
       setup_steps: [{ title: "Вход и настройка cargo", code: "cctl login\ncctl setup cargo" }],
       manual_config: {
         path: ".cargo/config.toml",
@@ -125,12 +144,56 @@ export const Cargo: Story = {
 };
 
 export const Loading: Story = {
-  name: "Загрузка инструкций: заглушки вместо чужих команд",
-  args: { loading: true },
+  name: "До первого ответа: заглушки, копировать нечего",
+  args: { preferred: undefined, instructions: undefined },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.queryByRole("button", { name: COPY })).toBeNull();
     await expect(canvasElement.querySelectorAll("[aria-busy=true]")).toHaveLength(2);
+  },
+};
+
+export const Refetching: Story = {
+  name: "Клиент сменили, инструкции ещё старые: заглушки вместо чужих команд",
+  args: { preferred: "pnpm", loading: true },
+  render: (args) => <InstallBlock {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("button", { name: "pnpm" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(canvas.queryByRole("button", { name: COPY })).toBeNull();
+  },
+};
+
+export const Substitution: Story = {
+  name: "Подмена: предпочитаемый клиент недоступен, заметка объясняет",
+  args: { preferred: "pip", instructions: NPM },
+  render: (args) => <InstallBlock {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByText("pip недоступен для этого репозитория, показаны команды для npm"),
+    ).toHaveAttribute("role", "status");
+    await expect(canvas.getByRole("button", { name: "npm" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  },
+};
+
+export const SubstitutionEnglish: Story = {
+  name: "Подмена: EN",
+  globals: { locale: "en" },
+  args: { preferred: "pip", instructions: NPM },
+  render: (args) => <InstallBlock {...args} />,
+  play: async ({ canvasElement }) => {
+    await expect(
+      await within(canvasElement).findByText(
+        "pip isn't available for this repository, showing commands for npm",
+      ),
+    ).toHaveAttribute("role", "status");
   },
 };
 

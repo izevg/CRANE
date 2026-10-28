@@ -44,14 +44,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function InstallSection() {
-  // Страница держит клиента и сразу получает инструкции для него (здесь — из макета, без запроса)
-  const [client, setClient] = useInstallClient("npm");
+  // Страница запрашивает инструкции с предпочитаемым клиентом (или без него); показываемого клиента решает сервер
+  const [preferred, setPreferred] = useInstallClient("npm");
   return (
     <InstallBlock
-      format="npm"
-      client={client}
-      onClientChange={setClient}
-      instructions={installInstructions(client)}
+      preferred={preferred}
+      onClientChange={setPreferred}
+      instructions={installInstructions(preferred)}
       envHref="/help/environment"
     />
   );

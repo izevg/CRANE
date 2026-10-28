@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useCallback, useId, useState } from "react";
 import { expect, within } from "storybook/test";
-import { SearchResultCard } from "~/entities/package";
+import { SearchResultCard, similarToHref } from "~/entities/package";
 import { i18n } from "~/shared/lib/i18n";
 import { FacetList, FilterSelect, SegmentedControl } from "~/shared/ui/inputs";
 import { PageHeader } from "~/shared/ui/layout";
@@ -172,12 +172,12 @@ function ResultsList() {
       <p role="status" className="text-caption text-muted-foreground tabular-nums">
         {t`38 результатов · 74 мс`}
       </p>
-      {RESULTS.map(({ id, item, typosquatHref }) => (
+      {RESULTS.map(({ id, item }) => (
         <SearchResultCard
           key={id}
           item={item}
           href={`/packages/${id}`}
-          {...(typosquatHref === undefined ? {} : { typosquatHref })}
+          {...routeOf(similarToHref(item))}
         />
       ))}
     </section>
@@ -250,6 +250,14 @@ function S1Page({ empty = false }: { empty?: boolean }) {
       <TabsContent value="recent">{t`Недавно открытые пакеты появятся здесь`}</TabsContent>
     </Tabs>
   );
+}
+
+/**
+ * Маршрут SPA на настоящий пакет из `href` ссылки `crane:similar-to`: `href` API не маршрут, его переводит страница.
+ * В макете маршруты совпадают с путями API.
+ */
+function routeOf(apiHref: string | undefined): { typosquatHref?: string } {
+  return apiHref === undefined ? {} : { typosquatHref: apiHref };
 }
 
 type Props = { empty?: boolean; assistantsDown?: boolean };

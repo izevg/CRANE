@@ -1800,7 +1800,7 @@ components:
       - gradle
       - dotnet
       - cargo
-      description: 'Клиент пакетного менеджера. Совместимость формата и клиента: npm - npm, pnpm, yarn; pypi - pip, uv, poetry; maven - maven, gradle; nuget - dotnet; cargo - cargo. Несовместимый с форматом клиент даёт 400.'
+      description: 'Клиент пакетного менеджера. Совместимость формата и клиента: npm - npm, pnpm, yarn; pypi - pip, uv, poetry; maven - maven, gradle; nuget - dotnet; cargo - cargo. Клиент, недоступный для репозитория, не ошибка: сервер отдаёт инструкции клиента по умолчанию (первого в `available_clients`), а фактический клиент сообщает в `InstallInstructions.client`. 400 даёт только значение вне перечисления.'
     InstallInstructions:
       title: InstallInstructions
       type: object

@@ -1,5 +1,5 @@
 // biome-ignore-all lint/style/noMagicNumbers: детерминированные данные макетов, не продуктовый код
-import type { BlockReason, VersionFlags, VersionState } from "~/shared/api";
+import type { BlockReason, HalLinks, VersionFlags, VersionState } from "~/shared/api";
 import { PEOPLE } from "./common";
 
 export type VersionRow = {
@@ -15,6 +15,8 @@ export type VersionRow = {
   /** Источник сборки: номер MR/PR. */
   source: string;
   downloads: number;
+  /** HAL элемента: ссылка `crane:block` есть только у экстренно заблокированной версии. */
+  _links: HalLinks;
 };
 
 const QUARANTINED = new Set(["1.4.2", "1.3.9"]);
@@ -58,11 +60,13 @@ function flagsOf(version: string): VersionFlags {
   };
 }
 
+const BLOCK_ID = "0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10";
+
 function reasonOf(version: string): BlockReason | null {
   return BLOCKED.has(version)
     ? {
         kind: "emergency",
-        block_id: "0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
+        block_id: BLOCK_ID,
         advisory_id: "CVE-2026-31337",
         fixed_in: "4.17.21",
       }
@@ -84,6 +88,12 @@ export const VERSION_ROWS: readonly VersionRow[] = NAMES.map((version, index) =>
         : { kind: "robot", ...robot },
     source: `#${4521 - index * 7}`,
     downloads: 12_340 - index * 211,
+    _links: {
+      self: { href: `/api/packages/acme-ui/versions/${version}` },
+      ...(BLOCKED.has(version)
+        ? { "crane:block": { href: `/api/emergency-blocks/${BLOCK_ID}` } }
+        : {}),
+    },
   };
 });
 

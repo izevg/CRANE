@@ -9,6 +9,16 @@ const SQUAT = /отличается на 1 символ/;
 const ANY_DOWNLOADS = /загрузок за 30 дн/;
 const DOWNLOADS = /12\s?340 загрузок за 30 дн/;
 
+const SQUAT_TARGET = {
+  similar_to: "@acme/ui",
+  similar_to_purl: "pkg:npm/%40acme/ui",
+  distance: 1,
+};
+const LINKED = {
+  self: { href: "/api/packages/acme-ui" },
+  "crane:similar-to": { href: "/packages/npm/npm-hosted/%40acme%2Fui" },
+};
+
 function card(item: Partial<SearchItem> = {}, typosquatHref?: string) {
   render(
     <SearchResultCard
@@ -111,15 +121,8 @@ describe("SearchResultCard", () => {
     // Act
     card(
       {
-        typosquat: {
-          similar_to: "@acme/ui",
-          similar_to_purl: "pkg:npm/%40acme/ui",
-          distance: 1,
-        },
-        _links: {
-          self: { href: "/api/packages/acme-ui" },
-          "crane:similar-to": { href: "/packages/npm/npm-hosted/%40acme%2Fui" },
-        },
+        typosquat: SQUAT_TARGET,
+        _links: LINKED,
       },
       "/packages/real-acme-ui",
     );
@@ -135,17 +138,32 @@ describe("SearchResultCard", () => {
   it("typosquat без typosquatHref называет пакет без ссылки", () => {
     // Arrange
     // Act
-    card({
-      typosquat: {
-        similar_to: "@acme/ui",
-        similar_to_purl: "pkg:npm/%40acme/ui",
-        distance: 1,
-      },
-    });
+    card({ typosquat: SQUAT_TARGET, _links: LINKED });
 
     // Assert
     expect(screen.getByText(SQUAT)).toBeVisible();
     expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("ссылка на настоящий пакет есть ровно тогда, когда страница передала typosquatHref", () => {
+    // Arrange
+    // Act
+    card({ typosquat: SQUAT_TARGET }, "/packages/real-acme-ui");
+
+    // Assert
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/packages/real-acme-ui",
+      "/packages/acme-ui",
+    ]);
+  });
+
+  it("PURL настоящего пакета виден текстом в предупреждении", () => {
+    // Arrange
+    // Act
+    card({ typosquat: SQUAT_TARGET, _links: LINKED }, "/packages/real-acme-ui");
+
+    // Assert
+    expect(screen.getByText("(pkg:npm/%40acme/ui)")).toBeVisible();
   });
 
   it("ссылка в карточке одна — на имени пакета", () => {

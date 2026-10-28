@@ -18,7 +18,7 @@ type Draft = {
   risk?: { priority: "P0" | "P1" | "P2" | "P3"; findings: number };
 };
 
-export type ResultRow = { id: string; item: SearchItem; typosquatHref?: string };
+export type ResultRow = { id: string; item: SearchItem };
 
 const PROXY_SUFFIX = /proxy$/;
 // purl кодирует `@` скоупа npm как %40
@@ -246,19 +246,10 @@ function cardPath(draft: Draft): string {
   return `/packages/${draft.format}/${draft.repository}/${encodeURIComponent(draft.name)}`;
 }
 
-function typosquatHref(draft: Draft): string | undefined {
-  const original = originalOf(draft);
-  return original === undefined ? undefined : `/packages/${original.id}`;
-}
-
-export const RESULTS: readonly ResultRow[] = DRAFTS.map((draft) => {
-  const href = typosquatHref(draft);
-  return {
-    id: draft.id,
-    item: toItem(draft),
-    ...(href === undefined ? {} : { typosquatHref: href }),
-  };
-});
+export const RESULTS: readonly ResultRow[] = DRAFTS.map((draft) => ({
+  id: draft.id,
+  item: toItem(draft),
+}));
 
 const FORMAT_COUNTS = { npm: 21, pypi: 8, maven: 5, nuget: 3, cargo: 1 } as const satisfies Record<
   Format,

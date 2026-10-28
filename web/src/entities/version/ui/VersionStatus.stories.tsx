@@ -50,6 +50,28 @@ export const BlockedEmergency: Story = {
   },
 };
 
+export const BlockedWithBlockLink: Story = {
+  name: "Экстренная блокировка: идентификатор ссылкой",
+  args: {
+    blockHref: "/emergency-blocks/0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
+    version: {
+      state: "blocked",
+      block_reason: {
+        kind: "emergency",
+        block_id: "0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
+        advisory_id: "CVE-2026-31337",
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole("link", {
+        name: "Блокировка 0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10",
+      }),
+    ).toHaveAttribute("href", "/emergency-blocks/0193a7c2-5e4d-7b3a-8c1f-2d9e6a4b7c10");
+  },
+};
+
 export const BlockedByRule: Story = {
   name: "Заблокирована по правилу",
   args: {

@@ -46,6 +46,9 @@ msgstr "{label}: {shown}, {toneLabel}"
 msgid "{left, plural, one {Остался # символ} few {Осталось # символа} many {Осталось # символов} other {Осталось # символа}}"
 msgstr "{left, plural, one {# character left} other {# characters left}}"
 
+msgid "{requestedLabel} недоступен для этого репозитория, показаны команды для {shownLabel}"
+msgstr "{requestedLabel} isn't available for this repository, showing commands for {shownLabel}"
+
 msgid "{shown}, уверенность {confidenceText}"
 msgstr "{shown}, confidence {confidenceText}"
 
@@ -72,6 +75,9 @@ msgstr "Active"
 
 msgid "Безопасность"
 msgstr "Security"
+
+msgid "Блокировка {id}"
+msgstr "Block {id}"
 
 msgid "Было"
 msgstr "Before"
@@ -210,6 +216,9 @@ msgstr "Breadcrumbs"
 
 msgid "Навигация по разделам реестра"
 msgstr "Navigate the registry sections"
+
+msgid "Настроить вручную"
+msgstr "Configure manually"
 
 msgid "Настроить вручную ({path})"
 msgstr "Configure manually ({path})"
@@ -369,6 +378,9 @@ msgstr "Copied"
 
 msgid "Скопировать ID"
 msgstr "Copy ID"
+
+msgid "Скопировать идентификатор блокировки"
+msgstr "Copy block ID"
 
 msgid "Скопировать идентификатор запроса"
 msgstr "Copy request ID"
