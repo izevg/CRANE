@@ -14,6 +14,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: ${POSTGRES_DB:?}
+    # Только dev и тесты: каждый тест адаптера делает CREATE/DROP DATABASE, а DROP DATABASE ждёт
+    # checkpoint (7-11 с на Docker for Mac). Без fsync тесты укладываются в таймаут мутаций.
+    # Данные dev-БД при сбое питания не гарантируются; прод этот файл не использует.
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
     secrets: [postgres_password]
     ports: ["${DEV_BIND:?}:${POSTGRES_PORT:?}:5432"]
     volumes: [pg:/var/lib/postgresql/data]
