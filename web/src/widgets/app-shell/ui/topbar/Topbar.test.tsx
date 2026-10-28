@@ -33,6 +33,17 @@ describe("Topbar", () => {
     expect(screen.getByRole("link", { name: "left-pad" })).not.toHaveAttribute("aria-current");
   });
 
+  it("без onOpenPalette кнопки поиска нет", () => {
+    // Arrange
+    // Act
+    render(<Topbar breadcrumbs={CRUMBS} sidebarToggle={null} />);
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: "Поиск и переходы Ctrl K" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("кнопка поиска вызывает onOpenPalette и называет сочетание клавиш", async () => {
     // Arrange
     const user = userEvent.setup();

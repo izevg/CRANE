@@ -6,6 +6,7 @@ import { StatusBadge } from "~/shared/ui/status";
 import { Topbar } from "./Topbar";
 
 const onOpenPalette = fn();
+const SEARCH = /Поиск/;
 
 const meta = {
   title: "Шелл/Topbar",
@@ -40,6 +41,14 @@ export const Default: Story = {
     await expect(canvas.getByRole("link", { name: "Пакеты" })).toHaveAttribute("href", "/packages");
     await userEvent.click(canvas.getByRole("button", { name: "Поиск и переходы Ctrl K" }));
     await expect(onOpenPalette).toHaveBeenCalled();
+  },
+};
+
+export const WithoutPalette: Story = {
+  name: "Без палитры: кнопки поиска нет",
+  render: ({ onOpenPalette: _palette, ...rest }) => <Topbar {...rest} />,
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).queryByRole("button", { name: SEARCH })).toBeNull();
   },
 };
 

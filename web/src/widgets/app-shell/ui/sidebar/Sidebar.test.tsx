@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PackageIcon } from "lucide-react";
-import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { Sidebar, type SidebarProps } from "./Sidebar";
 
 const THEME_BUTTON = /^Тема:/;
@@ -140,13 +140,16 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: "Тема: Светлая" })).toBeInTheDocument();
   });
 
-  it("helpHref обязателен по типу: сайдбар без справки не собирается", () => {
+  it("без helpHref пункта «Справка» нет: ссылка на несуществующий раздел хуже её отсутствия", () => {
     // Arrange
+    const { helpHref: _help, ...withoutHelp } = PROPS;
+
     // Act
-    const helpHref = expectTypeOf<SidebarProps["helpHref"]>();
+    render(<Sidebar {...withoutHelp} collapsed={false} />);
 
     // Assert
-    helpHref.toEqualTypeOf<string>();
+    const service = screen.getByRole("navigation", { name: "Личное и справка" });
+    expect(within(service).queryByRole("link", { name: "Справка" })).not.toBeInTheDocument();
   });
 
   it("блок пользователя в развёрнутом сайдбаре показывает имя и роль", () => {

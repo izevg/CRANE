@@ -29,8 +29,11 @@ export type SidebarProps = {
   groups: readonly NavGroup[];
   /** «Мои токены», «Мои действия», «Настройки». «Справка» добавляется сайдбаром сама. */
   footerItems: readonly NavItem[];
-  /** Справка всегда стоит в одном месте нижнего блока (WCAG 3.2.6), поэтому ссылка обязательна. */
-  helpHref: string;
+  /**
+   * Справка стоит в одном месте нижнего блока (WCAG 3.2.6). Пока раздела справки нет, ссылку не передают:
+   * пункта тогда нет вовсе, а не ссылка на 404.
+   */
+  helpHref?: string;
   homeHref?: string;
   /** Текущий пользователь: две строки в развёрнутом сайдбаре, только аватар в рельсе. */
   account?: { name: string; role: string };
@@ -166,7 +169,10 @@ export function Sidebar({
   onNavigate,
 }: ContentProps) {
   const { t } = useLingui();
-  const help: NavItem = { id: "help", label: t`Справка`, href: helpHref, icon: CircleHelpIcon };
+  const help: readonly NavItem[] =
+    helpHref === undefined
+      ? []
+      : [{ id: "help", label: t`Справка`, href: helpHref, icon: CircleHelpIcon }];
   return (
     <div
       data-slot="sidebar"
@@ -193,7 +199,7 @@ export function Sidebar({
       <div className="flex shrink-0 flex-col gap-1 border-t border-sidebar-border p-3">
         <nav aria-label={t`Личное и справка`}>
           <ul className="flex flex-col gap-0.5">
-            {[...footerItems, help].map((item) => (
+            {[...footerItems, ...help].map((item) => (
               <NavLinkItem
                 key={item.id}
                 item={item}

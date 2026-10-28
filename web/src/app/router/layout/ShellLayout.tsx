@@ -8,7 +8,8 @@ import { DemoNotice } from "../demo/DemoNotice";
 import { usePageTitle } from "../focus/useDocumentTitle";
 import { navGroups } from "../nav/navItems";
 
-const HELP_HREF = "/help";
+// Раздела справки пока нет, поэтому helpHref не передаём: пункт «Справка» не рисуется, а не ведёт на 404.
+const DEFAULT_CRUMB = "CRANE";
 const LOGIN_PATH = "/login";
 
 /**
@@ -38,10 +39,10 @@ export function ShellLayout() {
     : [];
   return (
     <AppShell
-      sidebar={{ groups, footerItems: [], helpHref: HELP_HREF }}
+      sidebar={{ groups, footerItems: [] }}
       topbar={{
-        breadcrumbs: { trail: [], current: page ?? "" },
-        onOpenPalette: () => undefined,
+        // Палитра подключится вместе с поиском: без обработчика кнопки поиска нет.
+        breadcrumbs: { trail: [], current: page ?? DEFAULT_CRUMB },
       }}
       banners={sessionEnded ? [sessionEndedBanner] : []}
     >
