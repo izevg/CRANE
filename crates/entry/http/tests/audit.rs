@@ -14,7 +14,8 @@ use common::{Api, PRINCIPAL, REPO, TOKEN};
 use crane_app::registry::Coordinate;
 use crane_domain::access::{Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
-use crane_domain::registry::{Format, PackageName, Version};
+use crane_domain::registry::{Ecosystem, Format};
+use crane_format_cargo::CARGO;
 use serde_json::json;
 
 const CONFIG_URL: &str = "/cargo/internal/index/config.json";
@@ -178,8 +179,8 @@ fn publish_with_foreign_dependency_registry_is_rejected_and_audited() {
                 action: AuditAction::Publish(Coordinate {
                     format: Format::Cargo,
                     repository: REPO.to_owned(),
-                    package: PackageName::parse(Format::Cargo, "demo-crate").unwrap(),
-                    version: Version::parse(Format::Cargo, "1.0.0").unwrap(),
+                    package: CARGO.parse_name("demo-crate").unwrap(),
+                    version: CARGO.parse_version("1.0.0").unwrap(),
                 }),
                 outcome: Outcome::Failure {
                     code: Some("foreign-registry-dependency"),

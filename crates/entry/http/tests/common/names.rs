@@ -7,7 +7,7 @@ use crane_domain::access::{Caller, Principal, PrincipalKind, RequestContext, Req
 use crane_domain::registry::{Format, Namespace, NamespacePattern, PackageName, WorkspaceId};
 use crane_ports::proxy::{Presence, UpstreamNames};
 
-use super::Api;
+use super::{Api, ecosystem};
 
 /// Публичный реестр, который на любое имя отвечает одним и тем же.
 pub(crate) struct FixedPresence(pub(crate) Presence);
@@ -39,7 +39,7 @@ impl Api {
         };
         let namespace = Namespace {
             format,
-            pattern: NamespacePattern::parse(format, pattern).unwrap(),
+            pattern: NamespacePattern::parse(ecosystem(format), pattern).unwrap(),
             workspace: WorkspaceId::DEFAULT,
         };
         self.runtime

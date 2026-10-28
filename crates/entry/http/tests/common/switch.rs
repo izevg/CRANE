@@ -7,8 +7,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crane_domain::registry::{
-    Asset, Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Version,
-    VersionId, VersionState,
+    Asset, Format, Namespace, NamespacePattern, PackageName, PackageVersion, Repository,
+    RepositoryId, Version, VersionId, VersionState,
 };
 use crane_memory::MemoryCatalog;
 use crane_ports::registry::{Catalog, CatalogError, NewVersion};
@@ -134,12 +134,12 @@ impl Catalog for SwitchCatalog {
     async fn namespace_for(
         &self,
         format: Format,
-        name: &PackageName,
+        candidates: &[NamespacePattern],
     ) -> Result<Option<Namespace>, CatalogError> {
         if self.is_down() {
             return Err(unreachable());
         }
-        self.inner.namespace_for(format, name).await
+        self.inner.namespace_for(format, candidates).await
     }
 
     async fn hosted_exists(
