@@ -13,7 +13,9 @@ pub use api::{
 };
 pub use ecosystem::{CARGO, Cargo};
 pub use index::{IndexError, index_path, parse_index_path, render_index};
-pub use proxy::{Archive, DL_HOST, INDEX, INDEX_HOST, archive};
+pub use proxy::{
+    API_ACCEPT, API_HOST, API_PRESENCE, Archive, DL_HOST, INDEX, INDEX_HOST, archive, presence_path,
+};
 pub use publish::{
     CargoPublish, FOREIGN_REGISTRY_DEPENDENCY, ForeignRegistry, MetadataError, PublishError,
     parse_publish,

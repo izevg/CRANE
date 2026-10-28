@@ -5,7 +5,7 @@
 )]
 
 use crane_domain::registry::{Ecosystem, Sha256};
-use crane_format_cargo::{Archive, CARGO, archive, index_path};
+use crane_format_cargo::{Archive, CARGO, archive, index_path, presence_path};
 
 const SUM_A: &str = "1111111111111111111111111111111111111111111111111111111111111111";
 const SUM_B: &str = "2222222222222222222222222222222222222222222222222222222222222222";
@@ -142,4 +142,24 @@ fn index_survives_upstream_errors_for_seven_days_after_ttl() {
 
     // Assert
     assert_eq!(actual, [true, false]);
+}
+
+#[test]
+fn presence_path_is_the_same_for_every_spelling_of_a_crate() {
+    // Arrange
+    let spellings = ["serde_json", "serde-json", "Serde-JSON", "SERDE_json"];
+
+    // Act
+    let paths: Vec<String> = spellings
+        .iter()
+        .map(|raw| {
+            presence_path(&CARGO.parse_name(raw).unwrap())
+                .unwrap()
+                .as_str()
+                .to_owned()
+        })
+        .collect();
+
+    // Assert
+    assert_eq!(paths, ["api/v1/crates/serde_json"; 4]);
 }

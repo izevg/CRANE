@@ -21,7 +21,7 @@ use crane_app::proxy::ProxyEngine;
 use crane_app::registry::Registry;
 use crane_domain::proxy::{EgressPolicy, EgressRefusal, MetadataPolicy, Origin, UpstreamPath};
 use crane_domain::registry::{Format, PackageName, RepositoryId};
-use crane_format_cargo::{DL_HOST, INDEX, INDEX_HOST, index_path};
+use crane_format_cargo::{API_HOST, API_PRESENCE, DL_HOST, INDEX_HOST, presence_path};
 use crane_format_npm::{PACKUMENT, REGISTRY_HOST, packument_path};
 use crane_ports::proxy::{FetchLeases, ProxyCache, Upstream};
 use crane_ports::registry::{BlobStore, Catalog};
@@ -120,9 +120,7 @@ pub(crate) fn presence_probe(
     name: &PackageName,
 ) -> Option<(UpstreamPath, &'static MetadataPolicy)> {
     match format {
-        Format::Cargo => UpstreamPath::parse(&index_path(name))
-            .ok()
-            .map(|path| (path, &INDEX)),
+        Format::Cargo => presence_path(name).ok().map(|path| (path, &API_PRESENCE)),
         Format::Npm => packument_path(name).ok().map(|path| (path, &PACKUMENT)),
         Format::PyPi => None,
         Format::Maven => None,
@@ -134,7 +132,7 @@ pub(crate) fn presence_probe(
 #[must_use]
 pub fn upstream_hosts(format: Format) -> &'static [&'static str] {
     match format {
-        Format::Cargo => &[INDEX_HOST, DL_HOST],
+        Format::Cargo => &[INDEX_HOST, DL_HOST, API_HOST],
         Format::Npm => &[REGISTRY_HOST],
         Format::PyPi => &[],
         Format::Maven => &[],

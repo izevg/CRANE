@@ -12,7 +12,7 @@ use crane_app::registry::Registry;
 use crane_domain::access::Caller;
 use crane_domain::proxy::{EgressRefusal, Origin, UpstreamPath};
 use crane_domain::registry::{Format, PackageName};
-use crane_format_cargo::{DL_HOST, INDEX, INDEX_HOST, index_path};
+use crane_format_cargo::{API_ACCEPT, API_HOST, DL_HOST, INDEX, INDEX_HOST, index_path};
 use crane_ports::proxy::{FetchLeases, ProxyCache, Upstream};
 use crane_ports::registry::{BlobStore, Catalog};
 
@@ -42,11 +42,16 @@ fn origins(source: &ProxySource<'_>) -> Result<CargoProxyOrigins, EgressRefusal>
     })
 }
 
-/// Источник документа для проверки присутствия имени: индекс.
+/// Источник документа для проверки присутствия имени: API crates.io, а не индекс. Индекс ищет по
+/// написанию, и `serde-json` не находил бы публичный `serde_json`; API сравнивает канонические имена.
 pub(in crate::formats) fn presence_origin(
     source: &ProxySource<'_>,
 ) -> Result<Origin, EgressRefusal> {
-    Ok(origins(source)?.index)
+    Ok(Origin {
+        repository: source.repository,
+        base: source.policy.admit("https", API_HOST, None, "")?,
+        accept: Some(API_ACCEPT),
+    })
 }
 
 /// Состояние обработчиков одного proxy-репозитория. `U, PC, L, B` — порты движка,
