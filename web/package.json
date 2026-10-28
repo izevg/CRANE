@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "gen:api": "orval",
-    "build": "pnpm run gen:api && tsc --noEmit && vite build",
+    "build": "pnpm run gen:api && tsc --noEmit && vite build && node ../tools/check-bundle.ts dist",
     "typecheck": "tsc --noEmit",
     "fsd": "steiger ./src",
     "unused": "knip",
