@@ -6,6 +6,7 @@ import { Markdown } from "~/shared/ui/data-display";
 const LAZY = { timeout: 15_000 };
 const BAIT_LINK = /Нажми меня/;
 const SAFE_LINK = /Безопасная ссылка/;
+const PIXEL_LINK = /pixel/;
 const DOCS_LINK = /документации/;
 
 const README = `# @acme/ui
@@ -70,6 +71,21 @@ export const MaliciousInput: Story = {
     await expect(canvas.queryByRole("link", { name: BAIT_LINK })).toBeNull();
     await expect(canvas.getByRole("link", { name: SAFE_LINK })).toBeVisible();
     await expect(canvasElement.querySelector("script, [onerror]")).toBeNull();
+  },
+};
+
+export const ReadmeWithImage: Story = {
+  name: "README с картинкой",
+  args: { source: "# Бейджи\n\n![pixel](https://attacker.example/p.gif)" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole("heading", { name: "Бейджи" }, LAZY);
+    await expect(canvas.queryByRole("img")).toBeNull();
+    await expect(canvasElement.querySelector("img")).toBeNull();
+    await expect(canvas.getByRole("link", { name: PIXEL_LINK })).toHaveAttribute(
+      "href",
+      "https://attacker.example/p.gif",
+    );
   },
 };
 
