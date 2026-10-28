@@ -4,7 +4,7 @@ import { type Access, type Egress, HTTP_OK_FROM, HTTP_OK_TO, SERVER_ERROR_FROM }
 
 const UNAVAILABLE = 503;
 const SNIPPET_CHARS = 120;
-const VALKEY_WARN = "Valkey:";
+const VALKEY_UNAVAILABLE = "unavailable";
 const EMPTY = "в окне нет ни одной строки access: без запросов проверка ничего не доказывает";
 
 const describe = (line: Access): string => `${line.path}: status ${line.status}`;
@@ -73,23 +73,24 @@ export function checkNoFaults(craneNdjson: string): string[] {
   return problems;
 }
 
-/** Деградация кэша видна и безопасна: есть warn адаптера Valkey о потере соединения, нет паник и ERROR. */
+/**
+ * Деградация кэша видна и безопасна: есть warn адаптера о смене доступности (поле `valkey = "unavailable"`),
+ * нет паник и ERROR. Поле, а не префикс «Valkey:»: повторы подключения тоже пишут warn с этим префиксом
+ * и подтвердили бы проверку без самого события.
+ */
 export function checkCacheDegraded(craneNdjson: string): string[] {
   const warned = craneNdjson.split("\n").some((raw) => {
     const entry = parseObject(raw);
-    return (
-      entry?.level === "WARN" &&
-      typeof entry.message === "string" &&
-      entry.message.includes(VALKEY_WARN)
-    );
+    return entry?.level === "WARN" && entry.valkey === VALKEY_UNAVAILABLE;
   });
-  const missing = warned ? [] : ["в журнале нет warn адаптера Valkey о потере соединения"];
+  const missing = warned ? [] : ["в журнале нет warn `valkey = unavailable` о потере соединения"];
   return [...checkNoFaults(craneNdjson), ...missing];
 }
 
 interface Entry {
   level?: unknown;
   message?: unknown;
+  valkey?: unknown;
 }
 
 function parseObject(raw: string): Entry | undefined {

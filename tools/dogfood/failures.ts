@@ -20,9 +20,9 @@ import {
 } from "./cargo.ts";
 import { MS_PER_SECOND, SECONDS_PER_MINUTE, tail, timed } from "./exec.ts";
 import {
+  checkCacheDegraded,
   checkDegradedFetch,
   checkNoEgress,
-  checkNoFaults,
   checkNoServerErrors,
   checkServed,
   checkUnavailable,
@@ -155,8 +155,7 @@ function expectObjects(c: Context, want: number, when: string): void {
 
 /**
  * Valkey (`stop` или `pause`): тёплый ключ из L1, холодный идёт мимо L2 и координатора прямо в upstream; 5xx нет.
- * Журнал о деградации появляется с fix/valkey-unresponsive (тогда для обоих видов вернётся `checkCacheDegraded`);
- * пока требуются лишь отсутствие паник и ERROR.
+ * Журнал обязан содержать warn `valkey = "unavailable"` (смена доступности) и не содержать паник и ERROR.
  * Время каждого запроса печатается без порогов: это «до» для circuit breaker.
  */
 function valkey(c: Context, kind: Outage): void {
@@ -174,7 +173,7 @@ function valkey(c: Context, kind: Outage): void {
     `Valkey ${kind}: холодный ключ`,
     checkDegradedFetch(forPaths(lines, `/index/${cold}`), during.egress, cold),
   );
-  fail(`Valkey ${kind}: журнал`, checkNoFaults(during.journal));
+  fail(`Valkey ${kind}: журнал`, checkCacheDegraded(during.journal));
   // Valkey без персистентности: после возврата L2 пуст, это ожидаемо, полный сценарий греет свои ключи сам.
 }
 
