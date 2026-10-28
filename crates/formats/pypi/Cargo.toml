@@ -12,3 +12,16 @@ workspace = true
 
 [dependencies]
 crane-domain = { path = "../../core/domain" }
+# Разбор и сравнение версий PEP 440: та же семантика, что у uv. Лицензия Apache-2.0 OR BSD-2-Clause;
+# свой разбор — сотни строк и property-тесты против `packaging` ради того же результата.
+pep440_rs = "0.7.3"
+# Метаданные версии (поля формы загрузки) хранятся JSON; derive допустим на границе формата.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+# Контракт Ecosystem — исполняемая спецификация, общая для всех форматов.
+crane-ports = { path = "../../core/ports", features = ["contract"] }
+# Только для построения VersionId/RepositoryId в тестах; в рабочий код не попадает.
+uuid = "1"
