@@ -1,0 +1,45 @@
+//! Экосистема Cargo: грамматика имён crates.io и версии `SemVer` 2.0.
+
+mod name;
+mod version;
+
+use crane_domain::registry::{Ecosystem, Format, NameError, PackageName, Version, VersionError};
+
+pub(crate) use name::parse_name;
+pub(crate) use version::parse_version;
+
+/// Правила Cargo; реализация [`Ecosystem`] без состояния.
+#[derive(Debug, Clone, Copy)]
+pub struct Cargo;
+
+/// Единственный экземпляр для сквозных потребителей трейта.
+pub static CARGO: Cargo = Cargo;
+
+impl Ecosystem for Cargo {
+    fn format(&self) -> Format {
+        Format::Cargo
+    }
+
+    fn parse_name(&self, raw: &str) -> Result<PackageName, NameError> {
+        parse_name(raw)
+    }
+
+    fn parse_version(&self, raw: &str) -> Result<Version, VersionError> {
+        parse_version(raw)
+    }
+
+    fn normalize(&self, raw: &str) -> String {
+        name::normalize(raw)
+    }
+
+    fn separator(&self) -> char {
+        '_'
+    }
+
+    fn accepted_separators(&self) -> &'static [char] {
+        &['-', '_']
+    }
+}
+
+#[cfg(test)]
+mod tests;

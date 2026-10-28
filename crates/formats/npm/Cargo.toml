@@ -22,8 +22,12 @@ serde_json = { version = "1", features = ["raw_value"] }
 base64 = "0.22"
 # Поля `time` packument: RFC 3339 с миллисекундами.
 humantime = "2"
+# Грамматика версий npm: строгий SemVer 2.0 и ключ порядка.
+semver = "1"
 thiserror = "2"
 
 [dev-dependencies]
+# Контракт Ecosystem — исполняемая спецификация, общая для всех форматов.
+crane-ports = { path = "../../core/ports", features = ["contract"] }
 # Только для построения VersionId/RepositoryId в тестах; в рабочий код не попадает.
 uuid = "1"

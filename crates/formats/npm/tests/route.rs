@@ -4,11 +4,11 @@
     reason = "в тестах падение unwrap — это падение теста"
 )]
 
-use crane_domain::registry::{Format, NameError, PackageName};
-use crane_format_npm::{Route, RouteError, tarball_file, tarball_version};
+use crane_domain::registry::{Ecosystem, NameError, PackageName};
+use crane_format_npm::{NPM, Route, RouteError, tarball_file, tarball_version};
 
 fn pkg(raw: &str) -> PackageName {
-    PackageName::parse(Format::Npm, raw).unwrap()
+    NPM.parse_name(raw).unwrap()
 }
 
 #[test]
@@ -190,12 +190,8 @@ fn tarball_file_uses_basename_of_scoped_name() {
     ];
 
     // Act
-    let actual = cases.map(|(package, version)| {
-        tarball_file(
-            &package,
-            &crane_domain::registry::Version::parse(Format::Npm, version).unwrap(),
-        )
-    });
+    let actual = cases
+        .map(|(package, version)| tarball_file(&package, &NPM.parse_version(version).unwrap()));
 
     // Assert
     assert_eq!(actual, ["left-pad-1.0.0.tgz", "core-7.0.0-rc.1+b5.tgz"]);

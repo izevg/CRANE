@@ -2,7 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use crane_domain::registry::{Format, Version};
+use crate::ecosystem::parse_version;
+use crane_domain::registry::Version;
 
 use super::WriteError;
 
@@ -23,7 +24,7 @@ pub fn parse_tag(raw: &str) -> Result<String, WriteError> {
     {
         return Err(WriteError::TagChar(bad));
     }
-    if Version::parse(Format::Npm, raw).is_ok() {
+    if parse_version(raw).is_ok() {
         return Err(WriteError::TagIsVersion);
     }
     Ok(raw.to_owned())
@@ -40,7 +41,7 @@ pub fn removable(tag: &str) -> Result<(), WriteError> {
 /// Тело `PUT dist-tags/{tag}`: JSON-строка с версией.
 pub fn parse_tag_body(body: &[u8]) -> Result<Version, WriteError> {
     let raw: String = serde_json::from_slice(body)?;
-    Version::parse(Format::Npm, &raw).map_err(WriteError::Version)
+    parse_version(&raw).map_err(WriteError::Version)
 }
 
 /// Ответ `GET dist-tags`: `{"tag":"version"}` в детерминированном порядке.

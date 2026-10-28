@@ -3,7 +3,8 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use crane_domain::registry::{Format, PackageVersion, Version};
+use crate::ecosystem::parse_version;
+use crane_domain::registry::{PackageVersion, Version};
 
 use super::WriteError;
 use crate::packument::{Fields, Raw};
@@ -14,7 +15,7 @@ pub(super) fn deprecations(
 ) -> Result<Vec<(Version, Option<String>)>, WriteError> {
     let mut changes = Vec::new();
     for (key, fields) in versions {
-        let Ok(version) = Version::parse(Format::Npm, &key) else {
+        let Ok(version) = parse_version(&key) else {
             continue;
         };
         let Some(existing) = current.iter().find(|c| c.version == version) else {
