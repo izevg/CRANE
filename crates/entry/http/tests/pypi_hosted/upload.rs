@@ -101,6 +101,46 @@ fn wrong_sha256_digest_is_a_client_error_and_publishes_nothing() {
     assert!(not_published(&api));
 }
 
+/// md5 от `WHEEL_BYTES` в urlsafe base64 без паддинга, как его шлёт poetry.
+const WHEEL_MD5: &str = "v5SfKiQu66AI0PP68LujNw";
+/// md5 пустого файла: чужой дайджест.
+const EMPTY_MD5: &str = "1B2M2Y8AsgTpgAmY7PhCfg";
+
+fn upload_with_md5(api: &Api, md5: &str) -> crate::common::Reply {
+    let dist = Dist::wheel("acme-core", "1.0.0");
+    let mut fields = dist.fields();
+    fields.push(("md5_digest".to_owned(), md5.to_owned()));
+    api.pypi_post(
+        &upload_uri(),
+        multipart(&fields, &dist.filename, &dist.bytes),
+    )
+}
+
+#[test]
+fn matching_md5_digest_is_accepted() {
+    // Arrange
+    let api = Api::new();
+
+    // Act
+    let reply = upload_with_md5(&api, WHEEL_MD5);
+
+    // Assert
+    assert_eq!(reply.status, StatusCode::OK);
+}
+
+#[test]
+fn wrong_md5_digest_is_a_client_error_and_publishes_nothing() {
+    // Arrange
+    let api = Api::new();
+
+    // Act
+    let reply = upload_with_md5(&api, EMPTY_MD5);
+
+    // Assert
+    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(not_published(&api));
+}
+
 #[test]
 fn both_spellings_of_the_upload_url_are_served_without_a_redirect() {
     // Arrange
