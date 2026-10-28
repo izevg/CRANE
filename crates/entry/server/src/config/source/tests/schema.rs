@@ -325,3 +325,19 @@ fn check_of_an_unknown_group_is_an_error_not_a_pass() {
     // Assert
     assert_eq!(failed_keys(result), Some(vec!["no_such_group".to_owned()]));
 }
+
+#[test]
+fn secret_file_is_read_through_the_boot_layer() {
+    // Arrange
+    let boot = Boot::new(
+        |name: &str| (name == "CRANE_TOKEN_FILE").then(|| "/run/secrets/token".to_owned()),
+        |_: &Path| Ok("file-token\n".to_owned()),
+    );
+    let schema = ConfigSchema::new(boot, false);
+
+    // Act
+    let result = schema.check("token", &rows(vec![]), &[]);
+
+    // Assert
+    assert_eq!(failed_keys(result), None);
+}
