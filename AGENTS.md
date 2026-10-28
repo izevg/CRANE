@@ -49,6 +49,7 @@ The single entry point is the [Taskfile](Taskfile.yml) (`task --list`).
 | PostgreSQL tests | `task rust:test:pg` (needs `.env` from `.env.dist` and Docker) |
 | Web: types, Biome, Steiger, knip, depcruise | `task web:check` · unit tests: `task web:test` |
 | File structure, file size and crate layers | `task structure` · non-gating size report: `task structure:report` |
+| Stub registry | `task fixme:report` · format check `task fixme:check`. The only allowed debt marker in code is `FIXME(vX.Y.Z): <text>`; TODO/XXX/HACK fail the check |
 | Dogfood: throwaway compose stand + real cargo | `task dogfood` (latest stable) · `task e2e` (two latest stable) · `task dogfood:full` (publishes CRANE to its own registry, builds it from there, then builds offline; `task gate` runs it in the same stand after the e2e scenarios). Needs Docker and Compose with repeated `--env-file` (tested on v5.6.1) |
 | Checks before a PR to `release/*` | `task check` + the tests the change touches (`task rust:test:pg` for storage, `task e2e` for HTTP, server and delivery) + a manual mutants table in the PR description |
 | Full gate before the release PR `release/*` → `main` | `task gate` (unit tests + cargo-mutants and Stryker mutations over the whole release diff against `main` + e2e + Playwright) |
