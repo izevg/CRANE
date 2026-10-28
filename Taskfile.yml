@@ -17,6 +17,7 @@ tasks:
     desc: "Быстрые проверки (как pre-push): Rust, web, структура, tools"
     cmds:
       - task: structure
+      - task: fixme:check
       - task: lint
       - task: tools:check
       - task: rust:check
@@ -31,6 +32,14 @@ tasks:
   structure:report:
     desc: Размеры файлов - самые большие и все от порога предупреждения (не блокирует)
     cmds: [node tools/lint-structure/index.ts --report]
+
+  fixme:check:
+    desc: Реестр заглушек - формат FIXME(vX.Y.Z), закрытые и неизвестные вехи, привязка к контракту
+    cmds: [node tools/lint-fixme/index.ts]
+
+  fixme:report:
+    desc: Заглушки FIXME по вехам в порядке ROADMAP (не блокирует)
+    cmds: [node tools/lint-fixme/index.ts --report]
 
   lint:
     desc: Biome на весь репозиторий (tools, конфиги, web)

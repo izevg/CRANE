@@ -73,6 +73,8 @@ jobs:
       - run: pnpm run test:tools
       - name: Правило четырёх и слои крейтов
         run: pnpm run lint:structure
+      - name: Реестр заглушек FIXME
+        run: pnpm run lint:fixme
       - name: Compose-файлы и Helm-чарт
         run: |
           docker compose --project-directory . --env-file .env.dist -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.cache.yaml --profile scan --profile s3 config -q
