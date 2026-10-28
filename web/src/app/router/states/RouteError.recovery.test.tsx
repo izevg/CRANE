@@ -6,7 +6,8 @@ import {
   Outlet,
   RouterProvider,
 } from "@tanstack/react-router";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loginRoute } from "~/pages/login";
 import { ApiProblem } from "~/shared/api";
@@ -27,7 +28,16 @@ const STATUS = { unavailable: 503, unauthorized: 401 } as const;
 /** Loader, который падает первые `failures` раз, а потом отдаёт страницу. */
 function renderFlaky(failures: number, problem: () => ApiProblem) {
   const calls = { loader: 0 };
-  const root = createRootRoute({ component: Outlet });
+  const root = createRootRoute({
+    component: () => (
+      <>
+        <button type="button">{"Вне main"}</button>
+        <main>
+          <Outlet />
+        </main>
+      </>
+    ),
+  });
   const page = createRoute({
     getParentRoute: () => root,
     path: "/page",
@@ -135,5 +145,58 @@ describe("RouteError: 401 при переходе", () => {
     // Assert
     expect(router.state.location.pathname).toBe("/login");
     expect(router.state.location.search).toEqual({ reason: "session_expired", redirect: "/page" });
+  });
+});
+
+describe("RouteError: фокус при повторе", () => {
+  it("ручной повтор: фокус, стоявший в блоке ошибки, оказывается на h1 результата", async () => {
+    // Arrange
+    pause.ms = TOO_EARLY_MS;
+    const user = userEvent.setup();
+    renderFlaky(2, unavailable);
+    const retry = await screen.findByRole("button", { name: "Повторить" });
+    retry.focus();
+
+    // Act
+    await user.keyboard("{Enter}");
+
+    // Assert
+    const heading = await screen.findByRole("heading", {
+      level: 1,
+      name: "Сервер CRANE не отвечает",
+    });
+    await waitFor(() => expect(heading).toHaveFocus());
+  });
+
+  it("два автоповтора с фокусом на «Повторить»: каждый раз фокус на h1, а не на body", async () => {
+    // Arrange
+    renderFlaky(2, unavailable);
+    const retry = await screen.findByRole("button", { name: "Повторить" });
+    retry.focus();
+
+    // Act
+    await screen.findByRole("heading", { level: 1, name: "Страница открылась" });
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1, name: "Страница открылась" })).toHaveFocus(),
+    );
+    expect(document.body).not.toHaveFocus();
+  });
+
+  it("фокус вне main (сайдбар, topbar) повтор не трогает", async () => {
+    // Arrange
+    pause.ms = SHORT_MS;
+    renderFlaky(1, unavailable);
+    await screen.findByRole("heading", { level: 1, name: "Сервер CRANE не отвечает" });
+    const outside = screen.getByRole("button", { name: "Вне main" });
+    outside.focus();
+    await screen.findByRole("heading", { level: 1, name: "Страница открылась" });
+
+    // Act
+    await act(() => new Promise((resolve) => setTimeout(resolve, OBSERVE_MS)));
+
+    // Assert
+    expect(outside).toHaveFocus();
   });
 });

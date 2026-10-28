@@ -1,12 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { configure, expect, getConfig, spyOn, within } from "storybook/test";
+import { configure, expect, getConfig, spyOn, waitFor, within } from "storybook/test";
 import { type ApiOverrides, ApiProblem, type Status } from "~/shared/api";
 import { ChunkLoadError } from "~/shared/lib/route";
 import { AppAt } from "../harness/AppAt";
 import { refetchStale } from "../harness/refresh";
+import { appBackoff } from "../recovery/backoff";
 import { markReload } from "../recovery/chunk";
 
 const LOAD_TIMEOUT_MS = 10_000;
+const AUTO_RETRY_MS = 300;
 const INTERNAL_DETAIL = /внутренняя деталь/;
 
 const meta = {
@@ -76,6 +78,36 @@ export const RenderFailure: Story = {
       await canvas.findByRole("heading", { level: 1, name: "Не удалось открыть страницу" }),
     ).toBeVisible();
     await expect(canvas.queryByText(INTERNAL_DETAIL)).toBeNull();
+  },
+};
+
+let serverCalls = 0;
+
+export const ServerDownAutoRetry: Story = {
+  name: "Сервер не отвечает: автоповтор открывает страницу, фокус остаётся на h1",
+  // пауза сокращена с 5 с до 0,3 с; первый вызов (loader) падает, повтор отдаёт данные
+  beforeEach: () => {
+    serverCalls = 0;
+    spyOn(appBackoff, "next").mockReturnValue(AUTO_RETRY_MS);
+  },
+  parameters: {
+    api: {
+      getStatus: () => {
+        serverCalls += 1;
+        if (serverCalls === 1) {
+          throw new ApiProblem({ kind: "problem", status: 503 });
+        }
+        return SMALL_STATUS;
+      },
+    } satisfies ApiOverrides,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const retry = await canvas.findByRole("button", { name: "Повторить" });
+    retry.focus();
+    const heading = await canvas.findByRole("heading", { level: 1, name: "Статус системы" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    await expect(document.body).not.toHaveFocus();
   },
 };
 

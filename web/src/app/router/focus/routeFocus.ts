@@ -64,3 +64,17 @@ export function focusHeadingWhenReady(root: HTMLElement, stale: HTMLElement | nu
   attempt();
   return finish;
 }
+
+/** Фокус сейчас внутри `<main>` (в блоке ошибки или на странице), а не в сайдбаре или topbar. */
+export function isFocusInMain(): boolean {
+  const main = document.querySelector("main");
+  return main?.contains(document.activeElement) === true;
+}
+
+/** Фокус на h1 того, что показано сейчас. */
+export function focusMainHeading(): void {
+  const heading = findHeading(document.body);
+  if (heading !== null) {
+    focusHeading(heading);
+  }
+}

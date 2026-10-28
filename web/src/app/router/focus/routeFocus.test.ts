@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { announce } from "~/shared/lib/a11y";
-import { focusHeadingWhenReady, shouldMoveFocus } from "./routeFocus";
+import {
+  focusHeadingWhenReady,
+  focusMainHeading,
+  isFocusInMain,
+  shouldMoveFocus,
+} from "./routeFocus";
 
 vi.mock("~/shared/lib/a11y", () => ({ announce: vi.fn() }));
 
@@ -230,5 +235,69 @@ describe("focusHeadingWhenReady", () => {
 
     // Assert
     expect(root.querySelector("h1")).not.toHaveFocus();
+  });
+});
+
+describe("фокус при повторе", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("isFocusInMain: фокус на кнопке внутри main — да", () => {
+    // Arrange
+    document.body.innerHTML = "<button>Вне</button><main><button id='in'>Внутри</button></main>";
+    document.querySelector<HTMLElement>("#in")?.focus();
+
+    // Act
+    const inside = isFocusInMain();
+
+    // Assert
+    expect(inside).toBe(true);
+  });
+
+  it("isFocusInMain: фокус в сайдбаре — нет", () => {
+    // Arrange
+    document.body.innerHTML = "<button id='out'>Вне</button><main><button>Внутри</button></main>";
+    document.querySelector<HTMLElement>("#out")?.focus();
+
+    // Act
+    const inside = isFocusInMain();
+
+    // Assert
+    expect(inside).toBe(false);
+  });
+
+  it("isFocusInMain: main на странице нет — нет", () => {
+    // Arrange
+    document.body.innerHTML = "<button id='out'>Вне</button>";
+    document.querySelector<HTMLElement>("#out")?.focus();
+
+    // Act
+    const inside = isFocusInMain();
+
+    // Assert
+    expect(inside).toBe(false);
+  });
+
+  it("focusMainHeading переносит фокус на h1 в main", () => {
+    // Arrange
+    document.body.innerHTML = "<main><h1>Страница</h1></main>";
+
+    // Act
+    focusMainHeading();
+
+    // Assert
+    expect(document.querySelector("h1")).toHaveFocus();
+  });
+
+  it("focusMainHeading без заголовка ничего не делает", () => {
+    // Arrange
+    document.body.innerHTML = "<main><p>Без заголовка</p></main>";
+
+    // Act
+    const run = () => focusMainHeading();
+
+    // Assert
+    expect(run).not.toThrow();
   });
 });

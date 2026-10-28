@@ -7,6 +7,7 @@ import { ApiProblem, problemViewOf } from "~/shared/api";
 import { ChunkLoadError } from "~/shared/lib/route";
 import type { Action } from "~/shared/ui/actions";
 import { ProblemState, type ProblemView } from "~/shared/ui/status";
+import { focusMainHeading, isFocusInMain } from "../focus/routeFocus";
 import { type ChunkAction, decideChunkAction, markReload } from "../recovery/chunk";
 import { reloadPage } from "../recovery/reload";
 import { useAutoRetry } from "../recovery/useAutoRetry";
@@ -66,8 +67,18 @@ export function RouteError({ error, reset, scope = "section" }: Props) {
   const router = useRouter();
   const chunk = useChunkAction(error);
   const retry = useCallback(() => {
+    // Блок ошибки пересоздаётся, и фокус, стоявший в нём, ушёл бы на body (WCAG 2.4.3): после повтора он на h1
+    // результата. Фокус вне main (сайдбар, topbar) не трогаем.
+    const keepFocus = isFocusInMain();
     reset();
-    void router.invalidate();
+    const loading = router.invalidate();
+    if (keepFocus) {
+      const focus = (): void => {
+        // макрозадача: React к этому моменту успевает заменить узлы результатом
+        setTimeout(focusMainHeading, 0);
+      };
+      void loading.then(focus, focus);
+    }
   }, [reset, router]);
   const problem = viewOf(error, chunk, {
     retry: { label: t`Повторить`, run: { onSelect: retry } },
