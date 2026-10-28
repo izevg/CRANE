@@ -35,6 +35,7 @@ fn describe(error: &RegistryError) -> ClientError {
         | RegistryError::AssetNotFound => StatusCode::NOT_FOUND,
         RegistryError::NotHosted => StatusCode::METHOD_NOT_ALLOWED,
         RegistryError::VersionExists => StatusCode::CONFLICT,
+        RegistryError::AssetExists => StatusCode::CONFLICT,
         RegistryError::Unavailable {
             state: VersionState::Deleted,
         } => StatusCode::GONE,

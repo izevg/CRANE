@@ -1,6 +1,6 @@
 use crane_domain::registry::VersionState;
 
-use super::{ensure_repo, find, new_version, publish, unknown_version_id};
+use crate::contract::catalog::{ensure_repo, find, new_version, publish, unknown_version_id};
 use crate::registry::{Catalog, CatalogError};
 
 /// Сценарии группы; порядок вызовов сохраняет порядок общего прогона.

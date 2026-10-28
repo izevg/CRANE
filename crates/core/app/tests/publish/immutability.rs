@@ -96,7 +96,7 @@ fn publish_lost_race_maps_catalog_conflict_to_version_exists() {
     // Arrange
     let seed = Seed::new();
     seed.add_version("foo", "1.0.0", VersionState::Released, b"winner");
-    let registry = seed.registry_with(BlindCatalog, |blobs| blobs);
+    let registry = seed.registry_with(BlindCatalog::always, |blobs| blobs);
     let request = publish_request("foo", "1.0.0", &HELLO, Vec::new());
 
     // Act

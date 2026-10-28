@@ -24,6 +24,7 @@ fn registry_errors_map_to_http_statuses() {
         (RegistryError::VersionNotFound, StatusCode::NOT_FOUND),
         (RegistryError::AssetNotFound, StatusCode::NOT_FOUND),
         (RegistryError::VersionExists, StatusCode::CONFLICT),
+        (RegistryError::AssetExists, StatusCode::CONFLICT),
         (
             RegistryError::Unavailable {
                 state: VersionState::Deleted,

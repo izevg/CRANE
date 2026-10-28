@@ -1,6 +1,6 @@
 use crane_domain::registry::{
-    Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Version, VersionId,
-    VersionState,
+    Asset, Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Version,
+    VersionId, VersionState,
 };
 use crane_ports::registry::{Catalog, CatalogError, NewVersion};
 use sqlx::PgPool;
@@ -98,6 +98,14 @@ impl Catalog for PgCatalog {
 
     async fn publish_version(&self, new: NewVersion) -> Result<PackageVersion, CatalogError> {
         publish::publish_version(&self.pool, new).await
+    }
+
+    async fn add_asset(
+        &self,
+        version: VersionId,
+        asset: Asset,
+    ) -> Result<PackageVersion, CatalogError> {
+        publish::add_asset(&self.pool, version, asset).await
     }
 
     async fn versions(

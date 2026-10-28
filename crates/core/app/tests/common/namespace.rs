@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crane_domain::registry::{
-    Format, FormatMetadata, Namespace, NamespacePattern, PackageName, PackageVersion, Repository,
-    RepositoryId, RepositoryKind, Version, VersionId, VersionState, WorkspaceId,
+    Asset, Format, FormatMetadata, Namespace, NamespacePattern, PackageName, PackageVersion,
+    Repository, RepositoryId, RepositoryKind, Version, VersionId, VersionState, WorkspaceId,
 };
 use crane_memory::{MemoryCatalog, SequentialIdGen};
 use crane_ports::proxy::{Presence, UpstreamNames};
@@ -105,6 +105,7 @@ impl UpstreamNames for FakeUpstream {
 pub(crate) enum Fault {
     NamespaceFor,
     HostedExists,
+    AddAsset,
 }
 
 /// Каталог, у которого отказывают перечисленные методы; остальное делегируется.
@@ -146,6 +147,17 @@ impl Catalog for FaultyCatalog {
         version: NewVersion,
     ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
         self.inner.publish_version(version)
+    }
+
+    async fn add_asset(
+        &self,
+        version: VersionId,
+        asset: Asset,
+    ) -> Result<PackageVersion, CatalogError> {
+        if self.fails(Fault::AddAsset) {
+            return Err(lookup_down());
+        }
+        self.inner.add_asset(version, asset).await
     }
 
     fn versions(

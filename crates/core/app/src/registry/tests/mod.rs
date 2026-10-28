@@ -32,6 +32,21 @@ fn catalog_version_exists_maps_to_version_exists() {
 }
 
 #[test]
+fn catalog_asset_exists_maps_to_asset_exists() {
+    // Arrange
+    let error = CatalogError::AssetExists;
+
+    // Act
+    let mapped = RegistryError::from(error);
+
+    // Assert
+    assert!(
+        matches!(mapped, RegistryError::AssetExists),
+        "занятый путь файла должен давать 409, а не 500: {mapped:?}"
+    );
+}
+
+#[test]
 fn catalog_broken_invariants_map_to_backend() {
     // Arrange
     let errors = [

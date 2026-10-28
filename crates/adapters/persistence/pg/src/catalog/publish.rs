@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crane_domain::registry::{PackageVersion, VersionId};
+use crane_domain::registry::{Asset, PackageVersion, VersionId};
 use crane_ports::registry::{CatalogError, NewVersion};
 use sqlx::{PgConnection, PgPool};
 
@@ -16,6 +16,8 @@ const STORE_ID: &str = "main";
 /// Имена ограничений из миграции 0001: по ним нарушения превращаются в доменные ошибки.
 const VERSION_KEY: &str = "package_version_package_id_version_key";
 const PACKAGE_REPOSITORY_FKEY: &str = "package_repository_id_fkey";
+const ASSET_KEY: &str = "asset_pkey";
+const ASSET_VERSION_FKEY: &str = "asset_version_id_fkey";
 
 /// Файлы версии в виде параллельных массивов для `UNNEST`.
 struct Files<'a> {
@@ -24,9 +26,11 @@ struct Files<'a> {
     sizes: Vec<i64>,
 }
 
-/// Ошибки `publish_version`: нарушения известных ограничений - доменные, остальное - сбой.
-/// Любое другое нарушение уникальности (повтор пути файла, повтор id) - ошибка вызывающего
+/// Ошибки `publish_version` и `add_asset`: нарушения известных ограничений - доменные,
+/// остальное - сбой. Любое другое нарушение уникальности (повтор id) - ошибка вызывающего
 /// или повреждение, но не `VersionExists`: иначе клиент получил бы ложное «версия занята».
+/// Повтор пути файла при публикации остаётся сбоем: пути в `NewVersion` задаёт вызывающий,
+/// а `AssetExists` - ответ только на прикрепление к существующей версии.
 fn publish_error(error: sqlx::Error) -> CatalogError {
     if let Some(db) = error.as_database_error() {
         if db.is_unique_violation() && db.constraint() == Some(VERSION_KEY) {
@@ -63,13 +67,15 @@ pub(super) async fn publish_version(
     new: NewVersion,
 ) -> Result<PackageVersion, CatalogError> {
     let published_at = to_db_time(new.published_at)?;
-    let files = files_of(&new)?;
+    let files = files_of(&new.assets)?;
 
     let mut tx = pool.begin().await.map_err(backend)?;
     let package_id = ensure_package(&mut tx, &new).await?;
     insert_blobs(&mut tx, &files).await?;
     insert_version(&mut tx, &new, package_id, published_at).await?;
-    insert_assets(&mut tx, &new, &files).await?;
+    insert_assets(&mut tx, new.id, &files)
+        .await
+        .map_err(publish_error)?;
     move_tags(&mut tx, &new, package_id).await?;
 
     // Результат читается из БД, а не собирается из входа: так publish и find совпадают
@@ -81,15 +87,13 @@ pub(super) async fn publish_version(
     Ok(stored)
 }
 
-fn files_of(new: &NewVersion) -> Result<Files<'_>, CatalogError> {
-    let sizes = new
-        .assets
+fn files_of(assets: &[Asset]) -> Result<Files<'_>, CatalogError> {
+    let sizes = assets
         .iter()
         .map(|a| i64::try_from(a.size).map_err(|_| rejected("размер файла не помещается в bigint")))
         .collect::<Result<Vec<_>, _>>()?;
-    let paths = new.assets.iter().map(|a| a.path.as_str()).collect();
-    let digests = new
-        .assets
+    let paths = assets.iter().map(|a| a.path.as_str()).collect();
+    let digests = assets
         .iter()
         .map(|a| a.sha256.as_bytes().as_slice())
         .collect();
@@ -164,21 +168,56 @@ async fn insert_version(
 /// Один запрос на все файлы вместо N обращений к БД.
 async fn insert_assets(
     conn: &mut PgConnection,
-    new: &NewVersion,
+    version: VersionId,
     files: &Files<'_>,
-) -> Result<(), CatalogError> {
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO asset (version_id, path, store_id, blob_sha256)
          SELECT $1, t.path, $2, t.digest FROM UNNEST($3::text[], $4::bytea[]) AS t(path, digest)",
     )
-    .bind(new.id.as_uuid())
+    .bind(version.as_uuid())
     .bind(STORE_ID)
     .bind(&files.paths)
     .bind(&files.digests)
     .execute(conn)
-    .await
-    .map_err(publish_error)?;
+    .await?;
     Ok(())
+}
+
+/// Прикрепляет файл одной транзакцией: blob, строка файла и чтение результата.
+/// Версию не блокируем: параллельные прикрепления разных путей не конфликтуют, а тот же путь
+/// разрешает первичный ключ `(version_id, path)`.
+pub(super) async fn add_asset(
+    pool: &PgPool,
+    version: VersionId,
+    asset: Asset,
+) -> Result<PackageVersion, CatalogError> {
+    let files = files_of(std::slice::from_ref(&asset))?;
+
+    let mut tx = pool.begin().await.map_err(backend)?;
+    insert_blobs(&mut tx, &files).await?;
+    insert_assets(&mut tx, version, &files)
+        .await
+        .map_err(asset_error)?;
+    let stored = load_version(&mut tx, version)
+        .await?
+        .ok_or_else(|| corrupt("версия с только что вставленным файлом не читается"))?;
+    tx.commit().await.map_err(backend)?;
+    Ok(stored)
+}
+
+/// Занятый путь и неизвестная версия - доменные ответы `add_asset`, остальное - сбой.
+fn asset_error(error: sqlx::Error) -> CatalogError {
+    if let Some(db) = error.as_database_error() {
+        // Имя ограничения однозначно (как у `PACKAGE_REPOSITORY_FKEY`): отдельная проверка
+        // вида нарушения добавила бы недостижимую ветку.
+        match db.constraint() {
+            Some(ASSET_KEY) => return CatalogError::AssetExists,
+            Some(ASSET_VERSION_FKEY) => return CatalogError::NotFound,
+            _ => {}
+        }
+    }
+    backend(error)
 }
 
 /// Теги переносятся в той же транзакции, что и версия: либо всё, либо ничего.

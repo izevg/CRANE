@@ -1,28 +1,64 @@
 //! Декораторы адаптеров для сценариев отказов: слепая предпроверка, недоступная БД, сбои blob-хранилища.
 
 use std::future::{Future, ready};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crane_domain::registry::{
-    Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Sha256, Version,
-    VersionId, VersionState,
+    Asset, Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Sha256,
+    Version, VersionId, VersionState,
 };
 use crane_memory::{MemoryBlobStore, MemoryCatalog};
 use crane_ports::registry::{
     BlobError, BlobStore, ByteStream, Catalog, CatalogError, Digests, NewVersion, Staged,
 };
 
-/// Каталог с «слепой» предпроверкой: `find_version` всегда `None`, остальное делегируется.
-/// Моделирует гонку: между предпроверкой и `publish_version` версию занял другой запрос.
+/// Каталог с «слепой» предпроверкой: первые `blind_calls` вызовов `find_version` дают `None`,
+/// остальное делегируется. Моделирует гонку: между предпроверкой и `publish_version`
+/// версию занял другой запрос.
 #[derive(Debug)]
-pub(crate) struct BlindCatalog(pub MemoryCatalog);
+pub(crate) struct BlindCatalog {
+    inner: MemoryCatalog,
+    blind_calls: AtomicUsize,
+    /// Пакет тоже «не виден»: оба конкурента первой загрузки считают имя свободным.
+    hides_package: bool,
+}
+
+impl BlindCatalog {
+    /// Предпроверка слепа всегда.
+    pub(crate) fn always(inner: MemoryCatalog) -> Self {
+        Self {
+            inner,
+            blind_calls: AtomicUsize::new(usize::MAX),
+            hides_package: false,
+        }
+    }
+
+    /// Гонка двух первых загрузок: первая предпроверка версии слепа и пакета «ещё нет»,
+    /// повторное чтение уже видит версию-победителя.
+    pub(crate) fn once(inner: MemoryCatalog) -> Self {
+        Self {
+            inner,
+            blind_calls: AtomicUsize::new(1),
+            hides_package: true,
+        }
+    }
+
+    fn is_blind(&self) -> bool {
+        self.blind_calls
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+                left.checked_sub(1)
+            })
+            .is_ok()
+    }
+}
 
 impl Catalog for BlindCatalog {
     fn ensure_repository(
         &self,
         repository: Repository,
     ) -> impl Future<Output = Result<Repository, CatalogError>> + Send {
-        self.0.ensure_repository(repository)
+        self.inner.ensure_repository(repository)
     }
 
     fn find_repository(
@@ -30,14 +66,22 @@ impl Catalog for BlindCatalog {
         format: Format,
         name: &str,
     ) -> impl Future<Output = Result<Option<Repository>, CatalogError>> + Send {
-        self.0.find_repository(format, name)
+        self.inner.find_repository(format, name)
     }
 
     fn publish_version(
         &self,
         version: NewVersion,
     ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
-        self.0.publish_version(version)
+        self.inner.publish_version(version)
+    }
+
+    fn add_asset(
+        &self,
+        version: VersionId,
+        asset: Asset,
+    ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
+        self.inner.add_asset(version, asset)
     }
 
     fn versions(
@@ -45,16 +89,18 @@ impl Catalog for BlindCatalog {
         repository: RepositoryId,
         package: &PackageName,
     ) -> impl Future<Output = Result<Vec<PackageVersion>, CatalogError>> + Send {
-        self.0.versions(repository, package)
+        self.inner.versions(repository, package)
     }
 
     fn find_version(
         &self,
-        _repository: RepositoryId,
-        _package: &PackageName,
-        _version: &Version,
+        repository: RepositoryId,
+        package: &PackageName,
+        version: &Version,
     ) -> impl Future<Output = Result<Option<PackageVersion>, CatalogError>> + Send {
-        ready(Ok(None))
+        let blind = self.is_blind();
+        let found = self.inner.find_version(repository, package, version);
+        async move { if blind { Ok(None) } else { found.await } }
     }
 
     fn set_yanked(
@@ -62,7 +108,7 @@ impl Catalog for BlindCatalog {
         id: VersionId,
         yanked: bool,
     ) -> impl Future<Output = Result<(), CatalogError>> + Send {
-        self.0.set_yanked(id, yanked)
+        self.inner.set_yanked(id, yanked)
     }
 
     fn set_deprecated(
@@ -70,7 +116,7 @@ impl Catalog for BlindCatalog {
         id: VersionId,
         message: Option<String>,
     ) -> impl Future<Output = Result<(), CatalogError>> + Send {
-        self.0.set_deprecated(id, message)
+        self.inner.set_deprecated(id, message)
     }
 
     fn set_tag(
@@ -78,7 +124,7 @@ impl Catalog for BlindCatalog {
         version: VersionId,
         tag: &str,
     ) -> impl Future<Output = Result<(), CatalogError>> + Send {
-        self.0.set_tag(version, tag)
+        self.inner.set_tag(version, tag)
     }
 
     fn remove_tag(
@@ -87,7 +133,7 @@ impl Catalog for BlindCatalog {
         package: &PackageName,
         tag: &str,
     ) -> impl Future<Output = Result<bool, CatalogError>> + Send {
-        self.0.remove_tag(repository, package, tag)
+        self.inner.remove_tag(repository, package, tag)
     }
 
     fn tags(
@@ -95,7 +141,7 @@ impl Catalog for BlindCatalog {
         repository: RepositoryId,
         package: &PackageName,
     ) -> impl Future<Output = Result<Vec<(String, VersionId)>, CatalogError>> + Send {
-        self.0.tags(repository, package)
+        self.inner.tags(repository, package)
     }
 
     fn transition(
@@ -104,7 +150,7 @@ impl Catalog for BlindCatalog {
         from: VersionState,
         to: VersionState,
     ) -> impl Future<Output = Result<(), CatalogError>> + Send {
-        self.0.transition(id, from, to)
+        self.inner.transition(id, from, to)
     }
 
     fn namespace_for(
@@ -112,7 +158,7 @@ impl Catalog for BlindCatalog {
         format: Format,
         name: &PackageName,
     ) -> impl Future<Output = Result<Option<Namespace>, CatalogError>> + Send {
-        self.0.namespace_for(format, name)
+        self.inner.namespace_for(format, name)
     }
 
     fn hosted_exists(
@@ -120,14 +166,16 @@ impl Catalog for BlindCatalog {
         format: Format,
         name: &PackageName,
     ) -> impl Future<Output = Result<bool, CatalogError>> + Send {
-        self.0.hosted_exists(format, name)
+        let hidden = self.hides_package;
+        let exists = self.inner.hosted_exists(format, name);
+        async move { if hidden { Ok(false) } else { exists.await } }
     }
 
     fn ensure_namespace(
         &self,
         namespace: Namespace,
     ) -> impl Future<Output = Result<Namespace, CatalogError>> + Send {
-        self.0.ensure_namespace(namespace)
+        self.inner.ensure_namespace(namespace)
     }
 }
 
@@ -157,6 +205,14 @@ impl Catalog for DownCatalog {
         version: NewVersion,
     ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
         self.0.publish_version(version)
+    }
+
+    fn add_asset(
+        &self,
+        version: VersionId,
+        asset: Asset,
+    ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
+        self.0.add_asset(version, asset)
     }
 
     fn versions(

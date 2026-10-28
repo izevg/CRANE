@@ -68,6 +68,13 @@ fn shadow() -> AuditAction {
     }
 }
 
+fn publish_file() -> AuditAction {
+    AuditAction::PublishFile {
+        coordinate: coord("serde", "1.0.0"),
+        path: "serde-1.0.0.crate".to_owned(),
+    }
+}
+
 pub(super) fn failure() -> Outcome {
     Outcome::Failure {
         reason: "причина".to_owned(),
@@ -152,6 +159,21 @@ fn action_and_outcome_map_to_class_activity_type_status_and_severity() {
 }
 
 #[test]
+fn publish_file_maps_to_create_activity_distinct_from_publish() {
+    // Arrange
+    let robot = Some(principal(PrincipalKind::Robot));
+
+    // Act
+    let r = record(publish_file(), Outcome::Success, robot);
+
+    // Assert
+    assert_eq!(
+        (r.class_uid, r.activity_id, r.operation),
+        (6003, 1, Some("publish.file"))
+    );
+}
+
+#[test]
 fn namespace_actions_map_to_api_activity_without_resource() {
     // Arrange
     let robot = Some(principal(PrincipalKind::Robot));
@@ -202,6 +224,7 @@ fn purl_encodes_plus_in_version_and_keeps_written_name() {
     let cases = [
         AuditAction::Publish(coord("serde", "1.0.0")),
         AuditAction::Publish(coord("Foo_Bar", "1.2.3-rc.1+build5")),
+        publish_file(),
     ];
 
     // Act
@@ -213,6 +236,7 @@ fn purl_encodes_plus_in_version_and_keeps_written_name() {
         [
             Some("pkg:cargo/serde@1.0.0".to_owned()),
             Some("pkg:cargo/Foo_Bar@1.2.3-rc.1%2Bbuild5".to_owned()),
+            Some("pkg:cargo/serde@1.0.0".to_owned()),
         ]
     );
 }

@@ -2,8 +2,8 @@ use std::future::ready;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crane_domain::registry::{
-    Format, Namespace, NamespacePattern, PackageName, PackageVersion, Repository, RepositoryId,
-    RepositoryKind, Version, VersionId, VersionState,
+    Asset, Format, Namespace, NamespacePattern, PackageName, PackageVersion, Repository,
+    RepositoryId, RepositoryKind, Version, VersionId, VersionState,
 };
 use crane_ports::registry::{Catalog, CatalogError, NewVersion};
 
@@ -74,6 +74,24 @@ impl MemoryCatalog {
             .find(|v| v.id == id)
             .ok_or(CatalogError::NotFound)?;
         change(record)
+    }
+}
+
+impl MemoryCatalog {
+    fn attach(&self, id: VersionId, asset: Asset) -> Result<PackageVersion, CatalogError> {
+        let mut state = self.lock();
+        let record = state
+            .versions
+            .iter_mut()
+            .find(|v| v.id == id)
+            .ok_or(CatalogError::NotFound)?;
+        if record.assets.iter().any(|a| a.path == asset.path) {
+            return Err(CatalogError::AssetExists);
+        }
+        record.assets.push(asset);
+        // Порядок файлов задаёт контракт `find_version`: байтовый порядок путей, как `COLLATE "C"` в PG.
+        record.assets.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(record.clone())
     }
 }
 
@@ -157,6 +175,14 @@ impl Catalog for MemoryCatalog {
         }
         state.versions.push(record.clone());
         ready(Ok(record))
+    }
+
+    fn add_asset(
+        &self,
+        version: VersionId,
+        asset: Asset,
+    ) -> impl Future<Output = Result<PackageVersion, CatalogError>> + Send {
+        ready(self.attach(version, asset))
     }
 
     fn versions(
