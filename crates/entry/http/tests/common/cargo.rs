@@ -12,13 +12,23 @@ pub(crate) fn index_path(name: &str) -> String {
 
 /// Тело `PUT /api/v1/crates/new`: длина JSON, JSON, длина крейта, крейт.
 pub(crate) fn publish_body(name: &str, vers: &str, krate: &[u8]) -> Vec<u8> {
+    publish_body_with_registry(name, vers, krate, &Value::Null)
+}
+
+/// То же, но у зависимости задан `registry`.
+pub(crate) fn publish_body_with_registry(
+    name: &str,
+    vers: &str,
+    krate: &[u8],
+    registry: &Value,
+) -> Vec<u8> {
     let meta = json!({
         "name": name,
         "vers": vers,
         "deps": [{
             "name": "serde", "version_req": "^1.0", "features": ["derive"],
             "optional": false, "default_features": true, "target": null,
-            "kind": "normal", "registry": null, "explicit_name_in_toml": null
+            "kind": "normal", "registry": registry, "explicit_name_in_toml": null
         }],
         "features": { "default": ["std"], "std": [] },
         "description": "тестовый крейт",

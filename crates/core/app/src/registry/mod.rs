@@ -19,6 +19,8 @@ use crane_ports::proxy::UpstreamNames;
 use crane_ports::registry::{BlobError, BlobStore, ByteStream, Catalog, CatalogError};
 use crane_ports::system::{Clock, IdGen};
 
+pub use write::Refusal;
+
 /// Файл версии от клиента. Один файл на запрос: так устроены все протоколы;
 /// добавление файлов к версии (`PyPI`, Maven) — отдельный use case позже.
 pub struct Upload {
@@ -43,7 +45,8 @@ impl fmt::Debug for Upload {
 pub struct Publish {
     pub coordinate: Coordinate,
     pub file: Upload,
-    pub metadata: FormatMetadata,
+    /// `Err` — отказ политики формата: публикация не дойдёт до хранилищ.
+    pub metadata: Result<FormatMetadata, Refusal>,
     /// Dist-теги, которые публикация ставит на версию (переносит с прежних).
     pub tags: Vec<String>,
 }
@@ -77,6 +80,9 @@ pub enum RegistryError {
     /// Публикация разрешена только в hosted-репозиторий.
     #[error("репозиторий не hosted: публикация запрещена")]
     NotHosted,
+    /// Отказ по правилу формата (например, запрещённая зависимость); причина безопасна для журнала.
+    #[error("{reason}")]
+    Rejected { code: &'static str, reason: String },
     #[error("версия не найдена")]
     VersionNotFound,
     #[error("файл версии не найден")]
@@ -123,6 +129,17 @@ pub enum RegistryError {
     /// Сбой хранилища или нарушенный инвариант: для клиента это 500.
     #[error("ошибка бэкенда")]
     Backend(#[source] Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl RegistryError {
+    /// Стабильный код отказа по правилу для журнала аудита; у прочих ошибок его нет.
+    #[must_use]
+    pub const fn code(&self) -> Option<&'static str> {
+        match self {
+            Self::Rejected { code, .. } => Some(code),
+            _ => None,
+        }
+    }
 }
 
 // Единственное место, где ошибки портов превращаются в ошибки use case.
@@ -226,6 +243,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             // Только Display: цепочка `source` у Backend может содержать адреса хранилища.
             Err(error) => Outcome::Failure {
                 reason: error.to_string(),
+                code: error.code(),
             },
         };
         self.audit.record(AuditEvent {

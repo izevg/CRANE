@@ -34,6 +34,8 @@ pub struct OcsfRecord {
     pub status_id: u32,
     pub status: &'static str,
     pub status_detail: Option<String>,
+    /// Стабильный код отказа по правилу (`status_code` базового события OCSF).
+    pub status_code: Option<String>,
     pub severity_id: u32,
     pub event_id: Uuid,
     pub correlation_uid: String,
@@ -177,9 +179,15 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
     let shape = shape(&event.action);
     let subject = user(event.actor.as_ref());
     let is_auth = shape.class_uid == CLASS_AUTHENTICATION;
-    let (status_id, status, severity_id, status_detail) = match &event.outcome {
-        Outcome::Success => (1, "Success", 1, None),
-        Outcome::Failure { reason } => (2, "Failure", 2, Some(reason.clone())),
+    let (status_id, status, severity_id, status_detail, status_code) = match &event.outcome {
+        Outcome::Success => (1, "Success", 1, None, None),
+        Outcome::Failure { reason, code } => (
+            2,
+            "Failure",
+            2,
+            Some(reason.clone()),
+            code.map(str::to_owned),
+        ),
     };
     let resource = resource(&event.action);
     OcsfRecord {
@@ -191,6 +199,7 @@ pub fn ocsf(event: &AuditEvent, event_id: Uuid, time_ms: u64) -> OcsfRecord {
         status_id,
         status,
         status_detail,
+        status_code,
         severity_id,
         event_id,
         correlation_uid: event.request.request_id.as_str().to_owned(),

@@ -15,6 +15,8 @@ use crane_format_cargo::{IndexError, asset_path, parse_publish, render_index};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+const OWN_INDEX: &str = "sparse+https://crane.example/cargo/internal/index/";
+
 fn publish_body(name: &str, vers: &str) -> Bytes {
     let json = json!({
         "name": name,
@@ -40,6 +42,7 @@ fn publish_body(name: &str, vers: &str) -> Bytes {
 
 fn version(name: &str, vers: &str, yanked: bool, sha_byte: u8) -> PackageVersion {
     let publish = parse_publish(publish_body(name, vers)).unwrap();
+    let metadata = publish.index_metadata(OWN_INDEX).unwrap();
     PackageVersion {
         id: VersionId::new(Uuid::nil()),
         repository: RepositoryId::new(Uuid::nil()),
@@ -54,7 +57,7 @@ fn version(name: &str, vers: &str, yanked: bool, sha_byte: u8) -> PackageVersion
         yanked,
         deprecated: None,
         published_at: SystemTime::UNIX_EPOCH,
-        metadata: publish.metadata,
+        metadata,
     }
 }
 

@@ -11,12 +11,17 @@ use axum::routing::{delete, get, put};
 use crane_app::registry::Registry;
 use crane_ports::registry::{BlobStore, Catalog};
 
-use super::{CargoSettings, cargo_not_found};
+use super::{CARGO_PREFIX, CargoSettings, cargo_not_found};
 
 /// Общее состояние обработчиков.
 struct Shared<C, B> {
     registry: Arc<Registry<C, B>>,
     settings: CargoSettings,
+}
+
+/// Адрес репозитория, от которого строятся `dl`/`api` в `config.json` и адрес его индекса.
+fn repo_base(settings: &CargoSettings, repo: &str) -> String {
+    format!("{}{CARGO_PREFIX}/{repo}", settings.public_url)
 }
 
 /// Маршруты hosted-репозитория без слоя аутентификации: его накладывает `api_router`.
