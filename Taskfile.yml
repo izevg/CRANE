@@ -134,6 +134,9 @@ tasks:
     desc: "Полный гейт перед PR release/* → main (юниты, e2e, мутации по дифу релиза, Playwright). В CI не запускается"
     vars:
       BASE: '{{.BASE | default "origin/main"}}'
+      # Параллельные сборки cargo-mutants (task gate JOBS=3). Valkey общий, а тесты адаптера делают
+      # FLUSHDB: на ошибках гонки мутант ложно считается пойманным, поэтому по умолчанию один поток.
+      JOBS: '{{.JOBS | default "1"}}'
     # Флаги видны только шагам самого gate (в подзадачи они не передаются): мутационному прогону
     # нужны БД и Valkey, иначе все тесты крейтов-адаптеров пропускаются и мутанты выживают.
     # .env читает только шаг мутаций: dotenv на уровне задачи экспортирует CRANE_IMAGE и прочее
@@ -156,7 +159,7 @@ tasks:
         CRANE_TEST_DATABASE_URL=${CRANE_TEST_DATABASE_URL:-postgres://$POSTGRES_USER:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB}
         CRANE_TEST_VALKEY_URL=${CRANE_TEST_VALKEY_URL:-valkey://crane:$(cat "$VALKEY_PASSWORD_SECRET")@127.0.0.1:$VALKEY_PORT}
         CRANE_TEST_VALKEY_ADMIN_URL=${CRANE_TEST_VALKEY_ADMIN_URL:-valkey://crane-test:$(cat "$VALKEY_PASSWORD_SECRET")@127.0.0.1:$VALKEY_PORT}
-        cargo mutants --workspace --in-diff out/gate.diff
+        cargo mutants --workspace -j {{.JOBS}} --in-diff out/gate.diff
       - |
         if find web/src -name '*.test.*' | grep -q .; then
           pnpm --filter web run mutate
