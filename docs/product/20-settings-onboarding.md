@@ -147,12 +147,12 @@ pub trait SettingsSchema: Send + Sync {
 
 ```sql
 CREATE TABLE setting (
-  key          text PRIMARY KEY,
+  key          text PRIMARY KEY CHECK (key ~ '^[a-z][a-z0-9_]*$' AND length(key) <= 96),
   value_text   text,                -- несекретное: строка той же формы, что у ENV и файла
   value_sealed bytea,               -- секрет: nonce || шифртекст || тег
   key_id       text,                -- каким ключом зашифровано (ротация)
-  version      bigint NOT NULL DEFAULT 1,
-  updated_at   timestamptz NOT NULL DEFAULT now(),
+  version      bigint NOT NULL CHECK (version >= 1),
+  updated_at   timestamptz NOT NULL, -- время ставит адаптер из Clock, не БД
   updated_by   text NOT NULL,
   CONSTRAINT setting_value_xor CHECK ((value_text IS NULL) <> (value_sealed IS NULL)),
   CONSTRAINT setting_sealed_key CHECK ((value_sealed IS NULL) = (key_id IS NULL))
@@ -166,18 +166,18 @@ CREATE TABLE onboarding (
   completed_by     text,
   CONSTRAINT onboarding_state CHECK (
        (completed_at IS NULL AND token_hash IS NOT NULL AND token_expires_at IS NOT NULL AND completed_by IS NULL)
-    OR (completed_at IS NOT NULL AND token_hash IS NULL AND completed_by IS NOT NULL))
+    OR (completed_at IS NOT NULL AND token_hash IS NULL AND token_expires_at IS NULL AND completed_by IS NOT NULL))
 );
 ```
 
-Состояний два, и «завершён, но с токеном» непредставимо. Завершение — один `UPDATE … SET completed_at, completed_by, token_hash = NULL WHERE completed_at IS NULL`. Прогресс шагов не хранится (20.4). Все изменения — expand; откат миграции не предусмотрен (16.4).
+Состояний два, и «завершён, но с токеном» непредставимо. Завершение — один `UPDATE … SET completed_at, completed_by, token_hash = NULL, token_expires_at = NULL WHERE completed_at IS NULL`. Прогресс шагов не хранится (20.4). Все изменения — expand; откат миграции не предусмотрен (16.4).
 
 ### Шифрование секретов
 
 - Шифрование — деталь pg-адаптера: `PgSettings::new(pool, key: Option<SettingsKey>)`. Порт работает с открытым `Secret`, memory-адаптер не шифрует, контрактные тесты про шифр не знают.
 - AES-256-GCM через `aws_lc_rs::aead::RandomizedNonceKey` (сам генерирует 96-битный nonce). `aws-lc-rs` уже криптопровайдер проекта (sqlx и object_store собраны с `tls-rustls-aws-lc-rs`), новой зависимости нет.
 - Файл ключа — base64 от 32 байт (`openssl rand -base64 32`), права 0400, читается тем же `source::secret` с обрезкой перевода строки (сырые байты эту обрезку ломают).
-- AAD = имя ключа настройки и `key_id`: шифртекст нельзя переставить в строку другой настройки. **Не покрыто:** откат строки целиком (старые шифртекст и версия вместе) тем, у кого есть запись в БД; это угроза уровня доступа к БД.
+- AAD = имя настройки, версия строки и `key_id`: шифртекст нельзя переставить в строку другой настройки, а оставшийся от старой версии не откроется. **Не покрыто:** откат строки целиком (старые шифртекст и версия вместе) тем, у кого есть запись в БД; это угроза уровня доступа к БД.
 - Без ключа `put` секрета — `StoreError::SecretsUnavailable` (`422 secrets-unavailable`): мастер показывает секретные поля неактивными и объясняет, что задать (`*_FILE`-переменную секрета или `CRANE_SETTINGS_KEY_FILE`).
 - Секреты из окружения в БД не копируются и не шифруются.
 - Ротация ключа (`rekey`) — после v0.3.0; до неё один активный ключ.
@@ -373,7 +373,7 @@ flowchart LR
 | Bootstrap-токен в логе утекает через сбор логов | 24 часа, права только на мастер, цель вне аудита и SIEM, предпочтительный путь через `CRANE_BOOTSTRAP_TOKEN_FILE` |
 | Токен мастера виден JS вкладки | память вкладки, не `localStorage`; CSP SPA; срок и права токена (20.5) |
 | Потеря `CRANE_SETTINGS_KEY_FILE` делает секреты в БД нечитаемыми | ключ в Secret с резервной копией; секреты можно перезаписать |
-| Откат строки `setting` целиком тем, у кого есть запись в БД | не покрыто: угроза уровня доступа к БД (20.2) |
+| Откат строки `setting` целиком (шифртекст и версия вместе) тем, у кого есть запись в БД | не покрыто: угроза уровня доступа к БД (20.2); отдельный откат шифртекста ловит версия в AAD |
 | ENV затеняет значение из консоли, и администратор не понимает почему | бейдж и замок, серое «не действует», `warn` на старте |
 | Новый обязательный ключ отправляет обновлённую v0.2 в мастер | правило новых ключей v0.3.0 (20.1) |
 | Невалидное сохранённое значение не даёт стартовать | ошибка называет ключ; обход — ключ в окружении |
