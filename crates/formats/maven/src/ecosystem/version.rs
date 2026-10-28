@@ -7,7 +7,10 @@ const MAX_LEN: usize = 128;
 /// Символы, запрещённые в версии моделью Maven (`ILLEGAL_VERSION_CHARS`), плюс `%` и `#`:
 /// путь layout приходит декодированным, и `%2e` в сегменте разбирается как попытка обхода.
 const FORBIDDEN: &str = "\\/:\"<>|?*%#";
-const SNAPSHOT_SUFFIX: &str = "-SNAPSHOT";
+/// Суффикс каталога SNAPSHOT.
+pub(crate) const SNAPSHOT_SUFFIX: &str = "-SNAPSHOT";
+/// Имя документа metadata: версия с таким именем заняла бы его путь в layout.
+const METADATA_FILE: &str = "maven-metadata.xml";
 /// `yyyyMMdd` и `HHmmss` в имени timestamp-сборки.
 const DATE_DIGITS: usize = 8;
 const TIME_DIGITS: usize = 6;
@@ -64,6 +67,17 @@ impl<'a> Build<'a> {
     }
 }
 
+/// Каталог или версия в виде SNAPSHOT: `1.0-SNAPSHOT` или `-SNAPSHOT`.
+pub(crate) fn is_snapshot(version: &str) -> bool {
+    version.ends_with(SNAPSHOT_SUFFIX)
+}
+
+/// База каталога SNAPSHOT: `1.0-SNAPSHOT` -> `1.0`. Пустая база (`-SNAPSHOT`) — не каталог.
+pub(crate) fn snapshot_base(dir: &str) -> Option<&str> {
+    dir.strip_suffix(SNAPSHOT_SUFFIX)
+        .filter(|base| !base.is_empty())
+}
+
 /// Десятичное число из ASCII-цифр. `str::parse` принял бы и ведущий `+`, поэтому цифры
 /// проверяются отдельно; пустая строка и переполнение `u32` дают `None`.
 fn digits(text: &str) -> Option<u32> {
@@ -83,7 +97,8 @@ fn fixed_digits(text: &str, len: usize) -> Option<u32> {
 }
 
 /// Версия Maven: каноническая форма равна написанной (литеральный каталог layout), порядок —
-/// `GenericVersionScheme`, а `prerelease` значит «timestamp-сборка SNAPSHOT».
+/// `GenericVersionScheme`, а `prerelease` значит «SNAPSHOT»: timestamp-сборка или литеральный
+/// `X-SNAPSHOT`. Релиз в metadata — максимум среди остальных.
 pub(crate) fn parse_version(raw: &str) -> Result<Version, VersionError> {
     check_grammar(raw)?;
     let (key, prerelease) = match Build::parse(raw) {
@@ -97,7 +112,10 @@ pub(crate) fn parse_version(raw: &str) -> Result<Version, VersionError> {
                 .finish(),
             true,
         ),
-        None => (terminate(key_prefix(&items(raw))).finish(), false),
+        None => (
+            terminate(key_prefix(&items(raw))).finish(),
+            is_snapshot(raw),
+        ),
     };
     Ok(Version::from_parts(
         raw.to_owned(),
@@ -118,8 +136,8 @@ fn check_grammar(raw: &str) -> Result<(), VersionError> {
     if raw.len() > MAX_LEN {
         return Err(invalid("версия длиннее допустимого"));
     }
-    if matches!(raw, "." | "..") {
-        return Err(invalid("версия не может быть «.» или «..»"));
+    if matches!(raw, "." | "..") || raw == METADATA_FILE {
+        return Err(invalid("версия не может совпадать с именем файла layout"));
     }
     // Версия — каталог layout: только видимый ASCII без символов, запрещённых моделью Maven.
     if let Some(bad) = raw

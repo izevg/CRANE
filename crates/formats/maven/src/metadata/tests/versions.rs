@@ -1,7 +1,7 @@
-use crane_domain::registry::{OrderKeyBuilder, Version, VersionState};
+use crane_domain::registry::{OrderKeyBuilder, PackageVersion, Version, VersionState};
 
 use super::super::versions;
-use super::fixtures::{HOUR, MINUTE, T0, package, released, version, with_version};
+use super::fixtures::{HOUR, MINUTE, T0, package, released, with_version};
 
 const BUILD_1: &str = "1.2-20261028.120000-1";
 const BUILD_2: &str = "1.2-20261028.130000-2";
@@ -100,37 +100,9 @@ fn builds_of_one_base_are_listed_once() {
 }
 
 #[test]
-fn versions_that_are_not_served_do_not_appear() {
+fn empty_listing_means_no_document() {
     // Arrange
-    let served = [
-        released("1.0", T0, &[]),
-        version("2.0", VersionState::Deleted, T0 + 3 * HOUR, &[]),
-        version("3.0", VersionState::Quarantined, T0 + 4 * HOUR, &[]),
-        version("4.0", VersionState::Blocked, T0 + 5 * HOUR, &[]),
-    ];
-
-    // Act
-    let xml = versions(&package(), &served).unwrap();
-
-    // Assert
-    let listed: Vec<&str> = xml
-        .lines()
-        .filter(|l| l.contains("<version>") || l.contains("<lastUpdated>"))
-        .map(str::trim)
-        .collect();
-    assert_eq!(
-        listed,
-        [
-            "<version>1.0</version>",
-            "<lastUpdated>20261028120000</lastUpdated>"
-        ]
-    );
-}
-
-#[test]
-fn nothing_served_means_no_document() {
-    // Arrange
-    let served = [version("1.0", VersionState::Deleted, T0, &[])];
+    let served: [PackageVersion; 0] = [];
 
     // Act
     let xml = versions(&package(), &served);
@@ -175,4 +147,55 @@ fn special_characters_are_escaped_in_text() {
 
     // Assert
     assert!(xml.contains("<version>1&lt;2&gt;&amp;&quot;&apos;</version>"));
+}
+
+#[test]
+fn literal_snapshot_never_becomes_the_release() {
+    // Arrange
+    let served = [
+        released("0.9", T0, &[]),
+        released("1.0-SNAPSHOT", T0 + HOUR, &[]),
+    ];
+
+    // Act
+    let xml = versions(&package(), &served).unwrap();
+
+    // Assert
+    let tags: Vec<&str> = xml
+        .lines()
+        .filter(|l| l.contains("<latest>") || l.contains("<release>"))
+        .map(str::trim)
+        .collect();
+    assert_eq!(
+        tags,
+        ["<latest>1.0-SNAPSHOT</latest>", "<release>0.9</release>"]
+    );
+}
+
+#[test]
+fn bases_with_equal_keys_are_listed_once_each_in_order_of_appearance() {
+    // Arrange
+    // `1-SNAPSHOT` и `1.0-SNAPSHOT` равны по порядку, поэтому их сборки перемежаются по времени.
+    let served = [
+        released("1-20261028.120000-1", T0, &[]),
+        released("1.0-20261028.130000-1", T0 + HOUR, &[]),
+        released("1-20261028.140000-2", T0 + 2 * HOUR, &[]),
+    ];
+
+    // Act
+    let xml = versions(&package(), &served).unwrap();
+
+    // Assert
+    let listed: Vec<&str> = xml
+        .lines()
+        .filter(|l| l.contains("<version>"))
+        .map(str::trim)
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            "<version>1-SNAPSHOT</version>",
+            "<version>1.0-SNAPSHOT</version>"
+        ]
+    );
 }

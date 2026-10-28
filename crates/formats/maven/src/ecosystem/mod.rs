@@ -8,7 +8,9 @@ use crane_domain::registry::{
     Ecosystem, Format, NameError, NamespaceShape, PackageName, Purl, Version, VersionError,
 };
 
+pub(crate) use name::coordinates;
 pub use version::Build;
+pub(crate) use version::{SNAPSHOT_SUFFIX, snapshot_base};
 
 /// Правила Maven; реализация [`Ecosystem`] без состояния.
 #[derive(Debug, Clone, Copy)]
@@ -54,7 +56,7 @@ impl Ecosystem for Maven {
     // Maven: имя пакета хранится как `groupId:artifactId`; groupId — namespace, регистр значим
     // (PURL-TYPES, maven). Нормализованная форма и каноническая версия равны написанным.
     fn purl(&self, name: &PackageName, version: Option<&Version>) -> Purl {
-        let (namespace, name) = match name.normalized().split_once(':') {
+        let (namespace, name) = match coordinates(name) {
             Some((group, artifact)) => (Some(group.to_owned()), artifact),
             None => (None, name.normalized()),
         };

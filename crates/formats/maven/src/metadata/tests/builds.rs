@@ -1,6 +1,5 @@
 use super::super::builds;
-use super::fixtures::{HOUR, MINUTE, T0, package, released, version};
-use crane_domain::registry::VersionState;
+use super::fixtures::{HOUR, MINUTE, T0, package, released};
 
 const OLD: &str = "1.2-20261028.120000-1";
 const MID: &str = "1.2-20261028.130000-2";
@@ -137,35 +136,6 @@ fn base_without_builds_has_no_document() {
 
     // Assert
     assert_eq!(xml, None);
-}
-
-#[test]
-fn builds_that_are_not_served_are_ignored() {
-    // Arrange
-    let served = [
-        released(OLD, T0, &["core-1.2-20261028.120000-1.jar"]),
-        version(
-            MID,
-            VersionState::Deleted,
-            T0 + HOUR,
-            &["core-1.2-20261028.130000-2.jar"],
-        ),
-        version(
-            NEW,
-            VersionState::Quarantined,
-            T0 + 2 * HOUR,
-            &["core-1.2-20261028.140000-10.jar"],
-        ),
-    ];
-
-    // Act
-    let xml = builds(&package(), "1.2", &served).unwrap();
-
-    // Assert
-    assert!(
-        xml.contains("<buildNumber>1</buildNumber>")
-            && !xml.contains("<value>1.2-20261028.130000-2</value>")
-    );
 }
 
 #[test]

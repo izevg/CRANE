@@ -1,12 +1,15 @@
+use super::version::is_snapshot;
 use crane_domain::registry::{NameError, PackageName};
 
 /// Предел байт имени `groupId:artifactId`: ограничивает ключи каталога и пути layout.
 const MAX_LEN: usize = 255;
 /// Разделитель `groupId` и `artifactId` в имени пакета.
 const COORD_SEPARATOR: char = ':';
-/// Суффикс каталога SNAPSHOT: `artifactId` с ним сделал бы путь `…/a-SNAPSHOT/maven-metadata.xml`
-/// неотличимым от уровня сборок.
-const SNAPSHOT_SUFFIX: &str = "-SNAPSHOT";
+
+/// (`groupId`, `artifactId`) разобранного имени; `None` — имя не из `parse_name`.
+pub(crate) fn coordinates(name: &PackageName) -> Option<(&str, &str)> {
+    name.normalized().split_once(COORD_SEPARATOR)
+}
 
 /// `groupId:artifactId`. Регистр значим (Maven различает `Foo` и `foo`), поэтому нормализованная
 /// форма равна написанной.
@@ -60,7 +63,9 @@ fn check_artifact(artifact: &str) -> Result<(), NameError> {
     {
         return Err(NameError::InvalidChar(bad));
     }
-    if matches!(artifact, "." | "..") || artifact.ends_with(SNAPSHOT_SUFFIX) {
+    // Суффикс `-SNAPSHOT` у artifactId сделал бы путь `…/a-SNAPSHOT/maven-metadata.xml`
+    // неотличимым от уровня сборок.
+    if matches!(artifact, "." | "..") || is_snapshot(artifact) {
         return Err(NameError::Reserved(artifact.to_owned()));
     }
     Ok(())

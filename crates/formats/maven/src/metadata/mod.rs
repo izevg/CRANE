@@ -6,13 +6,13 @@
 
 mod render;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::num::NonZeroUsize;
 use std::time::{Duration, SystemTime};
 
-use crane_domain::registry::{DeletePolicy, PackageName, PackageVersion, VersionState};
+use crane_domain::registry::{DeletePolicy, PackageName, PackageVersion};
 
-use crate::ecosystem::Build;
+use crate::ecosystem::{Build, coordinates};
 use crate::layout::FileName;
 use render::{BuildsDoc, SnapshotFile, VersionsDoc};
 
@@ -21,31 +21,34 @@ pub const RETENTION: DeletePolicy = DeletePolicy {
     window: Duration::MAX,
 };
 
-/// `g/a/maven-metadata.xml`; `None` — отдавать нечего (404).
+/// `g/a/maven-metadata.xml`; `None` — отдавать нечего (404). `served` — версии, которые каталог
+/// отдаёт клиентам (`Registry::versions` уже отсёк остальные).
 ///
 /// `latest` — база версии с максимальным порядком (сборка выглядит как `X-SNAPSHOT`),
-/// `release` — максимум среди версий, не являющихся timestamp-сборками.
+/// `release` — максимум среди версий, не являющихся SNAPSHOT.
 #[must_use]
 pub fn versions(package: &PackageName, served: &[PackageVersion]) -> Option<String> {
-    let mut live = live(served);
-    live.sort_by(|a, b| a.version.cmp(&b.version));
-    let latest = base_of(live.last()?);
-    // Сборки базы идут подряд: у них общий префикс ключа, и другая версия в него не попадёт.
-    let mut bases: Vec<String> = live.iter().map(|v| base_of(v)).collect();
-    bases.dedup();
-    let release = live
+    let mut sorted: Vec<&PackageVersion> = served.iter().collect();
+    sorted.sort_by(|a, b| a.version.cmp(&b.version));
+    let latest = base_of(sorted.last()?);
+    // Базы `1-SNAPSHOT` и `1.0-SNAPSHOT` имеют равный ключ, и их сборки перемежаются по времени,
+    // поэтому повторы убираются множеством, а не соседним сравнением.
+    let mut seen = HashSet::new();
+    let mut bases: Vec<String> = sorted.iter().map(|v| base_of(v)).collect();
+    bases.retain(|base| seen.insert(base.clone()));
+    let release = sorted
         .iter()
         .rev()
         .find(|v| !v.version.is_prerelease())
         .map(|v| v.version.canonical());
-    let (group, artifact) = coordinates(package);
+    let (group, artifact) = coordinates(package)?;
     Some(render::versions(&VersionsDoc {
         group,
         artifact,
         latest: &latest,
         release,
         versions: &bases,
-        last_updated: last_updated(&live),
+        last_updated: last_updated(&sorted),
     }))
 }
 
@@ -55,9 +58,9 @@ pub fn versions(package: &PackageName, served: &[PackageVersion]) -> Option<Stri
 /// указана самая новая сборка, где такой файл есть.
 #[must_use]
 pub fn builds(package: &PackageName, base: &str, served: &[PackageVersion]) -> Option<String> {
-    let builds = builds_of(base, served);
+    let builds = builds_of(package, base, served);
     let (latest, _) = builds.last()?;
-    let (group, artifact) = coordinates(package);
+    let (group, artifact) = coordinates(package)?;
     let snapshot_dir = latest.base_version();
     // Идём от старых сборок к новым: поздняя запись по тому же файлу вытесняет раннюю.
     let mut newest: BTreeMap<(Option<&str>, &str), SnapshotFile> = BTreeMap::new();
@@ -93,17 +96,19 @@ pub fn builds(package: &PackageName, base: &str, served: &[PackageVersion]) -> O
     }))
 }
 
-/// Сборки базы `base`, выходящие за `keep` самых новых по (время, номер); от старых к новым.
+/// Сборки базы `base` пакета `package`, выходящие за `keep` самых новых по (время, номер);
+/// от старых к новым.
 ///
-/// Возвращает только timestamp-сборки этой базы: релизы и сборки других баз не затрагиваются
-/// ни при каком `keep`.
+/// Возвращает только timestamp-сборки этой базы этого пакета: релизы, сборки других баз и
+/// версии других пакетов не затрагиваются ни при каком `keep`.
 #[must_use]
 pub fn stale_builds<'v>(
+    package: &PackageName,
     base: &str,
     served: &'v [PackageVersion],
     keep: NonZeroUsize,
 ) -> Vec<&'v PackageVersion> {
-    let builds = builds_of(base, served);
+    let builds = builds_of(package, base, served);
     let stale = builds.len().saturating_sub(keep.get());
     builds
         .into_iter()
@@ -112,19 +117,15 @@ pub fn stale_builds<'v>(
         .collect()
 }
 
-/// Версии, которые каталог отдаёт клиентам. Каталог может вернуть и удалённые: в metadata
-/// и в счёт ретенции они не входят.
-fn live(served: &[PackageVersion]) -> Vec<&PackageVersion> {
-    served
+/// Сборки базы пакета от старых к новым.
+fn builds_of<'v>(
+    package: &PackageName,
+    base: &str,
+    served: &'v [PackageVersion],
+) -> Vec<(Build<'v>, &'v PackageVersion)> {
+    let mut builds: Vec<_> = served
         .iter()
-        .filter(|version| version.state == VersionState::Released)
-        .collect()
-}
-
-/// Сборки базы от старых к новым.
-fn builds_of<'v>(base: &str, served: &'v [PackageVersion]) -> Vec<(Build<'v>, &'v PackageVersion)> {
-    let mut builds: Vec<_> = live(served)
-        .into_iter()
+        .filter(|version| version.package == *package)
         .filter_map(|version| Some((Build::parse(version.version.canonical())?, version)))
         .filter(|(build, _)| build.base == base)
         .collect();
@@ -144,14 +145,6 @@ fn last_updated(versions: &[&PackageVersion]) -> SystemTime {
         .map(|version| version.published_at)
         .max()
         .unwrap_or(SystemTime::UNIX_EPOCH)
-}
-
-/// `g.h:a` -> (`g.h`, `a`).
-fn coordinates(package: &PackageName) -> (&str, &str) {
-    package
-        .normalized()
-        .split_once(':')
-        .unwrap_or((package.normalized(), ""))
 }
 
 #[cfg(test)]

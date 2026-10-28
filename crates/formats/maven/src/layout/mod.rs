@@ -14,10 +14,9 @@ use crane_domain::registry::{Ecosystem, NameError, PackageName};
 pub use checksum::Algorithm;
 pub use file::FileName;
 
-use crate::ecosystem::MAVEN;
+use crate::ecosystem::{MAVEN, SNAPSHOT_SUFFIX, coordinates, snapshot_base};
 
 const METADATA_FILE: &str = "maven-metadata.xml";
-const SNAPSHOT_SUFFIX: &str = "-SNAPSHOT";
 /// Кодированные `.`, `/` и `\`: путь приходит декодированным, поэтому в сегменте они
 /// означают попытку обхода, которую поймает следующий слой.
 const ENCODED_TRAVERSAL: [&str; 3] = ["%2e", "%2f", "%5c"];
@@ -90,14 +89,14 @@ impl Route {
             .map_or_else(String::new, |alg| format!(".{}", alg.suffix()));
         let path = match &self.resource {
             Resource::File { package, dir, file } => {
-                format!("{}/{dir}/{file}{suffix}", package_dir(package))
+                format!("{}/{dir}/{file}{suffix}", package_dir(package)?)
             }
             Resource::Versions { package } => {
-                format!("{}/{METADATA_FILE}{suffix}", package_dir(package))
+                format!("{}/{METADATA_FILE}{suffix}", package_dir(package)?)
             }
             Resource::Builds { package, base } => format!(
                 "{}/{base}{SNAPSHOT_SUFFIX}/{METADATA_FILE}{suffix}",
-                package_dir(package)
+                package_dir(package)?
             ),
         };
         UpstreamPath::parse(&path)
@@ -131,12 +130,12 @@ fn split_checksum(name: &str) -> (&str, Option<Algorithm>) {
 /// `…/maven-metadata.xml`: каталог `X-SNAPSHOT` выше — уровень сборок, иначе уровень артефакта.
 fn metadata_resource(dirs: &[&str]) -> Result<Resource, RouteError> {
     match dirs.split_last() {
-        Some((dir, package_dirs)) => match dir.strip_suffix(SNAPSHOT_SUFFIX) {
-            Some(base) if !base.is_empty() => Ok(Resource::Builds {
+        Some((dir, package_dirs)) => match snapshot_base(dir) {
+            Some(base) => Ok(Resource::Builds {
                 package: package(package_dirs)?,
                 base: base.to_owned(),
             }),
-            _ => Ok(Resource::Versions {
+            None => Ok(Resource::Versions {
                 package: package(dirs)?,
             }),
         },
@@ -167,12 +166,10 @@ fn package(dirs: &[&str]) -> Result<PackageName, RouteError> {
 }
 
 /// `g.h:a` -> `g/h/a`.
-fn package_dir(package: &PackageName) -> String {
-    let (group, artifact) = package
-        .normalized()
-        .split_once(':')
-        .unwrap_or((package.normalized(), ""));
-    format!("{}/{artifact}", group.replace('.', "/"))
+fn package_dir(package: &PackageName) -> Result<String, PathError> {
+    // Имя не из `parse_name` не имеет координат, а значит и пути.
+    let (group, artifact) = coordinates(package).ok_or(PathError::Empty)?;
+    Ok(format!("{}/{artifact}", group.replace('.', "/")))
 }
 
 #[cfg(test)]

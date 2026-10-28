@@ -1,8 +1,6 @@
 use super::RouteError;
-use crate::ecosystem::Build;
+use crate::ecosystem::{Build, SNAPSHOT_SUFFIX, snapshot_base};
 
-const SNAPSHOT_SUFFIX: &str = "-SNAPSHOT";
-const SNAPSHOT_WORD: &str = "SNAPSHOT";
 /// Длина `yyyyMMdd.HHmmss`.
 const STAMP_LEN: usize = 15;
 
@@ -29,7 +27,7 @@ impl<'a> FileName<'a> {
             .strip_prefix(artifact)
             .and_then(|rest| rest.strip_prefix('-'))
             .ok_or(RouteError::FileMismatch)?;
-        let version_len = match dir.strip_suffix(SNAPSHOT_SUFFIX) {
+        let version_len = match snapshot_base(dir) {
             Some(base) => build_len(base, rest)?,
             None => release_len(dir, rest)?,
         };
@@ -49,7 +47,7 @@ fn build_len(base: &str, rest: &str) -> Result<usize, RouteError> {
         .strip_prefix(base)
         .and_then(|after| after.strip_prefix('-'))
         .ok_or(RouteError::FileMismatch)?;
-    if after_base.starts_with(SNAPSHOT_WORD) {
+    if after_base.starts_with(&SNAPSHOT_SUFFIX[1..]) {
         return Err(RouteError::NotUniqueSnapshot);
     }
     // Номер сборки — цифры после отметки времени и дефиса; дальше `-classifier` или `.ext`.

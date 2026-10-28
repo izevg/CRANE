@@ -53,17 +53,13 @@ pub(super) fn with_version(
     }
 }
 
-pub(super) fn version(
-    raw: &str,
-    state: VersionState,
-    published: u64,
-    assets: &[&str],
-) -> PackageVersion {
-    with_version(MAVEN.parse_version(raw).unwrap(), state, published, assets)
-}
-
 pub(super) fn released(raw: &str, published: u64, assets: &[&str]) -> PackageVersion {
-    version(raw, VersionState::Released, published, assets)
+    with_version(
+        MAVEN.parse_version(raw).unwrap(),
+        VersionState::Released,
+        published,
+        assets,
+    )
 }
 
 pub(super) fn raws(versions: &[&PackageVersion]) -> Vec<String> {

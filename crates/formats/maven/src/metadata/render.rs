@@ -4,13 +4,13 @@
 use std::fmt::Write;
 use std::time::SystemTime;
 
+use time::OffsetDateTime;
+use time::macros::format_description;
+
 use crate::ecosystem::Build;
 
 const HEADER: &str =
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<metadata modelVersion=\"1.1.0\">\n";
-const SECONDS_PER_DAY: u64 = 86_400;
-const SECONDS_PER_HOUR: u64 = 3_600;
-const SECONDS_PER_MINUTE: u64 = 60;
 
 /// Факты уровня артефакта.
 pub(super) struct VersionsDoc<'a> {
@@ -109,36 +109,12 @@ fn escape(text: &str) -> String {
     out
 }
 
-/// `yyyyMMddHHmmss` в UTC. Время до эпохи даёт эпоху.
+/// `yyyyMMddHHmmss` в UTC.
 pub(super) fn timestamp(time: SystemTime) -> String {
-    let seconds = time
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_or(0, |since| since.as_secs());
-    let (year, month, day) = civil_date(seconds / SECONDS_PER_DAY);
-    let of_day = seconds % SECONDS_PER_DAY;
-    let hour = of_day / SECONDS_PER_HOUR;
-    let minute = of_day % SECONDS_PER_HOUR / SECONDS_PER_MINUTE;
-    let second = of_day % SECONDS_PER_MINUTE;
-    format!("{year:04}{month:02}{day:02}{hour:02}{minute:02}{second:02}")
-}
-
-/// Дата по числу дней от 1970-01-01 (алгоритм `civil_from_days` Говарда Хиннанта,
-/// пролептический григорианский календарь). Возвращает год, месяц `1..=12`, день `1..=31`.
-fn civil_date(days: u64) -> (u64, u64, u64) {
-    // Сдвиг к 0000-03-01: високосный день года оказывается в его конце.
-    let shifted = days + 719_468;
-    let era = shifted / 146_097;
-    let day_of_era = shifted % 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_index = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
-    let month = if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
-    };
-    let year = year_of_era + era * 400 + u64::from(month <= 2);
-    (year, month, day)
+    // Год вне 0000..=9999 формат не вмещает; такой `published_at` даёт пустую отметку.
+    OffsetDateTime::from(time)
+        .format(format_description!(
+            "[year][month][day][hour][minute][second]"
+        ))
+        .unwrap_or_default()
 }

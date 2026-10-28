@@ -46,6 +46,7 @@ fn versions_unfit_for_a_path_segment_are_rejected() {
         "",
         ".",
         "..",
+        "maven-metadata.xml",
         "1/0",
         "1\\0",
         "1\u{0}",
@@ -99,7 +100,7 @@ fn rejection_names_the_raw_version() {
 }
 
 #[test]
-fn only_timestamp_builds_are_prerelease() {
+fn only_snapshots_are_prerelease() {
     // Arrange
     let raws = [
         "1.0-20261028.123456-3",
@@ -113,7 +114,7 @@ fn only_timestamp_builds_are_prerelease() {
     let actual = raws.map(|raw| MAVEN.parse_version(raw).unwrap().is_prerelease());
 
     // Assert
-    assert_eq!(actual, [true, false, false, false, false]);
+    assert_eq!(actual, [true, true, false, false, false]);
 }
 
 #[test]

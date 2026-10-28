@@ -1,16 +1,17 @@
 use std::num::NonZeroUsize;
 
-use crane_domain::registry::{PackageVersion, VersionState};
+use crane_domain::registry::{Ecosystem, PackageVersion};
 
 use super::super::stale_builds;
-use super::fixtures::{HOUR, T0, raws, released, version};
+use super::fixtures::{HOUR, T0, package, raws, released};
+use crate::ecosystem::MAVEN;
 
 fn keep(count: usize) -> NonZeroUsize {
     NonZeroUsize::new(count).unwrap()
 }
 
 fn stale(base: &str, served: &[PackageVersion], count: usize) -> Vec<String> {
-    raws(&stale_builds(base, served, keep(count)))
+    raws(&stale_builds(&package(), base, served, keep(count)))
 }
 
 /// Четыре сборки базы `1.0` вперемешку (по времени, а не по списку или публикации),
@@ -81,23 +82,14 @@ fn a_release_is_untouched_even_when_it_is_the_only_version() {
 }
 
 #[test]
-fn versions_that_are_not_served_neither_count_nor_get_deleted_again() {
+fn builds_of_other_packages_are_never_stale() {
     // Arrange
+    let mut foreign = released("1.0-20261028.110000-1", T0 - HOUR, &[]);
+    foreign.package = MAVEN.parse_name("com.acme:other").unwrap();
     let served = [
+        foreign,
         released("1.0-20261028.120000-1", T0, &[]),
         released("1.0-20261028.130000-2", T0 + HOUR, &[]),
-        version(
-            "1.0-20261028.140000-3",
-            VersionState::Deleted,
-            T0 + 2 * HOUR,
-            &[],
-        ),
-        version(
-            "1.0-20261028.150000-4",
-            VersionState::Quarantined,
-            T0 + 3 * HOUR,
-            &[],
-        ),
     ];
 
     // Act
