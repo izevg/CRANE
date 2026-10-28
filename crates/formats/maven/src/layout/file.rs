@@ -60,10 +60,11 @@ fn build_len(base: &str, rest: &str) -> Result<usize, RouteError> {
     let version = rest
         .get(..number_at + number_len)
         .ok_or(RouteError::FileMismatch)?;
-    match Build::parse(version) {
-        Some(build) if build.base == base => Ok(version.len()),
-        _ => Err(RouteError::FileMismatch),
-    }
+    // Длины фиксированы, а в отметке времени и номере нет дефисов: база разобранной сборки
+    // совпадает с `base` по построению, отдельной сверки не нужно.
+    Build::parse(version)
+        .map(|_| version.len())
+        .ok_or(RouteError::FileMismatch)
 }
 
 /// Длина версии релиза: имя файла несёт каталог буквально.
