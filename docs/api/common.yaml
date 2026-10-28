@@ -8266,6 +8266,12 @@ components:
           - null
           description: |-
             Только для `kind=secret`. `unreadable` - секрет лежит в БД, но не открывается; причина в поле `unreadable`. Перезаписать (`PUT` с `If-Match`) или удалить (`DELETE`) такую строку можно, ключ шифрования для этого не нужен.
+        locator:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Только для `kind=secret` с секретом-URL: куда он указывает, `scheme://host[:port]`, без учётных данных, пути и запроса. Хост как записан в значении (без DNS и приведения к IP), IPv6 в квадратных скобках, порт только если он задан в значении (умолчание схемы не подставляется). `null`, если секрета нет или он не URL.
         unreadable:
           oneOf:
           - $ref: '#/components/schemas/SettingUnreadable'
