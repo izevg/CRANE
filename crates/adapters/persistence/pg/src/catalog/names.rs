@@ -10,14 +10,11 @@ use super::rows::{corrupt, namespace_from_row};
 pub(super) async fn namespace_for(
     pool: &PgPool,
     format: Format,
-    name: &PackageName,
+    candidates: &[NamespacePattern],
 ) -> Result<Option<Namespace>, CatalogError> {
     // Паттерны сравниваются точно (`= ANY`), а не LIKE: `_` в LIKE - подстановочный символ.
-    // Порядок `covering` (специфичный первым) задаёт `array_position`.
-    let patterns: Vec<String> = NamespacePattern::covering(format, name)
-        .iter()
-        .map(|p| p.as_str().to_owned())
-        .collect();
+    // Порядок кандидатов (специфичный первым) задаёт вызывающий, его сохраняет `array_position`.
+    let patterns: Vec<String> = candidates.iter().map(|p| p.as_str().to_owned()).collect();
     sqlx::query(
         "SELECT workspace_id, format::text AS format, pattern FROM namespace
          WHERE format = $1::pkg_format AND pattern = ANY($2::text[])

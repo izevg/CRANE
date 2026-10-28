@@ -149,13 +149,16 @@ async fn insert_version(
 ) -> Result<(), CatalogError> {
     sqlx::query(
         "INSERT INTO package_version
-             (id, package_id, version, version_display, state, published_at, metadata)
-         VALUES ($1, $2, $3, $4, $5::ver_state, $6, $7::json)",
+             (id, package_id, version, version_display, version_order, prerelease, state,
+              published_at, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::ver_state, $8, $9::json)",
     )
     .bind(new.id.as_uuid())
     .bind(package_id)
     .bind(new.version.canonical())
     .bind(new.version.as_written())
+    .bind(new.version.order_key().as_bytes())
+    .bind(new.version.is_prerelease())
     .bind(state_as_str(new.state))
     .bind(published_at)
     .bind(new.metadata.as_str())

@@ -23,8 +23,8 @@ use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, PackageName, Repository, RepositoryId, RepositoryKind, Sha256,
-    Version, VersionId, VersionState,
+    Asset, Format, FormatMetadata, OrderKeyBuilder, PackageName, Repository, RepositoryId,
+    RepositoryKind, Sha256, Version, VersionId, VersionState,
 };
 use crane_pg::{PgCatalog, migrate};
 use crane_ports::registry::{Catalog, NewVersion};
@@ -204,12 +204,34 @@ async fn connect(options: &PgConnectOptions, database: &str) -> PgPool {
         .expect("подключение к тестовой БД")
 }
 
+/// Имя cargo из готовых частей: адаптеры не зависят от `formats`.
 pub(crate) fn name(raw: &str) -> PackageName {
-    PackageName::parse(Format::Cargo, raw).expect("имя пакета валидно")
+    PackageName::from_parts(raw.to_ascii_lowercase().replace('-', "_"), raw.to_owned())
 }
 
+/// Версия `a.b.c[-pre][+build]`: порядок строится по числам ядра, build не входит в каноническую форму.
 pub(crate) fn version(raw: &str) -> Version {
-    Version::parse(Format::Cargo, raw).expect("версия валидна")
+    let without_build = raw.split('+').next().unwrap_or(raw);
+    let (core, pre) = match without_build.split_once('-') {
+        Some((core, pre)) => (core, Some(pre)),
+        None => (without_build, None),
+    };
+    let key = core
+        .split('.')
+        .fold(OrderKeyBuilder::new(), |b, n| {
+            b.number(n.parse().expect("число ядра версии"))
+        })
+        .rank(u8::from(pre.is_none()));
+    let key = match pre {
+        Some(pre) => key.text(pre),
+        None => key,
+    };
+    Version::from_parts(
+        without_build.to_owned(),
+        raw.to_owned(),
+        key.finish(),
+        pre.is_some(),
+    )
 }
 
 pub(crate) fn asset(path: &str, fill: u8, size: u64) -> Asset {

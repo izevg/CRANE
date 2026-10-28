@@ -83,6 +83,8 @@ CREATE TABLE package_version (
   id uuid PRIMARY KEY, package_id bigint NOT NULL REFERENCES package,
   version text NOT NULL,             -- каноническая форма (Cargo: SemVer без build metadata), ключ уникальности
   version_display text NOT NULL,     -- написание клиента, как name_display у пакета
+  version_order bytea NOT NULL,      -- OrderKey: порядок версий побайтно, строит Ecosystem при публикации
+  prerelease boolean NOT NULL,       -- факт версии из Ecosystem, а не разбор строки при чтении
   purl text NOT NULL,                -- pkg:npm/%40acme/ui@1.2.3, ключ графа
   state ver_state NOT NULL, mutable boolean NOT NULL DEFAULT false,
   yanked boolean NOT NULL DEFAULT false, deprecated_msg text,
@@ -302,6 +304,8 @@ CREATE TABLE package (
 CREATE TABLE package_version (
   id uuid PRIMARY KEY, package_id bigint NOT NULL REFERENCES package (id),
   version text NOT NULL, version_display text NOT NULL,
+  version_order bytea NOT NULL,      -- миграция 0005: OrderKey версии
+  prerelease boolean NOT NULL,       -- миграция 0005: признак pre-release
   state ver_state NOT NULL, yanked boolean NOT NULL DEFAULT false,
   deprecated text,                   -- миграция 0002: сообщение deprecate (npm), NULL - не устарела
   published_at timestamptz NOT NULL, metadata json NOT NULL,
@@ -345,7 +349,7 @@ CREATE TABLE onboarding (
     OR (completed_at IS NOT NULL AND token_hash IS NULL AND token_expires_at IS NULL AND completed_by IS NOT NULL)));
 ```
 
-*Рис. 9.3. Срез схемы v0.1.0 плюс миграции 0002 (`deprecated`, `dist_tag`) и 0004 (`setting`, `onboarding`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД. Миграция 0003 `namespace` (expand, только `CREATE TABLE`) добавляет таблицу `namespace` в виде, показанном выше; история заявок на имена в БД не хранится, она живёт только в событиях аудита. Миграция 0004 `settings` (expand, только `CREATE TABLE`) добавляет `setting` и `onboarding`: секрет лежит только в `value_sealed`, откат строки целиком (старые шифртекст и версия вместе) шифр не ловит, это угроза уровня доступа к БД (20.2).
+*Рис. 9.3. Срез схемы v0.1.0 плюс миграции 0002 (`deprecated`, `dist_tag`), 0004 (`setting`, `onboarding`) и 0005 (`version_order`, `prerelease`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД. Миграция 0003 `namespace` (expand, только `CREATE TABLE`) добавляет таблицу `namespace` в виде, показанном выше; история заявок на имена в БД не хранится, она живёт только в событиях аудита. Миграция 0004 `settings` (expand, только `CREATE TABLE`) добавляет `setting` и `onboarding`: секрет лежит только в `value_sealed`, откат строки целиком (старые шифртекст и версия вместе) шифр не ловит, это угроза уровня доступа к БД (20.2). Миграция 0005 добавляет `version_order` и `prerelease` как `NOT NULL` без backfill: в отличие от остальных миграций, она отказывается идти по непустой `package_version` (dev-БД до v0.3.0 пересоздаётся), потому что заполнить колонки без грамматики экосистемы нечем. Адаптер читает версию как набор фактов (`Version::from_parts`) и грамматик экосистем не знает.
 
 | Отложено | Когда добавляется |
 | --- | --- |

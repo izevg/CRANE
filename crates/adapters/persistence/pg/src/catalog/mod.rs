@@ -1,6 +1,6 @@
 use crane_domain::registry::{
-    Asset, Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Version,
-    VersionId, VersionState,
+    Asset, Format, Namespace, NamespacePattern, PackageName, PackageVersion, Repository,
+    RepositoryId, Version, VersionId, VersionState,
 };
 use crane_ports::registry::{Catalog, CatalogError, NewVersion};
 use sqlx::PgPool;
@@ -15,8 +15,9 @@ use uuid::Uuid;
 macro_rules! select_version {
     ($tail:literal) => {
         concat!(
-            r#"SELECT r.format::text AS format, p.name_display, v.id, r.id AS repository_id,
-                v.version_display, v.state::text AS state, v.yanked, v.deprecated, v.published_at,
+            r#"SELECT p.name_norm, p.name_display, v.id, r.id AS repository_id,
+                v.version AS version_canonical, v.version_display, v.version_order, v.prerelease,
+                v.state::text AS state, v.yanked, v.deprecated, v.published_at,
                 v.metadata::text AS metadata,
                 COALESCE(f.paths, '{}') AS paths,
                 COALESCE(f.digests, '{}') AS digests,
@@ -263,9 +264,9 @@ impl Catalog for PgCatalog {
     async fn namespace_for(
         &self,
         format: Format,
-        name: &PackageName,
+        candidates: &[NamespacePattern],
     ) -> Result<Option<Namespace>, CatalogError> {
-        names::namespace_for(&self.pool, format, name).await
+        names::namespace_for(&self.pool, format, candidates).await
     }
 
     async fn hosted_exists(
