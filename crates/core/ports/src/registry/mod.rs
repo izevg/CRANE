@@ -6,4 +6,4 @@ mod digest;
 
 pub use blob::{BlobError, BlobStore, ByteStream, Staged, StagingKey};
 pub use catalog::{Catalog, CatalogError, NewVersion};
-pub use digest::{Digester, Digests};
+pub use digest::Digester;

@@ -1,11 +1,13 @@
-//! Дайджесты содержимого: SHA-256 (ключ CAS), SHA-512 и SHA-1 (контрольные суммы форматов).
+//! Дайджесты содержимого: SHA-256 (ключ CAS), SHA-512, SHA-1 и MD5 (контрольные суммы форматов).
 
 mod checksum;
+mod digests;
 mod hex;
 
 use std::fmt;
 
 pub use checksum::Checksum;
+pub use digests::Digests;
 pub use hex::DigestError;
 
 /// Объявляет тип дайджеста фиксированной длины с общим разбором и выводом hex.
@@ -61,6 +63,11 @@ digest!(
     /// Дайджест SHA-1 (`dist.shasum` npm). Не криптостойкий: только сверка с заявленным клиентом.
     Sha1,
     20
+);
+digest!(
+    /// Дайджест MD5 (`.md5` Maven). Не криптостойкий: только отдача и сверка с заявленным клиентом.
+    Md5,
+    16
 );
 
 #[cfg(test)]
@@ -182,6 +189,31 @@ mod tests {
 
         // Assert
         assert_eq!(printed, (Ok(sha512), Ok(sha1)));
+    }
+
+    #[test]
+    fn md5_round_trips_through_hex_and_rejects_sha1_length() {
+        // Arrange
+        let md5 = "0f".repeat(16);
+        let sha1 = "0f".repeat(20);
+
+        // Act
+        let parsed = (
+            Md5::from_hex(&md5).map(|d| d.to_string()),
+            Md5::from_hex(&sha1),
+        );
+
+        // Assert
+        assert_eq!(
+            parsed,
+            (
+                Ok(md5),
+                Err(DigestError::InvalidLength {
+                    expected: 32,
+                    actual: 40
+                })
+            )
+        );
     }
 
     #[test]

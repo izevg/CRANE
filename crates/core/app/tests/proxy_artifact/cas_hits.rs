@@ -5,8 +5,8 @@ use std::sync::Arc;
 use crane_app::proxy::{CacheResult, ProxyEngine, ProxyError, ProxyLimits};
 use crane_domain::proxy::NegativePolicy;
 use crane_memory::{ManualClock, MemoryBlobStore};
-use crane_ports::proxy::{Cached, CachedState, ProxyCache};
-use crane_ports::registry::{BlobError, Digests};
+use crane_ports::proxy::{Cached, CachedDigests, CachedState, ProxyCache};
+use crane_ports::registry::BlobError;
 use futures_executor::block_on;
 
 use crate::common::faults::OpenFailsBlobs;
@@ -74,7 +74,7 @@ fn cas_backend_failure_on_hit_is_a_backend_error() {
     let cache = SharedCache::default();
     let record = Cached {
         fetched_at: epoch(),
-        state: CachedState::Blob(Digests {
+        state: CachedState::Blob(CachedDigests {
             sha256: hello_sha256(),
             sha512: hello_sha512(),
             sha1: hello_sha1(),
@@ -108,7 +108,7 @@ fn cas_unreachable_on_hit_is_an_unreachable_error() {
     let cache = SharedCache::default();
     let record = Cached {
         fetched_at: epoch(),
-        state: CachedState::Blob(Digests {
+        state: CachedState::Blob(CachedDigests {
             sha256: hello_sha256(),
             sha512: hello_sha512(),
             sha1: hello_sha1(),

@@ -3,10 +3,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use crane_domain::registry::Sha256;
+use crane_domain::registry::{Digests, Sha256};
 use futures_core::Stream;
-
-use super::Digests;
 
 /// Поток байт тела артефакта; ошибка чтения — `io::Error`.
 pub type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, std::io::Error>> + Send>>;

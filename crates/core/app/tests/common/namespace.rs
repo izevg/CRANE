@@ -6,9 +6,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, Namespace, NamespacePattern, PackageName, PackageVersion,
-    Repository, RepositoryId, RepositoryKind, Sha256, Version, VersionId, VersionState,
-    WorkspaceId,
+    Asset, Digests, Format, FormatMetadata, Namespace, NamespacePattern, PackageName,
+    PackageVersion, Repository, RepositoryId, RepositoryKind, Sha256, Version, VersionId,
+    VersionState, WorkspaceId,
 };
 use crane_memory::{MemoryCatalog, SequentialIdGen};
 use crane_ports::proxy::{Presence, UpstreamNames};
@@ -167,7 +167,10 @@ impl Catalog for FaultyCatalog {
             Some(asset.clone())
         } else if self.fails(Fault::LoseAssetRaceToOtherFile) {
             Some(Asset {
-                sha256: Sha256::from([0xee; 32]),
+                content: Digests {
+                    sha256: Sha256::from([0xee; 32]),
+                    ..asset.content
+                },
                 ..asset.clone()
             })
         } else {

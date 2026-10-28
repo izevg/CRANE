@@ -8,8 +8,7 @@ use crane_domain::registry::{RepositoryId, Sha1, Sha256, Sha512};
 use futures_util::task::noop_waker_ref;
 use uuid::Uuid;
 
-use crate::proxy::{Cached, CachedState, Claim, ETag, FetchLeases, ProxyCache};
-use crate::registry::Digests;
+use crate::proxy::{Cached, CachedDigests, CachedState, Claim, ETag, FetchLeases, ProxyCache};
 
 const LEASE: Duration = Duration::from_secs(30);
 const PATIENCE: Duration = Duration::from_secs(5);
@@ -197,7 +196,7 @@ async fn blob_entry_survives_round_trip<C: ProxyCache>(cache: &C) {
     // Arrange
     let entry = Cached {
         fetched_at: at(3_000),
-        state: CachedState::Blob(Digests {
+        state: CachedState::Blob(CachedDigests {
             sha256: Sha256::from([0x5a; 32]),
             sha512: Sha512::from([0x5b; 64]),
             sha1: Sha1::from([0x5c; 20]),

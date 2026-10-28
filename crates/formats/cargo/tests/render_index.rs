@@ -8,7 +8,8 @@ use std::time::SystemTime;
 
 use bytes::Bytes;
 use crane_domain::registry::{
-    Asset, Ecosystem, FormatMetadata, PackageVersion, RepositoryId, Sha256, VersionId, VersionState,
+    Asset, Digests, Ecosystem, FormatMetadata, Md5, PackageVersion, RepositoryId, Sha1, Sha256,
+    Sha512, VersionId, VersionState,
 };
 use crane_format_cargo::{CARGO, IndexError, asset_path, parse_publish, render_index};
 use serde_json::{Value, json};
@@ -39,6 +40,16 @@ fn publish_body(name: &str, vers: &str) -> Bytes {
     Bytes::from(out)
 }
 
+fn digests(byte: u8) -> Digests {
+    Digests {
+        sha256: Sha256::from([byte; 32]),
+        sha512: Sha512::from([byte; 64]),
+        sha1: Sha1::from([byte; 20]),
+        md5: Md5::from([byte; 16]),
+        size: 1,
+    }
+}
+
 fn version(name: &str, vers: &str, yanked: bool, sha_byte: u8) -> PackageVersion {
     let publish = parse_publish(publish_body(name, vers)).unwrap();
     let metadata = publish.index_metadata(OWN_INDEX).unwrap();
@@ -47,8 +58,7 @@ fn version(name: &str, vers: &str, yanked: bool, sha_byte: u8) -> PackageVersion
         repository: RepositoryId::new(Uuid::nil()),
         assets: vec![Asset {
             path: asset_path(&publish.name, &publish.version),
-            sha256: Sha256::from([sha_byte; 32]),
-            size: 1,
+            content: digests(sha_byte),
         }],
         package: publish.name,
         version: publish.version,
@@ -137,8 +147,7 @@ fn checksum_comes_from_the_asset_of_that_very_version() {
         0,
         Asset {
             path: "other.txt".to_owned(),
-            sha256: Sha256::from([0xee; 32]),
-            size: 1,
+            content: digests(0xee),
         },
     );
 

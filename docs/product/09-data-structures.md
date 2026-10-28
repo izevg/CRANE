@@ -101,7 +101,7 @@ CREATE TABLE blob_store (
 CREATE TABLE blob (
   store_id text NOT NULL REFERENCES blob_store,
   sha256 bytea NOT NULL, size bigint NOT NULL,
-  sha512 bytea, sha1 bytea, md5 bytea,               -- для протоколов клиентов
+  sha512 bytea NOT NULL, sha1 bytea NOT NULL, md5 bytea NOT NULL,  -- для протоколов клиентов; считаются при записи
   created_at timestamptz NOT NULL, verified_at timestamptz,
   gc_mark timestamptz,               -- момент, когда blob стал кандидатом
   PRIMARY KEY (store_id, sha256));   -- дедупликация в пределах хранилища
@@ -322,6 +322,11 @@ CREATE TABLE blob (
   store_id text NOT NULL, sha256 bytea NOT NULL CHECK (octet_length(sha256) = 32),
   size bigint NOT NULL CHECK (size >= 0), created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (store_id, sha256));
+-- Миграция 0006: все дайджесты содержимого, чтобы контрольные суммы отдавались строкой каталога без чтения blob.
+ALTER TABLE blob
+  ADD COLUMN sha512 bytea NOT NULL CHECK (octet_length(sha512) = 64),
+  ADD COLUMN sha1   bytea NOT NULL CHECK (octet_length(sha1) = 20),
+  ADD COLUMN md5    bytea NOT NULL CHECK (octet_length(md5) = 16);
 
 CREATE TABLE asset (
   version_id uuid NOT NULL REFERENCES package_version (id), path text NOT NULL,
@@ -349,13 +354,13 @@ CREATE TABLE onboarding (
     OR (completed_at IS NOT NULL AND token_hash IS NULL AND token_expires_at IS NULL AND completed_by IS NOT NULL)));
 ```
 
-*Рис. 9.3. Срез схемы v0.1.0 плюс миграции 0002 (`deprecated`, `dist_tag`), 0004 (`setting`, `onboarding`) и 0005 (`version_order`, `prerelease`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД. Миграция 0003 `namespace` (expand, только `CREATE TABLE`) добавляет таблицу `namespace` в виде, показанном выше; история заявок на имена в БД не хранится, она живёт только в событиях аудита. Миграция 0004 `settings` (expand, только `CREATE TABLE`) добавляет `setting` и `onboarding`: секрет лежит только в `value_sealed`, откат строки целиком (старые шифртекст и версия вместе) шифр не ловит, это угроза уровня доступа к БД (20.2). Миграция 0005 добавляет `version_order` и `prerelease` как `NOT NULL` без backfill: в отличие от остальных миграций, она отказывается идти по непустой `package_version` (dev-БД до v0.3.0 пересоздаётся), потому что заполнить колонки без грамматики экосистемы нечем. Адаптер читает версию как набор фактов (`Version::from_parts`) и грамматик экосистем не знает.
+*Рис. 9.3. Срез схемы v0.1.0 плюс миграции 0002 (`deprecated`, `dist_tag`), 0004 (`setting`, `onboarding`), 0005 (`version_order`, `prerelease`) и 0006 (`blob.sha512`, `blob.sha1`, `blob.md5`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД. Миграция 0003 `namespace` (expand, только `CREATE TABLE`) добавляет таблицу `namespace` в виде, показанном выше; история заявок на имена в БД не хранится, она живёт только в событиях аудита. Миграция 0004 `settings` (expand, только `CREATE TABLE`) добавляет `setting` и `onboarding`: секрет лежит только в `value_sealed`, откат строки целиком (старые шифртекст и версия вместе) шифр не ловит, это угроза уровня доступа к БД (20.2). Миграция 0005 добавляет `version_order` и `prerelease` как `NOT NULL` без backfill: в отличие от остальных миграций, она отказывается идти по непустой `package_version` (dev-БД до v0.3.0 пересоздаётся), потому что заполнить колонки без грамматики экосистемы нечем. Адаптер читает версию как набор фактов (`Version::from_parts`) и грамматик экосистем не знает. Миграция 0006 добавляет `sha512`, `sha1` и `md5` в `blob` как `NOT NULL` без backfill по той же причине: она отказывается идти по непустой `blob`, потому что дайджесты старых строк восстановимы только перечитыванием CAS. Дайджесты определяются содержимым, поэтому при конфликте `(store_id, sha256)` существующая строка остаётся как есть. Запись proxy-кэша в Valkey md5 не хранит.
 
 | Отложено | Когда добавляется |
 | --- | --- |
 | `package.namespace_id`, `package.owner_workspace_id` (с CHECK), FK `namespace.workspace_id` и `repository.workspace_id` на `workspace` | v0.4.0, вместе с командами и workspaces. Таблица `namespace` уже есть (миграция 0003, 10.3) |
 | `purl`, `sort_key`, `mutable`, `published_by` | Появление потребителя (граф, сортировка, аудит публикаций) |
-| `sha512`, `sha1`, `md5`, `media_type` | Форматы, которым нужны эти дайджесты и типы |
+| `media_type` | Форматы, которым нужен тип |
 | таблица `blob_store` | Второе физическое хранилище; пока `store_id` — текст без FK |
 | `package_embedding` | Векторный поиск, P3 / v1.2.0 |
 | `download_event` | v0.4.0, вместе с журналом аудита (колонки `workspace_id`, `bytes`, `source` входят в `CREATE TABLE` сразу, до появления потока) |

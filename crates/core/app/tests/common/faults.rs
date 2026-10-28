@@ -5,12 +5,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crane_domain::registry::{
-    Asset, Format, Namespace, NamespacePattern, PackageName, PackageVersion, Repository,
+    Asset, Digests, Format, Namespace, NamespacePattern, PackageName, PackageVersion, Repository,
     RepositoryId, Sha256, Version, VersionId, VersionState,
 };
 use crane_memory::{MemoryBlobStore, MemoryCatalog};
 use crane_ports::registry::{
-    BlobError, BlobStore, ByteStream, Catalog, CatalogError, Digests, NewVersion, Staged,
+    BlobError, BlobStore, ByteStream, Catalog, CatalogError, NewVersion, Staged,
 };
 
 /// Каталог с «слепой» предпроверкой: первые `blind_calls` вызовов `find_version` дают `None`,

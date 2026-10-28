@@ -10,8 +10,8 @@ use uuid::Uuid;
 /// Файлы читает один коррелированный LATERAL: `asset` и `blob` проходятся по версии один раз,
 /// а не тремя подзапросами-массивами. Порядок задан в каждом `array_agg` одним и тем же
 /// выражением: `COLLATE "C"` даёт байтовый порядок путей, одинаковый для любой локали
-/// кластера и совпадающий с `Ord` для `String`. Размер берётся из `blob`, а не хранится
-/// в `asset`: источник истины один. Без файлов `array_agg` даёт NULL, поэтому `COALESCE`.
+/// кластера и совпадающий с `Ord` для `String`. Размер и дайджесты берутся из `blob`, а не
+/// хранятся в `asset`: источник истины один. Без файлов `array_agg` даёт NULL, поэтому `COALESCE`.
 macro_rules! select_version {
     ($tail:literal) => {
         concat!(
@@ -20,14 +20,20 @@ macro_rules! select_version {
                 v.state::text AS state, v.yanked, v.deprecated, v.published_at,
                 v.metadata::text AS metadata,
                 COALESCE(f.paths, '{}') AS paths,
-                COALESCE(f.digests, '{}') AS digests,
+                COALESCE(f.sha256, '{}') AS sha256,
+                COALESCE(f.sha512, '{}') AS sha512,
+                COALESCE(f.sha1, '{}') AS sha1,
+                COALESCE(f.md5, '{}') AS md5,
                 COALESCE(f.sizes, '{}') AS sizes
                FROM package_version v
                JOIN package p ON p.id = v.package_id
                JOIN repository r ON r.id = p.repository_id
                LEFT JOIN LATERAL (
                    SELECT array_agg(a.path ORDER BY a.path COLLATE "C") AS paths,
-                          array_agg(a.blob_sha256 ORDER BY a.path COLLATE "C") AS digests,
+                          array_agg(a.blob_sha256 ORDER BY a.path COLLATE "C") AS sha256,
+                          array_agg(b.sha512 ORDER BY a.path COLLATE "C") AS sha512,
+                          array_agg(b.sha1 ORDER BY a.path COLLATE "C") AS sha1,
+                          array_agg(b.md5 ORDER BY a.path COLLATE "C") AS md5,
                           array_agg(b.size ORDER BY a.path COLLATE "C") AS sizes
                    FROM asset a
                    JOIN blob b ON b.store_id = a.store_id AND b.sha256 = a.blob_sha256

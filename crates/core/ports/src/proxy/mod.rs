@@ -11,7 +11,7 @@ use crane_domain::proxy::{EgressRefusal, UpstreamBase, UpstreamPath};
 
 use crate::registry::ByteStream;
 
-pub use cache::{CacheError, Cached, CachedState, ETag, ProxyCache};
+pub use cache::{CacheError, Cached, CachedDigests, CachedState, ETag, ProxyCache};
 pub use leases::{Claim, FetchLeases, Lease, LeaseError};
 pub use names::{NoUpstream, Presence, UpstreamNames};
 

@@ -7,7 +7,8 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use crane_domain::proxy::EgressRefusal;
-use crane_ports::registry::{ByteStream, Digests};
+use crane_ports::proxy::CachedDigests;
+use crane_ports::registry::ByteStream;
 
 use super::ProxyError;
 
@@ -55,7 +56,7 @@ impl<T> fmt::Debug for Served<T> {
 
 /// Артефакт из CAS.
 pub struct Fetched {
-    pub digests: Digests,
+    pub digests: CachedDigests,
     pub body: ByteStream,
 }
 

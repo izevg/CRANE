@@ -2,10 +2,8 @@ use std::error::Error;
 use std::io;
 use std::sync::Arc;
 
-use crane_domain::registry::Sha256;
-use crane_ports::registry::{
-    BlobError, BlobStore, ByteStream, Digester, Digests, Staged, StagingKey,
-};
+use crane_domain::registry::{Digests, Sha256};
+use crane_ports::registry::{BlobError, BlobStore, ByteStream, Digester, Staged, StagingKey};
 use futures_util::StreamExt;
 use object_store::buffered::BufWriter;
 use object_store::client::{HttpError, HttpErrorKind};

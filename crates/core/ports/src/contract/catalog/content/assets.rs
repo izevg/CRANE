@@ -1,7 +1,7 @@
-use crane_domain::registry::{Asset, PackageVersion, RepositoryId, Sha256, VersionId};
+use crane_domain::registry::{Asset, PackageVersion, RepositoryId, VersionId};
 
 use crate::contract::catalog::{
-    ensure_repo, find, new_version, publish, publish_deleted, unknown_version_id,
+    digests, ensure_repo, find, new_version, publish, publish_deleted, unknown_version_id,
 };
 use crate::registry::{Catalog, CatalogError};
 
@@ -16,13 +16,13 @@ pub(super) async fn scenarios<C: Catalog>(new: &impl Fn() -> C) {
     add_asset_with_known_blob_succeeds(&new()).await;
     add_asset_to_unknown_version_is_not_found(&new()).await;
     add_asset_to_deleted_version_succeeds(&new()).await;
+    every_digest_of_a_file_is_stored_and_read_back(&new()).await;
 }
 
 fn asset(path: &str, byte: u8) -> Asset {
     Asset {
         path: path.to_owned(),
-        sha256: Sha256::from([byte; 32]),
-        size: 3,
+        content: digests(byte),
     }
 }
 
@@ -201,5 +201,32 @@ async fn publish_returns_and_stores_files_sorted_by_path<C: Catalog>(catalog: &C
         (paths(&published.assets), find_serde(catalog, repo).await),
         (vec!["a.whl", "z.whl"], published.clone()),
         "publish_version отдаёт и хранит файлы в порядке find_version"
+    );
+}
+
+async fn every_digest_of_a_file_is_stored_and_read_back<C: Catalog>(catalog: &C) {
+    // Arrange
+    let repo = ensure_repo(catalog, 1, "main").await;
+    let id = published(catalog, repo).await;
+    catalog
+        .add_asset(id, asset("extra.whl", 5))
+        .await
+        .expect("add_asset");
+
+    // Act
+    let found = find_serde(catalog, repo).await;
+
+    // Assert
+    let content_of = |path: &str| {
+        found
+            .assets
+            .iter()
+            .find(|a| a.path == path)
+            .map(|a| a.content)
+    };
+    assert_eq!(
+        (content_of("extra.whl"), content_of("serde-1.0.0.crate")),
+        (Some(digests(5)), Some(digests(7))),
+        "sha256, sha512, sha1, md5 и размер каждого файла читаются такими, какими записаны"
     );
 }

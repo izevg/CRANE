@@ -24,7 +24,7 @@ pub struct Attach {
 fn declared_sha256(file: &Upload) -> Option<Sha256> {
     file.declared.iter().find_map(|checksum| match checksum {
         Checksum::Sha256(digest) => Some(*digest),
-        Checksum::Sha512(_) | Checksum::Sha1(_) => None,
+        Checksum::Sha512(_) | Checksum::Sha1(_) | Checksum::Md5(_) => None,
     })
 }
 
@@ -42,7 +42,7 @@ enum Slot {
 fn slot(version: &PackageVersion, path: &str, sha256: &Sha256) -> Slot {
     match version.assets.iter().find(|asset| asset.path == path) {
         None => Slot::Free,
-        Some(have) if have.sha256 == *sha256 => Slot::Same,
+        Some(have) if have.content.sha256 == *sha256 => Slot::Same,
         Some(_) => Slot::Taken,
     }
 }
@@ -151,7 +151,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         version: PackageVersion,
         asset: Asset,
     ) -> Result<PackageVersion, RegistryError> {
-        match slot(&version, &asset.path, &asset.sha256) {
+        match slot(&version, &asset.path, &asset.content.sha256) {
             Slot::Same => Ok(version),
             Slot::Taken => Err(RegistryError::AssetExists),
             Slot::Free => match self.catalog.add_asset(version.id, asset.clone()).await {
@@ -173,7 +173,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             .find_version(version.repository, &version.package, &version.version)
             .await?
             .ok_or_else(vanished)?;
-        match slot(&current, &asset.path, &asset.sha256) {
+        match slot(&current, &asset.path, &asset.content.sha256) {
             Slot::Same => Ok(current),
             Slot::Free | Slot::Taken => Err(RegistryError::AssetExists),
         }

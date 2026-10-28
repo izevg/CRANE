@@ -206,6 +206,13 @@ fn migrator() -> Migrator {
             include_str!("../../migrations/0005_version_order.sql").into_sql_str(),
             false,
         ),
+        Migration::new(
+            6,
+            "blob_digests".into(),
+            MigrationType::Simple,
+            include_str!("../../migrations/0006_blob_digests.sql").into_sql_str(),
+            false,
+        ),
     ])
 }
 

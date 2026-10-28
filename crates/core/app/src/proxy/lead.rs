@@ -6,10 +6,10 @@ use bytes::Bytes;
 use crane_domain::proxy::{Freshness, MetadataPolicy, NegativePolicy, ProxyKey, UpstreamBase};
 use crane_domain::registry::Checksum;
 use crane_ports::proxy::{
-    Cached, CachedState, Claim, ETag, FetchLeases, Lease, ProxyCache, Upstream, UpstreamError,
-    UpstreamRequest, UpstreamResponse,
+    Cached, CachedDigests, CachedState, Claim, ETag, FetchLeases, Lease, ProxyCache, Upstream,
+    UpstreamError, UpstreamRequest, UpstreamResponse,
 };
-use crane_ports::registry::{BlobError, BlobStore, ByteStream, Digests};
+use crane_ports::registry::{BlobError, BlobStore, ByteStream};
 use futures_util::{StreamExt, stream};
 
 use super::flight::Outcome;
@@ -65,7 +65,7 @@ impl Target {
 
     /// Дайджест полученных байт против ожидаемого. Полёт общий, а ожидание у каждого вызывающего своё,
     /// поэтому проверка нужна и лидеру до коммита, и присоединившемуся после полёта.
-    pub(super) fn check_digest(&self, digests: &Digests) -> Result<(), ProxyError> {
+    pub(super) fn check_digest(&self, digests: &CachedDigests) -> Result<(), ProxyError> {
         match self {
             Self::Artifact {
                 expected: Some(expected),
@@ -289,10 +289,14 @@ async fn store_artifact<B: BlobStore>(
         other => ProxyError::blob(other),
     })?;
     // Несовпавший staged-объект не коммитим: чужие байты не должны попасть в CAS.
-    job.target.check_digest(staged.digests())?;
+    job.target
+        .check_digest(&CachedDigests::from(staged.digests()))?;
     let digests = blobs.commit(staged).await.map_err(ProxyError::blob)?;
     // Содержимое неизменяемо: запись без срока, вытеснение — право бэкенда.
-    Ok((CachedState::Blob(digests), Duration::MAX))
+    Ok((
+        CachedState::Blob(CachedDigests::from(&digests)),
+        Duration::MAX,
+    ))
 }
 
 /// 404: отрицательная запись, счётчик промахов растёт от прежней отрицательной записи.

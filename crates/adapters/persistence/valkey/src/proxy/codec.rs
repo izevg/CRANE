@@ -16,8 +16,7 @@ use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
 use crane_domain::registry::{Sha1, Sha256, Sha512};
-use crane_ports::proxy::{Cached, CachedState, ETag};
-use crane_ports::registry::Digests;
+use crane_ports::proxy::{Cached, CachedDigests, CachedState, ETag};
 
 const VERSION: u8 = 2;
 const TAG_DOCUMENT: u8 = 0;
@@ -160,7 +159,7 @@ pub(super) fn decode(raw: Bytes) -> Result<Cached, CodecError> {
             let sha1 = Sha1::from(reader.array::<SHA1_LEN>()?);
             let size = reader.u64()?;
             reader.finish()?;
-            CachedState::Blob(Digests {
+            CachedState::Blob(CachedDigests {
                 sha256,
                 sha512,
                 sha1,
@@ -306,7 +305,7 @@ mod tests {
         // Arrange
         let entry = Cached {
             fetched_at: SystemTime::UNIX_EPOCH + Duration::from_secs(7),
-            state: CachedState::Blob(Digests {
+            state: CachedState::Blob(CachedDigests {
                 sha256: Sha256::from([1; 32]),
                 sha512: Sha512::from([2; 64]),
                 sha1: Sha1::from([3; 20]),
@@ -347,7 +346,7 @@ mod tests {
                 unchanged: 3,
                 max_age: Some(Duration::from_secs(60)),
             },
-            CachedState::Blob(Digests {
+            CachedState::Blob(CachedDigests {
                 sha256: Sha256::from([1; 32]),
                 sha512: Sha512::from([2; 64]),
                 sha1: Sha1::from([3; 20]),
