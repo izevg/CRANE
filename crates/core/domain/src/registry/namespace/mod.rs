@@ -9,9 +9,8 @@
 //! родительским namespace, из которого не вырезан вложенный, принадлежит владельцу родителя.
 
 mod pattern;
-mod rules;
 
-use super::{Format, PackageName, WorkspaceId};
+use super::{Ecosystem, Format, PackageName, WorkspaceId};
 
 pub use pattern::{NamespacePattern, PatternError};
 
@@ -23,11 +22,11 @@ pub struct Namespace {
     pub workspace: WorkspaceId,
 }
 
-/// Можно ли опубликовать имя в hosted-репозиторий формата.
+/// Можно ли опубликовать имя в hosted-репозиторий экосистемы.
 ///
 /// Для npm нельзя неименованное по scope: клиент маршрутизирует реестры только по scope,
 /// поэтому безscope-имя нечем защитить от подмены из публичного реестра.
 #[must_use]
-pub fn hosted_name_allowed(format: Format, name: &PackageName) -> bool {
-    rules::unscoped_allowed(format, name.normalized())
+pub fn hosted_name_allowed(eco: &dyn Ecosystem, name: &PackageName) -> bool {
+    !eco.requires_scope() || name.normalized().starts_with('@')
 }
