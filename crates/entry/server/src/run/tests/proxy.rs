@@ -228,6 +228,7 @@ fn mount_refuses_a_format_without_proxy_support() {
         Arc::new(SequentialIdGen::default()),
         Arc::new(MemoryAudit::default()),
         prepared.upstream_names(),
+        crate::ecosystem::ecosystem,
     ));
     let formats = FormatSettings {
         public_url: "http://crane.test".to_owned(),
