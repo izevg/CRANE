@@ -150,3 +150,42 @@ fn catalog_failure_leaves_the_version_unchanged_and_the_blob_for_gc() {
     );
     assert_eq!(paths_of_foo(&registry), [FIRST]);
 }
+
+#[test]
+fn lost_race_for_same_file_is_success_without_duplicate() {
+    // Arrange
+    let registry = seeded().registry_with(
+        |inner| FaultyCatalog {
+            inner,
+            failing: &[Fault::LoseAssetRaceToSameFile],
+        },
+        |blobs| blobs,
+    );
+    let request = attach_request("foo", "1.0.0", SECOND, &HELLO, Vec::new());
+
+    // Act
+    let result = block_on(registry.attach(&caller(), request));
+
+    // Assert
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(paths_of_foo(&registry), [FIRST, SECOND]);
+}
+
+#[test]
+fn lost_race_for_other_file_under_same_path_is_asset_exists() {
+    // Arrange
+    let registry = seeded().registry_with(
+        |inner| FaultyCatalog {
+            inner,
+            failing: &[Fault::LoseAssetRaceToOtherFile],
+        },
+        |blobs| blobs,
+    );
+    let request = attach_request("foo", "1.0.0", SECOND, &HELLO, Vec::new());
+
+    // Act
+    let error = block_on(registry.attach(&caller(), request)).unwrap_err();
+
+    // Assert
+    assert!(matches!(error, RegistryError::AssetExists), "{error:?}");
+}

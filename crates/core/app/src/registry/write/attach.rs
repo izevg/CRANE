@@ -150,7 +150,28 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         match existing(&version, &asset.path) {
             Some(have) if have.sha256 == asset.sha256 => Ok(version),
             Some(_) => Err(RegistryError::AssetExists),
-            None => Ok(self.catalog.add_asset(version.id, asset).await?),
+            None => match self.catalog.add_asset(version.id, asset.clone()).await {
+                Err(CatalogError::AssetExists) => self.settle_lost_race(&version, &asset).await,
+                added => Ok(added?),
+            },
+        }
+    }
+
+    /// Параллельный запрос успел занять путь между снимком версии и записью (клиент ретраит
+    /// по таймауту): версия перечитывается один раз и сравнивается тем же правилом, без цикла.
+    async fn settle_lost_race(
+        &self,
+        version: &PackageVersion,
+        asset: &Asset,
+    ) -> Result<PackageVersion, RegistryError> {
+        let current = self
+            .catalog
+            .find_version(version.repository, &version.package, &version.version)
+            .await?
+            .ok_or(RegistryError::AssetExists)?;
+        match existing(&current, &asset.path) {
+            Some(have) if have.sha256 == asset.sha256 => Ok(current),
+            _ => Err(RegistryError::AssetExists),
         }
     }
 }

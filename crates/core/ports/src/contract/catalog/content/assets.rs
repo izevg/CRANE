@@ -7,6 +7,7 @@ use crate::registry::{Catalog, CatalogError};
 
 /// Сценарии группы; порядок вызовов сохраняет порядок общего прогона.
 pub(super) async fn scenarios<C: Catalog>(new: &impl Fn() -> C) {
+    publish_returns_and_stores_files_sorted_by_path(&new()).await;
     add_asset_returns_all_files_sorted_by_path(&new()).await;
     add_asset_is_visible_to_find_version_as_returned(&new()).await;
     add_asset_with_occupied_path_is_asset_exists_and_changes_nothing(&new()).await;
@@ -182,5 +183,23 @@ async fn add_asset_to_deleted_version_succeeds<C: Catalog>(catalog: &C) {
     assert!(
         result.is_ok(),
         "состояние версии порт не проверяет, это правило use case: {result:?}"
+    );
+}
+
+async fn publish_returns_and_stores_files_sorted_by_path<C: Catalog>(catalog: &C) {
+    // Arrange
+    let repo = ensure_repo(catalog, 1, "main").await;
+    let mut new = new_version(10, repo, "serde", "1.0.0");
+    new.assets = vec![asset("z.whl", 1), asset("a.whl", 2)];
+
+    // Act
+    let result = catalog.publish_version(new).await;
+
+    // Assert
+    let published = result.expect("publish_version");
+    assert_eq!(
+        (paths(&published.assets), find_serde(catalog, repo).await),
+        (vec!["a.whl", "z.whl"], published.clone()),
+        "publish_version отдаёт и хранит файлы в порядке find_version"
     );
 }

@@ -89,10 +89,15 @@ impl MemoryCatalog {
             return Err(CatalogError::AssetExists);
         }
         record.assets.push(asset);
-        // Порядок файлов задаёт контракт `find_version`: байтовый порядок путей, как `COLLATE "C"` в PG.
-        record.assets.sort_by(|a, b| a.path.cmp(&b.path));
+        record.assets = sorted_by_path(std::mem::take(&mut record.assets));
         Ok(record.clone())
     }
+}
+
+/// Порядок файлов задаёт контракт `find_version`: байтовый порядок путей, как `COLLATE "C"` в PG.
+fn sorted_by_path(mut assets: Vec<Asset>) -> Vec<Asset> {
+    assets.sort_by(|a, b| a.path.cmp(&b.path));
+    assets
 }
 
 fn same_package(v: &PackageVersion, repository: RepositoryId, package: &PackageName) -> bool {
@@ -167,7 +172,7 @@ impl Catalog for MemoryCatalog {
             yanked: false,
             deprecated: None,
             published_at: version.published_at,
-            assets: version.assets,
+            assets: sorted_by_path(version.assets),
             metadata: version.metadata,
         };
         for tag in &version.tags {
