@@ -16,7 +16,7 @@ describe("createDefaultTransport: токен из GET /session", () => {
     return fetchMock;
   }
 
-  it("мутация сперва читает сессию (cookie той же страницы, без кэша) и ставит её токен", async () => {
+  it("мутация сперва читает сессию (cookie той же страницы, не хранится в кэше) и ставит её токен", async () => {
     // Arrange
     const fetchMock = stubSession(json(STATUS.ok, { authenticated: true, csrf_token: "tok-9" }));
     const transport = createDefaultTransport();
@@ -27,7 +27,7 @@ describe("createDefaultTransport: токен из GET /session", () => {
     // Assert
     const [sessionUrl, sessionInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(sessionUrl).toBe("/api/v1/session");
-    expect(sessionInit).toMatchObject({ credentials: "same-origin", cache: "no-cache" });
+    expect(sessionInit).toMatchObject({ credentials: "same-origin", cache: "no-store" });
     expect(headerOf(init(fetchMock, 1), "X-CSRF-Token")).toBe("tok-9");
   });
 

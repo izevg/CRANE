@@ -41,16 +41,16 @@ export const FS_ALLOW = [
 const DEMO_DEFINE = "__CRANE_UI_DEMO__";
 
 /**
- * Демо-режим интерфейса (заглушки API) — константа сборки: true в `vite` dev, Storybook и тестах (команда serve),
- * а в production только при `CRANE_UI_DEMO=1`. Витрина (`STORYBOOK=true`, его выставляет сам Storybook) показывает
- * заглушки и в статической сборке. Плагин, а не функция-конфиг: `vitest*.config.ts` сливают этот конфиг как объект.
+ * Демо-режим интерфейса (заглушки API) — константа сборки: true в `vite` dev, Storybook dev и тестах (команда serve),
+ * а в сборке только при `CRANE_UI_DEMO=1` (его же читает tools/check-bundle.ts; статической витрине флаг задан в
+ * скрипте `build-storybook`). Единственный флаг: окружение сборщика с лишней переменной демо не включит. Плагин, а не функция-конфиг: `vitest*.config.ts` сливают этот конфиг как объект.
  */
 function demoFlag(): Plugin {
   return {
     name: "crane-demo-flag",
     config(_config, { command }) {
-      const { STORYBOOK, CRANE_UI_DEMO } = process.env;
-      const demo = command === "serve" || STORYBOOK === "true" || CRANE_UI_DEMO === "1";
+      const { CRANE_UI_DEMO } = process.env;
+      const demo = command === "serve" || CRANE_UI_DEMO === "1";
       return { define: { [DEMO_DEFINE]: JSON.stringify(demo) } };
     },
   };

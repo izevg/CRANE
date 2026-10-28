@@ -101,6 +101,24 @@ describe("RouteError: сбой чанка маршрута", () => {
     expect(reloadPage).not.toHaveBeenCalled();
   });
 
+  it("хранилище закрыто — метку не записать, поэтому без перезагрузки: экран «Не удалось загрузить раздел»", async () => {
+    // Arrange
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("закрыто", "SecurityError");
+    });
+    renderRoute({ lazy: failedChunk });
+
+    // Act
+    const heading = await screen.findByRole("heading", {
+      level: 1,
+      name: "Не удалось загрузить раздел",
+    });
+
+    // Assert
+    expect(heading).toBeInTheDocument();
+    expect(reloadPage).not.toHaveBeenCalled();
+  });
+
   it("«Обновить страницу» перезагружает по явному действию пользователя", async () => {
     // Arrange
     sessionStorage.setItem(RELOAD_KEY, String(Date.now()));

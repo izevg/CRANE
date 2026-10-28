@@ -16,7 +16,7 @@
     "test": "vitest run --passWithNoTests",
     "mutate": "stryker run",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build",
+    "build-storybook": "CRANE_UI_DEMO=1 storybook build",
     "i18n:extract": "lingui extract",
     "i18n:check": "lingui check sync && lingui check missing"
   },

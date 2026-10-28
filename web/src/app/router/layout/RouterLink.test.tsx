@@ -12,6 +12,9 @@ import { describe, expect, it } from "vitest";
 import { Link, LinkProvider } from "~/shared/ui/primitives";
 import { RouterLink } from "./RouterLink";
 
+// собрано из частей: литерал со схемой script ловит правило линтера, а в тесте он нужен как данные
+const SPACED_SCRIPT_HREF = ["  java", "script:alert(1)"].join("");
+
 function renderLinks() {
   const root = createRootRoute({
     component: () => (
@@ -22,6 +25,9 @@ function renderLinks() {
         <Link href="/help">{"Справка"}</Link>
         <Link href="https://docs.example/crane">{"Документация"}</Link>
         <Link href="//cdn.example/x">{"Без схемы"}</Link>
+        <Link href="mailto:admin@example.com">{"Почта"}</Link>
+        <Link href={SPACED_SCRIPT_HREF}>{"Опасная"}</Link>
+        <Link href="data:text/html,x">{"Данные"}</Link>
         <Outlet />
       </LinkProvider>
     ),
@@ -136,5 +142,36 @@ describe("RouterLink: чужие адреса", () => {
     expect(link).toHaveAttribute("href", href);
     expect(notPrevented).toBe(true);
     expect(router.state.location.pathname).toBe("/");
+  });
+});
+
+describe("RouterLink: rel чужих адресов", () => {
+  it.each([
+    ["Документация", "noopener noreferrer nofollow"],
+    ["Без схемы", "noopener noreferrer nofollow"],
+    ["Почта", "noopener noreferrer"],
+  ])("ссылка %j получает rel=%j", async (label, rel) => {
+    // Arrange
+    renderLinks();
+
+    // Act
+    const link = await screen.findByRole("link", { name: label });
+
+    // Assert
+    expect(link).toHaveAttribute("rel", rel);
+  });
+});
+
+describe("RouterLink: опасные схемы", () => {
+  it.each(["Опасная", "Данные"])("%j не рендерится ссылкой, текст остаётся", async (label) => {
+    // Arrange
+    renderLinks();
+
+    // Act
+    const text = await screen.findByText(label);
+
+    // Assert
+    expect(text).not.toHaveAttribute("href");
+    expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
   });
 });

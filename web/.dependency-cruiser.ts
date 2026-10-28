@@ -50,6 +50,14 @@ const config: IConfiguration = {
       from: { path: "^src/shared/api/stubs/" },
       to: { path: "^src/", pathNot: "^src/shared/(api|lib)/" },
     },
+    {
+      name: "api-stub-data-no-static-import",
+      comment:
+        "Данные заглушек подключает только import.meta.glob в stubs/table (его dependency-cruiser не видит). Статический импорт вшил бы демо-данные в production-бандл мимо проверки manifest в tools/check-bundle.ts.",
+      severity: "error",
+      from: { pathNot: "^src/shared/api/stubs/data/" },
+      to: { path: "^src/shared/api/stubs/data/" },
+    },
     { name: "no-circular", severity: "error", from: {}, to: { circular: true } },
     {
       name: "not-to-unresolvable",

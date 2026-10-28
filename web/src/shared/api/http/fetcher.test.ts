@@ -69,6 +69,38 @@ describe("createTransport: запрос", () => {
     expect(headerOf(request, "Authorization")).toBe("Bearer crb_demo");
   });
 
+  it("запрос с Bearer уходит без cookie: credentials omit", async () => {
+    // Arrange
+    const fetchMock = vi.fn().mockResolvedValue(json(STATUS.ok, OK_BODY));
+    const transport = createTransport({ fetch: fetchMock, readCsrfToken: vi.fn() });
+
+    // Act
+    await transport.send("/onboarding/steps", {
+      method: "POST",
+      headers: { Authorization: "Bearer crb_demo" },
+    });
+
+    // Assert
+    expect(init(fetchMock).credentials).toBe("omit");
+  });
+
+  it("пустой Authorization — не Bearer: обычный запрос с cookie и X-CSRF-Token", async () => {
+    // Arrange
+    const fetchMock = vi.fn().mockResolvedValue(json(STATUS.ok, OK_BODY));
+    const transport = createTransport({
+      fetch: fetchMock,
+      readCsrfToken: () => Promise.resolve("tok-3"),
+    });
+
+    // Act
+    await transport.send("/tokens", { method: "POST", headers: { Authorization: "" } });
+
+    // Assert
+    const request = init(fetchMock);
+    expect(request.credentials).toBe("same-origin");
+    expect(headerOf(request, "X-CSRF-Token")).toBe("tok-3");
+  });
+
   it("CSRF-отказ bearer-запроса не повторяется: токен перечитывать нечем", async () => {
     // Arrange
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(csrfProblem()));

@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { hrefKind } from "~/shared/lib/route";
 import type { LinkProps } from "~/shared/ui/primitives";
 
 /** Пропсы якоря с явным `undefined` не ложатся на типы `Link` при `exactOptionalPropertyTypes`: такие ключи убираем. */
@@ -10,18 +11,23 @@ function defined<T extends object>(props: T): Defined<T> {
   ) as Defined<T>;
 }
 
-const SCHEME = /^[a-z][a-z\d+.-]*:/i;
+const EXTERNAL_REL = "noopener noreferrer nofollow";
+const MAILTO_REL = "noopener noreferrer";
 
 /**
  * Ссылка кита поверх роутера: `Link` с опцией `href` разбирает путь вместе с query и hash, ставит `aria-current`,
  * подгружает страницу по наведению и фокусу и не перехватывает клики с модификаторами. Адрес без маршрута тоже
- * переходит внутри SPA и покажет 404 шелла. Обычный `<a>` — только адрес со схемой или `//`.
+ * переходит внутри SPA и покажет 404 шелла. Чужой адрес (`http(s):`, `//`, `mailto:`) — обычный `<a>`; адрес с любой
+ * другой схемой (`javascript:`, `data:`) не ссылка, а текст: href приходит из метаданных пакетов, то есть от чужих людей.
  */
 export function RouterLink({ href, ...rest }: LinkProps) {
-  return SCHEME.test(href) || href.startsWith("//") ? (
-    <a href={href} {...rest} />
-  ) : (
+  const kind = hrefKind(href);
+  if (kind === "blocked") {
+    return <span className={rest.className}>{rest.children}</span>;
+  }
+  if (kind === "internal") {
     // `to` обязателен по типам; при заданном `href` роутер разбирает адрес из него
-    <Link to="." href={href} {...defined(rest)} />
-  );
+    return <Link to="." href={href} {...defined(rest)} />;
+  }
+  return <a href={href} {...rest} rel={kind === "external" ? EXTERNAL_REL : MAILTO_REL} />;
 }

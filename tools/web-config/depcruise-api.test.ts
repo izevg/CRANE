@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "../../web");
 const INTERNALS = "api-internals-are-private";
 const STUBS_ONLY = "api-stubs-import-only-api-and-lib";
+const NO_STATIC_STUB_DATA = "api-stub-data-no-static-import";
 
 interface Violation {
   rule: string;
@@ -42,6 +43,8 @@ const FIXTURE: Record<string, string> = {
     'import { l } from "../../../lib/core";\nexport const z = l;\n',
   "src/shared/lib/core/index.ts": "export const l = 1;\n",
   "src/app/entry.ts": "export const v = 1;\n",
+  "src/shared/api/operation/leaky.ts":
+    'import { x } from "../stubs/data/status";\nexport const leak = x;\n',
   "src/pages/status/ui/Peeks.ts":
     'import { x } from "../../../shared/api/stubs/data/status";\nexport const p = x;\n',
   "src/pages/status/ui/Transport.ts":
@@ -142,6 +145,17 @@ it("виджет не импортирует мутаторы операций",
 
   // Act
   const found = about(INTERNALS, from);
+
+  // Assert
+  assert.equal(found.length, 1);
+});
+
+it("модуль внутри shared/api не импортирует данные заглушек статически", () => {
+  // Arrange
+  const from = "src/shared/api/operation/leaky.ts";
+
+  // Act
+  const found = about(NO_STATIC_STUB_DATA, from);
 
   // Assert
   assert.equal(found.length, 1);

@@ -16,13 +16,17 @@ const NOT_FOUND = 404;
 
 /** Решение по сбою чанка принимается один раз на показ ошибки; запись метки и перезагрузка — в эффекте. */
 function useChunkAction(error: unknown): ChunkAction | undefined {
-  const [action] = useState<ChunkAction | undefined>(() =>
+  const [action, setAction] = useState<ChunkAction | undefined>(() =>
     error instanceof ChunkLoadError ? decideChunkAction() : undefined,
   );
   useEffect(() => {
     if (action === "reload") {
-      markReload();
-      reloadPage();
+      // метка не записана (хранилище закрыто): следующая загрузка не узнает о перезагрузке и зациклится
+      if (markReload()) {
+        reloadPage();
+      } else {
+        setAction("show");
+      }
     }
   }, [action]);
   return action;

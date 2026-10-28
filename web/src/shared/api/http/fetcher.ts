@@ -30,7 +30,7 @@ async function readBody(response: Response): Promise<unknown> {
 }
 
 async function readCsrfToken(request: typeof fetch): Promise<string | null> {
-  const response = await request(SESSION_URL, { credentials: "same-origin", cache: "no-cache" });
+  const response = await request(SESSION_URL, { credentials: "same-origin", cache: "no-store" });
   if (!response.ok) {
     throw await problemFromResponse(response);
   }
@@ -62,16 +62,17 @@ export function createTransport(deps: Deps): Transport {
   async function attempt<T>(url: string, options: RequestInit, retriesLeft: number): Promise<T> {
     const read = READ_METHODS.has((options.method ?? "GET").toUpperCase());
     const headers = new Headers(options.headers);
-    // Запрос с Authorization (Bearer: мастер онбординга, CLI) не использует cookie и CSRF-атаке не подвержен:
-    // токен сессии ему не нужен, а без сессии GET /session вернул бы «нет токена» и сломал бы запрос.
-    const needsCsrf = !(read || headers.has(AUTHORIZATION_HEADER));
+    // Запрос с Bearer (мастер онбординга, CLI) аутентифицируется только заголовком: cookie не отправляем, чтобы у
+    // сервера не было двух кредитивов, а CSRF не нужен. Пустой Authorization — не Bearer, это обычный запрос.
+    const bearer = (headers.get(AUTHORIZATION_HEADER) ?? "") !== "";
+    const needsCsrf = !(read || bearer);
     if (needsCsrf) {
       headers.set(CSRF_HEADER, await csrf.token());
     }
     const response = await request(deps, url, {
       ...options,
       headers,
-      credentials: "same-origin",
+      credentials: bearer ? "omit" : "same-origin",
       cache: read ? "no-cache" : "no-store",
     });
     if (response.ok) {
