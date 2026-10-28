@@ -365,6 +365,7 @@ dependencies = [
  "subtle",
  "thiserror",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
@@ -501,6 +502,7 @@ dependencies = [
  "time",
  "tokio",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
