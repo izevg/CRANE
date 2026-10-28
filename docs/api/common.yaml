@@ -369,6 +369,29 @@ components:
       required: true
       schema:
         type: string
+    SettingIfMatch:
+      name: If-Match
+      in: header
+      description: 'Обновление существующей строки: `"<version>"` из `ETag` или `Setting.version`. Без `If-Match` и без `If-None-Match: *` - 428 `precondition-required`; устаревшая версия - 412.'
+      schema:
+        type: string
+    SettingIfNoneMatch:
+      name: If-None-Match
+      in: header
+      description: 'Создание: `*` - строки быть не должно (иначе 412). Без него и без `If-Match` - 428 `precondition-required`.'
+      schema:
+        type: string
+        enum:
+        - '*'
+    SettingGroup:
+      name: group
+      in: path
+      description: Группа (секция) настроек.
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z][a-z0-9_]*$'
+        maxLength: 96
   responses:
     BadRequest:
       description: 'Некорректный запрос: синтаксис или параметры.'
@@ -503,6 +526,24 @@ components:
           $ref: '#/components/headers/XRequestId'
         ETag:
           $ref: '#/components/headers/ETag'
+    PreconditionRequired:
+      description: '`precondition-required`: запись без `If-Match` (обновление) и без `If-None-Match: *` (создание).'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InsecurePublicUrl:
+      description: '`insecure-public-url`: `CRANE_PUBLIC_URL` указывает на http не с loopback, мастер закрыт. `detail`: задайте https либо `CRANE_REQUIRE_SECURE_CONFIG=false`.'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
   schemas:
     ProblemReason:
       title: ProblemReason
@@ -8211,8 +8252,15 @@ components:
           enum:
           - set
           - unset
+          - unreadable
           - null
-          description: Только для `kind=secret`.
+          description: |-
+            Только для `kind=secret`. `unreadable` - секрет лежит в БД, но не открывается; причина в поле `unreadable`. Перезаписать (`PUT` с `If-Match`) или удалить (`DELETE`) такую строку можно, ключ шифрования для этого не нужен.
+        unreadable:
+          oneOf:
+          - $ref: '#/components/schemas/SettingUnreadable'
+          - type: 'null'
+          description: Есть только при `secret_state=unreadable`.
         version:
           type:
           - integer
@@ -8258,11 +8306,15 @@ components:
         restart_required:
           type: boolean
           description: Снимок настроек в БД отличается от того, с которым процесс стартовал; изменения вступят в силу после перезапуска.
+        persistent:
+          type: boolean
+          description: '`false` в режиме `CRANE_DATABASE_URL=memory`: записать настройки некуда, `PUT` и `DELETE` отвечают 409 `settings-not-persistent`.'
         _links:
           $ref: '#/components/schemas/HalLinks'
       required:
       - _embedded
       - restart_required
+      - persistent
       - _links
     SettingWrite:
       title: SettingWrite
@@ -8334,9 +8386,15 @@ components:
           $ref: '#/components/schemas/OnboardingStepId'
         status:
           $ref: '#/components/schemas/OnboardingStepStatus'
+        groups:
+          type: array
+          items:
+            type: string
+          description: Группы настроек шага - секции конфигурации (`Setting.group`).
       required:
       - id
       - status
+      - groups
     Onboarding:
       title: Onboarding
       type: object
@@ -8437,6 +8495,51 @@ components:
       - step
       - report
       - _links
+    SettingUnreadable:
+      title: SettingUnreadable
+      type: object
+      description: |-
+        Почему секрет в БД не открывается, и что делать оператору. Значения в ответе нет ни при каком `reason`.
+
+        - `missing_key`: секрет есть, а ключа шифрования нет. Задайте `CRANE_SETTINGS_KEY_FILE` прежним ключом либо перезапишите значение.
+        - `wrong_key`: ключ сменился. Верните ключ с отпечатком `stored_key_id` либо перезапишите значение; `current_key_id` - отпечаток действующего ключа.
+        - `corrupted`: шифртекст повреждён или принадлежит другой строке. Перезапишите значение.
+      properties:
+        reason:
+          type: string
+          enum:
+          - missing_key
+          - wrong_key
+          - corrupted
+        stored_key_id:
+          type: string
+          description: Отпечаток ключа, которым секрет зашифрован. Только при `wrong_key`.
+        current_key_id:
+          type: string
+          description: Отпечаток действующего ключа. Только при `wrong_key`.
+      required:
+      - reason
+    SettingGroupWrite:
+      title: SettingGroupWrite
+      type: object
+      description: Атомарная запись ключей одной группы; один отказ - ничего не записано.
+      properties:
+        values:
+          type: object
+          description: Ключ - значение в форме окружения; `null` удаляет строку ключа.
+          additionalProperties:
+            type:
+            - string
+            - 'null'
+        versions:
+          type: object
+          description: Версия строки для каждого обновляемого или удаляемого ключа (CAS); для создаваемого ключа не указывается.
+          additionalProperties:
+            type: integer
+            format: int64
+      required:
+      - values
+      - versions
   pathItems:
     Status:
       get:
@@ -9697,7 +9800,7 @@ components:
           Этим вызовом SPA проверяет введённый токен.
 
           - Без заголовка `Authorization`: только `{state}`.
-          - С верным Bearer (bootstrap `crb_…` или статический `CRANE_TOKEN`): `state`, `current_step`, `steps[{id, status}]`, `missing` (ключи, разбор которых возвращает `Missing`).
+          - С верным Bearer (bootstrap `crb_…` или статический `CRANE_TOKEN`): `state`, `current_step`, `steps[{id, status, groups}]`, `missing` (ключи, разбор которых возвращает `Missing`).
           - С неверным токеном: 401 `bootstrap-token-invalid` (событие `OnboardingTokenRejected`).
           - Превышен лимит неудач по адресу клиента (5 за 15 минут): 429 с `Retry-After` на этом же вызове.
           - При `state=completed`: только `{state: completed}`; остальные операции мастера отвечают 410.
@@ -9772,6 +9875,8 @@ components:
             $ref: '#/components/responses/BadRequest'
           '401':
             $ref: '#/components/responses/Unauthorized'
+          '403':
+            $ref: '#/components/responses/InsecurePublicUrl'
           '409':
             $ref: '#/components/responses/Conflict'
           '410':
@@ -9824,6 +9929,8 @@ components:
             $ref: '#/components/responses/BadRequest'
           '401':
             $ref: '#/components/responses/Unauthorized'
+          '403':
+            $ref: '#/components/responses/InsecurePublicUrl'
           '410':
             $ref: '#/components/responses/Gone'
           '422':
@@ -9867,6 +9974,8 @@ components:
                   $ref: '#/components/schemas/Onboarding'
           '401':
             $ref: '#/components/responses/Unauthorized'
+          '403':
+            $ref: '#/components/responses/InsecurePublicUrl'
           '409':
             $ref: '#/components/responses/Conflict'
           '422':
@@ -9883,9 +9992,9 @@ components:
         - settings
         summary: Настройки платформы
         description: |-
-          Итоговые значения с источником (`env`, `stored`, `default`), замком и затенением; секреты только `set/unset`. `restart_required` - снимок в БД отличается от снимка старта.
+          Итоговые значения с источником (`env`, `stored`, `default`), замком и затенением; секреты только `set`, `unset` или `unreadable` (с причиной). `restart_required` - снимок в БД отличается от снимка старта; `persistent` - можно ли записывать. Параметр `group` отдаёт одну секцию (экран шага мастера).
 
-          Роли: platform-admin; до v0.4.0 - статический токен.
+          Роли: platform-admin; до v0.4.0 - статический токен. В фазе `pending` мастера принимается Bearer мастера (bootstrap-токен `crb_…` либо статический `CRANE_TOKEN`), как у операций `/onboarding`.
         operationId: listSettings
         x-crane-phase: P0
         x-crane-since: v0.3.0
@@ -9932,7 +10041,7 @@ components:
         description: |-
           Одна настройка с источником. `ETag` - версия строки в БД.
 
-          Роли: platform-admin.
+          Роли: platform-admin. В фазе `pending` мастера принимается Bearer мастера (bootstrap-токен `crb_…` либо статический `CRANE_TOKEN`).
         operationId: getSetting
         x-crane-phase: P0
         x-crane-since: v0.3.0
@@ -9969,7 +10078,11 @@ components:
         - settings
         summary: Записать значение в БД
         description: |-
-          Записывает значение effective после прогона секции над наложением с кандидатом. Ключ из окружения - 409 `setting-locked` (с именем переменной); режим `CRANE_DATABASE_URL=memory` - 409 `settings-not-persistent`; несовпадение `If-Match` - 412; ошибка разбора - 422 `setting-invalid` (`errors` из одного элемента). Вступает в силу после перезапуска.
+          Записывает значение effective после прогона секции над наложением с кандидатом. Ключ из окружения - 409 `setting-locked` (с именем переменной); режим `CRANE_DATABASE_URL=memory` - 409 `settings-not-persistent`; ошибка разбора - 422 `setting-invalid` (`errors` из одного элемента). Вступает в силу после перезапуска.
+
+          Конкурентность: создание - заголовок `If-None-Match: *`, обновление - `If-Match: "<version>"`. Без обоих - 428 `precondition-required`; устаревшая версия или уже существующая строка при создании - 412.
+
+          Секрет со `secret_state=unreadable` перезаписывается тем же `PUT` с `If-Match` (ключ шифрования читать не нужно); событие аудита помечает такую перезапись.
 
           Роли: platform-admin.
         operationId: putSetting
@@ -9985,7 +10098,8 @@ components:
         - bearer: []
         parameters:
         - $ref: '#/components/parameters/SettingKey'
-        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/SettingIfMatch'
+        - $ref: '#/components/parameters/SettingIfNoneMatch'
         requestBody:
           required: true
           content:
@@ -10016,6 +10130,8 @@ components:
             $ref: '#/components/responses/PreconditionFailed'
           '422':
             $ref: '#/components/responses/SettingInvalid'
+          '428':
+            $ref: '#/components/responses/PreconditionRequired'
           '429':
             $ref: '#/components/responses/TooManyRequests'
           '500':
@@ -10025,7 +10141,7 @@ components:
         - settings
         summary: Убрать значение из БД
         description: |-
-          Удаляет значение effective; дальше отвечает окружение либо умолчание. Если без него конфигурация не разбирается - 422 `setting-invalid`.
+          Удаляет значение effective; дальше отвечает окружение либо умолчание. Если без него конфигурация не разбирается - 422 `setting-invalid`. `If-Match: "<version>"` обязателен: без него 428 `precondition-required`, устаревшая версия - 412. Секрет со `secret_state=unreadable` удаляется так же.
 
           Роли: platform-admin.
         operationId: deleteSetting
@@ -10064,6 +10180,68 @@ components:
             $ref: '#/components/responses/PreconditionFailed'
           '422':
             $ref: '#/components/responses/SettingInvalid'
+          '428':
+            $ref: '#/components/responses/PreconditionRequired'
+          '429':
+            $ref: '#/components/responses/TooManyRequests'
+          '500':
+            $ref: '#/components/responses/InternalError'
+    SettingsGroupsGroup:
+      put:
+        tags:
+        - settings
+        summary: Записать ключи группы атомарно
+        description: |-
+          Записывает несколько ключей одной группы одной транзакцией: прогон секции над наложением всех значений, затем запись; один отказ - ничего не записано. `values[key] = null` удаляет строку. Ответ - `SettingList` группы.
+
+          Ошибки: 409 `setting-locked` (ключ задан окружением) и `settings-not-persistent`; 412 (устарела версия из `versions` либо строка уже есть у создаваемого ключа); 422 `setting-invalid` с `errors` по ключам; 428 `precondition-required` (нет версии у обновляемого ключа).
+
+          Роли: platform-admin. В фазе `pending` мастера принимается Bearer мастера (bootstrap-токен `crb_…` либо статический `CRANE_TOKEN`).
+        operationId: putSettingGroup
+        x-crane-phase: P0
+        x-crane-since: v0.3.0
+        x-crane-action: settings:write
+        x-crane-step-up: false
+        x-crane-audit:
+          event: setting.changed
+          ocsf_class: 6003
+        security:
+        - session: []
+        - bearer: []
+        parameters:
+        - $ref: '#/components/parameters/SettingGroup'
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingGroupWrite'
+        responses:
+          '200':
+            description: Сохранено.
+            headers:
+              X-Request-Id:
+                $ref: '#/components/headers/XRequestId'
+            content:
+              application/hal+json:
+                schema:
+                  $ref: '#/components/schemas/SettingList'
+          '400':
+            $ref: '#/components/responses/BadRequest'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '403':
+            $ref: '#/components/responses/Forbidden'
+          '404':
+            $ref: '#/components/responses/NotFound'
+          '409':
+            $ref: '#/components/responses/Conflict'
+          '412':
+            $ref: '#/components/responses/PreconditionFailed'
+          '422':
+            $ref: '#/components/responses/SettingInvalid'
+          '428':
+            $ref: '#/components/responses/PreconditionRequired'
           '429':
             $ref: '#/components/responses/TooManyRequests'
           '500':

@@ -256,6 +256,8 @@ paths:
     $ref: ./common.yaml#/components/pathItems/Settings
   /settings/{key}:
     $ref: ./common.yaml#/components/pathItems/SettingsKey
+  /settings/groups/{group}:
+    $ref: ./common.yaml#/components/pathItems/SettingsGroupsGroup
   /session:
     get:
       tags:
