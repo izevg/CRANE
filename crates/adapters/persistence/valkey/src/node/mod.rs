@@ -239,24 +239,32 @@ async fn hold_connection(client: Client) {
                 }
             };
             match next {
-                Ok(next) if next != available => {
-                    available = next;
-                    if available {
-                        info!(valkey = "available", "Valkey: соединение установлено");
-                    } else {
-                        warn!(
-                            valkey = "unavailable",
-                            "Valkey: команды отказывают сразу до переподключения"
-                        );
+                Ok(next) => {
+                    if let Some(now) = availability_change(available, next) {
+                        available = now;
+                        if available {
+                            info!(valkey = "available", "Valkey: соединение установлено");
+                        } else {
+                            warn!(
+                                valkey = "unavailable",
+                                "Valkey: команды отказывают сразу до переподключения"
+                            );
+                        }
                     }
                 }
-                // Без смены состояния и при пропущенных событиях (Lagged) журнал молчит: одна
-                // строка может не записаться, неверной не будет.
-                Ok(_) | Err(RecvError::Lagged(_)) => {}
+                // При пропущенных событиях (Lagged) журнал молчит: одна строка может не
+                // записаться, неверной не будет.
+                Err(RecvError::Lagged(_)) => {}
                 Err(RecvError::Closed) => return,
             }
         }
     }
+}
+
+/// Новое состояние доступности, если оно сменилось. Повтор того же состояния журнал не пишет:
+/// `error_rx` шлёт и каждую неудачную попытку реконнекта.
+fn availability_change(available: bool, next: bool) -> Option<bool> {
+    (next != available).then_some(next)
 }
 
 #[cfg(test)]
@@ -334,5 +342,17 @@ mod tests {
 
         // Assert
         assert_eq!((local.l1.get(NAME), local.l1.get("px:other")), (None, None));
+    }
+
+    #[test]
+    fn availability_is_reported_only_when_it_changes() {
+        // Arrange
+        let cases = [(false, false), (true, true), (false, true), (true, false)];
+
+        // Act
+        let actual = cases.map(|(available, next)| availability_change(available, next));
+
+        // Assert
+        assert_eq!(actual, [None, None, Some(true), Some(false)]);
     }
 }

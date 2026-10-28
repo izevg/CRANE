@@ -162,4 +162,22 @@ mod tests {
         // Assert
         assert!(waiters.is_empty(), "пустая запись не копится в карте");
     }
+
+    #[tokio::test]
+    async fn wait_lasts_for_the_whole_patience_without_a_wake() {
+        // Arrange
+        let waiters = Waiters::default();
+        let mut registration = waiters.register("a");
+        let patience = Duration::from_millis(100);
+        let started = std::time::Instant::now();
+
+        // Act
+        registration.wait(patience).await;
+
+        // Assert
+        assert!(
+            started.elapsed() >= patience,
+            "без сигнала ждём всё терпение"
+        );
+    }
 }

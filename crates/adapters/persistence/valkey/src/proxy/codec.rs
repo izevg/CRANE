@@ -335,4 +335,35 @@ mod tests {
         // Assert
         assert_eq!(result, Err(CodecError::Time));
     }
+
+    #[test]
+    fn encode_reserves_exactly_the_encoded_size() {
+        // Arrange
+        let fetched_at = SystemTime::UNIX_EPOCH + Duration::from_secs(7);
+        let entries = [
+            CachedState::Document {
+                body: Bytes::from_static(b"{\"name\":\"serde\"}"),
+                etag: Some(ETag::new("\"abc\"".to_owned())),
+                unchanged: 3,
+                max_age: Some(Duration::from_secs(60)),
+            },
+            CachedState::Blob(Digests {
+                sha256: Sha256::from([1; 32]),
+                sha512: Sha512::from([2; 64]),
+                sha1: Sha1::from([3; 20]),
+                size: 42,
+            }),
+            CachedState::Missing { misses: 2 },
+        ]
+        .map(|state| Cached { fetched_at, state });
+
+        // Act
+        let actual = entries.map(|entry| {
+            let raw = encode(&entry).unwrap();
+            raw.capacity() == raw.len()
+        });
+
+        // Assert
+        assert_eq!(actual, [true; 3]);
+    }
 }
