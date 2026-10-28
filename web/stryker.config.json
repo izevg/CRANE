@@ -6,10 +6,10 @@
   },
   "plugins": ["@stryker-mutator/vitest-runner", "../tools/stryker-lingui/ignorer.ts"],
   "mutate": [
-    "src/**/*.{ts,tsx}",
-    "!src/**/*.test.{ts,tsx}",
-    "!src/**/*.stories.tsx",
-    "!src/app/main.tsx",
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/use*.ts",
+    "!src/**/{columns,sidebar,button-styles,fixtures}.ts",
     "!src/shared/api/generated/**"
   ],
   "reporters": ["clear-text", "progress"],
