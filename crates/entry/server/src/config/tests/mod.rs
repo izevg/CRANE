@@ -374,3 +374,19 @@ fn byte_limits_carry_the_bytes_unit() {
         [Some(Some(Unit::Bytes)), Some(Some(Unit::Bytes)), Some(None)]
     );
 }
+
+#[test]
+fn every_definition_belongs_to_a_checked_section() {
+    // Arrange
+    let defs = definitions();
+
+    // Act
+    let orphans: Vec<_> = defs
+        .iter()
+        .filter(|def| section(def.group).is_none())
+        .map(|def| def.key)
+        .collect();
+
+    // Assert
+    assert_eq!(orphans, Vec::<&str>::new());
+}

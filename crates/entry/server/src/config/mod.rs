@@ -38,40 +38,58 @@ pub(crate) type ReadFile = Arc<dyn Fn(&Path) -> io::Result<String> + Send + Sync
 /// Значение «в памяти» для хранилища, blob и кэша.
 const MEMORY: &str = "memory";
 
-/// Имена всех переменных; из них выводятся ключи файла (`source::file`). Каждая секция владеет
-/// своим списком, здесь они только сводятся. `CRANE_CONFIG` сюда не входит намеренно.
+/// Значение переменной по имени: слой env + файл или его наложение со слоем БД.
+pub(crate) type Var<'a> = &'a dyn Fn(&str) -> Option<String>;
+/// Чтение файла секрета или конфигурации.
+pub(crate) type Read<'a> = &'a dyn Fn(&Path) -> io::Result<String>;
+
+/// Секция конфигурации: её переменные, ключи консоли и проверка отдельно от остальных секций.
+/// Группа ключей берётся отсюда же, поэтому определение без проверки непредставимо.
+pub(crate) struct Section {
+    group: &'static str,
+    /// Все переменные секции, включая `*_FILE` секретов; из них выводятся ключи файла TOML.
+    vars: fn() -> Vec<&'static str>,
+    settings: fn() -> Vec<SettingDef>,
+    /// Все ошибки секции, а не первая: консоль показывает их разом. Третий аргумент — режим
+    /// каталога (`Database::persistent`), он нужен связи blob с каталогом.
+    check: fn(Var, Read, bool) -> Vec<ConfigError>,
+}
+
+impl Section {
+    pub(crate) fn check(&self, var: Var, read_file: Read, persistent: bool) -> Vec<ConfigError> {
+        (self.check)(var, read_file, persistent)
+    }
+}
+
+/// Все секции. Новая секция — одна строка здесь.
+const SECTIONS: [Section; 6] = [
+    network::SECTION,
+    token::SECTION,
+    storage::SECTION,
+    proxy::SECTION,
+    repos::SECTION,
+    namespaces::SECTION,
+];
+
+/// Секция по имени группы ключей.
+pub(crate) fn section(group: &str) -> Option<&'static Section> {
+    SECTIONS.iter().find(|section| section.group == group)
+}
+
+/// Имена всех переменных; из них выводятся ключи файла (`source::file`).
+/// `CRANE_CONFIG` сюда не входит намеренно.
 fn vars() -> impl Iterator<Item = &'static str> {
-    [
-        network::VARS.as_slice(),
-        token::VARS.as_slice(),
-        storage::VARS.as_slice(),
-        proxy::VARS.as_slice(),
-        repos::VARS.as_slice(),
-        namespaces::VARS.as_slice(),
-    ]
-    .into_iter()
-    .flatten()
-    .copied()
-    .chain(repos::list_vars())
+    SECTIONS.iter().flat_map(|section| (section.vars)())
 }
 
 /// Определения всех ключей настроек, собранные один раз на процесс.
 pub(crate) fn definitions() -> &'static [SettingDef] {
     static ALL: OnceLock<Vec<SettingDef>> = OnceLock::new();
     ALL.get_or_init(|| {
-        [
-            network::SETTINGS.as_slice(),
-            token::SETTINGS.as_slice(),
-            storage::SETTINGS.as_slice(),
-            proxy::SETTINGS.as_slice(),
-            repos::SETTINGS.as_slice(),
-            namespaces::SETTINGS.as_slice(),
-        ]
-        .into_iter()
-        .flatten()
-        .copied()
-        .chain(repos::list_settings())
-        .collect()
+        SECTIONS
+            .iter()
+            .flat_map(|section| (section.settings)())
+            .collect()
     })
 }
 
@@ -225,39 +243,6 @@ impl Config {
             proxy,
             namespaces: namespaces::from_env(var)?,
         })
-    }
-}
-
-impl Config {
-    /// Прогон одной секции без остальных: первая ошибка чужой секции не должна заслонять свою.
-    /// Секции со связанными инвариантами (`storage`) получают режим каталога отдельно.
-    pub(crate) fn check_section(
-        group: &str,
-        var: &impl Fn(&str) -> Option<String>,
-        read_file: &impl Fn(&Path) -> io::Result<String>,
-        persistent: bool,
-    ) -> Vec<ConfigError> {
-        let errors = match group {
-            network::GROUP => vec![
-                network::http_port(var).err(),
-                admin_port(var).err(),
-                network::public_url(var).err(),
-                network::trusted_proxies(var).err(),
-            ],
-            token::GROUP => vec![
-                token::principal(var).err(),
-                secret(var, read_file, token::TOKEN, token::TOKEN_FILE).err(),
-            ],
-            storage::GROUP => vec![Blobs::from_env(var, read_file, persistent).err()],
-            proxy::GROUP => vec![Proxy::from_env(var, read_file).err()],
-            repos::GROUP => vec![
-                Repos::from_env(var).err(),
-                repos::max_publish_bytes(var).err(),
-            ],
-            namespaces::GROUP => vec![namespaces::from_env(var).err()],
-            _ => Vec::new(),
-        };
-        errors.into_iter().flatten().collect()
     }
 }
 

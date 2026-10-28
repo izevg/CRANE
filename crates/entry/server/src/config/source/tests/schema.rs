@@ -314,3 +314,15 @@ fn schema_lists_every_definition() {
     assert_eq!(keys.len(), definitions().len());
     assert!(keys.contains(&"cargo_repos"));
 }
+
+#[test]
+fn check_of_an_unknown_group_is_an_error_not_a_pass() {
+    // Arrange
+    let schema = schema(&[], false);
+
+    // Act
+    let result = schema.check("no_such_group", &rows(vec![]), &[]);
+
+    // Assert
+    assert_eq!(failed_keys(result), Some(vec!["no_such_group".to_owned()]));
+}

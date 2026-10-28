@@ -6,8 +6,8 @@ use std::sync::OnceLock;
 use crane_domain::registry::{Format, RepositoryKind};
 use crane_domain::settings::{Kind, SettingDef, Unit};
 
-use super::ConfigError;
-use super::source::{key_of, number, setting};
+use super::source::{failures, key_of, number, setting};
+use super::{ConfigError, Read, Section, Var};
 
 const CARGO_REPOS: &str = "CRANE_CARGO_REPOS";
 const CARGO_PROXY_REPOS: &str = "CRANE_CARGO_PROXY_REPOS";
@@ -17,31 +17,44 @@ pub(super) const MAX_PUBLISH_BYTES: &str = "CRANE_MAX_PUBLISH_BYTES";
 const DEFAULT_REPOS: &str = "internal";
 const DEFAULT_MAX_PUBLISH_BYTES: usize = 10 * 1024 * 1024;
 
-/// Имена переменных без списков: те выводятся из `REPO_VARS` (`list_vars`).
-pub(super) const VARS: [&str; 1] = [MAX_PUBLISH_BYTES];
+const GROUP: &str = "repos";
 
-pub(super) const GROUP: &str = "repos";
+pub(super) const SECTION: Section = Section {
+    group: GROUP,
+    vars,
+    settings,
+    check,
+};
 
-/// Списки репозиториев здесь не перечислены: их определения строит `list_settings`.
-pub(super) const SETTINGS: [SettingDef; 1] = [SettingDef {
-    unit: Some(Unit::Bytes),
-    ..setting(GROUP, "max_publish_bytes", MAX_PUBLISH_BYTES, Kind::Number)
-}];
-
-/// Определения списков всех форматов, выведенные из `REPO_VARS`: новый формат ключ не дописывает.
-/// Имена ключей строятся из имён переменных один раз и живут в статике, поэтому вызывать можно
-/// сколько угодно.
-pub(super) fn list_settings() -> impl Iterator<Item = SettingDef> {
-    static KEYS: OnceLock<Vec<String>> = OnceLock::new();
-    let keys = KEYS.get_or_init(|| list_vars().map(key_of).collect());
-    list_vars().zip(keys).map(|(var, key)| SettingDef {
-        key: key.as_str(),
-        ..setting(GROUP, "", var, Kind::List)
-    })
+/// Предел публикации и списки всех форматов; списки выводятся из `REPO_VARS`, поэтому новый
+/// формат сюда не дописывается.
+fn vars() -> Vec<&'static str> {
+    std::iter::once(MAX_PUBLISH_BYTES)
+        .chain(list_vars())
+        .collect()
 }
 
-/// Имена переменных списков всех форматов. Новый формат сюда не дописывается: достаточно `REPO_VARS`.
-pub(super) fn list_vars() -> impl Iterator<Item = &'static str> {
+fn settings() -> Vec<SettingDef> {
+    // Имена ключей списков строятся из имён переменных один раз и живут в статике.
+    static KEYS: OnceLock<Vec<String>> = OnceLock::new();
+    let keys = KEYS.get_or_init(|| list_vars().map(key_of).collect());
+    let limit = SettingDef {
+        unit: Some(Unit::Bytes),
+        ..setting(GROUP, "max_publish_bytes", MAX_PUBLISH_BYTES, Kind::Number)
+    };
+    std::iter::once(limit)
+        .chain(list_vars().zip(keys).map(|(var, key)| SettingDef {
+            key: key.as_str(),
+            ..setting(GROUP, "", var, Kind::List)
+        }))
+        .collect()
+}
+
+fn check(var: Var, _: Read, _: bool) -> Vec<ConfigError> {
+    failures([Repos::from_env(&var).err(), max_publish_bytes(&var).err()])
+}
+
+fn list_vars() -> impl Iterator<Item = &'static str> {
     REPO_VARS.iter().flat_map(|vars| [vars.hosted, vars.proxy])
 }
 

@@ -7,7 +7,7 @@ use crane_domain::settings::{Kind, NewValue, SettingDef, Stored};
 use crane_ports::settings::{Inherited, Invalid, InvalidKey, SettingsSchema};
 
 use super::stored::{StoredLayer, inherited_var};
-use crate::config::{Config, ConfigError, Lookup, ReadFile, definition, definitions};
+use crate::config::{ConfigError, Lookup, ReadFile, definition, definitions, section};
 
 /// Схема консоли настроек: что за ключи, что их задало на старте и что скажет разбор секции.
 /// Окружение и файл не меняются за жизнь процесса, поэтому слой читается через общие замыкания.
@@ -60,12 +60,25 @@ impl SettingsSchema for ConfigSchema {
             Err(error) => return Err(invalid(group, vec![error])),
         };
         let overlay = |name: &str| inherited(name).or_else(|| layer.get(name));
-        let errors = Config::check_section(group, &overlay, &read_file, self.persistent);
+        let Some(section) = section(group) else {
+            return Err(unknown_group(group));
+        };
+        let errors = section.check(&overlay, &read_file, self.persistent);
         if errors.is_empty() {
             Ok(())
         } else {
             Err(invalid(group, errors))
         }
+    }
+}
+
+/// Группа без секции — ошибка вызывающего, а не пройденная проверка.
+fn unknown_group(group: &str) -> Invalid {
+    Invalid {
+        errors: vec![InvalidKey {
+            key: group.to_owned(),
+            detail: "неизвестная секция настроек".to_owned(),
+        }],
     }
 }
 

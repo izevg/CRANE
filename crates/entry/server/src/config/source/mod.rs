@@ -36,6 +36,11 @@ pub(super) const fn setting(
     }
 }
 
+/// Ошибки секции: из результатов отдельных разборов остаются только неудачные.
+pub(super) fn failures<const N: usize>(results: [Option<ConfigError>; N]) -> Vec<ConfigError> {
+    results.into_iter().flatten().collect()
+}
+
 /// Ключ настройки по имени переменной.
 pub(super) fn key_of(env_var: &str) -> String {
     env_var
