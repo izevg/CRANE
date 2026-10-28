@@ -8,6 +8,7 @@
 pub mod audit;
 pub mod proxy;
 pub mod registry;
+pub mod settings;
 pub mod system;
 
 #[cfg(feature = "contract")]

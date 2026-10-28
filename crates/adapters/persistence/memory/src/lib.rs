@@ -5,8 +5,10 @@
 
 mod proxy;
 mod registry;
+mod settings;
 mod system;
 
 pub use proxy::{MemoryFetchLeases, MemoryProxyCache};
 pub use registry::{MemoryBlobStore, MemoryCatalog};
+pub use settings::{MemoryOnboarding, MemorySettings};
 pub use system::{ManualClock, MemoryAudit, SequentialIdGen};

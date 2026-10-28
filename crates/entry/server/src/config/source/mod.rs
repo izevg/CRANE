@@ -6,18 +6,10 @@ mod file;
 use std::io;
 use std::path::Path;
 
+use crane_domain::settings::Secret;
+
 use super::ConfigError;
 pub(crate) use file::layered;
-
-/// Секрет (токен, URL базы). Без `Debug` и `Display`: случайно попасть в журнал он не может.
-/// Поле видно только внутри `config`: тесты секций строят значение напрямую.
-pub(crate) struct Secret(pub(super) String);
-
-impl Secret {
-    pub(crate) fn expose(&self) -> &str {
-        &self.0
-    }
-}
 
 pub(super) fn required(
     var: &impl Fn(&str) -> Option<String>,
@@ -71,7 +63,7 @@ pub(super) fn secret(
             reason: "значение пусто",
         });
     }
-    Ok(Secret(value))
+    Ok(Secret::new(value))
 }
 
 #[cfg(test)]

@@ -4,5 +4,7 @@
 
 pub mod access;
 pub mod audit;
+pub mod onboarding;
 pub mod proxy;
 pub mod registry;
+pub mod settings;
