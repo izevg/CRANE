@@ -13,12 +13,13 @@ mod problem;
 mod status;
 
 pub(crate) use kind::ProblemKind;
-pub(crate) use problem::{Problem, not_found};
+pub(crate) use problem::{Problem, not_configured, not_found};
 
 const INTERNAL_DETAIL: &str = "внутренняя ошибка сервера";
 /// Единственный текст клиенту при недоступном хранилище: адреса и причины остаются в журнале.
 const UNREACHABLE_DETAIL: &str = "хранилище временно недоступно";
 const NOT_READY_DETAIL: &str = "хранилище не готово";
+const NOT_CONFIGURED_DETAIL: &str = "первый запуск не завершён: завершите настройку в мастере";
 const UPSTREAM_DETAIL: &str = "upstream недоступен";
 const NOT_FOUND_DETAIL: &str = "не найдено";
 

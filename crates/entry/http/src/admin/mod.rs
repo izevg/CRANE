@@ -35,6 +35,17 @@ pub fn admin_router<C: Catalog + 'static, B: BlobStore + 'static>(
         .layer(from_fn(render_only))
 }
 
+/// Admin-listener фазы мастера: живость и готовность без хранилищ. Процесс ждёт мастера, и
+/// оркестратор не должен его убивать или снимать с трафика, поэтому готовность - `200 ok`
+/// без деталей конфигурации (20.2).
+pub fn wizard_admin_router() -> Router {
+    Router::new()
+        .route("/healthz/live", get(live))
+        .route("/healthz/ready", get(live))
+        .fallback(not_found)
+        .layer(from_fn(render_only))
+}
+
 async fn live() -> &'static str {
     "ok"
 }
