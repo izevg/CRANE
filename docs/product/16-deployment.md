@@ -77,7 +77,7 @@ services:
 | `CRANE_TOKEN_PRINCIPAL` | `crane` | имя личности токена (тип «робот»): попадает в журнал аудита, `access`-журнал и ответ cargo `owners` |
 | `CRANE_TRUSTED_PROXIES` | пусто | IP-адреса и CIDR (IPv4, IPv6) через запятую, чьим `X-Forwarded-For` и `X-Request-Id` верить; compose обязан указать сеть Caddy, иначе во всех событиях будет адрес прокси. Каждый прокси из списка обязан перезаписывать или удалять присланный клиентом `X-Request-Id` и дописывать адрес своего пира в конец `X-Forwarded-For` (сервер разбирает его справа налево, левые записи клиента не влияют) |
 | `CRANE_HTTP_PORT` | `8080` | порт API |
-| `CRANE_ADMIN_PORT` | `9464` | порт проб `/healthz/live` и `/healthz/ready` |
+| `CRANE_ADMIN_PORT` | `9464` | порт проб `/healthz/live` и `/healthz/ready`; мастер первого запуска на нём не живёт, он обслуживается на публичном порту (20.2) |
 | `CRANE_CARGO_REPOS` | `internal` | hosted cargo-репозитории через запятую |
 | `CRANE_CARGO_PROXY_REPOS` | пусто | proxy-репозитории crates.io через запятую (например `crates-io`): `/cargo/<имя>/`, индекс и архивы через кэш; имя не должно совпадать с hosted. Пустое значение выключает proxy |
 | `CRANE_NPM_REPOS` | пусто | hosted npm-репозитории через запятую (например `web`): `/npm/<имя>/`; те же правила имён, что у cargo |

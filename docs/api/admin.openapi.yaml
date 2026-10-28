@@ -196,9 +196,9 @@ tags:
 - name: agents
   description: Подтверждения планов A2A-агента (P3).
 - name: onboarding
-  description: 'Мастер первого запуска: состояние, вход по bootstrap-токену, шаги, проверка связи, завершение (v0.3.0, раздел 20).'
+  description: 'Мастер первого запуска: состояние и проверка токена, шаги, проверка связи, завершение (v0.3.0, раздел 20).'
 - name: settings
-  description: 'Настройки платформы: итоговые значения, источники inherited и effective, запись, принятие (v0.3.0, раздел 20).'
+  description: 'Настройки платформы: итоговые значения, источники inherited и effective, запись (v0.3.0, раздел 20).'
 paths:
   /status:
     $ref: ./common.yaml#/components/pathItems/Status
@@ -246,8 +246,6 @@ paths:
     $ref: ./common.yaml#/components/pathItems/AuditAnchors
   /onboarding:
     $ref: ./common.yaml#/components/pathItems/Onboarding
-  /onboarding/session:
-    $ref: ./common.yaml#/components/pathItems/OnboardingSession
   /onboarding/steps/{step}:
     $ref: ./common.yaml#/components/pathItems/OnboardingStepsStep
   /onboarding/steps/{step}/probe:
@@ -258,8 +256,6 @@ paths:
     $ref: ./common.yaml#/components/pathItems/Settings
   /settings/{key}:
     $ref: ./common.yaml#/components/pathItems/SettingsKey
-  /settings/{key}/adoption:
-    $ref: ./common.yaml#/components/pathItems/SettingsKeyAdoption
   /session:
     get:
       tags:
@@ -7620,8 +7616,6 @@ components:
       $ref: ./common.yaml#/components/securitySchemes/session
     bearer:
       $ref: ./common.yaml#/components/securitySchemes/bearer
-    onboarding:
-      $ref: ./common.yaml#/components/securitySchemes/onboarding
 x-crane-link-rels:
   navigation:
   - crane:audit-events
