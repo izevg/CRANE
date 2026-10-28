@@ -49,7 +49,7 @@ Disclosure is coordinated: the advisory is published once a fix is available; by
 
 ## Design stage
 
-Architectural weaknesses can be discussed in the open: open an issue labeled `architecture`, see [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md). The threat model and controls are described in [section 14](docs/product/14-security.md) (in Russian).
+Architectural weaknesses can be discussed in the open: open an issue labeled `architecture`, see [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md). The threat model and controls are described in [section 14](../docs/product/14-security.md) (in Russian).
 
 ## Safe harbor
 

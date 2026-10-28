@@ -2,7 +2,7 @@
 # Значения берутся из .env (cp .env.dist .env); порты публикуются на ${DEV_BIND}.
 # Пароли PostgreSQL и Valkey лежат в файлах POSTGRES_PASSWORD_SECRET и VALKEY_PASSWORD_SECRET
 # и в окружение не попадают; Valkey принимает только пользователей из ACL, собранного при старте из этого пароля.
-#   docker compose -f docker-compose.dev.yaml up -d
+#   docker compose --project-directory . -f deploy/compose/docker-compose.dev.yaml up -d
 #   export CRANE_DATABASE_URL="postgres://${POSTGRES_USER}:$(cat "$POSTGRES_PASSWORD_SECRET")@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
 #   export CRANE_CACHE="valkey://crane:$(cat "$VALKEY_PASSWORD_SECRET")@127.0.0.1:${VALKEY_PORT}"
 name: crane-dev

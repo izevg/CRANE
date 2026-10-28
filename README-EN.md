@@ -11,7 +11,7 @@
 
 [![Status: design](https://img.shields.io/badge/status-design-951b81?style=flat-square)](docs/product/README.md)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-29303e?style=flat-square)](LICENSE)
-[![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa?style=flat-square)](CODE_OF_CONDUCT-EN.md)
+[![Contributor Covenant 2.1](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa?style=flat-square)](.github/CODE_OF_CONDUCT-EN.md)
 [![Rust](https://img.shields.io/badge/Rust-tokio%20·%20axum-b7410e?style=flat-square&logo=rust&logoColor=white)](docs/product/03-load-forecast-rust-vs-fastapi.md)
 [![PostgreSQL 17+](https://img.shields.io/badge/PostgreSQL-17%2B-336791?style=flat-square&logo=postgresql&logoColor=white)](docs/product/09-data-structures.md)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm-326ce5?style=flat-square&logo=kubernetes&logoColor=white)](docs/product/16-deployment.md)
@@ -214,17 +214,17 @@ Open decisions: [section 19](docs/product/19-risks-open-decisions.md).
 
 ## Contributing
 
-The project is in the design stage, so the most valuable contribution right now is an architecture review: open an issue that links to the relevant documentation section. Repository layout, documentation and code guidelines, DCO sign-off and the review process are in [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md). By participating, you agree to the [Code of Conduct](CODE_OF_CONDUCT-EN.md).
+The project is in the design stage, so the most valuable contribution right now is an architecture review: open an issue that links to the relevant documentation section. Repository layout, documentation and code guidelines, DCO sign-off and the review process are in [CONTRIBUTING-EN.md](.github/CONTRIBUTING-EN.md). By participating, you agree to the [Code of Conduct](.github/CODE_OF_CONDUCT-EN.md).
 
 **Dogfooding.** `task dogfood:full` starts a throwaway stand, publishes every CRANE crate to it, builds the server from CRANE's own registry (external dependencies go through the crates.io proxy) and repeats the build with the upstream unreachable. Details: [section 16.7](docs/product/16-deployment.md) (in Russian).
 
-**Security issues** in CRANE must not be reported in public issues: private reporting and scope are in [SECURITY-EN.md](SECURITY-EN.md).
+**Security issues** in CRANE must not be reported in public issues: private reporting and scope are in [SECURITY-EN.md](.github/SECURITY-EN.md).
 
 ## License
 
 [Apache License 2.0](LICENSE): an explicit patent grant and compatibility with the whole stack. See also [NOTICE](NOTICE).
 
-CRANE is pure OSS with no SLA or guaranteed support period; release security is best effort; the CRA position is in [SECURITY-EN.md](SECURITY-EN.md).
+CRANE is pure OSS with no SLA or guaranteed support period; release security is best effort; the CRA position is in [SECURITY-EN.md](.github/SECURITY-EN.md).
 
 <div align="center">
 <sub>Logo and artwork: <a href="brand/">brand/</a></sub>

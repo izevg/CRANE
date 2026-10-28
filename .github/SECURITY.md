@@ -49,7 +49,7 @@ CRANE — чистый OSS, навсегда: проект не будет пр�
 
 ## Проектирование
 
-Слабые места архитектуры можно обсуждать открыто: issue с меткой `architecture`, см. [CONTRIBUTING.md](CONTRIBUTING.md). Модель угроз и меры защиты описаны в [разделе 14](docs/product/14-security.md).
+Слабые места архитектуры можно обсуждать открыто: issue с меткой `architecture`, см. [CONTRIBUTING.md](CONTRIBUTING.md). Модель угроз и меры защиты описаны в [разделе 14](../docs/product/14-security.md).
 
 ## Безопасная гавань
 
