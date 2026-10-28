@@ -8,7 +8,7 @@
 
 use crane_domain::access::{Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
-use crane_domain::registry::{Coordinate, Format, PackageName, Version};
+use crane_domain::registry::{Coordinate, Format, OrderKeyBuilder, PackageName, Version};
 use crane_siem::ocsf;
 use uuid::Uuid;
 
@@ -27,8 +27,13 @@ fn event(outcome: Outcome) -> AuditEvent {
         action: AuditAction::Publish(Coordinate {
             format: Format::Cargo,
             repository: "internal".to_owned(),
-            package: PackageName::parse(Format::Cargo, "serde").unwrap(),
-            version: Version::parse(Format::Cargo, "1.0.0").unwrap(),
+            package: PackageName::from_parts("serde".to_owned(), "serde".to_owned()),
+            version: Version::from_parts(
+                "1.0.0".to_owned(),
+                "1.0.0".to_owned(),
+                OrderKeyBuilder::new().finish(),
+                false,
+            ),
         }),
         outcome,
     }
