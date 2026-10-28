@@ -2,10 +2,13 @@ import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import {
+  CalendarClockIcon,
   CloudAlertIcon,
   FileQuestionMarkIcon,
   KeyRoundIcon,
   type LucideIcon,
+  RefreshCwIcon,
+  ServerOffIcon,
   ShieldAlertIcon,
   WifiOffIcon,
 } from "lucide-react";
@@ -36,13 +39,36 @@ export type ProblemView =
       title: string;
       detail?: string;
       ruleId?: string;
-      requestId: string;
+      /** Нет у ответа, который сервер не снабдил идентификатором (например, страница прокси). */
+      requestId?: string;
       remediation: readonly string[];
       diagnostics?: Action;
       retry?: Action;
     }
-  | { kind: "offline"; retry?: Action }
-  | { kind: "session"; signIn: Action };
+  | {
+      /** Сбой самого интерфейса, не API: у него нет `request_id`, а текст не зависит от сервера. */
+      kind: "client";
+      /** `chunk` — не загрузился код раздела (после выкладки новой версии); `render` — исключение при рендере. */
+      cause: "chunk" | "render";
+      reload?: Action;
+    }
+  | {
+      kind: "offline";
+      /** `network` — у пользователя нет сети (по умолчанию); `server` — сеть есть, сервер CRANE не отвечает. */
+      cause?: "network" | "server";
+      retry?: Action;
+    }
+  | {
+      kind: "session";
+      /** Причина из 401 сессии. Без неё это первый вход, а не завершённая сессия. */
+      reason?: SessionReason;
+      /** До появления входа (BFF) действия нет: кнопка не рисуется, подсказка объясняет почему. */
+      signIn?: Action;
+    }
+  /** Операция ещё заглушена: данных нет, раздел появится в указанной версии. */
+  | { kind: "planned"; replacedIn: string };
+
+export type SessionReason = "session_expired" | "session_revoked" | "session_elsewhere";
 
 type ProblemStateProps = {
   problem: ProblemView;
@@ -70,22 +96,85 @@ const KIND_TEXT = {
     hint: msg`Проверьте адрес или имя пакета`,
   },
   forbidden: { title: msg`Недостаточно прав` },
-  offline: {
+} satisfies Record<
+  "not-found" | "forbidden",
+  { title: MessageDescriptor; hint?: MessageDescriptor }
+>;
+
+const CLIENT_TEXT = {
+  chunk: {
+    title: msg`Не удалось загрузить раздел`,
+    hint: msg`Возможно, CRANE обновился. Обновите страницу.`,
+  },
+  render: {
+    title: msg`Не удалось открыть страницу`,
+    hint: msg`Обновите страницу. Если ошибка повторится, сообщите администратору CRANE.`,
+  },
+} satisfies Record<"chunk" | "render", { title: MessageDescriptor; hint: MessageDescriptor }>;
+
+const OFFLINE_TEXT = {
+  network: {
     title: msg`Нет соединения`,
     hint: msg`Проверьте сеть — данные обновятся, когда связь вернётся`,
   },
-  session: {
-    title: msg`Сессия завершена`,
-    hint: msg`Войдите снова, чтобы продолжить работу`,
+  server: {
+    title: msg`Сервер CRANE недоступен`,
+    hint: msg`Последние данные остаются на экране. Попробуйте ещё раз через минуту`,
+  },
+} satisfies Record<"network" | "server", { title: MessageDescriptor; hint: MessageDescriptor }>;
+
+const SESSION_ENDED = msg`Сессия завершена`;
+const SIGN_IN_LATER = msg`Вход появится в следующей версии CRANE`;
+
+/** Подсказка по причине 401 сессии; вторая форма — когда действия «Войти снова» ещё нет. */
+const SESSION_HINT = {
+  session_expired: {
+    withSignIn: msg`Время сессии истекло. Войдите снова, чтобы продолжить работу`,
+    withoutSignIn: msg`Время сессии истекло. Вход появится в следующей версии CRANE`,
+  },
+  session_revoked: {
+    withSignIn: msg`Сессия отозвана. Войдите снова, чтобы продолжить работу`,
+    withoutSignIn: msg`Сессия отозвана. Вход появится в следующей версии CRANE`,
+  },
+  session_elsewhere: {
+    withSignIn: msg`Вы вошли на другом устройстве, и эта сессия завершена. Войдите снова, чтобы продолжить работу`,
+    withoutSignIn: msg`Вы вошли на другом устройстве, и эта сессия завершена. Вход появится в следующей версии CRANE`,
   },
 } satisfies Record<
-  Exclude<ProblemView["kind"], "error">,
-  { title: MessageDescriptor; hint?: MessageDescriptor }
+  SessionReason,
+  { withSignIn: MessageDescriptor; withoutSignIn: MessageDescriptor }
 >;
 
 const HEADINGS = { 1: "h1", 2: "h2", 3: "h3" } as const;
 
 const NEUTRAL = { circle: "bg-muted", iconTone: "text-muted-foreground" } as const;
+
+function sessionHead(problem: Of<"session">): Head {
+  const base = { Icon: KeyRoundIcon, circle: "bg-info-bg", iconTone: "text-info" } as const;
+  const hasSignIn = problem.signIn !== undefined;
+  if (problem.reason === undefined) {
+    return {
+      ...base,
+      title: msg`Войдите, чтобы продолжить`,
+      hint: hasSignIn ? msg`Для работы с реестром нужна сессия` : SIGN_IN_LATER,
+    };
+  }
+  const hint = SESSION_HINT[problem.reason];
+  return {
+    ...base,
+    title: SESSION_ENDED,
+    hint: hasSignIn ? hint.withSignIn : hint.withoutSignIn,
+  };
+}
+
+function plannedHead(version: string): Head {
+  return {
+    ...NEUTRAL,
+    Icon: CalendarClockIcon,
+    title: msg`Раздел появится в ${version}`,
+    hint: msg`Этот раздел пока недоступен`,
+  };
+}
 
 function headOf(problem: ProblemView): Head {
   switch (problem.kind) {
@@ -110,15 +199,25 @@ function headOf(problem: ProblemView): Head {
         title: problem.title,
         hint: problem.detail,
       };
-    case "offline":
-      return { ...NEUTRAL, Icon: WifiOffIcon, ...KIND_TEXT.offline };
-    case "session":
+    case "client":
       return {
-        Icon: KeyRoundIcon,
-        circle: "bg-info-bg",
-        iconTone: "text-info",
-        ...KIND_TEXT.session,
+        Icon: RefreshCwIcon,
+        circle: "bg-error-bg",
+        iconTone: "text-error",
+        ...CLIENT_TEXT[problem.cause],
       };
+    case "offline": {
+      const cause = problem.cause ?? "network";
+      return {
+        ...NEUTRAL,
+        Icon: cause === "server" ? ServerOffIcon : WifiOffIcon,
+        ...OFFLINE_TEXT[cause],
+      };
+    }
+    case "session":
+      return sessionHead(problem);
+    case "planned":
+      return plannedHead(problem.replacedIn);
   }
 }
 
@@ -182,7 +281,7 @@ function ErrorDetails({ problem }: { problem: Of<"error"> }) {
   return (
     <>
       {problem.ruleId ? <RuleLine ruleId={problem.ruleId} /> : null}
-      <RequestIdLine requestId={problem.requestId} />
+      {problem.requestId ? <RequestIdLine requestId={problem.requestId} /> : null}
       <RemediationList steps={problem.remediation} />
       <ProblemActions primary={problem.retry} secondary={problem.diagnostics} />
     </>
@@ -197,10 +296,14 @@ function Details({ problem }: { problem: ProblemView }) {
       return <ForbiddenDetails problem={problem} />;
     case "error":
       return <ErrorDetails problem={problem} />;
+    case "client":
+      return <ProblemActions primary={problem.reload} />;
     case "offline":
       return <ProblemActions primary={problem.retry} />;
     case "session":
       return <ProblemActions primary={problem.signIn} />;
+    case "planned":
+      return null;
   }
 }
 

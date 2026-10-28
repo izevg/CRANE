@@ -127,13 +127,121 @@ export const ErrorWithoutRetry: Story = {
 };
 
 export const Offline: Story = {
-  name: "Нет соединения",
+  name: "Нет соединения (нет сети)",
   args: { problem: { kind: "offline", retry: { label: "Повторить", run: { onSelect: onRetry } } } },
 };
 
+export const OfflineServer: Story = {
+  name: "Сервер CRANE недоступен",
+  args: {
+    problem: {
+      kind: "offline",
+      cause: "server",
+      retry: { label: "Повторить", run: { onSelect: onRetry } },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole("heading", { name: "Сервер CRANE недоступен" }),
+    ).toBeVisible();
+  },
+};
+
 export const Session: Story = {
-  name: "Сессия завершена",
-  args: { problem: { kind: "session", signIn: { label: "Войти снова", run: { href: "/login" } } } },
+  name: "Сессия завершена (по сроку)",
+  args: {
+    problem: {
+      kind: "session",
+      reason: "session_expired",
+      signIn: { label: "Войти снова", run: { href: "/login" } },
+    },
+  },
+};
+
+export const SessionRevoked: Story = {
+  name: "Сессия отозвана",
+  args: {
+    problem: {
+      kind: "session",
+      reason: "session_revoked",
+      signIn: { label: "Войти снова", run: { href: "/login" } },
+    },
+  },
+};
+
+export const SessionElsewhere: Story = {
+  name: "Вход на другом устройстве",
+  args: {
+    problem: {
+      kind: "session",
+      reason: "session_elsewhere",
+      signIn: { label: "Войти снова", run: { href: "/login" } },
+    },
+  },
+};
+
+export const SessionFirstSignIn: Story = {
+  name: "Первый вход: «Войдите, чтобы продолжить»",
+  args: {
+    problem: { kind: "session", signIn: { label: "Войти", run: { href: "/login" } } },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole("heading", { name: "Войдите, чтобы продолжить" }),
+    ).toBeVisible();
+  },
+};
+
+export const SessionWithoutSignIn: Story = {
+  name: "Входа ещё нет: без кнопки, подсказка про следующую версию",
+  args: { problem: { kind: "session" } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Вход появится в следующей версии CRANE")).toBeVisible();
+    await expect(canvas.queryByRole("link")).toBeNull();
+    await expect(canvas.queryByRole("button")).toBeNull();
+  },
+};
+
+export const ClientChunk: Story = {
+  name: "Сбой интерфейса: не загрузился раздел",
+  args: {
+    problem: {
+      kind: "client",
+      cause: "chunk",
+      reload: { label: "Обновить страницу", run: { onSelect: onRetry } },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("heading", { name: "Не удалось загрузить раздел" }),
+    ).toBeVisible();
+    await expect(canvas.getByText("Возможно, CRANE обновился. Обновите страницу.")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Обновить страницу" }));
+    await expect(onRetry).toHaveBeenCalled();
+  },
+};
+
+export const ClientRender: Story = {
+  name: "Сбой интерфейса: ошибка рендера",
+  args: {
+    problem: {
+      kind: "client",
+      cause: "render",
+      reload: { label: "Обновить страницу", run: { onSelect: onRetry } },
+    },
+  },
+};
+
+export const Planned: Story = {
+  name: "Раздел ещё заглушен: появится в версии",
+  args: { problem: { kind: "planned", replacedIn: "v0.4.0" } },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole("heading", { name: "Раздел появится в v0.4.0" }),
+    ).toBeVisible();
+  },
 };
 
 export const Compact: Story = {
@@ -152,7 +260,11 @@ export const PageHeading: Story = {
   name: "Страница: заголовок первого уровня",
   args: {
     headingLevel: 1,
-    problem: { kind: "session", signIn: { label: "Войти снова", run: { href: "/login" } } },
+    problem: {
+      kind: "session",
+      reason: "session_expired",
+      signIn: { label: "Войти снова", run: { href: "/login" } },
+    },
   },
   play: async ({ canvasElement }) => {
     await expect(within(canvasElement).getByRole("heading", { level: 1 })).toBeVisible();
@@ -175,5 +287,35 @@ export const NotFoundEnglish: Story = {
       await canvas.findByRole("heading", { name: "Not found or no access" }),
     ).toBeVisible();
     await expect(canvas.getByText("Check the address or package name")).toBeVisible();
+  },
+};
+
+export const PlannedEnglish: Story = {
+  name: "EN: раздел появится в версии",
+  globals: { locale: "en" },
+  args: { problem: { kind: "planned", replacedIn: "v0.4.0" } },
+  play: async ({ canvasElement }) => {
+    await expect(
+      await within(canvasElement).findByRole("heading", { name: "This section arrives in v0.4.0" }),
+    ).toBeVisible();
+  },
+};
+
+export const ClientChunkEnglish: Story = {
+  name: "EN: не загрузился раздел",
+  globals: { locale: "en" },
+  args: {
+    problem: {
+      kind: "client",
+      cause: "chunk",
+      reload: { label: "Refresh page", run: { onSelect: onRetry } },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole("heading", { name: "Could not load the section" }),
+    ).toBeVisible();
+    await expect(canvas.getByText("CRANE may have been updated. Refresh the page.")).toBeVisible();
   },
 };
