@@ -211,7 +211,7 @@ fn race_winner_that_is_not_released_makes_the_file_unavailable() {
 }
 
 #[test]
-fn second_conflict_after_the_single_retry_is_version_exists() {
+fn version_vanishing_after_version_exists_is_a_backend_error() {
     // Arrange
     let seed = Seed::new();
     seed.add_version("foo", "1.0.0", VersionState::Released, b"first");
@@ -222,5 +222,5 @@ fn second_conflict_after_the_single_retry_is_version_exists() {
     let error = block_on(registry.attach(&caller(), request)).unwrap_err();
 
     // Assert
-    assert!(matches!(error, RegistryError::VersionExists), "{error:?}");
+    assert!(matches!(error, RegistryError::Backend(_)), "{error:?}");
 }

@@ -1,7 +1,7 @@
 use crane_domain::access::Caller;
 use crane_domain::audit::AuditAction;
-use crane_domain::registry::{Namespace, PackageVersion, VersionId, VersionState};
-use crane_ports::registry::{BlobStore, Catalog, NewVersion};
+use crane_domain::registry::{Namespace, PackageVersion};
+use crane_ports::registry::{BlobStore, Catalog};
 
 use super::super::{Publish, Registry, RegistryError};
 
@@ -15,18 +15,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         request: Publish,
     ) -> Result<PackageVersion, RegistryError> {
         let action = AuditAction::Publish(request.coordinate.clone());
-        let (result, claim) = match self.try_publish(request).await {
-            Ok((published, claim)) => (Ok(published), claim),
-            Err(error) => (Err(error), None),
-        };
-        self.audited(caller, action, &result);
-        // Отступление от «одно событие на use case»: захват имени - отдельный факт
-        // безопасности (с него имя становится внутренним), и аудитору он нужен как
-        // самостоятельная запись, а не как догадка по первой публикации.
-        if let Some(claim) = claim {
-            self.audited(caller, AuditAction::Reserve(claim), &result);
-        }
-        result
+        self.audited_claim(caller, action, self.try_publish(request).await)
     }
 
     /// Кроме версии отдаёт namespace точного имени, если публикация захватила новое имя.
@@ -61,19 +50,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         let asset = self.ingest(file).await?;
 
         let published = self
-            .catalog
-            .publish_version(NewVersion {
-                id: VersionId::new(self.ids.generate()),
-                repository: repository.id,
-                package: coordinate.package,
-                version: coordinate.version,
-                // Hosted без gates в v0.1.0 публикует сразу в Released; quarantine заменит эту строку.
-                state: VersionState::Released,
-                published_at: self.clock.now(),
-                assets: vec![asset],
-                metadata,
-                tags,
-            })
+            .create_version(&repository, &coordinate, asset, metadata, tags)
             .await?;
         Ok((published, claim))
     }

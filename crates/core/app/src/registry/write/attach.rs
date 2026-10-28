@@ -1,10 +1,9 @@
 use crane_domain::access::Caller;
 use crane_domain::audit::AuditAction;
 use crane_domain::registry::{
-    Asset, Checksum, Coordinate, FormatMetadata, Namespace, PackageVersion, Sha256, VersionId,
-    VersionState,
+    Asset, Checksum, Coordinate, FormatMetadata, Namespace, PackageVersion, Sha256,
 };
-use crane_ports::registry::{BlobStore, Catalog, CatalogError, NewVersion};
+use crane_ports::registry::{BlobStore, Catalog, CatalogError};
 
 use super::super::{Registry, RegistryError, Upload, served};
 use super::Refusal;
@@ -15,7 +14,9 @@ use super::Refusal;
 pub struct Attach {
     pub coordinate: Coordinate,
     pub file: Upload,
-    /// Используется, только если этот файл создаёт версию: метаданные версии пишет первый файл.
+    /// `Err` - отказ политики формата: действует для каждого файла, в том числе для файла
+    /// к существующей версии. `Ok` пишется, только если этот файл создаёт версию:
+    /// метаданные версии пишет первый файл.
     pub metadata: Result<FormatMetadata, Refusal>,
 }
 
@@ -27,9 +28,28 @@ fn declared_sha256(file: &Upload) -> Option<Sha256> {
     })
 }
 
-/// Файл версии с этим путём, если он уже есть.
-fn existing<'a>(version: &'a PackageVersion, path: &str) -> Option<&'a Asset> {
-    version.assets.iter().find(|asset| asset.path == path)
+/// Что с путём файла в версии.
+enum Slot {
+    Free,
+    /// Тот же путь и тот же sha256: повтор загрузки, запись не нужна.
+    Same,
+    /// Путь занят другим содержимым.
+    Taken,
+}
+
+/// Единственное правило идемпотентности прикрепления: путь решает, свободен ли он,
+/// а sha256 - повтор это или конфликт.
+fn slot(version: &PackageVersion, path: &str, sha256: &Sha256) -> Slot {
+    match version.assets.iter().find(|asset| asset.path == path) {
+        None => Slot::Free,
+        Some(have) if have.sha256 == *sha256 => Slot::Same,
+        Some(_) => Slot::Taken,
+    }
+}
+
+/// Версия пропала после `VersionExists`: версии не исчезают, значит, нарушен инвариант.
+fn vanished() -> RegistryError {
+    RegistryError::Backend("версия пропала после VersionExists".into())
 }
 
 impl<C: Catalog, B: BlobStore> Registry<C, B> {
@@ -54,16 +74,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             coordinate: request.coordinate.clone(),
             path: request.file.path.clone(),
         };
-        let (result, claim) = match self.try_attach(request).await {
-            Ok((attached, claim)) => (Ok(attached), claim),
-            Err(error) => (Err(error), None),
-        };
-        self.audited(caller, action, &result);
-        // Как у `publish`: захват имени - отдельный факт безопасности.
-        if let Some(claim) = claim {
-            self.audited(caller, AuditAction::Reserve(claim), &result);
-        }
-        result
+        self.audited_claim(caller, action, self.try_attach(request).await)
     }
 
     async fn try_attach(
@@ -91,18 +102,13 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             .await?;
         let asset = self.ingest(file).await?;
         let created = self
-            .catalog
-            .publish_version(NewVersion {
-                id: VersionId::new(self.ids.generate()),
-                repository: repository.id,
-                package: coordinate.package.clone(),
-                version: coordinate.version.clone(),
-                state: VersionState::Released,
-                published_at: self.clock.now(),
-                assets: vec![asset.clone()],
+            .create_version(
+                &repository,
+                &coordinate,
+                asset.clone(),
                 metadata,
-                tags: Vec::new(),
-            })
+                Vec::new(),
+            )
             .await;
         match created {
             Ok(version) => Ok((version, claim)),
@@ -113,7 +119,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
                     .catalog
                     .find_version(repository.id, &coordinate.package, &coordinate.version)
                     .await?
-                    .ok_or(RegistryError::VersionExists)?;
+                    .ok_or_else(vanished)?;
                 served(&winner)?;
                 Ok((self.place(winner, asset).await?, None))
             }
@@ -128,14 +134,12 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         file: Upload,
     ) -> Result<PackageVersion, RegistryError> {
         served(&version)?;
-        if let (Some(have), Some(declared)) =
-            (existing(&version, &file.path), declared_sha256(&file))
-        {
-            return if have.sha256 == declared {
-                Ok(version)
-            } else {
-                Err(RegistryError::AssetExists)
-            };
+        if let Some(declared) = declared_sha256(&file) {
+            match slot(&version, &file.path, &declared) {
+                Slot::Same => return Ok(version),
+                Slot::Taken => return Err(RegistryError::AssetExists),
+                Slot::Free => {}
+            }
         }
         let asset = self.ingest(file).await?;
         self.place(version, asset).await
@@ -147,10 +151,10 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         version: PackageVersion,
         asset: Asset,
     ) -> Result<PackageVersion, RegistryError> {
-        match existing(&version, &asset.path) {
-            Some(have) if have.sha256 == asset.sha256 => Ok(version),
-            Some(_) => Err(RegistryError::AssetExists),
-            None => match self.catalog.add_asset(version.id, asset.clone()).await {
+        match slot(&version, &asset.path, &asset.sha256) {
+            Slot::Same => Ok(version),
+            Slot::Taken => Err(RegistryError::AssetExists),
+            Slot::Free => match self.catalog.add_asset(version.id, asset.clone()).await {
                 Err(CatalogError::AssetExists) => self.settle_lost_race(&version, &asset).await,
                 added => Ok(added?),
             },
@@ -158,7 +162,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
     }
 
     /// Параллельный запрос успел занять путь между снимком версии и записью (клиент ретраит
-    /// по таймауту): версия перечитывается один раз и сравнивается тем же правилом, без цикла.
+    /// по таймауту): версия перечитывается один раз и путь оценивается тем же правилом.
     async fn settle_lost_race(
         &self,
         version: &PackageVersion,
@@ -168,10 +172,10 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             .catalog
             .find_version(version.repository, &version.package, &version.version)
             .await?
-            .ok_or(RegistryError::AssetExists)?;
-        match existing(&current, &asset.path) {
-            Some(have) if have.sha256 == asset.sha256 => Ok(current),
-            _ => Err(RegistryError::AssetExists),
+            .ok_or_else(vanished)?;
+        match slot(&current, &asset.path, &asset.sha256) {
+            Slot::Same => Ok(current),
+            Slot::Free | Slot::Taken => Err(RegistryError::AssetExists),
         }
     }
 }

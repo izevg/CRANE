@@ -269,14 +269,23 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             .ok_or(RegistryError::RepositoryNotFound)
     }
 
-    /// Версия hosted-репозитория: мутации, меняющие содержимое, прокси-репозиториям запрещены.
-    async fn find_hosted(&self, coordinate: &Coordinate) -> Result<PackageVersion, RegistryError> {
+    /// Hosted-репозиторий координаты: запись в прокси-репозиторий запрещена.
+    async fn hosted_repository(
+        &self,
+        coordinate: &Coordinate,
+    ) -> Result<Repository, RegistryError> {
         let repository = self
             .find_repository(coordinate.format, &coordinate.repository)
             .await?;
         if repository.kind != RepositoryKind::Hosted {
             return Err(RegistryError::NotHosted);
         }
+        Ok(repository)
+    }
+
+    /// Версия hosted-репозитория: мутации, меняющие содержимое, прокси-репозиториям запрещены.
+    async fn find_hosted(&self, coordinate: &Coordinate) -> Result<PackageVersion, RegistryError> {
+        let repository = self.hosted_repository(coordinate).await?;
         self.catalog
             .find_version(repository.id, &coordinate.package, &coordinate.version)
             .await?
