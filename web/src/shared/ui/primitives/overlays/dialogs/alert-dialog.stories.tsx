@@ -82,6 +82,8 @@ export const Confirm: Story = {
     const dialog = await within(document.body).findByRole("alertdialog");
     await userEvent.click(within(dialog).getByRole("button", { name: "Удалить" }));
     await expect(args.onConfirm).toHaveBeenCalledTimes(1);
+    // Подтверждение закрывает диалог: axe должен увидеть закрытое состояние, а не выход с анимацией.
+    await waitFor(() => expect(within(document.body).queryByRole("alertdialog")).toBeNull());
   },
 };
 
