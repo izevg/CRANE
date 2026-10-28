@@ -6,5 +6,5 @@ mod schema;
 mod store;
 
 pub use onboarding::{OnboardingError, OnboardingStore};
-pub use schema::{Invalid, InvalidKey, SettingsSchema};
+pub use schema::{Inherited, Invalid, InvalidKey, SettingsSchema};
 pub use store::{SettingsError, SettingsStore};

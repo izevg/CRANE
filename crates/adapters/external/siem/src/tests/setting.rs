@@ -27,9 +27,9 @@ fn setting_and_onboarding_actions_map_to_api_activity_without_resource() {
         setting_changed(SettingChange::Secret {
             replaced_unreadable: false,
         }),
-        AuditAction::SettingRejectedLocked {
+        AuditAction::SettingRejected {
             key: "blobs".to_owned(),
-            env_var: "CRANE_BLOBS".to_owned(),
+            env_var: Some("CRANE_BLOBS".to_owned()),
         },
         AuditAction::OnboardingStarted,
         AuditAction::OnboardingCompleted {
@@ -51,7 +51,7 @@ fn setting_and_onboarding_actions_map_to_api_activity_without_resource() {
         actual,
         [
             (6003, 3, Some("setting.change"), None),
-            (6003, 3, Some("setting.reject_locked"), None),
+            (6003, 3, Some("setting.reject"), None),
             (6003, 1, Some("onboarding.start"), None),
             (6003, 3, Some("onboarding.complete"), None),
             (6003, 3, Some("onboarding.skip_preconfigured"), None),
@@ -210,19 +210,26 @@ fn deleted_setting_maps_to_delete_activity_and_carries_only_key() {
 }
 
 #[test]
-fn locked_rejection_carries_key_and_env_var() {
+fn rejection_carries_env_var_only_when_key_is_locked() {
     // Arrange
-    let action = AuditAction::SettingRejectedLocked {
-        key: "blobs".to_owned(),
-        env_var: "CRANE_BLOBS".to_owned(),
-    };
+    let cases =
+        [Some("CRANE_BLOBS".to_owned()), None].map(|env_var| AuditAction::SettingRejected {
+            key: "blobs".to_owned(),
+            env_var,
+        });
 
     // Act
-    let r = record(action, failure(), None);
+    let actual = cases.map(|action| {
+        let r = record(action, failure(), None);
+        (r.setting.key, r.setting.env_var)
+    });
 
     // Assert
     assert_eq!(
-        (r.setting.key, r.setting.env_var),
-        (Some("blobs".to_owned()), Some("CRANE_BLOBS".to_owned()))
+        actual,
+        [
+            (Some("blobs".to_owned()), Some("CRANE_BLOBS".to_owned())),
+            (Some("blobs".to_owned()), None),
+        ]
     );
 }
