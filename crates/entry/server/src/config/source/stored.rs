@@ -8,6 +8,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use crane_domain::settings::{Kind, NewValue, SettingDef, Stored, StoredValue, Unreadable};
 
+use zeroize::Zeroizing;
+
 use crate::config::{ConfigError, definition};
 
 /// Почему строка БД не действует.
@@ -22,15 +24,16 @@ pub(crate) enum Ignored {
 }
 
 /// Значение строки или причина, по которой его нельзя прочитать.
-type Candidate = Result<String, Unreadable>;
+/// Открытый текст секрета обнуляется при освобождении, как в `Secret`.
+type Candidate = Result<Zeroizing<String>, Unreadable>;
 
 /// Строки БД, которые действуют: по имени переменной, как ищет `Config`.
 pub(crate) struct StoredLayer {
-    by_var: HashMap<&'static str, String>,
+    by_var: HashMap<&'static str, Zeroizing<String>>,
 }
 
 impl StoredLayer {
-    pub(crate) fn empty() -> Self {
+    fn empty() -> Self {
         Self {
             by_var: HashMap::new(),
         }
@@ -72,7 +75,7 @@ impl StoredLayer {
     }
 
     pub(crate) fn get(&self, var: &str) -> Option<String> {
-        self.by_var.get(var).cloned()
+        self.by_var.get(var).map(|text| text.to_string())
     }
 }
 
@@ -105,17 +108,17 @@ fn admit(
 
 fn candidate(value: &StoredValue) -> Candidate {
     match value {
-        StoredValue::Plain(text) => Ok(text.clone()),
-        StoredValue::Secret(secret) => Ok(secret.expose().to_owned()),
+        StoredValue::Plain(text) => Ok(Zeroizing::new(text.clone())),
+        StoredValue::Secret(secret) => Ok(Zeroizing::new(secret.expose().to_owned())),
         StoredValue::Unreadable(reason) => Err(reason.clone()),
     }
 }
 
-fn new_text(value: &NewValue) -> String {
-    match value {
+fn new_text(value: &NewValue) -> Zeroizing<String> {
+    Zeroizing::new(match value {
         NewValue::Plain(text) => text.clone(),
         NewValue::Secret(secret) => secret.expose().to_owned(),
-    }
+    })
 }
 
 /// Только отпечатки ключей: байтов шифртекста и значений здесь нет.
