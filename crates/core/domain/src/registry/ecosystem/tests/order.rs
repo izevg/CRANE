@@ -191,3 +191,28 @@ fn digits_keep_following_elements_out_of_the_comparison() {
     // Assert
     assert_eq!(ordering, Ordering::Less);
 }
+
+#[test]
+fn encoding_is_stable_because_keys_are_persisted() {
+    // Arrange
+    let keys = [
+        OrderKeyBuilder::new().number(0).finish(),
+        OrderKeyBuilder::new().number(1).finish(),
+        OrderKeyBuilder::new().number(256).finish(),
+        OrderKeyBuilder::new().text("a\0").finish(),
+        OrderKeyBuilder::new().rank(7).digits("007").finish(),
+    ];
+
+    // Act
+    let actual = keys.each_ref().map(OrderKey::as_bytes);
+
+    // Assert
+    let expected: [&[u8]; 5] = [
+        &[0],
+        &[1, 1],
+        &[2, 1, 0],
+        &[0x61, 0, 0xFF, 0, 1],
+        &[7, 1, 1, b'7'],
+    ];
+    assert_eq!(actual, expected);
+}
