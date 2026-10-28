@@ -156,6 +156,34 @@ impl fmt::Debug for Valkey {
     }
 }
 
+/// Таймауты соединения командного и подписанного клиентов.
+fn connection_config() -> ConnectionConfig {
+    ConnectionConfig {
+        connection_timeout: CONNECT_TIMEOUT,
+        // Рукопожатие реконнекта против молчащего сервера не должно висеть 10 с по умолчанию.
+        internal_command_timeout: CONNECT_TIMEOUT,
+        // Таймаут команды сам соединение не рвёт: при `docker pause` или партиции клиент
+        // оставался бы `Connected`, и каждая команда ждала бы свою секунду бесконечно.
+        // Кадр без ответа дольше `COMMAND_TIMEOUT` рвёт соединение, клиент уходит из
+        // `Connected`, и `fail_fast` отказывает мгновенно, пока фоновый реконнект не получит
+        // ответ на рукопожатие (PING). Это и есть open/half-open, своей машины не нужно.
+        unresponsive: UnresponsiveConfig {
+            max_timeout: Some(COMMAND_TIMEOUT),
+            interval: UNRESPONSIVE_CHECK,
+        },
+        ..ConnectionConfig::default()
+    }
+}
+
+/// Параметры каждой команды: потолок времени и мгновенный отказ без соединения.
+fn command_options() -> Options {
+    Options {
+        timeout: Some(COMMAND_TIMEOUT),
+        fail_fast: true,
+        ..Options::default()
+    }
+}
+
 impl Valkey {
     /// Запускает подключение и диспетчер инвалидации в фоне и сразу возвращается: недоступный
     /// Valkey не роняет старт (`docs/product/16`), а команды до подключения отвечают ошибкой.
@@ -167,21 +195,7 @@ impl Valkey {
         let mut config = endpoint.0;
         // Первое подключение подчиняется той же политике реконнекта, а не роняет `init`.
         config.fail_fast = false;
-        let connection = ConnectionConfig {
-            connection_timeout: CONNECT_TIMEOUT,
-            // Рукопожатие реконнекта против молчащего сервера не должно висеть 10 с по умолчанию.
-            internal_command_timeout: CONNECT_TIMEOUT,
-            // Таймаут команды сам соединение не рвёт: при `docker pause` или партиции клиент
-            // оставался бы `Connected`, и каждая команда ждала бы свою секунду бесконечно.
-            // Кадр без ответа дольше `COMMAND_TIMEOUT` рвёт соединение, клиент уходит из
-            // `Connected`, и `fail_fast` отказывает мгновенно, пока фоновый реконнект не получит
-            // ответ на рукопожатие (PING). Это и есть open/half-open, своей машины не нужно.
-            unresponsive: UnresponsiveConfig {
-                max_timeout: Some(COMMAND_TIMEOUT),
-                interval: UNRESPONSIVE_CHECK,
-            },
-            ..ConnectionConfig::default()
-        };
+        let connection = connection_config();
         let policy =
             ReconnectPolicy::new_exponential(0, RECONNECT_MIN_MS, RECONNECT_MAX_MS, RECONNECT_BASE);
         let commands = Client::new(
@@ -197,11 +211,7 @@ impl Valkey {
             AbortOnDrop(tokio::spawn(hold_connection(commands.clone()))),
             AbortOnDrop(tokio::spawn(inbox::run(Arc::clone(&local), subscriber))),
         ];
-        let options = Options {
-            timeout: Some(COMMAND_TIMEOUT),
-            fail_fast: true,
-            ..Options::default()
-        };
+        let options = command_options();
         Self(Arc::new(Node {
             local,
             commands: commands.with_options(&options),
@@ -268,91 +278,5 @@ fn availability_change(available: bool, next: bool) -> Option<bool> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::SystemTime;
-
-    const NAME: &str = "px:name";
-
-    fn entry() -> Cached {
-        Cached {
-            fetched_at: SystemTime::UNIX_EPOCH,
-            state: CachedState::Missing { misses: 1 },
-        }
-    }
-
-    #[test]
-    fn admit_keeps_entry_when_nothing_was_invalidated_meanwhile() {
-        // Arrange
-        let local = Local::new(1 << 20);
-        let seen = local.generation();
-
-        // Act
-        local.admit(NAME, entry(), seen);
-
-        // Assert
-        assert_eq!(local.l1.get(NAME), Some(entry()));
-    }
-
-    #[test]
-    fn admit_drops_entry_read_before_an_invalidation() {
-        // Arrange
-        let local = Local::new(1 << 20);
-        let seen = local.generation();
-        local.invalidate("px:other");
-
-        // Act
-        local.admit(NAME, entry(), seen);
-
-        // Assert
-        assert_eq!(
-            local.l1.get(NAME),
-            None,
-            "любая инвалидация после чтения L2 делает прочитанное подозрительным"
-        );
-    }
-
-    #[test]
-    fn invalidate_removes_only_the_named_entry() {
-        // Arrange
-        let local = Local::new(1 << 20);
-        local.l1.insert(NAME.to_owned(), entry());
-        local.l1.insert("px:other".to_owned(), entry());
-
-        // Act
-        local.invalidate(NAME);
-
-        // Assert
-        assert_eq!(
-            (local.l1.get(NAME), local.l1.get("px:other")),
-            (None, Some(entry())),
-            "инвалидация выбрасывает только названный ключ"
-        );
-    }
-
-    #[test]
-    fn forget_all_empties_l1() {
-        // Arrange
-        let local = Local::new(1 << 20);
-        local.l1.insert(NAME.to_owned(), entry());
-        local.l1.insert("px:other".to_owned(), entry());
-
-        // Act
-        local.forget_all();
-
-        // Assert
-        assert_eq!((local.l1.get(NAME), local.l1.get("px:other")), (None, None));
-    }
-
-    #[test]
-    fn availability_is_reported_only_when_it_changes() {
-        // Arrange
-        let cases = [(false, false), (true, true), (false, true), (true, false)];
-
-        // Act
-        let actual = cases.map(|(available, next)| availability_change(available, next));
-
-        // Assert
-        assert_eq!(actual, [None, None, Some(true), Some(false)]);
-    }
-}
+#[path = "tests/mod.rs"]
+mod tests;

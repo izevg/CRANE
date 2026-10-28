@@ -6,7 +6,8 @@
 
 use std::future::Future;
 
-use crane_memory::{MemoryBlobStore, MemoryCatalog, SequentialIdGen};
+use crane_http::{CargoSettings, NpmSettings};
+use crane_memory::{MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use tokio::runtime::Builder;
 
 use super::*;
@@ -171,4 +172,54 @@ fn no_proxy_repositories_means_no_engine() {
 
     // Assert
     assert!(matches!(prepared, Ok(None)));
+}
+
+#[test]
+fn mount_builds_a_router_for_every_prepared_name_of_each_format() {
+    // Arrange
+    let catalog = MemoryCatalog::default();
+    let cargo = block_on(build(&catalog)).unwrap().unwrap();
+    let npm = block_on(build_npm(&MemoryCatalog::default()))
+        .unwrap()
+        .unwrap();
+    let registry = |prepared: &Prepared<MemoryBlobStore>| {
+        Arc::new(Registry::new(
+            MemoryCatalog::default(),
+            Arc::new(MemoryBlobStore::default()),
+            Arc::new(SystemClock),
+            Arc::new(SequentialIdGen::default()),
+            Arc::new(MemoryAudit::default()),
+            prepared.upstream_names(),
+        ))
+    };
+    let formats = FormatSettings {
+        cargo: CargoSettings {
+            public_url: "http://crane.test".to_owned(),
+            max_publish_bytes: 1_024,
+        },
+        npm: NpmSettings {
+            public_url: "http://crane.test".to_owned(),
+            max_publish_bytes: 1_024,
+        },
+    };
+    let (cargo_registry, npm_registry) = (registry(&cargo), registry(&npm));
+
+    // Act
+    let mounted = [
+        cargo.mount(&cargo_registry, &formats),
+        npm.mount(&npm_registry, &formats),
+    ];
+
+    // Assert
+    let names = mounted.map(|routers| {
+        let of = |routers: Vec<(String, axum::Router)>| {
+            routers
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>()
+        };
+        (of(routers.cargo), of(routers.npm))
+    });
+    let expected = vec![NAME.to_owned()];
+    assert_eq!(names, [(expected.clone(), vec![]), (vec![], expected)]);
 }
