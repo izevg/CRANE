@@ -391,6 +391,11 @@ name = "crane-format-maven"
 version = "0.2.0"
 dependencies = [
  "crane-domain",
+ "crane-ports",
+ "sha1 0.10.7",
+ "sha2 0.10.9",
+ "thiserror",
+ "uuid",
 ]
 
 [[package]]

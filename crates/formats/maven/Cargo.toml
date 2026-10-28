@@ -12,3 +12,13 @@ workspace = true
 
 [dependencies]
 crane-domain = { path = "../../core/domain" }
+# Суммы документов metadata (`maven-metadata.xml.sha1`, `.sha256`, `.sha512`) считаются по сгенерированным байтам.
+sha1 = "0.10"
+sha2 = "0.10"
+thiserror = "2"
+
+[dev-dependencies]
+# Контракт Ecosystem — исполняемая спецификация, общая для всех форматов.
+crane-ports = { path = "../../core/ports", features = ["contract"] }
+# Только для построения VersionId/RepositoryId в тестах; в рабочий код не попадает.
+uuid = "1"
