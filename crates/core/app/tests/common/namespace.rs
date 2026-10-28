@@ -16,6 +16,7 @@ use crane_ports::registry::{Catalog, CatalogError, NewVersion};
 use crane_ports::system::IdGen;
 use futures_executor::block_on;
 
+use super::ecosystem::pattern;
 use super::{METADATA, Seed, asset_path, fixed_now, name, version};
 
 /// Workspace, отличный от `WorkspaceId::DEFAULT` (владельца репозиториев). uuid в зависимости
@@ -27,10 +28,10 @@ pub(crate) fn other_workspace() -> WorkspaceId {
 }
 
 /// Namespace формата cargo, уже разобранный.
-pub(crate) fn cargo_namespace(pattern: &str, workspace: WorkspaceId) -> Namespace {
+pub(crate) fn cargo_namespace(pattern_text: &str, workspace: WorkspaceId) -> Namespace {
     Namespace {
         format: Format::Cargo,
-        pattern: NamespacePattern::parse(Format::Cargo, pattern).unwrap(),
+        pattern: pattern(pattern_text),
         workspace,
     }
 }
@@ -249,12 +250,12 @@ impl Catalog for FaultyCatalog {
     async fn namespace_for(
         &self,
         format: Format,
-        name: &PackageName,
+        candidates: &[NamespacePattern],
     ) -> Result<Option<Namespace>, CatalogError> {
         if self.fails(Fault::NamespaceFor) {
             return Err(lookup_down());
         }
-        self.inner.namespace_for(format, name).await
+        self.inner.namespace_for(format, candidates).await
     }
 
     async fn hosted_exists(

@@ -94,10 +94,12 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         format: Format,
         package: &PackageName,
     ) -> Result<Option<Namespace>, RegistryError> {
-        if !hosted_name_allowed(format, package) {
+        let eco = (self.ecosystems)(format);
+        if !hosted_name_allowed(eco, package) {
             return Err(RegistryError::UnscopedName);
         }
-        let claim = match self.catalog.namespace_for(format, package).await? {
+        let candidates = NamespacePattern::covering(eco, package);
+        let claim = match self.catalog.namespace_for(format, &candidates).await? {
             Some(namespace) if namespace.workspace != repository.workspace() => {
                 return Err(RegistryError::NamespaceOwned);
             }

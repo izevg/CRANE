@@ -7,6 +7,7 @@
     reason = "dead_code: фикстуры общие для трёх тестовых бинарей, каждый берёт своё подмножество; unwrap в тестах = падение теста"
 )]
 
+pub(crate) mod ecosystem;
 pub(crate) mod faults;
 pub(crate) mod namespace;
 pub(crate) mod proxy;
@@ -19,13 +20,15 @@ use bytes::Bytes;
 use crane_app::registry::{Attach, Coordinate, Publish, Registry, Upload};
 use crane_domain::access::{Caller, Principal, PrincipalKind, RequestContext, RequestId};
 use crane_domain::registry::{
-    Asset, Checksum, Format, FormatMetadata, PackageName, PackageRef, PackageVersion, Repository,
-    RepositoryId, RepositoryKind, Sha1, Sha256, Sha512, Version, VersionId, VersionState,
+    Asset, Checksum, Ecosystem, Format, FormatMetadata, PackageName, PackageRef, PackageVersion,
+    Repository, RepositoryId, RepositoryKind, Sha1, Sha256, Sha512, Version, VersionId,
+    VersionState,
 };
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::proxy::{NoUpstream, UpstreamNames};
 use crane_ports::registry::{BlobStore, ByteStream, Catalog, NewVersion};
 use crane_ports::system::IdGen;
+use ecosystem::{TestCargo, ecosystems};
 use futures_executor::block_on;
 use futures_util::StreamExt;
 use futures_util::stream;
@@ -79,11 +82,11 @@ pub(crate) fn hello_sha1() -> Sha1 {
 }
 
 pub(crate) fn name(raw: &str) -> PackageName {
-    PackageName::parse(Format::Cargo, raw).unwrap()
+    TestCargo.parse_name(raw).unwrap()
 }
 
 pub(crate) fn version(raw: &str) -> Version {
-    Version::parse(Format::Cargo, raw).unwrap()
+    TestCargo.parse_version(raw).unwrap()
 }
 
 pub(crate) fn coordinate(package: &str, raw_version: &str) -> Coordinate {
@@ -327,6 +330,7 @@ impl Seed {
             self.ids,
             self.audit,
             self.upstream,
+            ecosystems,
         )
     }
 

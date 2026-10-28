@@ -10,8 +10,8 @@ use crane_app::proxy::Fetched;
 use crane_app::registry::RegistryError;
 use crane_domain::access::Caller;
 use crane_domain::proxy::NegativePolicy;
-use crane_domain::registry::{Checksum, Format, PackageName};
-use crane_format_cargo::{archive, parse_index_path, render_config};
+use crane_domain::registry::{Checksum, Ecosystem};
+use crane_format_cargo::{CARGO, archive, parse_index_path, render_config};
 use crane_ports::proxy::{FetchLeases, ProxyCache, Upstream};
 use crane_ports::registry::{BlobStore, Catalog};
 
@@ -66,7 +66,7 @@ where
     RC: Catalog + 'static,
     RB: BlobStore + 'static,
 {
-    let package = match PackageName::parse(Format::Cargo, &name) {
+    let package = match CARGO.parse_name(&name) {
         Ok(package) => package,
         Err(error) => return ClientError::bad_request(chain(&error)).into_response(),
     };

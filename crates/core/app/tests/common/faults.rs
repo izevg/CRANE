@@ -5,8 +5,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crane_domain::registry::{
-    Asset, Format, Namespace, PackageName, PackageVersion, Repository, RepositoryId, Sha256,
-    Version, VersionId, VersionState,
+    Asset, Format, Namespace, NamespacePattern, PackageName, PackageVersion, Repository,
+    RepositoryId, Sha256, Version, VersionId, VersionState,
 };
 use crane_memory::{MemoryBlobStore, MemoryCatalog};
 use crane_ports::registry::{
@@ -156,9 +156,9 @@ impl Catalog for BlindCatalog {
     fn namespace_for(
         &self,
         format: Format,
-        name: &PackageName,
+        candidates: &[NamespacePattern],
     ) -> impl Future<Output = Result<Option<Namespace>, CatalogError>> + Send {
-        self.inner.namespace_for(format, name)
+        self.inner.namespace_for(format, candidates)
     }
 
     fn hosted_exists(
@@ -285,9 +285,9 @@ impl Catalog for DownCatalog {
     fn namespace_for(
         &self,
         format: Format,
-        name: &PackageName,
+        candidates: &[NamespacePattern],
     ) -> impl Future<Output = Result<Option<Namespace>, CatalogError>> + Send {
-        self.0.namespace_for(format, name)
+        self.0.namespace_for(format, candidates)
     }
 
     fn hosted_exists(

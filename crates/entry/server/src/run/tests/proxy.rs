@@ -189,6 +189,7 @@ fn mount_builds_a_router_for_every_prepared_name_of_each_format() {
             Arc::new(SequentialIdGen::default()),
             Arc::new(MemoryAudit::default()),
             prepared.upstream_names(),
+            crate::ecosystem::ecosystem,
         ))
     };
     let formats = FormatSettings {

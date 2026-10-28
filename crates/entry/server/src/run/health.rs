@@ -76,6 +76,7 @@ mod tests {
             Arc::new(UuidV7Ids),
             Arc::new(MemoryAudit::default()),
             Arc::new(NoUpstream),
+            crate::ecosystem::ecosystem,
         )))
     }
 

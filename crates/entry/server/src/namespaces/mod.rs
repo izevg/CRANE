@@ -63,6 +63,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::ecosystem::ecosystem;
 
     struct Fixture {
         registry: Registry<MemoryCatalog, MemoryBlobStore>,
@@ -79,6 +80,7 @@ mod tests {
             Arc::new(SequentialIdGen::default()),
             audit.clone(),
             Arc::new(NoUpstream),
+            ecosystem,
         );
         Fixture {
             registry,
@@ -90,7 +92,7 @@ mod tests {
     fn entry(pattern: &str, workspace: WorkspaceId) -> Namespace {
         Namespace {
             format: Format::Cargo,
-            pattern: NamespacePattern::parse(Format::Cargo, pattern).unwrap(),
+            pattern: NamespacePattern::parse(ecosystem(Format::Cargo), pattern).unwrap(),
             workspace,
         }
     }

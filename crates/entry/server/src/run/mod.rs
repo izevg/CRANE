@@ -26,6 +26,7 @@ use tokio::net::TcpListener;
 use tokio::runtime::Builder;
 
 use crate::config::{Database, Settings, Storage};
+use crate::ecosystem::ecosystem;
 use crate::namespaces;
 use crate::system::{SystemClock, UuidV7Ids};
 pub(crate) use health::healthcheck;
@@ -126,6 +127,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         ids.clone(),
         audit.clone(),
         upstream,
+        ecosystem,
     ));
     namespaces::reserve(&registry, ids.as_ref(), settings.namespaces).await?;
     let proxy_repos = proxies.map_or_else(

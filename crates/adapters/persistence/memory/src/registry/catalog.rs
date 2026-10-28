@@ -310,11 +310,11 @@ impl Catalog for MemoryCatalog {
     fn namespace_for(
         &self,
         format: Format,
-        name: &PackageName,
+        candidates: &[NamespacePattern],
     ) -> impl Future<Output = Result<Option<Namespace>, CatalogError>> + Send {
         let state = self.lock();
-        // Порядок `covering` задаёт специфичность: первый найденный и есть ответ.
-        let found = NamespacePattern::covering(format, name)
+        // Порядок кандидатов задаёт специфичность: первый найденный и есть ответ.
+        let found = candidates
             .iter()
             .find_map(|pattern| {
                 state

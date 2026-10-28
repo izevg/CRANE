@@ -11,8 +11,8 @@ use crane_domain::access::Caller;
 use crane_domain::audit::{AuditAction, AuditEvent, Outcome};
 pub use crane_domain::registry::Coordinate;
 use crane_domain::registry::{
-    Asset, Checksum, Format, FormatMetadata, PackageVersion, Repository, RepositoryKind, Sha256,
-    VersionId, VersionState,
+    Asset, Checksum, Ecosystems, Format, FormatMetadata, PackageVersion, Repository,
+    RepositoryKind, Sha256, VersionId, VersionState,
 };
 use crane_ports::audit::AuditSink;
 use crane_ports::proxy::UpstreamNames;
@@ -182,6 +182,8 @@ pub struct Registry<C, B> {
     audit: Arc<dyn AuditSink>,
     /// Что публичный upstream знает об имени: формат без proxy получает `NoUpstream`.
     upstream: Arc<dyn UpstreamNames>,
+    /// Правила имён экосистем: `app` не знает грамматик, реализацию выбирает `entry`.
+    ecosystems: Ecosystems,
 }
 
 impl<C, B> fmt::Debug for Registry<C, B> {
@@ -193,6 +195,10 @@ impl<C, B> fmt::Debug for Registry<C, B> {
 
 impl<C: Catalog, B: BlobStore> Registry<C, B> {
     #[must_use]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "корень сборки: все порты и политика приходят из entry одним вызовом"
+    )]
     pub fn new(
         catalog: C,
         blobs: B,
@@ -200,6 +206,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
         ids: Arc<dyn IdGen>,
         audit: Arc<dyn AuditSink>,
         upstream: Arc<dyn UpstreamNames>,
+        ecosystems: Ecosystems,
     ) -> Self {
         Self {
             catalog,
@@ -208,6 +215,7 @@ impl<C: Catalog, B: BlobStore> Registry<C, B> {
             ids,
             audit,
             upstream,
+            ecosystems,
         }
     }
 
