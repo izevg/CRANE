@@ -2,8 +2,8 @@ use std::future::Future;
 use std::time::SystemTime;
 
 use crane_domain::registry::{
-    Asset, Format, FormatMetadata, Namespace, PackageName, PackageVersion, Repository,
-    RepositoryId, Version, VersionId, VersionState,
+    Asset, Format, FormatMetadata, Namespace, NamespacePattern, PackageName, PackageVersion,
+    Repository, RepositoryId, Version, VersionId, VersionState,
 };
 
 /// Версия к публикации. `yanked` при публикации всегда `false`, а `deprecated` — `None`, поэтому полей нет.
@@ -146,13 +146,13 @@ pub trait Catalog: Send + Sync {
         to: VersionState,
     ) -> impl Future<Output = Result<(), CatalogError>> + Send;
 
-    /// Самый специфичный namespace формата, покрывающий имя: перебор в порядке
-    /// `NamespacePattern::covering` (точное имя, затем от длинного префикса к короткому),
-    /// возвращается первое сохранённое совпадение. Нет покрытия: `None`.
+    /// Первый сохранённый namespace формата среди кандидатов: порядок кандидатов задаёт
+    /// вызывающий (`NamespacePattern::covering`: точное имя, затем от длинного префикса
+    /// к короткому), поэтому побеждает самый специфичный. Нет совпадения: `None`.
     fn namespace_for(
         &self,
         format: Format,
-        name: &PackageName,
+        candidates: &[NamespacePattern],
     ) -> impl Future<Output = Result<Option<Namespace>, CatalogError>> + Send;
 
     /// Есть ли пакет с этим нормализованным именем хотя бы в одном hosted-репозитории формата
