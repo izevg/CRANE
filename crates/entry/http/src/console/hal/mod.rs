@@ -9,6 +9,7 @@ use crane_domain::settings::Version;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+const VARY_AUTHORIZATION: HeaderValue = HeaderValue::from_static("authorization");
 const HAL_JSON: HeaderValue = HeaderValue::from_static("application/hal+json");
 /// Длина дайджеста в `ETag`: хватает, чтобы отличить представления, и не раздувает заголовок.
 const TAG_DIGEST_BYTES: usize = 16;
@@ -36,6 +37,8 @@ pub(crate) fn cacheable(request: &HeaderMap, body: &Value, cache: &'static str) 
     };
     let headers = response.headers_mut();
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static(cache));
+    // Тело зависит от токена (`/status` без него короче): кэш не должен отдавать одно вместо другого.
+    headers.insert(header::VARY, VARY_AUTHORIZATION);
     if let Ok(tag) = HeaderValue::from_str(&tag) {
         headers.insert(header::ETAG, tag);
     }
