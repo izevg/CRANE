@@ -12,7 +12,7 @@ mod settings;
 use std::sync::Arc;
 
 use axum::Router;
-use axum::middleware::from_fn_with_state;
+use axum::middleware::{from_fn, from_fn_with_state};
 use crane_app::settings::Settings;
 use crane_ports::audit::AuditSink;
 use crane_ports::settings::SettingsStore;
@@ -87,5 +87,7 @@ pub fn console_router<S: SettingsStore + 'static>(
             Arc::new(Access { token, audit }),
             require_bearer,
         ))
+        // Снаружи аутентификации: политика кэша относится и к 401.
+        .layer(from_fn(hal::cache_policy))
         .layer(from_fn_with_state(Arc::new(proxies), request_context))
 }

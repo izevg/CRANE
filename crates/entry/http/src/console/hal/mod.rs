@@ -3,13 +3,20 @@
 use std::fmt::Write as _;
 
 use axum::body::Body;
+use axum::extract::Request;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+use axum::middleware::Next;
 use axum::response::Response;
 use crane_domain::settings::Version;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-const VARY_AUTHORIZATION: HeaderValue = HeaderValue::from_static("authorization");
+const SETTINGS_PATH: &str = "/api/v1/settings";
+const NO_STORE: HeaderValue = HeaderValue::from_static("no-store");
+const PRIVATE: HeaderValue = HeaderValue::from_static("private");
+/// Тело зависит от токена (`/status` без него короче) или от сессии (v0.4.0): общий кэш не должен
+/// отдавать одно вместо другого.
+const VARY_CREDENTIALS: HeaderValue = HeaderValue::from_static("Authorization, Cookie");
 const HAL_JSON: HeaderValue = HeaderValue::from_static("application/hal+json");
 /// Длина дайджеста в `ETag`: хватает, чтобы отличить представления, и не раздувает заголовок.
 const TAG_DIGEST_BYTES: usize = 16;
@@ -25,8 +32,8 @@ pub(crate) fn json(status: StatusCode, body: &Value, version: Option<Version>) -
     response
 }
 
-/// Ответ с `ETag` от тела и `Cache-Control`; совпавший `If-None-Match` даёт 304 без тела.
-pub(crate) fn cacheable(request: &HeaderMap, body: &Value, cache: &'static str) -> Response {
+/// Ответ с `ETag` от тела; совпавший `If-None-Match` даёт 304 без тела.
+pub(crate) fn cacheable(request: &HeaderMap, body: &Value) -> Response {
     let tag = tag_of(body);
     let mut response = if matches(request, &tag) {
         let mut response = Response::new(Body::empty());
@@ -36,11 +43,24 @@ pub(crate) fn cacheable(request: &HeaderMap, body: &Value, cache: &'static str) 
         respond(StatusCode::OK, body)
     };
     let headers = response.headers_mut();
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static(cache));
-    // Тело зависит от токена (`/status` без него короче): кэш не должен отдавать одно вместо другого.
-    headers.insert(header::VARY, VARY_AUTHORIZATION);
     if let Ok(tag) = HeaderValue::from_str(&tag) {
         headers.insert(header::ETAG, tag);
+    }
+    response
+}
+
+/// Единая политика кэша консоли, по пути ответа (включая 401 и 404): настройки не хранятся нигде,
+/// профиль и статус — только в приватном кэше и с ключом по учётным данным. Остальным ответам
+/// заголовки не ставятся: `ETag` и 304 у `/me` и `/status` остаются.
+pub(crate) async fn cache_policy(request: Request, next: Next) -> Response {
+    let path = request.uri().path().to_owned();
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    if path == SETTINGS_PATH || path.starts_with("/api/v1/settings/") {
+        headers.insert(header::CACHE_CONTROL, NO_STORE);
+    } else if path == "/api/v1/me" || path == "/api/v1/status" {
+        headers.insert(header::CACHE_CONTROL, PRIVATE);
+        headers.insert(header::VARY, VARY_CREDENTIALS);
     }
     response
 }

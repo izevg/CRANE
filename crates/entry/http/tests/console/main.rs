@@ -11,6 +11,7 @@ mod common;
 mod fixture;
 
 mod auth;
+mod headers;
 mod profile;
 mod secrets;
 mod settings;

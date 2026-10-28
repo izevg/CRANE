@@ -187,26 +187,3 @@ fn status_public_part_survives_an_unreachable_settings_store() {
     // Assert
     assert_eq!(reply.status.as_u16(), 200);
 }
-
-#[test]
-fn me_and_status_vary_on_authorization_also_when_not_modified() {
-    // Arrange
-    let console = Console::new();
-    let tag = console.get("/api/v1/me").header("etag").to_owned();
-    let requests: [(&str, &[(&str, &str)]); 3] = [
-        ("/api/v1/me", &[]),
-        ("/api/v1/status", &[]),
-        ("/api/v1/me", &[("if-none-match", &tag)]),
-    ];
-
-    // Act
-    let varies = requests.map(|(uri, headers)| {
-        console
-            .authed(Method::GET, uri, headers, "")
-            .header("vary")
-            .to_owned()
-    });
-
-    // Assert
-    assert_eq!(varies, ["authorization"; 3].map(str::to_owned));
-}

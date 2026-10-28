@@ -34,7 +34,7 @@ fn etag_is_the_same_for_equal_bodies_and_differs_for_different_ones() {
     ];
 
     // Act
-    let tags = bodies.map(|body| etag(&cacheable(&request(&[]), &body, "private")));
+    let tags = bodies.map(|body| etag(&cacheable(&request(&[]), &body)));
 
     // Assert
     assert_eq!((tags[0] == tags[1], tags[0] == tags[2]), (true, false));
@@ -44,7 +44,7 @@ fn etag_is_the_same_for_equal_bodies_and_differs_for_different_ones() {
 fn if_none_match_with_the_current_tag_gives_304_without_body() {
     // Arrange
     let body = json!({"a": 1});
-    let tag = etag(&cacheable(&request(&[]), &body, "private"));
+    let tag = etag(&cacheable(&request(&[]), &body));
     let wildcards = [
         tag.clone(),
         format!("W/{tag}"),
@@ -53,7 +53,7 @@ fn if_none_match_with_the_current_tag_gives_304_without_body() {
     ];
 
     // Act
-    let statuses = wildcards.map(|value| cacheable(&request(&[&value]), &body, "private").status());
+    let statuses = wildcards.map(|value| cacheable(&request(&[&value]), &body).status());
 
     // Assert
     assert_eq!(statuses, [StatusCode::NOT_MODIFIED; 4]);
@@ -65,29 +65,23 @@ fn if_none_match_with_a_stale_tag_gives_the_body() {
     let body = json!({"a": 1});
 
     // Act
-    let response = cacheable(&request(&["\"stale\""]), &body, "private");
+    let response = cacheable(&request(&["\"stale\""]), &body);
 
     // Assert
     assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[test]
-fn not_modified_still_carries_the_tag_and_cache_policy() {
+fn not_modified_still_carries_the_tag() {
     // Arrange
     let body = json!({"a": 1});
-    let tag = etag(&cacheable(&request(&[]), &body, "private, max-age=30"));
+    let tag = etag(&cacheable(&request(&[]), &body));
 
     // Act
-    let response = cacheable(&request(&[&tag]), &body, "private, max-age=30");
+    let response = cacheable(&request(&[&tag]), &body);
 
     // Assert
-    assert_eq!(
-        (
-            etag(&response),
-            response.headers()[header::CACHE_CONTROL].to_str().unwrap()
-        ),
-        (tag, "private, max-age=30")
-    );
+    assert_eq!(etag(&response), tag);
 }
 
 #[test]

@@ -18,8 +18,6 @@ use crate::error::Problem;
 
 pub(super) const STATUS_HREF: &str = "/api/v1/status";
 const ME_HREF: &str = "/api/v1/me";
-/// Бейдж баннера и профиль меняются редко; UI опрашивает статус с `ETag`.
-const CACHE: &str = "private, max-age=30";
 /// До v0.4.0 единственная роль статического токена; ролевая модель — в 14.12.
 const ROLE_ADMIN: &str = "platform-admin";
 /// Режим `SoD` до v0.4.0 фиксирован: конфликтов быть не может, у токена одна роль.
@@ -59,7 +57,7 @@ async fn me(
         "sod": {"mode": SOD_MODE, "conflict": false},
         "_links": links,
     });
-    hal::cacheable(&headers, &body, CACHE)
+    hal::cacheable(&headers, &body)
 }
 
 async fn status<S: SettingsStore + 'static>(
@@ -78,7 +76,7 @@ async fn status<S: SettingsStore + 'static>(
         let restart_required = settings.view().await?.restart_required;
         body["restart_required"] = Value::Bool(restart_required);
     }
-    Ok(hal::cacheable(&headers, &body, CACHE))
+    Ok(hal::cacheable(&headers, &body))
 }
 
 const fn kind_name(kind: PrincipalKind) -> &'static str {
