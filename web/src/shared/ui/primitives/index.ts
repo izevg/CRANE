@@ -45,6 +45,7 @@ export {
 } from "./forms/choice/select";
 export { Field, FieldDescription, FieldError, FieldLabel } from "./forms/text/field";
 export { Input } from "./forms/text/input";
+export { PasswordInput } from "./forms/text/password-input";
 export { Textarea } from "./forms/text/textarea";
 export { Button } from "./forms/toggle/button";
 export { type ButtonVariant, buttonStyles } from "./forms/toggle/button-styles";

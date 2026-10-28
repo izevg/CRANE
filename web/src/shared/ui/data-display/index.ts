@@ -5,4 +5,5 @@ export { type DiffRow, DiffViewer } from "./DiffViewer/DiffViewer";
 export { type JsonValue, JsonViewer } from "./JsonViewer/JsonViewer";
 export { KeyValueList } from "./KeyValueList/KeyValueList";
 export { Markdown } from "./Markdown/Markdown";
+export { type ProbeCheck, ProbeReport } from "./ProbeReport/ProbeReport";
 export { Timeline } from "./Timeline/Timeline";

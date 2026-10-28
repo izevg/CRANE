@@ -6,3 +6,4 @@ export { AutoRefreshToggle } from "./AutoRefreshToggle/AutoRefreshToggle";
 export { BulkActionBar } from "./BulkActionBar/BulkActionBar";
 export { CopyableId } from "./CopyableId/CopyableId";
 export { CopyButton } from "./CopyButton/CopyButton";
+export { StickySaveBar } from "./StickySaveBar/StickySaveBar";

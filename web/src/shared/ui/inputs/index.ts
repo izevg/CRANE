@@ -6,4 +6,5 @@ export {
   JUSTIFICATION_MAX,
   JUSTIFICATION_MIN,
 } from "./JustificationField/justification";
+export { ReadonlyValue } from "./ReadonlyValue/ReadonlyValue";
 export { SegmentedControl } from "./SegmentedControl/SegmentedControl";

@@ -2,12 +2,11 @@ import { plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { announce } from "~/shared/lib/a11y";
+import { announce, useScrollPaddingBottom } from "~/shared/lib/a11y";
 import { cx, type WithClassName } from "~/shared/lib/core";
 import { Button } from "../../primitives";
 import { ActionBar } from "../ActionBar/ActionBar";
 import type { Action } from "../ActionButton/action";
-import { useScrollPaddingBottom } from "./useScrollPaddingBottom";
 
 type BulkActionBarProps = WithClassName<{
   /** Сколько строк выбрано; 0 — панель не рендерится. */
