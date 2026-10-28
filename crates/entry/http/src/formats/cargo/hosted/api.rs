@@ -52,7 +52,7 @@ fn index_metadata(
 ) -> Result<Result<FormatMetadata, Refusal>, ClientError> {
     // Адрес индекса строится так же, как база в `config.json`: именно его cargo подставляет
     // в `registry` зависимостей этого репозитория.
-    let own_index = format!("sparse+{}/index/", settings.mount(Format::Cargo, repo));
+    let own_index = format!("sparse+{}/index/", settings.repo_url(Format::Cargo, repo));
     match request.index_metadata(&own_index) {
         Ok(metadata) => Ok(Ok(metadata)),
         Err(MetadataError::Foreign(foreign)) => Ok(Err(Refusal {

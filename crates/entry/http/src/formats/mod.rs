@@ -43,7 +43,7 @@ pub struct FormatSettings {
 
 impl FormatSettings {
     /// Точка монтирования репозитория; префикс совпадает с `Format::as_str`.
-    pub(crate) fn mount(&self, format: Format, repo: &str) -> String {
+    pub(crate) fn repo_url(&self, format: Format, repo: &str) -> String {
         format!("{}/{}/{repo}", self.public_url, format.as_str())
     }
 }
@@ -188,6 +188,8 @@ pub(crate) fn credentials(format: Format) -> &'static [Credential] {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     #[test]
@@ -196,23 +198,24 @@ mod tests {
         let formats = Format::ALL;
 
         // Act
-        let actual = formats.map(|format| (format, challenge(format)));
+        let actual: BTreeMap<_, _> = formats
+            .into_iter()
+            .map(|format| (format, challenge(format)))
+            .collect();
 
         // Assert
         let basic = HeaderValue::from_static("Basic realm=\"crane\"");
-        assert_eq!(
-            actual,
-            [
-                (Format::Maven, basic.clone()),
-                (
-                    Format::Npm,
-                    HeaderValue::from_static("Bearer realm=\"crane\"")
-                ),
-                (Format::PyPi, basic.clone()),
-                (Format::NuGet, basic),
-                (Format::Cargo, HeaderValue::from_static("Cargo")),
-            ]
-        );
+        let expected = BTreeMap::from([
+            (Format::Maven, basic.clone()),
+            (
+                Format::Npm,
+                HeaderValue::from_static("Bearer realm=\"crane\""),
+            ),
+            (Format::PyPi, basic.clone()),
+            (Format::NuGet, basic),
+            (Format::Cargo, HeaderValue::from_static("Cargo")),
+        ]);
+        assert_eq!(actual, expected);
     }
 
     #[test]
@@ -221,19 +224,26 @@ mod tests {
         let formats = Format::ALL;
 
         // Act
-        let actual = formats.map(|format| error_body(format, "плохо", "req-1"));
+        let actual: BTreeMap<_, _> = formats
+            .into_iter()
+            .map(|format| (format, error_body(format, "плохо", "req-1")))
+            .collect();
 
         // Assert
         let text = "плохо (request_id req-1)";
-        assert_eq!(
-            actual,
-            [
-                None,
+        let expected = BTreeMap::from([
+            (Format::Maven, None),
+            (
+                Format::Npm,
                 Some((JSON, format!(r#"{{"error":"{text}"}}"#))),
-                None,
-                None,
+            ),
+            (Format::PyPi, None),
+            (Format::NuGet, None),
+            (
+                Format::Cargo,
                 Some((JSON, format!(r#"{{"errors":[{{"detail":"{text}"}}]}}"#))),
-            ]
-        );
+            ),
+        ]);
+        assert_eq!(actual, expected);
     }
 }

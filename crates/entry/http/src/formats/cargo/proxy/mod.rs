@@ -111,7 +111,7 @@ where
         engine,
         registry,
         origins: origins(source)?,
-        base: settings.mount(Format::Cargo, source.name),
+        base: settings.repo_url(Format::Cargo, source.name),
     });
     Ok(Router::new()
         .route("/index/config.json", get(routes::config))

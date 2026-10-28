@@ -31,7 +31,7 @@ pub(super) async fn config<C: Catalog + 'static, B: BlobStore + 'static>(
         .registry
         .repository(&caller, Format::Cargo, &repo)
         .await?;
-    let base = shared.settings.mount(Format::Cargo, &repo);
+    let base = shared.settings.repo_url(Format::Cargo, &repo);
     Ok(([(header::CONTENT_TYPE, JSON)], render_config(&base)).into_response())
 }
 

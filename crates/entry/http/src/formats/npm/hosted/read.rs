@@ -44,7 +44,7 @@ pub(super) async fn packument<C: Catalog + 'static, B: BlobStore + 'static>(
     if stored.versions.is_empty() {
         return Err(ClientError::not_found());
     }
-    let base = shared.settings.mount(Format::Npm, &request.repo);
+    let base = shared.settings.repo_url(Format::Npm, &request.repo);
     let body = render_hosted(
         package,
         &stored.versions,

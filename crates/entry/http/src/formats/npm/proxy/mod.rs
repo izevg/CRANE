@@ -94,7 +94,7 @@ where
         engine,
         registry,
         origin: presence_origin(source)?,
-        base: settings.mount(Format::Npm, source.name),
+        base: settings.repo_url(Format::Npm, source.name),
     });
     Ok(Router::new()
         .route("/{*path}", any(routes::handle::<U, PC, L, B, RC, RB>))

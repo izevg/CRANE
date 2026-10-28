@@ -21,21 +21,18 @@ pub(super) fn render_error(mut response: Response, id: &RequestId) -> Response {
     };
     let status = response.status();
     let format = response.extensions_mut().remove::<Format>();
-    let (content_type, text) = match (error, format) {
-        (ErrorBody::Detail { detail, kind }, format) => format
+    let (content_type, text) = match error {
+        ErrorBody::Detail { detail, kind } => format
             .and_then(|format| formats::error_body(format, &detail, id.as_str()))
             .unwrap_or_else(|| {
                 let title = status.canonical_reason().unwrap_or("Error");
                 (PROBLEM_JSON, problem(status, title, &detail, kind, id))
             }),
-        (
-            ErrorBody::Problem {
-                title,
-                detail,
-                kind,
-            },
-            _,
-        ) => (PROBLEM_JSON, problem(status, title, detail, kind, id)),
+        ErrorBody::Problem {
+            title,
+            detail,
+            kind,
+        } => (PROBLEM_JSON, problem(status, title, detail, kind, id)),
     };
     *response.body_mut() = Body::from(text);
     let headers = response.headers_mut();
