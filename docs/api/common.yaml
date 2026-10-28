@@ -107,6 +107,22 @@ components:
       description: ETag из прошлого ответа; при совпадении сервер отвечает 304 без тела.
       schema:
         type: string
+    SettingKey:
+      name: key
+      in: path
+      description: Ключ настройки - файловый ключ конфигурации (`blobs`, `public_url`, `cargo_proxy_repos`); переменная окружения - `CRANE_` + верхний регистр.
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z][a-z0-9_]*$'
+        maxLength: 96
+    OnboardingStep:
+      name: step
+      in: path
+      description: Шаг мастера первого запуска.
+      required: true
+      schema:
+        $ref: '#/components/schemas/OnboardingStepId'
     TokenId:
       name: token_id
       in: path
@@ -429,6 +445,15 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    SettingInvalid:
+      description: '`setting-invalid`: значение не проходит разбор секции; `errors` перечисляет ключи и причины. Другие 422: `secrets-unavailable`, `idempotency-key-reuse`.'
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/SettingInvalidProblem'
     TooManyRequests:
       description: Превышен лимит запросов (GCRA).
       headers:
@@ -8091,6 +8116,313 @@ components:
       required:
       - _links
       - _embedded
+    SettingOrigin:
+      title: SettingOrigin
+      type: string
+      description: 'Какой слой дал итоговое значение: `env` (inherited: окружение или файл конфигурации), `stored` (effective: БД), `default` (умолчание).'
+      enum:
+      - env
+      - stored
+      - default
+    SettingKind:
+      title: SettingKind
+      type: string
+      description: |-
+        Вид настройки - подсказка виджета, не тип хранения. Значение всегда строка в форме окружения:
+        `list` - элементы через запятую без пробелов (элементы запятых не содержат); `bool` - `true` или `false`; `number` - десятичное целое; `text`, `url` - как есть; у `secret` значение в ответах не возвращается никогда.
+      enum:
+      - text
+      - number
+      - bool
+      - list
+      - url
+      - secret
+    SettingUnit:
+      title: SettingUnit
+      type: string
+      description: Единица значения вида `number`.
+      enum:
+      - bytes
+      - seconds
+    SettingShadowed:
+      title: SettingShadowed
+      type: object
+      description: Значение в БД, которое не действует, потому что ключ задан окружением.
+      properties:
+        version:
+          type: integer
+          format: int64
+        updated_at:
+          type: string
+          format: date-time
+        updated_by:
+          type: string
+      required:
+      - version
+      - updated_at
+      - updated_by
+    Setting:
+      title: Setting
+      type: object
+      description: 'Итоговое значение настройки и его источник. Секрет не возвращается никогда: только `secret_state`.'
+      properties:
+        key:
+          type: string
+        env_var:
+          type: string
+          description: Имя переменной окружения ключа (подсказка оператору, что менять).
+        group:
+          type: string
+          description: Секция конфигурации, она же группа экрана и шаг мастера (`network`, `storage`, `proxy`, `repos`, `namespaces`, `token`, ...).
+        kind:
+          $ref: '#/components/schemas/SettingKind'
+        unit:
+          oneOf:
+          - $ref: '#/components/schemas/SettingUnit'
+          - type: 'null'
+        origin:
+          $ref: '#/components/schemas/SettingOrigin'
+        locked:
+          type: boolean
+          description: '`true`, если значение пришло из окружения (`origin=env`) или ключ только для окружения: изменить его из консоли нельзя.'
+        value:
+          type:
+          - string
+          - 'null'
+          description: Строка в форме окружения (см. `SettingKind`); `null` у секретов и у незаданных ключей.
+        secret_state:
+          type:
+          - string
+          - 'null'
+          enum:
+          - set
+          - unset
+          - null
+          description: Только для `kind=secret`.
+        version:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: Версия строки в БД (ETag для `If-Match`); `null`, если строки нет.
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        updated_by:
+          type:
+          - string
+          - 'null'
+        shadowed:
+          oneOf:
+          - $ref: '#/components/schemas/SettingShadowed'
+          - type: 'null'
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+      required:
+      - key
+      - env_var
+      - group
+      - kind
+      - origin
+      - locked
+      - _links
+    SettingList:
+      title: SettingList
+      type: object
+      properties:
+        _embedded:
+          type: object
+          properties:
+            crane:settings:
+              type: array
+              items:
+                $ref: '#/components/schemas/Setting'
+          required:
+          - crane:settings
+        restart_required:
+          type: boolean
+          description: Снимок настроек в БД отличается от того, с которым процесс стартовал; изменения вступят в силу после перезапуска.
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+      required:
+      - _embedded
+      - restart_required
+      - _links
+    SettingWrite:
+      title: SettingWrite
+      type: object
+      properties:
+        value:
+          type: string
+          description: Новое значение в форме окружения (см. `SettingKind`). Для секрета без `CRANE_SETTINGS_KEY_FILE` - 422 `secrets-unavailable`.
+      required:
+      - value
+    SettingError:
+      title: SettingError
+      type: object
+      properties:
+        key:
+          type: string
+        detail:
+          type: string
+          description: Причина из разбора секции, без значения секрета.
+      required:
+      - key
+      - detail
+    SettingInvalidProblem:
+      title: SettingInvalidProblem
+      description: 'Problem `422 setting-invalid` с расширением `errors`: на `PUT /settings/{key}` один элемент, на шаге мастера - по ключам шага.'
+      allOf:
+      - $ref: '#/components/schemas/Problem'
+      - type: object
+        properties:
+          errors:
+            type: array
+            items:
+              $ref: '#/components/schemas/SettingError'
+        required:
+        - errors
+    OnboardingState:
+      title: OnboardingState
+      type: string
+      enum:
+      - pending
+      - completed
+    OnboardingStepId:
+      title: OnboardingStepId
+      type: string
+      description: Шаги мастера (раздел 20.4).
+      enum:
+      - environment
+      - storage
+      - upstream
+      - namespaces
+      - workspaces
+      - identity
+      - remaining
+      - summary
+    OnboardingStepStatus:
+      title: OnboardingStepStatus
+      type: string
+      description: 'Вычисляется, не хранится: `done` - разбор секции шага проходит, `done_by_env` - к тому же все ключи шага из окружения, `unavailable` - возможность ещё не включена (команды и OIDC до v0.4.0), иначе `todo`.'
+      enum:
+      - todo
+      - done
+      - done_by_env
+      - unavailable
+    OnboardingStep:
+      title: OnboardingStep
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/OnboardingStepId'
+        status:
+          $ref: '#/components/schemas/OnboardingStepStatus'
+      required:
+      - id
+      - status
+    Onboarding:
+      title: Onboarding
+      type: object
+      description: Без заголовка `Authorization` и при `state=completed` возвращается только `state`.
+      properties:
+        state:
+          $ref: '#/components/schemas/OnboardingState'
+        current_step:
+          oneOf:
+          - $ref: '#/components/schemas/OnboardingStepId'
+          - type: 'null'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingStep'
+        missing:
+          type: array
+          items:
+            type: string
+          description: Ключи, разбор которых возвращает `Missing`.
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+      required:
+      - state
+      - _links
+    OnboardingStepInput:
+      title: OnboardingStepInput
+      type: object
+      description: 'Значения ключей шага строками в форме окружения. Ключи, заданные окружением, сервер отвергает 409 `setting-locked`.'
+      properties:
+        values:
+          type: object
+          additionalProperties:
+            type: string
+        acknowledged_warnings:
+          type: array
+          items:
+            type: string
+          description: Идентификаторы проверок со статусом `warn`, с которыми оператор согласился идти дальше.
+      required:
+      - values
+    ProbeStatus:
+      title: ProbeStatus
+      type: string
+      description: '`skipped` - проверка ещё не поддерживается (OIDC до v0.4.0).'
+      enum:
+      - pass
+      - warn
+      - fail
+      - skipped
+    ProbeCheck:
+      title: ProbeCheck
+      type: object
+      properties:
+        id:
+          type: string
+          description: Стабильный идентификатор проверки (`storage.write`, `upstream.tls`, `oidc.jwks`).
+        status:
+          $ref: '#/components/schemas/ProbeStatus'
+        detail:
+          type: string
+          description: Пояснение без секретов, значений и внутренних адресов.
+      required:
+      - id
+      - status
+      - detail
+    ProbeReport:
+      title: ProbeReport
+      type: object
+      properties:
+        passed:
+          type: boolean
+          description: '`true`, если нет проверок со статусом `fail`.'
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeCheck'
+      required:
+      - passed
+      - checks
+    OnboardingStepResult:
+      title: OnboardingStepResult
+      type: object
+      properties:
+        step:
+          $ref: '#/components/schemas/OnboardingStep'
+        next_credential:
+          type: string
+          enum:
+          - bootstrap_token
+          - static_token
+          description: 'Каким токеном слать следующие запросы мастера. `static_token` - статический токен задан (этим шагом или окружением), bootstrap-токен больше не принимается.'
+        report:
+          $ref: '#/components/schemas/ProbeReport'
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+      required:
+      - step
+      - report
+      - _links
   pathItems:
     Status:
       get:
@@ -9338,6 +9670,386 @@ components:
             $ref: '#/components/responses/Unauthorized'
           '403':
             $ref: '#/components/responses/Forbidden'
+          '429':
+            $ref: '#/components/responses/TooManyRequests'
+          '500':
+            $ref: '#/components/responses/InternalError'
+    Onboarding:
+      get:
+        tags:
+        - onboarding
+        summary: Состояние мастера и проверка токена
+        description: |-
+          Этим вызовом SPA проверяет введённый токен.
+
+          - Без заголовка `Authorization`: только `{state}`.
+          - С верным Bearer (bootstrap `crb_…` или статический `CRANE_TOKEN`): `state`, `current_step`, `steps[{id, status}]`, `missing` (ключи, разбор которых возвращает `Missing`).
+          - С неверным токеном: 401 `bootstrap-token-invalid` (событие `OnboardingTokenRejected`).
+          - Превышен лимит неудач по адресу клиента (5 за 15 минут): 429 с `Retry-After` на этом же вызове.
+          - При `state=completed`: только `{state: completed}`; остальные операции мастера отвечают 410.
+        operationId: getOnboarding
+        x-crane-phase: P0
+        x-crane-since: v0.3.0
+        x-crane-action: onboarding:read
+        x-crane-step-up: false
+        x-crane-audit:
+          event: onboarding.token_rejected
+          ocsf_class: 3002
+        security:
+        - {}
+        - bearer: []
+        responses:
+          '200':
+            description: Успешно.
+            headers:
+              X-Request-Id:
+                $ref: '#/components/headers/XRequestId'
+            content:
+              application/hal+json:
+                schema:
+                  $ref: '#/components/schemas/Onboarding'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '429':
+            $ref: '#/components/responses/TooManyRequests'
+          '500':
+            $ref: '#/components/responses/InternalError'
+    OnboardingStepsStep:
+      put:
+        tags:
+        - onboarding
+        summary: Проверить и сохранить ключи шага
+        description: |-
+          Прогон секции шага над наложением env > файл > БД + значения запроса, затем запись в БД; идемпотентно. Ключи, заданные окружением, - 409 `setting-locked`; ошибки разбора - 422 `setting-invalid` с `errors` по ключам шага. Результат содержит отчёт проверки связи и `next_credential`.
+
+          Шаг `remaining`, записавший статический токен `token`, отвечает `next_credential: static_token`: bootstrap-токен с этого момента не принимается, и SPA шлёт статический токен, который оператор только что ввёл (сервер проверяет его по текущему слою БД, без перезапуска). Если нет ни `CRANE_TOKEN` в окружении, ни `CRANE_SETTINGS_KEY_FILE`, записать токен нельзя: 422 `secrets-unavailable`, `token` остаётся в `missing`.
+
+          Доступ: `Authorization: Bearer` с bootstrap-токеном `crb_…` (пока статический токен не задан) либо статическим `CRANE_TOKEN`. После завершения мастера - 410 `onboarding-completed`.
+        operationId: saveOnboardingStep
+        x-crane-phase: P0
+        x-crane-since: v0.3.0
+        x-crane-action: onboarding:save_step
+        x-crane-step-up: false
+        x-crane-audit:
+          event: setting.changed
+          ocsf_class: 6003
+        security:
+        - bearer: []
+        parameters:
+        - $ref: '#/components/parameters/OnboardingStep'
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingStepInput'
+        responses:
+          '200':
+            description: Шаг сохранён.
+            headers:
+              X-Request-Id:
+                $ref: '#/components/headers/XRequestId'
+            content:
+              application/hal+json:
+                schema:
+                  $ref: '#/components/schemas/OnboardingStepResult'
+          '400':
+            $ref: '#/components/responses/BadRequest'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '409':
+            $ref: '#/components/responses/Conflict'
+          '410':
+            $ref: '#/components/responses/Gone'
+          '422':
+            $ref: '#/components/responses/SettingInvalid'
+          '429':
+            $ref: '#/components/responses/TooManyRequests'
+          '500':
+            $ref: '#/components/responses/InternalError'
+          '503':
+            $ref: '#/components/responses/ServiceUnavailable'
+    OnboardingStepsStepProbe:
+      post:
+        tags:
+        - onboarding
+        summary: Проверить связь без сохранения
+        description: |-
+          Проба значений кандидата через единый клиент с SSRF-guard; ничего не сохраняет, в проверяемом хранилище оставляет только удаляемый объект `.crane-probe/<uuid>`. Проверки, которые ещё не поддерживаются (OIDC до v0.4.0), - `skipped`.
+
+          Доступ: `Authorization: Bearer` с bootstrap-токеном `crb_…` (пока статический токен не задан) либо статическим `CRANE_TOKEN`. После завершения мастера - 410 `onboarding-completed`.
+        operationId: probeOnboardingStep
+        x-crane-phase: P0
+        x-crane-since: v0.3.0
+        x-crane-action: onboarding:probe
+        x-crane-step-up: false
+        x-crane-audit: null
+        security:
+        - bearer: []
+        parameters:
+        - $ref: '#/components/parameters/OnboardingStep'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingStepInput'
+        responses:
+          '200':
+            description: Отчёт проверки.
+            headers:
+              X-Request-Id:
+                $ref: '#/components/headers/XRequestId'
+            content:
+              application/hal+json:
+                schema:
+                  $ref: '#/components/schemas/ProbeReport'
+          '400':
+            $ref: '#/components/responses/BadRequest'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '410':
+            $ref: '#/components/responses/Gone'
+          '422':
+            $ref: '#/components/responses/Unprocessable'
+          '429':
+            $ref: '#/components/responses/TooManyRequests'
+          '500':
+            $ref: '#/components/responses/InternalError'
+          '503':
+            $ref: '#/components/responses/ServiceUnavailable'
+    OnboardingCompletion:
+      post:
+        tags:
+        - onboarding
+        summary: Завершить мастер
+        description: |-
+          Возможно, когда разбор всей конфигурации проходит (иначе 422 `setting-invalid` с `errors` по недостающим ключам). Атомарно переводит состояние в `completed`, стирает bootstrap-токен и закрывает мастер навсегда; процесс входит в рабочий режим без перезапуска.
+
+          Доступ: `Authorization: Bearer` с bootstrap-токеном `crb_…` (пока статический токен не задан) либо статическим `CRANE_TOKEN`. После завершения мастера - 410 `onboarding-completed`.
+        operationId: completeOnboarding
+        x-crane-phase: P0
+        x-crane-since: v0.3.0
+        x-crane-action: onboarding:complete
+        x-crane-step-up: false
+        x-crane-audit:
+          event: onboarding.completed
+          ocsf_class: 6003
+        security:
+        - bearer: []
+        parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        responses:
+          '200':
+            description: Мастер завершён.
+            headers:
+              X-Request-Id:
+                $ref: '#/components/headers/XRequestId'
+            content:
+              application/hal+json:
+                schema:
+                  $ref: '#/components/schemas/Onboarding'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '409':
+            $ref: '#/components/responses/Conflict'
+          '422':
+            $ref: '#/components/responses/SettingInvalid'
+          '410':
+            $ref: '#/components/responses/Gone'
+          '429':
+            $ref: '#/components/responses/TooManyRequests'
+          '500':
+            $ref: '#/components/responses/InternalError'
+    Settings:
+      get:
+        tags:
+        - settings
+        summary: Настройки платформы
+        description: |-
+          Итоговые значения с источником (`env`, `stored`, `default`), замком и затенением; секреты только `set/unset`. `restart_required` - снимок в БД отличается от снимка старта.
+
+          Роли: platform-admin; до v0.4.0 - статический токен.
+        operationId: listSettings
+        x-crane-phase: P0
+        x-crane-since: v0.3.0
+        x-crane-action: settings:read
+        x-crane-step-up: false
+        x-crane-audit: null
+        security:
+        - session: []
+        - bearer: []
+        parameters:
+        - name: group
+          in: query
+          description: Группа (секция) настроек.
+          schema:
+            type: string
+        - name: origin
+          in: query
+          description: Фильтр по источнику значения.
+          schema:
+            $ref: '#/components/schemas/SettingOrigin'
+        responses:
+          '200':
+            description: Успешно.
+            headers:
+              X-Request-Id:
+                $ref: '#/components/headers/XRequestId'
+            content:
+              application/hal+json:
+                schema:
+                  $ref: '#/components/schemas/SettingList'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '403':
+            $ref: '#/components/responses/Forbidden'
+          '429':
+            $ref: '#/components/responses/TooManyRequests'
+          '500':
+            $ref: '#/components/responses/InternalError'
+    SettingsKey:
+      get:
+        tags:
+        - settings
+        summary: Настройка
+        description: |-
+          Одна настройка с источником. `ETag` - версия строки в БД.
+
+          Роли: platform-admin.
+        operationId: getSetting
+        x-crane-phase: P0
+        x-crane-since: v0.3.0
+        x-crane-action: settings:read
+        x-crane-step-up: false
+        x-crane-audit: null
+        security:
+        - session: []
+        - bearer: []
+        parameters:
+        - $ref: '#/components/parameters/SettingKey'
+        responses:
+          '200':
+            description: Успешно.
+            headers:
+              X-Request-Id:
+                $ref: '#/components/headers/XRequestId'
+            content:
+              application/hal+json:
+                schema:
+                  $ref: '#/components/schemas/Setting'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '403':
+            $ref: '#/components/responses/Forbidden'
+          '404':
+            $ref: '#/components/responses/NotFound'
+          '429':
+            $ref: '#/components/responses/TooManyRequests'
+          '500':
+            $ref: '#/components/responses/InternalError'
+      put:
+        tags:
+        - settings
+        summary: Записать значение в БД
+        description: |-
+          Записывает значение effective после прогона секции над наложением с кандидатом. Ключ из окружения - 409 `setting-locked` (с именем переменной); режим `CRANE_DATABASE_URL=memory` - 409 `settings-not-persistent`; несовпадение `If-Match` - 412; ошибка разбора - 422 `setting-invalid` (`errors` из одного элемента). Вступает в силу после перезапуска.
+
+          Роли: platform-admin.
+        operationId: putSetting
+        x-crane-phase: P0
+        x-crane-since: v0.3.0
+        x-crane-action: settings:write
+        x-crane-step-up: false
+        x-crane-audit:
+          event: setting.changed
+          ocsf_class: 6003
+        security:
+        - session: []
+        - bearer: []
+        parameters:
+        - $ref: '#/components/parameters/SettingKey'
+        - $ref: '#/components/parameters/IfMatch'
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingWrite'
+        responses:
+          '200':
+            description: Сохранено.
+            headers:
+              X-Request-Id:
+                $ref: '#/components/headers/XRequestId'
+            content:
+              application/hal+json:
+                schema:
+                  $ref: '#/components/schemas/Setting'
+          '400':
+            $ref: '#/components/responses/BadRequest'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '403':
+            $ref: '#/components/responses/Forbidden'
+          '404':
+            $ref: '#/components/responses/NotFound'
+          '409':
+            $ref: '#/components/responses/Conflict'
+          '412':
+            $ref: '#/components/responses/PreconditionFailed'
+          '422':
+            $ref: '#/components/responses/SettingInvalid'
+          '429':
+            $ref: '#/components/responses/TooManyRequests'
+          '500':
+            $ref: '#/components/responses/InternalError'
+      delete:
+        tags:
+        - settings
+        summary: Убрать значение из БД
+        description: |-
+          Удаляет значение effective; дальше отвечает окружение либо умолчание. Если без него конфигурация не разбирается - 422 `setting-invalid`.
+
+          Роли: platform-admin.
+        operationId: deleteSetting
+        x-crane-phase: P0
+        x-crane-since: v0.3.0
+        x-crane-action: settings:write
+        x-crane-step-up: false
+        x-crane-audit:
+          event: setting.changed
+          ocsf_class: 6003
+        security:
+        - session: []
+        - bearer: []
+        parameters:
+        - $ref: '#/components/parameters/SettingKey'
+        - $ref: '#/components/parameters/IfMatch'
+        responses:
+          '200':
+            description: Значение убрано; ответ содержит итоговую настройку.
+            headers:
+              X-Request-Id:
+                $ref: '#/components/headers/XRequestId'
+            content:
+              application/hal+json:
+                schema:
+                  $ref: '#/components/schemas/Setting'
+          '401':
+            $ref: '#/components/responses/Unauthorized'
+          '403':
+            $ref: '#/components/responses/Forbidden'
+          '404':
+            $ref: '#/components/responses/NotFound'
+          '409':
+            $ref: '#/components/responses/Conflict'
+          '412':
+            $ref: '#/components/responses/PreconditionFailed'
+          '422':
+            $ref: '#/components/responses/SettingInvalid'
           '429':
             $ref: '#/components/responses/TooManyRequests'
           '500':

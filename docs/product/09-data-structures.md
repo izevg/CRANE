@@ -522,6 +522,7 @@ RETURNING id, kind, payload, attempts;
 | Уязвимости и скоринг | `advisory`, `feed_cursor`, `risk_score`, `vex_statement`, `emergency_block`, `break_glass_grant` |
 | Граф | `dependency_edge`, `usage_evidence`, `consumer` (проект, сборка, деплой; `consumer` вида «проект» = workload-принципал, 14.15) |
 | Эксплуатация | `job`, `job_dead`, `outbox`, `webhook_subscription`, `webhook_delivery`, `idempotency_key`, `retention_rule`, `retention_hold`, `quota_usage`, `audit_event`, `download_event`, `download_daily`, `siem_sink`, `siem_cursor` |
+| Настройки и первый запуск | `setting` (слой конфигурации «в БД», секреты зашифрованы), `onboarding` (одна строка: `Pending` с хэшем bootstrap-токена или `Completed`) (раздел 20) |
 
 ## Жизненный цикл версии
 

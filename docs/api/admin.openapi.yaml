@@ -12,7 +12,7 @@ info:
 
     ## Фазы и версии
 
-    Каждая операция несёт `x-crane-phase` и `x-crane-since`: P0 = v0.4.0 (доступ, базовый UI, CLI; часть в v0.5.0), P1 = v0.6.0, P2 = v1.1.0, P3 = v1.2.0.
+    Каждая операция несёт `x-crane-phase` и `x-crane-since`: P0 = v0.4.0 (доступ, базовый UI, CLI; часть в v0.5.0); настройки и мастер первого запуска (раздел 20) вытянуты вперёд и помечены `x-crane-since: v0.3.0` при P0, P1 = v0.6.0, P2 = v1.1.0, P3 = v1.2.0.
 
     ## Расширения операции
 
@@ -195,6 +195,10 @@ tags:
   description: 'Центр уведомлений: список, счётчик непрочитанных, отметка прочитанным (P0).'
 - name: agents
   description: Подтверждения планов A2A-агента (P3).
+- name: onboarding
+  description: 'Мастер первого запуска: состояние и проверка токена, шаги, проверка связи, завершение (v0.3.0, раздел 20).'
+- name: settings
+  description: 'Настройки платформы: итоговые значения, источники inherited и effective, запись (v0.3.0, раздел 20).'
 paths:
   /status:
     $ref: ./common.yaml#/components/pathItems/Status
@@ -240,6 +244,18 @@ paths:
     $ref: ./common.yaml#/components/pathItems/AuditExportsExportId
   /audit/anchors:
     $ref: ./common.yaml#/components/pathItems/AuditAnchors
+  /onboarding:
+    $ref: ./common.yaml#/components/pathItems/Onboarding
+  /onboarding/steps/{step}:
+    $ref: ./common.yaml#/components/pathItems/OnboardingStepsStep
+  /onboarding/steps/{step}/probe:
+    $ref: ./common.yaml#/components/pathItems/OnboardingStepsStepProbe
+  /onboarding/completion:
+    $ref: ./common.yaml#/components/pathItems/OnboardingCompletion
+  /settings:
+    $ref: ./common.yaml#/components/pathItems/Settings
+  /settings/{key}:
+    $ref: ./common.yaml#/components/pathItems/SettingsKey
   /session:
     get:
       tags:
@@ -7626,6 +7642,7 @@ x-crane-link-rels:
   - crane:metadata
   - crane:my-actions
   - crane:my-tokens
+  - crane:onboarding
   - crane:overview
   - crane:package
   - crane:platform-overview
@@ -7635,6 +7652,8 @@ x-crane-link-rels:
   - crane:robot
   - crane:same-request
   - crane:search
+  - crane:setting
+  - crane:settings
   - crane:status
   - crane:target
   - crane:token
