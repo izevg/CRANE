@@ -16,12 +16,16 @@ crane-domain = { path = "../../core/domain" }
 crane-ports = { path = "../../core/ports" }
 crane-format-cargo = { path = "../../formats/cargo" }
 crane-format-npm = { path = "../../formats/npm" }
+crane-format-pypi = { path = "../../formats/pypi" }
 axum = { version = "0.8", default-features = false, features = ["tokio"] }
 axum-extra = { version = "0.12", default-features = false, features = ["typed-header"] }
 # Basic-схема (pip, Maven, dotnet): пароль приходит в base64. Версия та же, что у crane-format-npm.
 base64 = "0.22"
 bytes = "1"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# Загрузка PyPI: часть `content` должна стать потоком `'static` для `Registry::attach`, а `Field` из
+# `axum::extract::Multipart` заимствует форму. multer — движок axum multipart (MIT), без json и tokio-io.
+multer = { version = "3", default-features = false }
 serde_json = "1"
 sha2 = "0.10"
 # time: timeout пробы готовности (зависшее хранилище не держит пробу дольше клиента).

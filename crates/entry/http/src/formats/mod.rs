@@ -12,6 +12,7 @@
 
 mod cargo;
 mod npm;
+mod pypi;
 
 use std::sync::Arc;
 
@@ -66,7 +67,7 @@ pub(crate) fn hosted_router<C: Catalog + 'static, B: BlobStore + 'static>(
     match format {
         Format::Cargo => Some(cargo::hosted_router(Arc::clone(registry), settings)),
         Format::Npm => Some(npm::hosted_router(Arc::clone(registry), settings)),
-        Format::PyPi => None,
+        Format::PyPi => Some(pypi::hosted_router(Arc::clone(registry), settings)),
         Format::Maven => None,
         Format::NuGet => None,
     }
