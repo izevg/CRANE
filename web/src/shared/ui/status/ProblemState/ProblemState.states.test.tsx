@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ProblemState } from "~/shared/ui/status";
 
+const AUTO_RETRY = /Повторим попытку автоматически/;
+const LAST_DATA = /Последние данные/;
 const REQUEST_ID_LABEL = /Идентификатор запроса/;
 
 describe("ProblemState: сессия, сбой интерфейса, сеть, заглушенный раздел", () => {
@@ -20,16 +22,16 @@ describe("ProblemState: сессия, сбой интерфейса, сеть, �
     // Assert
     expect(screen.getByRole("heading", { name: "Сессия завершена" })).toBeInTheDocument();
     expect(
-      screen.getByText("Время сессии истекло. Войдите снова, чтобы продолжить работу"),
+      screen.getByText("Время сессии истекло. Войдите снова, чтобы продолжить работу."),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Войти снова" })).toHaveAttribute("href", "/login");
   });
 
   it.each([
-    ["session_revoked", "Сессия отозвана. Войдите снова, чтобы продолжить работу"],
+    ["session_revoked", "Сессия отозвана. Войдите снова, чтобы продолжить работу."],
     [
       "session_elsewhere",
-      "Вы вошли на другом устройстве, и эта сессия завершена. Войдите снова, чтобы продолжить работу",
+      "Вы вошли на другом устройстве, и эта сессия завершена. Войдите снова, чтобы продолжить работу.",
     ],
   ] as const)("session %s: подсказка своя", (reason, hint) => {
     // Arrange
@@ -61,30 +63,18 @@ describe("ProblemState: сессия, сбой интерфейса, сеть, �
     expect(screen.queryByRole("heading", { name: "Сессия завершена" })).not.toBeInTheDocument();
   });
 
-  it("session без signIn не рисует кнопку, а подсказка говорит, что вход появится в следующей версии", () => {
+  it("session без signIn: кнопки нет, подсказка называет версию, в которой вход появится", () => {
     // Arrange
-    const problem = { kind: "session" } as const;
+    const problem = { kind: "session", availableIn: "v0.4.0" } as const;
 
     // Act
     render(<ProblemState problem={problem} />);
 
     // Assert
-    expect(screen.getByText("Вход появится в следующей версии CRANE")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Войдите, чтобы продолжить" })).toBeInTheDocument();
+    expect(screen.getByText("Вход в веб-консоль появится в CRANE 0.4.0.")).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-  });
-
-  it("session с причиной, но без signIn: причина и объяснение, что входа пока нет", () => {
-    // Arrange
-    const problem = { kind: "session", reason: "session_revoked" } as const;
-
-    // Act
-    render(<ProblemState problem={problem} />);
-
-    // Assert
-    expect(
-      screen.getByText("Сессия отозвана. Вход появится в следующей версии CRANE"),
-    ).toBeInTheDocument();
   });
 
   it("client chunk: «Не удалось загрузить раздел», подсказка об обновлении и «Обновить страницу»", async () => {
@@ -150,11 +140,11 @@ describe("ProblemState: сессия, сбой интерфейса, сеть, �
     render(<ProblemState problem={problem} />);
 
     // Assert
-    expect(screen.getByRole("heading", { name: "Сервер CRANE недоступен" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Сервер CRANE не отвечает" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Нет соединения" })).not.toBeInTheDocument();
   });
 
-  it("planned: «Раздел появится в vX.Y.Z» с подставленной версией и без действий", () => {
+  it("planned: «Раздел пока недоступен», версия без префикса v в подсказке, без действий", () => {
     // Arrange
     const problem = { kind: "planned", replacedIn: "v0.4.0" } as const;
 
@@ -162,8 +152,59 @@ describe("ProblemState: сессия, сбой интерфейса, сеть, �
     render(<ProblemState problem={problem} />);
 
     // Assert
-    expect(screen.getByRole("heading", { name: "Раздел появится в v0.4.0" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Раздел пока недоступен" })).toBeInTheDocument();
+    expect(screen.getByText("Он появится в CRANE 0.4.0.")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("session без signIn игнорирует причину: показывает вариант первого входа", () => {
+    // Arrange
+    const problem = { kind: "session", reason: "session_revoked", availableIn: "v0.4.0" } as const;
+
+    // Act
+    render(<ProblemState problem={problem} />);
+
+    // Assert
+    expect(screen.queryByRole("heading", { name: "Сессия завершена" })).not.toBeInTheDocument();
+    expect(screen.getByText("Вход в веб-консоль появится в CRANE 0.4.0.")).toBeInTheDocument();
+  });
+
+  it("planned с областью «веб-консоль»: заголовок про консоль целиком", () => {
+    // Arrange
+    const problem = { kind: "planned", replacedIn: "v0.4.0", scope: "console" } as const;
+
+    // Act
+    render(<ProblemState problem={problem} />);
+
+    // Assert
+    expect(
+      screen.getByRole("heading", { name: "Веб-консоль появится в CRANE 0.4.0" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offline network: подсказка про сеть", () => {
+    // Arrange
+    const problem = { kind: "offline", cause: "network" } as const;
+
+    // Act
+    render(<ProblemState problem={problem} />);
+
+    // Assert
+    expect(
+      screen.getByText("Проверьте сеть — данные обновятся, когда связь вернётся."),
+    ).toBeInTheDocument();
+  });
+
+  it("offline server: обещает автоматический повтор, а не «последние данные»", () => {
+    // Arrange
+    const problem = { kind: "offline", cause: "server" } as const;
+
+    // Act
+    render(<ProblemState problem={problem} />);
+
+    // Assert
+    expect(screen.getByText(AUTO_RETRY)).toBeInTheDocument();
+    expect(screen.queryByText(LAST_DATA)).not.toBeInTheDocument();
   });
 });

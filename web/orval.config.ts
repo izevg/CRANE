@@ -30,6 +30,8 @@ export default defineConfig({
         // Без этого не-2xx приходит значением, а не бросается, и isError у Query не срабатывает.
         fetch: { forceSuccessResponse: true },
         query: {
+          // Страницы читают данные через useSuspenseQuery: ему нужны опции без skipToken и enabled.
+          useSuspenseQuery: true,
           queryOptions: {
             path: "./src/shared/api/operation/queryOptions.ts",
             name: "withOperation",

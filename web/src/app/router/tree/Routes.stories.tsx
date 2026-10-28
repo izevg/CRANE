@@ -1,10 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useQueryClient } from "@tanstack/react-query";
-import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { useState } from "react";
 import { configure, expect, getConfig, userEvent, waitFor, within } from "storybook/test";
 import { type ApiOverrides, ApiProblem, type Status } from "~/shared/api";
-import { createAppRouter } from "./router";
+import { AppAt } from "../harness/AppAt";
+import { refetchStale } from "../harness/refresh";
 
 // Чанк страницы грузится лениво: на холодном кэше Vite это дольше секунды, которую ждёт findBy по умолчанию.
 const LOAD_TIMEOUT_MS = 10_000;
@@ -13,15 +11,6 @@ const VIEWPORTS = {
   desktop: { name: "Десктоп 1440", styles: { width: "1440px", height: "900px" } },
   mobile: { name: "Телефон 390", styles: { width: "390px", height: "844px" } },
 };
-
-/** Приложение на памяти по адресу `url`; клиент запросов даёт декоратор витрины (свежий на историю, retry: false). */
-function AppAt({ url }: { url: string }) {
-  const queryClient = useQueryClient();
-  const [router] = useState(() =>
-    createAppRouter({ queryClient, history: createMemoryHistory({ initialEntries: [url] }) }),
-  );
-  return <RouterProvider router={router} />;
-}
 
 const meta = {
   title: "Приложение/Маршруты",
@@ -63,13 +52,13 @@ export const StatusLoading: Story = {
   parameters: { api: { getStatus: never } satisfies ApiOverrides },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText("Загрузка раздела")).toBeInTheDocument();
+    await waitFor(() => expect(canvasElement.querySelector('[aria-busy="true"]')).not.toBeNull());
     await expect(canvas.getByRole("navigation", { name: "Основное меню" })).toBeVisible();
     await expect(canvas.queryByRole("heading", { level: 1 })).toBeNull();
   },
 };
 
-const REFRESH_FAILED = "Не удалось обновить данные. Показаны последние полученные";
+const REFRESH_FAILED = "Не удалось обновить данные. Показаны последние полученные.";
 const SMALL_STATUS: Status = {
   version: "0.3.0",
   mode: "normal",
@@ -82,7 +71,7 @@ let statusCalls = 0;
 
 export const StatusRefreshFailed: Story = {
   name: "E15: обновление не удалось — данные остаются, «Повторить» перечитывает",
-  // loader читает данные (1-й вызов), страница при монтировании перечитывает их (2-й) — он и падает
+  // loader читает данные (1-й вызов), перечитывание устаревших данных (2-й) — он и падает
   beforeEach: () => {
     statusCalls = 0;
   },
@@ -99,6 +88,8 @@ export const StatusRefreshFailed: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await canvas.findByRole("heading", { level: 1, name: "Статус системы" });
+    await refetchStale();
     await expect(await canvas.findByText(REFRESH_FAILED)).toBeVisible();
     await expect(canvas.getByText("PostgreSQL")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Повторить" }));
@@ -133,7 +124,7 @@ export const StatusError: Story = {
 };
 
 export const StatusPlanned: Story = {
-  name: "E15: production без демо — «Раздел появится в v0.4.0»",
+  name: "E15: заглушка не подключена (как в production без демо; плашка демо — от сборки витрины)",
   parameters: {
     api: {
       getStatus: () => {
@@ -145,7 +136,7 @@ export const StatusPlanned: Story = {
     await expect(
       await within(canvasElement).findByRole("heading", {
         level: 1,
-        name: "Раздел появится в v0.4.0",
+        name: "Раздел пока недоступен",
       }),
     ).toBeVisible();
   },
@@ -163,7 +154,7 @@ export const ServerDown: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      await canvas.findByRole("heading", { level: 1, name: "Сервер CRANE недоступен" }),
+      await canvas.findByRole("heading", { level: 1, name: "Сервер CRANE не отвечает" }),
     ).toBeVisible();
     await expect(canvas.getByRole("navigation", { name: "Основное меню" })).toBeVisible();
   },
@@ -182,7 +173,7 @@ export const ShellFailure: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      await canvas.findByRole("heading", { level: 1, name: "Сервер CRANE недоступен" }),
+      await canvas.findByRole("heading", { level: 1, name: "Сервер CRANE не отвечает" }),
     ).toBeVisible();
     await expect(canvas.queryByRole("navigation", { name: "Основное меню" })).toBeNull();
     await expect(canvas.getAllByRole("main")).toHaveLength(1);
@@ -210,23 +201,21 @@ export const LoginFirst: Story = {
     await expect(
       await canvas.findByRole("heading", { level: 1, name: "Войдите, чтобы продолжить" }),
     ).toBeVisible();
-    await expect(canvas.getByText("Вход появится в следующей версии CRANE")).toBeVisible();
+    await expect(canvas.getByText("Вход в веб-консоль появится в CRANE 0.4.0.")).toBeVisible();
     await expect(canvas.queryByRole("button")).toBeNull();
     await expect(canvas.queryByRole("navigation")).toBeNull();
   },
 };
 
-export const LoginSessionEnded: Story = {
-  name: "A1 /login: сессия отозвана",
+export const LoginWithReason: Story = {
+  name: "A1 /login: причина в адресе не показывается, пока входа нет",
   args: { url: "/login?reason=session_revoked&redirect=%2Fstatus" },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      await canvas.findByRole("heading", { level: 1, name: "Сессия завершена" }),
+      await canvas.findByRole("heading", { level: 1, name: "Войдите, чтобы продолжить" }),
     ).toBeVisible();
-    await expect(
-      canvas.getByText("Сессия отозвана. Вход появится в следующей версии CRANE"),
-    ).toBeVisible();
+    await expect(canvas.getByText("Вход в веб-консоль появится в CRANE 0.4.0.")).toBeVisible();
   },
 };
 
@@ -249,8 +238,8 @@ export const StatusEnglish: Story = {
       await canvas.findByRole("heading", { level: 1, name: "System status" }),
     ).toBeVisible();
     await expect(document.documentElement.lang).toBe("en");
-    await expect(document.title).toBe("System status — CRANE");
-    await expect(canvas.getByText("Demo data")).toBeVisible();
+    await expect(document.title).toBe("System status — CRANE · Demo");
+    await expect(canvas.getByText("Demo mode")).toBeVisible();
   },
 };
 

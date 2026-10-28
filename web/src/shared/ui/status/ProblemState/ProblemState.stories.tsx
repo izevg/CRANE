@@ -132,7 +132,7 @@ export const Offline: Story = {
 };
 
 export const OfflineServer: Story = {
-  name: "Сервер CRANE недоступен",
+  name: "Сервер CRANE не отвечает",
   args: {
     problem: {
       kind: "offline",
@@ -142,7 +142,7 @@ export const OfflineServer: Story = {
   },
   play: async ({ canvasElement }) => {
     await expect(
-      within(canvasElement).getByRole("heading", { name: "Сервер CRANE недоступен" }),
+      within(canvasElement).getByRole("heading", { name: "Сервер CRANE не отвечает" }),
     ).toBeVisible();
   },
 };
@@ -193,11 +193,11 @@ export const SessionFirstSignIn: Story = {
 };
 
 export const SessionWithoutSignIn: Story = {
-  name: "Входа ещё нет: без кнопки, подсказка про следующую версию",
-  args: { problem: { kind: "session" } },
+  name: "Входа ещё нет: без кнопки, подсказка называет версию",
+  args: { problem: { kind: "session", availableIn: "v0.4.0" } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText("Вход появится в следующей версии CRANE")).toBeVisible();
+    await expect(canvas.getByText("Вход в веб-консоль появится в CRANE 0.4.0.")).toBeVisible();
     await expect(canvas.queryByRole("link")).toBeNull();
     await expect(canvas.queryByRole("button")).toBeNull();
   },
@@ -239,7 +239,7 @@ export const Planned: Story = {
   args: { problem: { kind: "planned", replacedIn: "v0.4.0" } },
   play: async ({ canvasElement }) => {
     await expect(
-      within(canvasElement).getByRole("heading", { name: "Раздел появится в v0.4.0" }),
+      within(canvasElement).getByRole("heading", { name: "Раздел пока недоступен" }),
     ).toBeVisible();
   },
 };
@@ -296,7 +296,9 @@ export const PlannedEnglish: Story = {
   args: { problem: { kind: "planned", replacedIn: "v0.4.0" } },
   play: async ({ canvasElement }) => {
     await expect(
-      await within(canvasElement).findByRole("heading", { name: "This section arrives in v0.4.0" }),
+      await within(canvasElement).findByRole("heading", {
+        name: "This section isn't available yet",
+      }),
     ).toBeVisible();
   },
 };
@@ -314,7 +316,7 @@ export const ClientChunkEnglish: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      await canvas.findByRole("heading", { name: "Could not load the section" }),
+      await canvas.findByRole("heading", { name: "Couldn't load this section" }),
     ).toBeVisible();
     await expect(canvas.getByText("CRANE may have been updated. Refresh the page.")).toBeVisible();
   },

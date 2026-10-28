@@ -1,5 +1,5 @@
-import { sanitizeRedirect } from "~/shared/api";
 import type { SessionReason } from "~/shared/ui/status";
+import { sanitizeRedirect } from "./redirect";
 
 export type LoginSearch = {
   /** Причина завершения сессии из 401; без неё это первый вход. */

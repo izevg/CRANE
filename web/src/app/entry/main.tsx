@@ -7,7 +7,8 @@ import { I18nProvider, i18n, initLocale } from "~/shared/lib/i18n";
 import { initColorScheme } from "~/shared/lib/state";
 import "~/shared/styles";
 import { Toaster, TooltipProvider } from "~/shared/ui/primitives";
-import { createApp } from "../router/tree/app";
+import { createQueryClient } from "../query/queryClient";
+import { createAppRouter } from "../router/tree/router";
 import "./index.css";
 
 const root = document.querySelector("#root");
@@ -19,7 +20,8 @@ initColorScheme();
 // Каталог загружается до первого рендера: интерфейс не мигает языком по умолчанию.
 await initLocale();
 
-const { queryClient, router } = createApp();
+const queryClient = createQueryClient();
+const router = createAppRouter({ queryClient });
 
 createRoot(root).render(
   <StrictMode>

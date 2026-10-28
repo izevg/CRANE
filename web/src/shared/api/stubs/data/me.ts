@@ -1,8 +1,5 @@
 import type { Me } from "../../generated/schemas";
 
-/** Маркер модуля данных: шаг сборки ищет его в dist и валит production-сборку без демо-флага. */
-export const STUB_MARKER = "crane-stub:me";
-
 // i18n-fixture: демо-данные заглушки — контент сервера, а не текст интерфейса
 export function getMe(): Me {
   return {

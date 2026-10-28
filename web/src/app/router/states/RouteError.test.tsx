@@ -10,13 +10,13 @@ import {
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { notFoundRoute } from "~/pages/not-found";
 import { ApiProblem } from "~/shared/api";
-import { lazyPage } from "../chunk/chunk";
-import { reloadPage } from "../chunk/reload";
-import { NotFoundPage } from "./notFound";
+import { lazyPage } from "~/shared/lib/route";
+import { reloadPage } from "../recovery/reload";
 import { RouteError } from "./RouteError";
 
-vi.mock("../chunk/reload", () => ({ reloadPage: vi.fn() }));
+vi.mock("../recovery/reload", () => ({ reloadPage: vi.fn() }));
 
 const CHUNK_MESSAGE =
   "Failed to fetch dynamically imported module: https://crane.example/assets/Page.js";
@@ -33,7 +33,7 @@ type Spec = {
 };
 
 function renderRoute(spec: Spec) {
-  const root = createRootRoute({ component: Outlet, notFoundComponent: NotFoundPage });
+  const root = createRootRoute({ component: Outlet, notFoundComponent: notFoundRoute.component });
   const index = createRoute({
     getParentRoute: () => root,
     path: "/",
@@ -44,7 +44,7 @@ function renderRoute(spec: Spec) {
     path: "/broken",
     ...(spec.loader ? { loader: spec.loader } : {}),
     component: spec.lazy
-      ? lazyPage(spec.lazy as never)
+      ? lazyPage(spec.lazy, "default")
       : (spec.component ?? (() => <p>{"Страница"}</p>)),
   });
   const router = createRouter({
@@ -181,7 +181,7 @@ describe("RouteError: ошибки loader'а и рендера", () => {
     // Act
     const heading = await screen.findByRole("heading", {
       level: 1,
-      name: "Сервер CRANE недоступен",
+      name: "Сервер CRANE не отвечает",
     });
 
     // Assert
@@ -247,7 +247,7 @@ describe("404 из двух источников", () => {
     await within(viaLoader.container).findByRole("heading", { name: "Не найдено или нет доступа" });
     const fromLoader = section(viaLoader.container);
     viaLoader.unmount();
-    const root = createRootRoute({ component: Outlet, notFoundComponent: NotFoundPage });
+    const root = createRootRoute({ component: Outlet, notFoundComponent: notFoundRoute.component });
     const router = createRouter({
       routeTree: root.addChildren([]),
       history: createMemoryHistory({ initialEntries: ["/нет-такого"] }),

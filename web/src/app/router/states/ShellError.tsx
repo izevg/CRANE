@@ -7,7 +7,7 @@ export function ShellError(props: ErrorComponentProps) {
   return (
     <BareFrame>
       <div className="rounded-xl border border-border bg-card shadow-card">
-        <RouteError {...props} />
+        <RouteError {...props} scope="console" />
       </div>
     </BareFrame>
   );

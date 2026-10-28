@@ -1,19 +1,23 @@
-import type { StubTable } from "./types";
-
-// Загрузчики — инлайн-тернарники по константе сборки `__CRANE_UI_DEMO__` (не по импортированной `DEMO`: через границу
-// модуля бандлер ветку не сворачивает). Отдельные константы нужны, чтобы запись таблицы осталась одной строкой, которую
-// форматтер не разобьёт: линтер требует версию замены в строке сразу под пометкой.
-const loadMe = __CRANE_UI_DEMO__ ? () => import("../data/me") : undefined;
-const loadStatus = __CRANE_UI_DEMO__ ? () => import("../data/status") : undefined;
+import type { StubModules, StubTable } from "./types";
 
 /**
- * Заглушки по operationId. Удалить запись = операция идёт в сеть, экраны не меняются. Над каждой записью стоит
- * пометка о замене с той же версией, что и `replacedIn`; версия не раньше `x-crane-since` операции.
- * Без демо загрузчики равны `undefined`, и `import()` вместе с модулем в dist не попадает.
+ * Заглушки по operationId: версия, в которой операция становится настоящей. Удалить запись = операция идёт в сеть,
+ * экраны не меняются. Над каждой записью стоит пометка о замене с той же версией (она не раньше `x-crane-since`).
  */
 export const STUBS = {
   // FIXME(v0.4.0): getMe — профиль и навигация (_links) пока из заглушки, GET /me не подключён
-  getMe: { replacedIn: "v0.4.0", load: loadMe },
+  getMe: "v0.4.0",
   // FIXME(v0.4.0): getStatus — статус платформы пока из заглушки, GET /status не подключён
-  getStatus: { replacedIn: "v0.4.0", load: loadStatus },
+  getStatus: "v0.4.0",
 } satisfies StubTable;
+
+/**
+ * Модули данных заглушек. Условие читает глобальную константу сборки `__CRANE_UI_DEMO__` прямо здесь (не через
+ * импортированную `DEMO`: границу модуля бандлер не сворачивает): без демо ветка с `import()` выбрасывается, и
+ * модули данных в dist не попадают. Обработчик ищется по operationId среди экспортов модулей.
+ */
+// Stryker disable all: Vite раскрывает import.meta.glob по литералу до выполнения, подставленная мутантом строка ломает разбор
+export const STUB_MODULES: StubModules = __CRANE_UI_DEMO__
+  ? import.meta.glob<Record<string, unknown>>("../data/*.ts")
+  : {};
+// Stryker restore all

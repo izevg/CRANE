@@ -100,6 +100,9 @@ export function createDefaultTransport(): Transport {
 
 const transport = createDefaultTransport();
 
+/** Тип ошибки для сгенерированных опций (orval читает это имя): всё, что бросают транспорт и заглушки. */
+export type ErrorType<_Error> = ApiProblem;
+
 /** Мутатор orval: единственный транспорт; тип ответа задаёт сгенерированный код. */
 export async function fetcher<T>(url: string, options: RequestInit): Promise<T> {
   return transport.send<T>(url, options);

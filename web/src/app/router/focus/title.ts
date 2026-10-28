@@ -23,7 +23,13 @@ export function pageTitleOf(
   return matches.map((match) => match.staticData?.title).findLast((title) => title !== undefined);
 }
 
-/** «<Страница> — CRANE»; без страницы — только имя продукта. */
-export function documentTitle(page: string | undefined): string {
-  return page === undefined ? BRAND : `${page}${SEPARATOR}${BRAND}`;
+const DEMO_SEPARATOR = " · ";
+
+/**
+ * «<Страница> — CRANE»; без страницы — только имя продукта. В демо-режиме добавляется пометка: плашка демо стоит
+ * в DOM до h1, и скринридер, перешедший по заголовку, её не встретит.
+ */
+export function documentTitle(page: string | undefined, demo?: string): string {
+  const title = page === undefined ? BRAND : `${page}${SEPARATOR}${BRAND}`;
+  return demo === undefined ? title : `${title}${DEMO_SEPARATOR}${demo}`;
 }

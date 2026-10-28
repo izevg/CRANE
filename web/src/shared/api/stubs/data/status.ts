@@ -1,8 +1,5 @@
 import type { Status } from "../../generated/schemas";
 
-/** Маркер модуля данных: шаг сборки ищет его в dist и валит production-сборку без демо-флага. */
-export const STUB_MARKER = "crane-stub:status";
-
 const FEEDS_LAG_S = 540;
 const SIEM_LAG_S = 12;
 

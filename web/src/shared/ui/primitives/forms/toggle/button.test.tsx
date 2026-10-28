@@ -44,4 +44,36 @@ describe("Button", () => {
     // Assert
     expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
   });
+
+  it("pending: клик не срабатывает, кнопка занята и остаётся в порядке фокуса", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <Button pending onClick={onClick}>
+        {"Повторить"}
+      </Button>,
+    );
+    const button = screen.getByRole("button", { name: "Повторить" });
+
+    // Act
+    await user.click(button);
+
+    // Assert
+    expect(onClick).not.toHaveBeenCalled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button.querySelector("svg")).not.toBeNull();
+  });
+
+  it("без pending индикатора и aria-busy нет", () => {
+    // Arrange
+    // Act
+    render(<Button>{"Повторить"}</Button>);
+
+    // Assert
+    const button = screen.getByRole("button", { name: "Повторить" });
+    expect(button).not.toHaveAttribute("aria-busy");
+    expect(button.querySelector("svg")).toBeNull();
+  });
 });

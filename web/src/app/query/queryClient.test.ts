@@ -1,23 +1,24 @@
 import { MutationObserver, QueryObserver } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiProblem } from "~/shared/api";
 import { createQueryClient } from "./queryClient";
+import { sessionEnded } from "./sessionEnded";
 
-const SESSION_ENDED = new ApiProblem({
-  kind: "unauthenticated",
-  status: 401,
-  reason: "session_expired",
-});
+const STATUS = { unauthorized: 401, notFound: 404, serverError: 500 } as const;
+const SESSION_ENDED = new ApiProblem({ kind: "unauthenticated", status: STATUS.unauthorized });
 
 function rejecting(error: unknown) {
   return () => Promise.reject(error);
 }
 
+beforeEach(() => {
+  sessionEnded.set(false);
+});
+
 describe("createQueryClient: завершение сессии", () => {
-  it("401 запроса без наблюдателей (loader при переходе) — переход, не фон", async () => {
+  it("401 запроса поднимает флаг для баннера", async () => {
     // Arrange
-    const onSessionEnded = vi.fn();
-    const client = createQueryClient(onSessionEnded);
+    const client = createQueryClient();
 
     // Act
     await client
@@ -25,58 +26,29 @@ describe("createQueryClient: завершение сессии", () => {
       .catch(() => undefined);
 
     // Assert
-    expect(onSessionEnded).toHaveBeenCalledWith({ background: false, reason: "session_expired" });
+    expect(sessionEnded.get()).toBe(true);
   });
 
-  it("401 запроса с наблюдателем (опрос на экране) — фон", async () => {
+  it("401 мутации тоже поднимает флаг", async () => {
     // Arrange
-    const onSessionEnded = vi.fn();
-    const client = createQueryClient(onSessionEnded);
-    const observer = new QueryObserver(client, {
-      queryKey: ["status"],
-      queryFn: rejecting(SESSION_ENDED),
-      retry: false,
-    });
-    observer.subscribe(() => undefined);
-
-    // Act
-    await vi.waitFor(() => expect(onSessionEnded).toHaveBeenCalled());
-
-    // Assert
-    expect(onSessionEnded).toHaveBeenCalledWith({ background: true, reason: "session_expired" });
-  });
-
-  it("401 мутации — фон: страницу с формой не покидаем", async () => {
-    // Arrange
-    const onSessionEnded = vi.fn();
-    const client = createQueryClient(onSessionEnded);
+    const client = createQueryClient();
     const mutation = new MutationObserver(client, { mutationFn: rejecting(SESSION_ENDED) });
 
     // Act
     await mutation.mutate(undefined).catch(() => undefined);
 
     // Assert
-    expect(onSessionEnded).toHaveBeenCalledWith({ background: true, reason: "session_expired" });
-  });
-
-  it("401 без причины — событие без ключа reason", async () => {
-    // Arrange
-    const onSessionEnded = vi.fn();
-    const client = createQueryClient(onSessionEnded);
-    const bare = new ApiProblem({ kind: "unauthenticated", status: 401 });
-
-    // Act
-    await client.fetchQuery({ queryKey: ["x"], queryFn: rejecting(bare) }).catch(() => undefined);
-
-    // Assert
-    expect(onSessionEnded.mock.calls[0]?.[0]).toStrictEqual({ background: false });
+    expect(sessionEnded.get()).toBe(true);
   });
 
   it("step-up глобально не обрабатывается", async () => {
     // Arrange
-    const onSessionEnded = vi.fn();
-    const client = createQueryClient(onSessionEnded);
-    const stepUp = new ApiProblem({ kind: "step-up", status: 401, requiredAcr: "mfa" });
+    const client = createQueryClient();
+    const stepUp = new ApiProblem({
+      kind: "step-up",
+      status: STATUS.unauthorized,
+      requiredAcr: "mfa",
+    });
 
     // Act
     await client
@@ -84,14 +56,13 @@ describe("createQueryClient: завершение сессии", () => {
       .catch(() => undefined);
 
     // Assert
-    expect(onSessionEnded).not.toHaveBeenCalled();
+    expect(sessionEnded.get()).toBe(false);
   });
 
   it("прочие ошибки (500) завершением сессии не считаются", async () => {
     // Arrange
-    const onSessionEnded = vi.fn();
-    const client = createQueryClient(onSessionEnded);
-    const failure = new ApiProblem({ kind: "problem", status: 500 });
+    const client = createQueryClient();
+    const failure = new ApiProblem({ kind: "problem", status: STATUS.serverError });
 
     // Act
     await client
@@ -99,17 +70,29 @@ describe("createQueryClient: завершение сессии", () => {
       .catch(() => undefined);
 
     // Assert
-    expect(onSessionEnded).not.toHaveBeenCalled();
+    expect(sessionEnded.get()).toBe(false);
+  });
+
+  it("ошибка не из API завершением сессии не считается", async () => {
+    // Arrange
+    const client = createQueryClient();
+
+    // Act
+    await client
+      .fetchQuery({ queryKey: ["x"], queryFn: rejecting(new TypeError("баг")), retry: false })
+      .catch(() => undefined);
+
+    // Assert
+    expect(sessionEnded.get()).toBe(false);
   });
 });
 
 describe("createQueryClient: после мутации", () => {
   it("успешная мутация перечитывает активные запросы", async () => {
     // Arrange
-    const client = createQueryClient(vi.fn());
+    const client = createQueryClient();
     const queryFn = vi.fn().mockResolvedValue("данные");
-    const observer = new QueryObserver(client, { queryKey: ["status"], queryFn });
-    observer.subscribe(() => undefined);
+    new QueryObserver(client, { queryKey: ["status"], queryFn }).subscribe(() => undefined);
     await vi.waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
     const mutation = new MutationObserver(client, { mutationFn: () => Promise.resolve("ok") });
 
@@ -122,13 +105,12 @@ describe("createQueryClient: после мутации", () => {
 
   it("неудачная мутация запросы не трогает", async () => {
     // Arrange
-    const client = createQueryClient(vi.fn());
+    const client = createQueryClient();
     const queryFn = vi.fn().mockResolvedValue("данные");
-    const observer = new QueryObserver(client, { queryKey: ["status"], queryFn });
-    observer.subscribe(() => undefined);
+    new QueryObserver(client, { queryKey: ["status"], queryFn }).subscribe(() => undefined);
     await vi.waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
     const mutation = new MutationObserver(client, {
-      mutationFn: rejecting(new ApiProblem({ kind: "problem", status: 409 })),
+      mutationFn: rejecting(new ApiProblem({ kind: "problem", status: STATUS.notFound })),
     });
 
     // Act
@@ -140,13 +122,28 @@ describe("createQueryClient: после мутации", () => {
 });
 
 describe("createQueryClient: повторы", () => {
-  it("запрос с 4xx не повторяется (retry по умолчанию из политики)", async () => {
+  it("запрос с 4xx не повторяется (политика retry подключена)", async () => {
     // Arrange
-    const client = createQueryClient(vi.fn());
-    const queryFn = vi.fn().mockRejectedValue(new ApiProblem({ kind: "problem", status: 404 }));
+    const client = createQueryClient();
+    const queryFn = vi
+      .fn()
+      .mockRejectedValue(new ApiProblem({ kind: "problem", status: STATUS.notFound }));
 
     // Act
     await client.fetchQuery({ queryKey: ["x"], queryFn }).catch(() => undefined);
+
+    // Assert
+    expect(queryFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("свежесть: только что загруженное не перечитывается сразу", async () => {
+    // Arrange
+    const client = createQueryClient();
+    const queryFn = vi.fn().mockResolvedValue("данные");
+    await client.fetchQuery({ queryKey: ["fresh"], queryFn });
+
+    // Act
+    await client.fetchQuery({ queryKey: ["fresh"], queryFn });
 
     // Assert
     expect(queryFn).toHaveBeenCalledTimes(1);

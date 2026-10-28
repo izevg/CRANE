@@ -1,33 +1,35 @@
 import { useLingui } from "@lingui/react/macro";
-import { type ErrorComponentProps, useRouter } from "@tanstack/react-router";
+import { type ErrorComponentProps, Navigate, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
+import { loginRoute } from "~/pages/login";
+import { notFoundRoute } from "~/pages/not-found";
 import { ApiProblem, problemViewOf } from "~/shared/api";
+import { ChunkLoadError } from "~/shared/lib/route";
 import type { Action } from "~/shared/ui/actions";
 import { ProblemState, type ProblemView } from "~/shared/ui/status";
-import { type ChunkAction, ChunkLoadError, decideChunkAction, markReload } from "../chunk/chunk";
-import { reloadPage } from "../chunk/reload";
-import { NotFoundPage } from "./notFound";
+import { type ChunkAction, decideChunkAction, markReload } from "../recovery/chunk";
+import { reloadPage } from "../recovery/reload";
+import { useAutoRetry } from "../recovery/useAutoRetry";
 
 const NOT_FOUND = 404;
 
+/** Решение по сбою чанка принимается один раз на показ ошибки; запись метки и перезагрузка — в эффекте. */
 function useChunkAction(error: unknown): ChunkAction | undefined {
-  const chunk = error instanceof ChunkLoadError;
-  // Решение принимается один раз на показ ошибки; запись метки и перезагрузка — в эффекте.
   const [action] = useState<ChunkAction | undefined>(() =>
-    chunk ? decideChunkAction() : undefined,
+    error instanceof ChunkLoadError ? decideChunkAction() : undefined,
   );
   useEffect(() => {
-    if (chunk && decideChunkAction() === "reload") {
+    if (action === "reload") {
       markReload();
       reloadPage();
     }
-  }, [chunk]);
+  }, [action]);
   return action;
 }
 
 type Actions = { retry: Action; home: Action; reload: Action };
 
-function clientView(
+function viewOf(
   error: unknown,
   chunk: ChunkAction | undefined,
   actions: Actions,
@@ -48,12 +50,18 @@ function clientView(
   return { kind: "client", cause: "render", reload: actions.reload };
 }
 
+type Props = ErrorComponentProps & {
+  /** Сбой до появления шелла: недоступна вся веб-консоль, а не раздел. */
+  scope?: "section" | "console";
+};
+
 /**
- * Ошибка маршрута в области содержимого (шелл остаётся). Тексты исключений и стек не показываются. Сбой кода
- * самой страницы (`ChunkLoadError` из `lazyPage`) ведёт к одной перезагрузке; сбой ленивого кода внутри страницы
- * (палитра, график) — обычная ошибка рендера без перезагрузки (WCAG 3.3.7).
+ * Ошибка маршрута в области содержимого (шелл остаётся). Рисуется только при переходе: preload ошибку проглатывает,
+ * опрос и мутации сюда не доходят, поэтому 401 здесь — это переход, и он уводит на вход. Тексты исключений и стек не
+ * показываются. Сбой кода страницы (`ChunkLoadError`) ведёт к одной перезагрузке; сбой ленивого кода внутри страницы
+ * (палитра, график) — обычная ошибка рендера без перезагрузки (WCAG 3.3.7). Недоступный сервер и сеть повторяются сами.
  */
-export function RouteError({ error, reset }: ErrorComponentProps) {
+export function RouteError({ error, reset, scope = "section" }: Props) {
   const { t } = useLingui();
   const router = useRouter();
   const chunk = useChunkAction(error);
@@ -61,14 +69,34 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
     reset();
     void router.invalidate();
   }, [reset, router]);
-  if (error instanceof ApiProblem && error.status === NOT_FOUND && error.kind === "problem") {
-    // тот же экран, что у адреса без маршрута: по разметке скрытый ресурс от несуществующего не отличить
-    return <NotFoundPage />;
-  }
-  const problem = clientView(error, chunk, {
+  const problem = viewOf(error, chunk, {
     retry: { label: t`Повторить`, run: { onSelect: retry } },
     home: { label: t`На главную`, run: { href: "/" } },
     reload: { label: t`Обновить страницу`, run: { onSelect: reloadPage } },
   });
+  useAutoRetry(
+    problem?.kind === "offline",
+    retry,
+    error instanceof ApiProblem ? error.retryAfterMs : undefined,
+  );
+  if (error instanceof ApiProblem && error.kind === "unauthenticated") {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        search={loginRoute.validateSearch({
+          reason: error.reason,
+          redirect: router.latestLocation.href,
+        })}
+      />
+    );
+  }
+  if (error instanceof ApiProblem && error.status === NOT_FOUND && error.kind === "problem") {
+    // тот же экран, что у адреса без маршрута: по разметке скрытый ресурс от несуществующего не отличить
+    return <notFoundRoute.component />;
+  }
+  if (problem?.kind === "planned" && scope === "console") {
+    return <ProblemState headingLevel={1} problem={{ ...problem, scope }} />;
+  }
   return problem === null ? null : <ProblemState headingLevel={1} problem={problem} />;
 }

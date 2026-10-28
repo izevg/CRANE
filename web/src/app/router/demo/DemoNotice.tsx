@@ -10,9 +10,9 @@ export function DemoNotice() {
   return (
     <div role="note" className="mb-6">
       <Callout tone="info">
-        <CalloutTitle>{t`Демо-данные`}</CalloutTitle>
+        <CalloutTitle>{t`Демо-режим`}</CalloutTitle>
         <CalloutDescription>
-          {t`Часть экранов показывает примерные данные вместо ответов сервера. Не используйте их для решений.`}
+          {t`Данные на экранах примерные, не с сервера. Не принимайте по ним решений.`}
         </CalloutDescription>
       </Callout>
     </div>

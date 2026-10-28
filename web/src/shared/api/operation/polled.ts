@@ -1,4 +1,4 @@
-import { isAutoRefreshPaused } from "~/shared/lib/state";
+import { autoRefreshPaused } from "~/shared/lib/state";
 import { ApiProblem } from "../http/problem";
 import type { OperationId } from "../stubs/table/types";
 
@@ -8,9 +8,7 @@ const STATUS_POLL_MS = 30_000;
  * Каденс опроса по операциям: свойство контракта (`Cache-Control: private, max-age=<каденс>` в спеке), поэтому
  * стоит рядом с операцией, а не у каждого вызова. Нет записи — операция не опрашивается.
  */
-const POLL_MS = { getStatus: STATUS_POLL_MS } satisfies Partial<Record<OperationId, number>>;
-
-const CADENCE: Readonly<Partial<Record<string, number>>> = POLL_MS;
+const POLL_MS: Partial<Record<OperationId, number>> = { getStatus: STATUS_POLL_MS };
 
 type Polling = { state: { error: unknown } };
 
@@ -21,10 +19,10 @@ type Polling = { state: { error: unknown } };
  */
 export function polled<T extends { refetchInterval?: unknown }>(
   options: T,
-  operationId: string,
-  paused: () => boolean = isAutoRefreshPaused,
+  operationId: OperationId,
+  paused: () => boolean = autoRefreshPaused.get,
 ): T {
-  const interval = CADENCE[operationId];
+  const interval = POLL_MS[operationId];
   if (interval === undefined || options.refetchInterval !== undefined) {
     return options;
   }

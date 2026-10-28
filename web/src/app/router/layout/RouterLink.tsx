@@ -1,77 +1,27 @@
-import { useMatchRoute, useRouter } from "@tanstack/react-router";
-import { type FocusEvent, type MouseEvent, useCallback } from "react";
+import { Link } from "@tanstack/react-router";
 import type { LinkProps } from "~/shared/ui/primitives";
 
-const PRIMARY_BUTTON = 0;
+/** Пропсы якоря с явным `undefined` не ложатся на типы `Link` при `exactOptionalPropertyTypes`: такие ключи убираем. */
+type Defined<T> = { [K in keyof T]: Exclude<T[K], undefined> };
 
-function isPlainClick(event: MouseEvent<HTMLAnchorElement>, target: string | undefined): boolean {
-  const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-  return (
-    event.button === PRIMARY_BUTTON && !modified && (target === undefined || target === "_self")
-  );
+function defined<T extends object>(props: T): Defined<T> {
+  return Object.fromEntries(
+    Object.entries(props).filter(([, value]) => value !== undefined),
+  ) as Defined<T>;
 }
 
-type AppPath = keyof ReturnType<typeof useRouter>["routesByPath"];
-
-/** Ссылка на маршрут приложения: клиентский переход, подгрузка по наведению и фокусу, `aria-current` из совпадения. */
-function AppLink({
-  to,
-  href: _href,
-  onClick,
-  onMouseEnter,
-  onFocus,
-  ...rest
-}: LinkProps & { to: AppPath }) {
-  const router = useRouter();
-  const matchRoute = useMatchRoute();
-  const preload = useCallback(() => {
-    void router.preloadRoute({ to });
-  }, [router, to]);
-  const handleClick = useCallback(
-    (event: MouseEvent<HTMLAnchorElement>) => {
-      onClick?.(event);
-      if (!event.defaultPrevented && isPlainClick(event, rest.target)) {
-        event.preventDefault();
-        void router.navigate({ to });
-      }
-    },
-    [onClick, rest.target, router, to],
-  );
-  const handleHover = useCallback(
-    (event: MouseEvent<HTMLAnchorElement>) => {
-      onMouseEnter?.(event);
-      preload();
-    },
-    [onMouseEnter, preload],
-  );
-  const handleFocus = useCallback(
-    (event: FocusEvent<HTMLAnchorElement>) => {
-      onFocus?.(event);
-      preload();
-    },
-    [onFocus, preload],
-  );
-  return (
-    <a
-      aria-current={matchRoute({ to }) === false ? undefined : "page"}
-      {...rest}
-      href={router.buildLocation({ to }).href}
-      onClick={handleClick}
-      onMouseEnter={handleHover}
-      onFocus={handleFocus}
-    />
-  );
-}
+const SCHEME = /^[a-z][a-z\d+.-]*:/i;
 
 /**
- * Ссылка кита поверх роутера: адрес с маршрутом в приложении — клиентский переход, остальное (адрес с query,
- * чужой, без маршрута) — обычный `<a>`. Свой `<a>`, а не `Link` роутера: кит передаёт произвольные пропсы якоря,
- * и их типы с `Link` не совпадают.
+ * Ссылка кита поверх роутера: `Link` с опцией `href` разбирает путь вместе с query и hash, ставит `aria-current`,
+ * подгружает страницу по наведению и фокусу и не перехватывает клики с модификаторами. Адрес без маршрута тоже
+ * переходит внутри SPA и покажет 404 шелла. Обычный `<a>` — только адрес со схемой или `//`.
  */
-export function RouterLink(props: LinkProps) {
-  const router = useRouter();
-  if (Object.hasOwn(router.routesByPath, props.href)) {
-    return <AppLink {...props} to={props.href as AppPath} />;
-  }
-  return <a {...props} />;
+export function RouterLink({ href, ...rest }: LinkProps) {
+  return SCHEME.test(href) || href.startsWith("//") ? (
+    <a href={href} {...rest} />
+  ) : (
+    // `to` обязателен по типам; при заданном `href` роутер разбирает адрес из него
+    <Link to="." href={href} {...defined(rest)} />
+  );
 }

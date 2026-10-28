@@ -26,7 +26,7 @@ function Latency({ ms }: { ms: number | null | undefined }) {
     return <>{NO_VALUE}</>;
   }
   const value = format.number(ms);
-  return <>{t`${value} мс`}</>;
+  return <>{t`${value} мс`}</>;
 }
 
 /** Состояние компонентов платформы. Состояние — бейдж с текстом; задержка без данных — «—». */

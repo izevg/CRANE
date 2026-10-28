@@ -1,24 +1,52 @@
 import { plannedProblem } from "../http/problem";
 import { overrideFor } from "../stubs/override/override";
 import { DEMO } from "../stubs/table/demo";
-import { STUBS } from "../stubs/table/table";
-import type { OperationArgs, StubEntries } from "../stubs/table/types";
-
-type Handler = (args: OperationArgs) => unknown;
+import { STUB_MODULES, STUBS } from "../stubs/table/table";
+import type {
+  OperationArgs,
+  OperationId,
+  StubHandler,
+  StubModules,
+  StubTable,
+} from "../stubs/table/types";
 
 /** Всё, от чего зависит решение «заглушка или сеть»: параметры, чтобы оба режима проверялись в одном прогоне. */
 export type StubDeps = {
   demo: boolean;
-  entries: StubEntries;
-  overrideFor: (operationId: string) => Handler | undefined;
+  versions: StubTable;
+  modules: StubModules;
+  overrideFor: (operationId: string) => StubHandler | undefined;
 };
 
-const defaultStubDeps: StubDeps = { demo: DEMO, entries: STUBS, overrideFor };
+const defaultStubDeps: StubDeps = {
+  demo: DEMO,
+  versions: STUBS,
+  modules: STUB_MODULES,
+  overrideFor,
+};
 
-export type OperationMeta = { url?: string; operationId: string; operationName: string };
+export type OperationMeta = { url?: string; operationId: OperationId; operationName: string };
 
-function isHandler(value: unknown): value is Handler {
+function isHandler(value: unknown): value is StubHandler {
   return typeof value === "function";
+}
+
+// Модули грузятся один раз на набор загрузчиков: в демо все данные приходят при первом заглушенном вызове.
+const loaded = new WeakMap<StubModules, Promise<readonly Readonly<Record<string, unknown>>[]>>();
+
+async function handlerOf(modules: StubModules, operationId: OperationId): Promise<StubHandler> {
+  let all = loaded.get(modules);
+  if (all === undefined) {
+    all = Promise.all(Object.values(modules).map((load) => load()));
+    loaded.set(modules, all);
+  }
+  for (const module of await all) {
+    const handler = module[operationId];
+    if (isHandler(handler)) {
+      return handler;
+    }
+  }
+  throw new Error(`Ни один модуль заглушек не экспортирует обработчик ${operationId}`);
 }
 
 /** Ответ заглушки в той же форме, что у транспорта: `{ data, status, headers }`. */
@@ -33,7 +61,7 @@ function respond(data: unknown): { data: unknown; status: number; headers: Heade
  */
 export function stubbedFn<Arg>(
   original: (arg: Arg) => unknown,
-  operationId: string,
+  operationId: OperationId,
   inputOf: (arg: Arg) => OperationArgs,
   deps: StubDeps = defaultStubDeps,
 ): (arg: Arg) => Promise<unknown> {
@@ -43,17 +71,14 @@ export function stubbedFn<Arg>(
     if (forced) {
       return respond(await forced(input));
     }
-    const entry = deps.entries[operationId];
-    if (entry === undefined) {
+    const replacedIn = deps.versions[operationId];
+    if (replacedIn === undefined) {
       return original(arg);
     }
-    if (!deps.demo || entry.load === undefined) {
-      throw plannedProblem(entry.replacedIn);
+    if (!deps.demo) {
+      throw plannedProblem(replacedIn);
     }
-    const handler = (await entry.load())[operationId];
-    if (!isHandler(handler)) {
-      throw new Error(`Модуль заглушки не экспортирует обработчик ${operationId}`);
-    }
+    const handler = await handlerOf(deps.modules, operationId);
     return respond(await handler(input));
   };
 }

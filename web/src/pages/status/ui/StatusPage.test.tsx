@@ -3,37 +3,49 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiProblem, getGetStatusQueryOptions } from "~/shared/api";
-import { isAutoRefreshPaused, setAutoRefreshPaused } from "~/shared/lib/state";
+import { announce } from "~/shared/lib/a11y";
+import { autoRefreshPaused } from "~/shared/lib/state";
 import { StatusPage } from "./StatusPage";
 
+const UPDATED = /^Обновлено /;
 const UPSTREAM_ROW = /Upstream npmjs/;
 const POSTGRES_ROW = /PostgreSQL/;
 
 // Граница — ответы сервера: подменяется queryFn публичных опций операции, остальное настоящее.
-const server = vi.hoisted(() => ({ calls: 0, failFrom: 0, mode: undefined as string | undefined }));
+const server = vi.hoisted(() => ({
+  calls: 0,
+  failFrom: 0,
+  mode: undefined as string | undefined,
+}));
+
+vi.mock("~/shared/lib/a11y", () => ({ announce: vi.fn() }));
 
 vi.mock("~/shared/api", async (original) => {
   const real = await original<typeof import("~/shared/api")>();
+  const patched = (make: typeof real.getGetStatusQueryOptions) => () => {
+    const options = make();
+    return {
+      ...options,
+      queryFn: async (context: never) => {
+        server.calls += 1;
+        if (server.failFrom > 0 && server.calls >= server.failFrom) {
+          throw new ApiProblem({ kind: "problem", status: 500, title: "Сбой" });
+        }
+        const response = (await (options.queryFn as (context: never) => unknown)(context)) as {
+          data: object;
+        };
+        return server.mode === undefined
+          ? response
+          : { ...response, data: { ...response.data, mode: server.mode } };
+      },
+    };
+  };
   return {
     ...real,
-    getGetStatusQueryOptions: () => {
-      const options = real.getGetStatusQueryOptions();
-      return {
-        ...options,
-        queryFn: async (context: never) => {
-          server.calls += 1;
-          if (server.failFrom > 0 && server.calls >= server.failFrom) {
-            throw new ApiProblem({ kind: "problem", status: 500, title: "Сбой" });
-          }
-          const response = (await (options.queryFn as (context: never) => unknown)(context)) as {
-            data: object;
-          };
-          return server.mode === undefined
-            ? response
-            : { ...response, data: { ...response.data, mode: server.mode } };
-        },
-      };
-    },
+    getGetStatusQueryOptions: patched(real.getGetStatusQueryOptions),
+    getGetStatusSuspenseQueryOptions: patched(
+      real.getGetStatusSuspenseQueryOptions as typeof real.getGetStatusQueryOptions,
+    ),
   };
 });
 
@@ -61,7 +73,8 @@ afterEach(() => {
   server.calls = 0;
   server.failFrom = 0;
   server.mode = undefined;
-  setAutoRefreshPaused(false);
+  vi.mocked(announce).mockClear();
+  autoRefreshPaused.set(false);
 });
 
 describe("StatusPage: режим платформы", () => {
@@ -140,11 +153,11 @@ describe("StatusPage: обновление", () => {
     await renderPage();
 
     // Act
-    const updated = screen.getByText("Обновлено");
+    const updated = screen.getByText(UPDATED);
 
     // Assert
-    expect(updated).toBeInTheDocument();
-    expect(updated.querySelector("time")).not.toBeNull();
+    expect(updated.tagName).toBe("TIME");
+    expect(updated).toHaveAttribute("datetime");
   });
 
   it("ошибка очередного обновления: данные остаются, есть «Повторить», повтор перечитывает", async () => {
@@ -166,6 +179,35 @@ describe("StatusPage: обновление", () => {
     expect(screen.getByText("Scanner worker")).toBeInTheDocument();
   });
 
+  it("повтор не удался — объявляется один раз", async () => {
+    // Arrange
+    server.failFrom = 2;
+    const user = userEvent.setup();
+    const client = await renderPage();
+    await client.refetchQueries({ queryKey: ["status"] });
+    const retry = await screen.findByRole("button", { name: "Повторить" });
+
+    // Act
+    await user.click(retry);
+
+    // Assert
+    await waitFor(() => expect(announce).toHaveBeenCalledTimes(1));
+    expect(announce).toHaveBeenCalledWith("Не удалось обновить данные. Попробуйте ещё раз.");
+  });
+
+  it("пока «Повторить» не нажата, сбой опроса ничего не объявляет", async () => {
+    // Arrange
+    server.failFrom = 2;
+    const client = await renderPage();
+
+    // Act
+    await client.refetchQueries({ queryKey: ["status"] });
+
+    // Assert
+    expect(await screen.findByRole("button", { name: "Повторить" })).toBeInTheDocument();
+    expect(announce).not.toHaveBeenCalled();
+  });
+
   it("при ошибке обновления компоненты не пропадают", async () => {
     // Arrange
     server.failFrom = 2;
@@ -176,7 +218,7 @@ describe("StatusPage: обновление", () => {
 
     // Assert
     expect(
-      await screen.findByText("Не удалось обновить данные. Показаны последние полученные"),
+      await screen.findByText("Не удалось обновить данные. Показаны последние полученные."),
     ).toBeInTheDocument();
     expect(screen.getByText("Scanner worker")).toBeInTheDocument();
   });
@@ -190,7 +232,7 @@ describe("StatusPage: обновление", () => {
     await user.click(screen.getByRole("button", { name: "Пауза автообновления" }));
 
     // Assert
-    expect(isAutoRefreshPaused()).toBe(true);
+    expect(autoRefreshPaused.get()).toBe(true);
     expect(screen.getByRole("button", { name: "Пауза автообновления" })).toHaveAttribute(
       "aria-pressed",
       "true",

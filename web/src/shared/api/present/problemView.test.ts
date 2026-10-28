@@ -53,7 +53,7 @@ describe("problemViewOf", () => {
     expect(view).toStrictEqual({ kind: "planned", replacedIn: "" });
   });
 
-  it("401 сессии — session с причиной и действием входа, если оно есть", () => {
+  it("401 с действием входа — session с причиной и этим действием", () => {
     // Arrange
     const expired = new ApiProblem({
       kind: "unauthenticated",
@@ -65,7 +65,7 @@ describe("problemViewOf", () => {
     const view = problemViewOf(expired, { signIn: SIGN_IN });
 
     // Assert
-    expect(view).toEqual({ kind: "session", reason: "session_expired", signIn: SIGN_IN });
+    expect(view).toStrictEqual({ kind: "session", signIn: SIGN_IN, reason: "session_expired" });
   });
 
   it("неизвестная причина 401 не попадает в вид", () => {
@@ -77,10 +77,25 @@ describe("problemViewOf", () => {
     });
 
     // Act
-    const view = problemViewOf(odd);
+    const view = problemViewOf(odd, { signIn: SIGN_IN });
 
     // Assert
-    expect(view).toEqual({ kind: "session" });
+    expect(view).toStrictEqual({ kind: "session", signIn: SIGN_IN });
+  });
+
+  it("401 без действия входа — версия, в которой вход появится, и никакой причины", () => {
+    // Arrange
+    const expired = new ApiProblem({
+      kind: "unauthenticated",
+      status: STATUS.unauthorized,
+      reason: "session_expired",
+    });
+
+    // Act
+    const view = problemViewOf(expired);
+
+    // Assert
+    expect(view).toStrictEqual({ kind: "session", availableIn: "v0.4.0" });
   });
 
   it("404 — нейтральный not-found с идентификатором запроса и «На главную»", () => {
@@ -219,17 +234,6 @@ describe("problemViewOf", () => {
 
     // Assert
     expect(view).toStrictEqual({ kind: "offline", cause: "server" });
-  });
-
-  it("401 без причины — session без reason", () => {
-    // Arrange
-    const bare = new ApiProblem({ kind: "unauthenticated", status: STATUS.unauthorized });
-
-    // Act
-    const view = problemViewOf(bare);
-
-    // Assert
-    expect(view).toStrictEqual({ kind: "session" });
   });
 
   it("ошибка без деталей и идентификатора не несёт этих ключей", () => {

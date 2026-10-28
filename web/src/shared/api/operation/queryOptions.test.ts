@@ -4,7 +4,7 @@ import { override, resetOverrides } from "../stubs/override/override";
 import { withMutation } from "./mutationOptions";
 import { withOperation } from "./queryOptions";
 
-const META = { operationId: "listTokens", operationName: "listTokens" };
+const META = { operationId: "listTokens", operationName: "listTokens" } as const;
 const CONTEXT = { signal: new AbortController().signal, queryKey: ["x"] };
 
 afterEach(() => {
@@ -108,11 +108,10 @@ describe("withMutation", () => {
     // Arrange
     const handler = vi.fn().mockReturnValue({ created: true });
     override("createToken", handler);
-    const options = withMutation(
-      { mutationFn: vi.fn() },
-      { url: "/tokens" },
-      { operationId: "createToken", operationName: "createToken" },
-    );
+    const options = withMutation({ mutationFn: vi.fn() }, { url: "/tokens" }, {
+      operationId: "createToken",
+      operationName: "createToken",
+    } as const);
     const run = options.mutationFn as (variables: unknown) => Promise<unknown>;
 
     // Act
@@ -127,11 +126,10 @@ describe("withMutation", () => {
     // Arrange
     const handler = vi.fn().mockReturnValue({});
     override("revokeToken", handler);
-    const options = withMutation(
-      { mutationFn: vi.fn() },
-      { url: "/tokens/x" },
-      { operationId: "revokeToken", operationName: "revokeToken" },
-    );
+    const options = withMutation({ mutationFn: vi.fn() }, { url: "/tokens/x" }, {
+      operationId: "revokeToken",
+      operationName: "revokeToken",
+    } as const);
     const run = options.mutationFn as (variables: unknown) => Promise<unknown>;
 
     // Act
@@ -145,11 +143,10 @@ describe("withMutation", () => {
     // Arrange
     const handler = vi.fn().mockReturnValue({});
     override("revokeToken", handler);
-    const options = withMutation(
-      { mutationFn: vi.fn() },
-      { url: "/tokens/x" },
-      { operationId: "revokeToken", operationName: "revokeToken" },
-    );
+    const options = withMutation({ mutationFn: vi.fn() }, { url: "/tokens/x" }, {
+      operationId: "revokeToken",
+      operationName: "revokeToken",
+    } as const);
     const run = options.mutationFn as (variables: unknown) => Promise<unknown>;
 
     // Act

@@ -1,29 +1,30 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiProblem } from "../http/problem";
-import type { StubEntries } from "../stubs/table/types";
+import type { StubHandler, StubModules } from "../stubs/table/types";
 import { type StubDeps, stubbedFn } from "./stubbed";
 
 const BODY = { version: "demo" };
-
-function deps(
-  overrides: Partial<StubDeps> & { load?: () => Promise<Record<string, unknown>> } = {},
-) {
-  const { load, ...rest } = overrides;
-  const entries: StubEntries = {
-    getStatus: { replacedIn: "v0.4.0", load },
-  };
-  return { demo: true, entries, overrideFor: () => undefined, ...rest } satisfies StubDeps;
-}
-
 const args = { headers: { a: 1 } };
 const same = () => args;
+
+function deps(overrides: Partial<StubDeps> = {}): StubDeps {
+  return {
+    demo: true,
+    versions: { getStatus: "v0.4.0" },
+    modules: {},
+    overrideFor: () => undefined,
+    ...overrides,
+  };
+}
+
+function modulesWith(handler: StubHandler): StubModules {
+  return { status: () => Promise.resolve({ getStatus: handler }) };
+}
 
 describe("stubbedFn: демо выключено", () => {
   it("заглушенная операция бросает planned с версией замены", async () => {
     // Arrange
-    const original = vi.fn();
-    const load = vi.fn();
-    const run = stubbedFn(original, "getStatus", same, deps({ demo: false, load }));
+    const run = stubbedFn(vi.fn(), "getStatus", same, deps({ demo: false }));
 
     // Act
     const error = await run(undefined).catch((cause: unknown) => cause);
@@ -37,7 +38,12 @@ describe("stubbedFn: демо выключено", () => {
     // Arrange
     const original = vi.fn();
     const load = vi.fn();
-    const run = stubbedFn(original, "getStatus", same, deps({ demo: false, load }));
+    const run = stubbedFn(
+      original,
+      "getStatus",
+      same,
+      deps({ demo: false, modules: { status: load } }),
+    );
 
     // Act
     await run(undefined).catch(() => undefined);
@@ -46,31 +52,14 @@ describe("stubbedFn: демо выключено", () => {
     expect(original).not.toHaveBeenCalled();
     expect(load).not.toHaveBeenCalled();
   });
-
-  it("запись без загрузчика (production-сборка) тоже planned", async () => {
-    // Arrange
-    const original = vi.fn();
-    const run = stubbedFn(original, "getStatus", same, deps({ demo: true }));
-
-    // Act
-    const error = await run(undefined).catch((cause: unknown) => cause);
-
-    // Assert
-    expect(error).toMatchObject({ kind: "planned" });
-  });
 });
 
 describe("stubbedFn: демо включено", () => {
   it("отдаёт данные заглушки в форме ответа транспорта и не идёт в сеть", async () => {
     // Arrange
     const original = vi.fn();
-    const getStatus = vi.fn().mockReturnValue(BODY);
-    const run = stubbedFn(
-      original,
-      "getStatus",
-      same,
-      deps({ load: () => Promise.resolve({ getStatus }) }),
-    );
+    const handler = vi.fn().mockReturnValue(BODY);
+    const run = stubbedFn(original, "getStatus", same, deps({ modules: modulesWith(handler) }));
 
     // Act
     const result = await run(undefined);
@@ -82,24 +71,53 @@ describe("stubbedFn: демо включено", () => {
 
   it("обработчик получает входы операции", async () => {
     // Arrange
-    const getStatus = vi.fn().mockReturnValue(BODY);
-    const run = stubbedFn(
-      vi.fn(),
-      "getStatus",
-      same,
-      deps({ load: () => Promise.resolve({ getStatus }) }),
-    );
+    const handler = vi.fn().mockReturnValue(BODY);
+    const run = stubbedFn(vi.fn(), "getStatus", same, deps({ modules: modulesWith(handler) }));
 
     // Act
     await run(undefined);
 
     // Assert
-    expect(getStatus).toHaveBeenCalledWith(args);
+    expect(handler).toHaveBeenCalledWith(args);
   });
 
-  it("модуль без обработчика — ошибка разработчика, а не пустой ответ", async () => {
+  it("обработчик ищется среди всех модулей по имени операции", async () => {
     // Arrange
-    const run = stubbedFn(vi.fn(), "getStatus", same, deps({ load: () => Promise.resolve({}) }));
+    const handler = vi.fn().mockReturnValue(BODY);
+    const modules: StubModules = {
+      me: () => Promise.resolve({ getMe: () => "не тот" }),
+      status: () => Promise.resolve({ getStatus: handler }),
+    };
+    const run = stubbedFn(vi.fn(), "getStatus", same, deps({ modules }));
+
+    // Act
+    const result = await run(undefined);
+
+    // Assert
+    expect(result).toMatchObject({ data: BODY });
+  });
+
+  it("модули данных грузятся один раз на все вызовы", async () => {
+    // Arrange
+    const load = vi.fn().mockResolvedValue({ getStatus: () => BODY });
+    const run = stubbedFn(vi.fn(), "getStatus", same, deps({ modules: { status: load } }));
+    await run(undefined);
+
+    // Act
+    await run(undefined);
+
+    // Assert
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("нет обработчика ни в одном модуле — ошибка разработчика с именем операции, не пустой ответ", async () => {
+    // Arrange
+    const run = stubbedFn(
+      vi.fn(),
+      "getStatus",
+      same,
+      deps({ modules: { me: () => Promise.resolve({}) } }),
+    );
 
     // Act
     const error = await run(undefined).catch((cause: unknown) => cause);
@@ -116,7 +134,7 @@ describe("stubbedFn: операции вне таблицы", () => {
     // Arrange
     const original = vi.fn().mockResolvedValue("сеть");
     const load = vi.fn();
-    const run = stubbedFn(original, "listTokens", same, deps({ load }));
+    const run = stubbedFn(original, "listTokens", same, deps({ modules: { status: load } }));
 
     // Act
     const result = await run("ctx");
@@ -171,9 +189,8 @@ describe("stubbedFn: подмена Storybook", () => {
 
   it("подмена операции вне таблицы тоже применяется", async () => {
     // Arrange
-    const original = vi.fn();
     const run = stubbedFn(
-      original,
+      vi.fn(),
       "listTokens",
       same,
       deps({ overrideFor: (id) => (id === "listTokens" ? () => ({ items: [] }) : undefined) }),

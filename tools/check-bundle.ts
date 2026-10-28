@@ -1,17 +1,16 @@
 // Шаг после `vite build` (вызывается из `build` в web/package.json): бюджет первой загрузки и защита от демо-данных.
 // 1) Стартовый чанк (entry и статически связанные чанки с их CSS) не больше 250 КБ gzip, иначе выход с кодом 1.
-// 2) Без CRANE_UI_DEMO=1 в dist нет ни одного модуля заглушек: каждый модуль данных экспортирует STUB_MARKER, и
-//    маркер ищется по всему dist. С CRANE_UI_DEMO=1 наоборот: маркеры обязаны быть, иначе флаг не сработал.
-// Использование: node ../tools/check-bundle.ts [dist] [каталог модулей заглушек] (из web/).
-import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+// 2) Без CRANE_UI_DEMO=1 в манифесте нет ни одного модуля данных заглушек (`src/shared/api/stubs/data/`).
+//    С CRANE_UI_DEMO=1 наоборот: модули обязаны быть, иначе флаг не сработал.
+// Использование: node ../tools/check-bundle.ts [dist] (из web/).
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 
 const BYTES_PER_KB = 1024;
 export const BUDGET_KB = 250;
-const MARKER_EXPORT = /export const STUB_MARKER\s*=\s*"([^"]+)"/;
+const STUB_DATA_PREFIX = "src/shared/api/stubs/data/";
 const DEMO_VALUE = "1";
-const BUNDLE_TEXT = /\.(js|css|html|json)$/;
 
 export interface ManifestChunk {
   file: string;
@@ -22,11 +21,6 @@ export interface ManifestChunk {
 }
 
 export type Manifest = Record<string, ManifestChunk>;
-
-export interface SourceFile {
-  path: string;
-  content: string;
-}
 
 /** Файлы стартовой загрузки: entry и всё, что подключено к нему статически (JS и CSS), без повторов. */
 export function startFiles(manifest: Manifest): string[] {
@@ -64,52 +58,29 @@ export function budgetViolations(gzipBytes: number, limitKb: number = BUDGET_KB)
   return [`стартовый чанк ${actualKb} КБ gzip при бюджете ${limitKb} КБ`];
 }
 
-/** Маркеры модулей данных заглушек; модуль без маркера — нарушение, иначе его нечем найти в dist. */
-export function collectMarkers(modules: SourceFile[]): { markers: string[]; violations: string[] } {
-  const markers: string[] = [];
-  const violations: string[] = [];
-  for (const module of modules) {
-    const marker = MARKER_EXPORT.exec(module.content)?.[1];
-    if (marker === undefined) {
-      violations.push(`${module.path}: нет export const STUB_MARKER = "…"`);
-    } else {
-      markers.push(marker);
-    }
-  }
-  return { markers, violations };
+/** Ключи манифеста, которые являются модулями данных заглушек. */
+export function stubModuleKeys(manifest: Manifest): string[] {
+  return Object.keys(manifest).filter((key) => key.startsWith(STUB_DATA_PREFIX));
 }
 
 /**
- * Демо выключено: ни один маркер не должен встретиться в dist. Демо включено: каждый маркер обязан встретиться,
- * иначе сборка с флагом молча осталась без заглушек.
+ * Демо выключено: ни одного модуля данных заглушек в сборке. Демо включено: хотя бы один обязан быть, иначе
+ * сборка с флагом молча осталась без заглушек. Статический импорт, встроивший данные в обычный чанк, манифест
+ * не покажет: от него защищает правило dependency-cruiser.
  */
-export function markerViolations(markers: string[], bundle: SourceFile[], demo: boolean): string[] {
-  const violations: string[] = [];
-  for (const marker of markers) {
-    const where = bundle.filter((file) => file.content.includes(marker)).map((file) => file.path);
-    if (!demo && where.length > 0) {
-      violations.push(`маркер ${marker} в сборке без демо: ${where.join(", ")}`);
-    }
-    if (demo && where.length === 0) {
-      violations.push(`маркер ${marker} не найден в демо-сборке: CRANE_UI_DEMO не сработал`);
-    }
+export function stubViolations(manifest: Manifest, demo: boolean): string[] {
+  const keys = stubModuleKeys(manifest);
+  if (!demo && keys.length > 0) {
+    return [`модули данных заглушек в сборке без демо: ${keys.join(", ")}`];
   }
-  return violations;
-}
-
-function listFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory() ? listFiles(join(dir, entry.name)) : [join(dir, entry.name)],
-  );
-}
-
-function readAll(root: string, files: string[]): SourceFile[] {
-  return files.map((path) => ({ path: relative(root, path), content: readFileSync(path, "utf8") }));
+  if (demo && keys.length === 0) {
+    return ["модулей данных заглушек нет в демо-сборке: CRANE_UI_DEMO не сработал"];
+  }
+  return [];
 }
 
 function main(): void {
   const dist = process.argv[2] ?? "dist";
-  const stubsDir = process.argv[3] ?? "src/shared/api/stubs/data";
   const { CRANE_UI_DEMO } = process.env;
   const demo = CRANE_UI_DEMO === DEMO_VALUE;
 
@@ -126,23 +97,11 @@ function main(): void {
     `check-bundle: стартовых файлов ${start.length}, ${kb} КБ gzip (бюджет ${BUDGET_KB} КБ)\n`,
   );
 
-  const modules = readAll(
-    stubsDir,
-    listFiles(stubsDir).filter((path) => path.endsWith(".ts")),
-  );
-  const { markers, violations: unmarked } = collectMarkers(modules);
-  const bundle = readAll(
-    dist,
-    listFiles(dist).filter((path) => BUNDLE_TEXT.test(path)),
-  );
-  const violations = [
-    ...budgetViolations(gzipBytes),
-    ...unmarked,
-    ...markerViolations(markers, bundle, demo),
-  ];
-
+  const violations = [...budgetViolations(gzipBytes), ...stubViolations(manifest, demo)];
   const mode = demo ? "демо-сборка" : "сборка без демо";
-  process.stdout.write(`check-bundle: ${mode}, маркеров заглушек: ${markers.length}\n`);
+  process.stdout.write(
+    `check-bundle: ${mode}, модулей данных заглушек: ${stubModuleKeys(manifest).length}\n`,
+  );
   if (violations.length > 0) {
     for (const violation of violations) {
       process.stderr.write(`check-bundle: ${violation}\n`);

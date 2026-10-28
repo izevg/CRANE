@@ -1,6 +1,7 @@
 import { msg } from "@lingui/core/macro";
 import type { QueryClient } from "@tanstack/react-query";
 import { getGetStatusQueryOptions } from "~/shared/api";
+import { lazyPage } from "~/shared/lib/route";
 
 /**
  * Описание маршрута страницы «Статус системы» (E15). Путь и родителя задаёт app. Лёгкая часть (loader, заголовок)
@@ -11,5 +12,5 @@ export const statusRoute = {
   // Те же опции, что у useQuery на странице: loader кладёт данные в кэш, экран читает их без второго запроса.
   loader: ({ context }: { context: { queryClient: QueryClient } }) =>
     context.queryClient.ensureQueryData(getGetStatusQueryOptions()),
-  load: () => import("../ui/StatusPage").then((module) => module.StatusPage),
+  component: lazyPage(() => import("../ui/StatusPage"), "StatusPage"),
 };

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { cx } from "~/shared/lib/core";
+import { i18n } from "~/shared/lib/i18n";
 import { type Action, ActionBar, type ActionGroup } from "~/shared/ui/actions";
 import { ContactLine, RemediationList, RequestIdLine, RuleLine } from "./ProblemParts";
 
@@ -54,19 +55,24 @@ export type ProblemView =
     }
   | {
       kind: "offline";
-      /** `network` — у пользователя нет сети (по умолчанию); `server` — сеть есть, сервер CRANE не отвечает. */
+      /** `network` — у пользователя нет сети (по умолчанию); `server` — сеть есть, сервер CRANE не отвечает. Обе причины повторяются автоматически (делает вызывающий). */
       cause?: "network" | "server";
       retry?: Action;
     }
-  | {
+  | ({
       kind: "session";
-      /** Причина из 401 сессии. Без неё это первый вход, а не завершённая сессия. */
+      /** Причина из 401 сессии; учитывается, только когда есть действие входа. */
       reason?: SessionReason;
-      /** До появления входа (BFF) действия нет: кнопка не рисуется, подсказка объясняет почему. */
-      signIn?: Action;
-    }
-  /** Операция ещё заглушена: данных нет, раздел появится в указанной версии. */
-  | { kind: "planned"; replacedIn: string };
+    } & (
+      | { signIn: Action; availableIn?: undefined }
+      /**
+       * Входа ещё нет: кнопка не рисуется, текст называет версию, в которой он появится. Версию передаёт вызывающий
+       * (пометку о замене ставит слой API: в кит её поставить нельзя).
+       */
+      | { signIn?: undefined; availableIn: string }
+    ))
+  /** Операция ещё заглушена: данных нет, раздел (или вся веб-консоль, `scope: "console"`) появится в версии. */
+  | { kind: "planned"; replacedIn: string; scope?: "section" | "console" };
 
 export type SessionReason = "session_expired" | "session_revoked" | "session_elsewhere";
 
@@ -115,64 +121,71 @@ const CLIENT_TEXT = {
 const OFFLINE_TEXT = {
   network: {
     title: msg`Нет соединения`,
-    hint: msg`Проверьте сеть — данные обновятся, когда связь вернётся`,
+    hint: msg`Проверьте сеть — данные обновятся, когда связь вернётся.`,
   },
   server: {
-    title: msg`Сервер CRANE недоступен`,
-    hint: msg`Последние данные остаются на экране. Попробуйте ещё раз через минуту`,
+    title: msg`Сервер CRANE не отвечает`,
+    hint: msg`Повторим попытку автоматически. Если сервер долго недоступен, сообщите администратору CRANE.`,
   },
 } satisfies Record<"network" | "server", { title: MessageDescriptor; hint: MessageDescriptor }>;
 
 const SESSION_ENDED = msg`Сессия завершена`;
-const SIGN_IN_LATER = msg`Вход появится в следующей версии CRANE`;
 
-/** Подсказка по причине 401 сессии; вторая форма — когда действия «Войти снова» ещё нет. */
-const SESSION_HINT = {
-  session_expired: {
-    withSignIn: msg`Время сессии истекло. Войдите снова, чтобы продолжить работу`,
-    withoutSignIn: msg`Время сессии истекло. Вход появится в следующей версии CRANE`,
-  },
-  session_revoked: {
-    withSignIn: msg`Сессия отозвана. Войдите снова, чтобы продолжить работу`,
-    withoutSignIn: msg`Сессия отозвана. Вход появится в следующей версии CRANE`,
-  },
-  session_elsewhere: {
-    withSignIn: msg`Вы вошли на другом устройстве, и эта сессия завершена. Войдите снова, чтобы продолжить работу`,
-    withoutSignIn: msg`Вы вошли на другом устройстве, и эта сессия завершена. Вход появится в следующей версии CRANE`,
-  },
-} satisfies Record<
-  SessionReason,
-  { withSignIn: MessageDescriptor; withoutSignIn: MessageDescriptor }
->;
+/** Причина 401: первое предложение подсказки; второе — действие («Войдите снова…»). */
+const SESSION_REASON = {
+  session_expired: msg`Время сессии истекло.`,
+  session_revoked: msg`Сессия отозвана.`,
+  session_elsewhere: msg`Вы вошли на другом устройстве, и эта сессия завершена.`,
+} satisfies Record<SessionReason, MessageDescriptor>;
 
 const HEADINGS = { 1: "h1", 2: "h2", 3: "h3" } as const;
 
 const NEUTRAL = { circle: "bg-muted", iconTone: "text-muted-foreground" } as const;
 
+/** Версия для текста: «0.4.0», без префикса «v». */
+function bare(version: string): string {
+  return version.startsWith("v") ? version.slice(1) : version;
+}
+
 function sessionHead(problem: Of<"session">): Head {
   const base = { Icon: KeyRoundIcon, circle: "bg-info-bg", iconTone: "text-info" } as const;
-  const hasSignIn = problem.signIn !== undefined;
+  if (problem.signIn === undefined) {
+    // Входа нет: причину не показываем, она ничего не даёт пользователю, который войти не может.
+    const version = bare(problem.availableIn);
+    return {
+      ...base,
+      title: msg`Войдите, чтобы продолжить`,
+      hint: msg`Вход в веб-консоль появится в CRANE ${version}.`,
+    };
+  }
   if (problem.reason === undefined) {
     return {
       ...base,
       title: msg`Войдите, чтобы продолжить`,
-      hint: hasSignIn ? msg`Для работы с реестром нужна сессия` : SIGN_IN_LATER,
+      hint: msg`Для работы с реестром нужна сессия.`,
     };
   }
-  const hint = SESSION_HINT[problem.reason];
   return {
     ...base,
     title: SESSION_ENDED,
-    hint: hasSignIn ? hint.withSignIn : hint.withoutSignIn,
+    hint: `${i18n._(SESSION_REASON[problem.reason])} ${i18n._(msg`Войдите снова, чтобы продолжить работу.`)}`,
   };
 }
 
-function plannedHead(version: string): Head {
+function plannedHead(problem: Of<"planned">): Head {
+  const version = bare(problem.replacedIn);
   return {
     ...NEUTRAL,
     Icon: CalendarClockIcon,
-    title: msg`Раздел появится в ${version}`,
-    hint: msg`Этот раздел пока недоступен`,
+    ...(problem.scope === "console"
+      ? {
+          title: msg`Веб-консоль появится в CRANE ${version}`,
+          hint: msg`Сейчас она недоступна.`,
+        }
+      : {
+          title: msg`Раздел пока недоступен`,
+          hint: msg`Он появится в CRANE ${version}.`,
+        }),
   };
 }
 
@@ -217,7 +230,7 @@ function headOf(problem: ProblemView): Head {
     case "session":
       return sessionHead(problem);
     case "planned":
-      return plannedHead(problem.replacedIn);
+      return plannedHead(problem);
   }
 }
 

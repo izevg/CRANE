@@ -40,10 +40,10 @@ describe("маршруты: переходы", () => {
     // Assert
     expect(heading).toBeInTheDocument();
     expect(await screen.findByText("Scanner worker")).toBeInTheDocument();
-    expect(document.title).toBe("Статус системы — CRANE");
+    expect(document.title).toBe("Статус системы — CRANE · Демо");
   });
 
-  it("плашка «Демо-данные» одна и стоит внутри main над заголовком страницы", async () => {
+  it("плашка «Демо-режим» одна и стоит внутри main над заголовком страницы", async () => {
     // Arrange
     renderApp("/status");
     await screen.findByRole("heading", { level: 1, name: "Статус системы" });
@@ -53,7 +53,7 @@ describe("маршруты: переходы", () => {
 
     // Assert
     expect(notes).toHaveLength(1);
-    expect(within(screen.getByRole("main")).getByRole("note")).toHaveTextContent("Демо-данные");
+    expect(within(screen.getByRole("main")).getByRole("note")).toHaveTextContent("Демо-режим");
   });
 
   it("сайдбар строится из _links GET /me и помечает текущий раздел aria-current", async () => {
@@ -85,7 +85,7 @@ describe("маршруты: переходы", () => {
     expect(within(screen.getByRole("main")).getByText("Не найдено или нет доступа")).toBe(heading);
     expect(router.state.location.pathname).toBe("/nope/at/all");
     expect(screen.getByRole("navigation", { name: "Основное меню" })).toBeInTheDocument();
-    expect(document.title).toBe("Не найдено или нет доступа — CRANE");
+    expect(document.title).toBe("Не найдено или нет доступа — CRANE · Демо");
   });
 
   it("/login: без шелла, h1 «Войдите, чтобы продолжить», кнопки входа нет, плашка демо одна", async () => {
@@ -101,18 +101,21 @@ describe("маршруты: переходы", () => {
     // Assert
     expect(heading).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Основное меню" })).not.toBeInTheDocument();
-    expect(screen.getByText("Вход появится в следующей версии CRANE")).toBeInTheDocument();
+    expect(screen.getByText("Вход в веб-консоль появится в CRANE 0.4.0.")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.getAllByRole("note")).toHaveLength(1);
     expect(screen.getAllByRole("main")).toHaveLength(1);
   });
 
-  it("/login с причиной показывает её подсказку, а redirect на чужой адрес сводится к «/»", async () => {
+  it("/login с причиной: пока входа нет, она не показывается; redirect на чужой адрес сводится к «/»", async () => {
     // Arrange
     const { router } = renderApp("/login?reason=session_revoked&redirect=//evil.example");
 
     // Act
-    const heading = await screen.findByRole("heading", { level: 1, name: "Сессия завершена" });
+    const heading = await screen.findByRole("heading", {
+      level: 1,
+      name: "Войдите, чтобы продолжить",
+    });
 
     // Assert
     expect(heading).toBeInTheDocument();

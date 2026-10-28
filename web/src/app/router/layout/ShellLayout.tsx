@@ -1,16 +1,15 @@
 import { useLingui } from "@lingui/react/macro";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useMatchRoute, useRouter } from "@tanstack/react-router";
-import { DEMO, getGetMeQueryOptions } from "~/shared/api";
+import { DEMO, getGetMeQueryOptions, SIGN_IN_AVAILABLE_IN } from "~/shared/api";
 import { AppShell, type Banner } from "~/widgets/app-shell";
-import { useSessionEnded } from "../../query/useSessionEnded";
+import { sessionEnded } from "../../query/sessionEnded";
 import { DemoNotice } from "../demo/DemoNotice";
 import { usePageTitle } from "../focus/useDocumentTitle";
 import { navGroups } from "../nav/navItems";
 
 // Раздела справки пока нет, поэтому helpHref не передаём: пункт «Справка» не рисуется, а не ведёт на 404.
 const DEFAULT_CRUMB = "CRANE";
-const LOGIN_PATH = "/login";
 
 /**
  * Шелл приложения. Навигация строится из `_links` ответа `GET /me` (решение D6) и показывает только пункты, для
@@ -20,16 +19,16 @@ export function ShellLayout() {
   const { t } = useLingui();
   const router = useRouter();
   const matchRoute = useMatchRoute();
-  const sessionEnded = useSessionEnded();
+  const ended = sessionEnded.use();
   const page = usePageTitle();
   // Данные положил в кэш beforeLoad шелла: отдельного запроса здесь нет.
   const { data } = useQuery(getGetMeQueryOptions());
-  const loginHref = `${LOGIN_PATH}?redirect=${encodeURIComponent(router.latestLocation.href)}`;
+  // Действия входа в баннере нет: входа до v0.4.0 нет (BFF), баннер называет версию.
+  const version = SIGN_IN_AVAILABLE_IN.replace("v", "");
   const sessionEndedBanner: Banner = {
     id: "session-ended",
     tone: "warning",
-    text: t`Сессия завершена`,
-    action: { label: t`Войти снова`, run: { href: loginHref } },
+    text: t`Сессия завершена. Вход в веб-консоль появится в CRANE ${version}.`,
   };
   const groups = data
     ? navGroups(data.data._links, {
@@ -44,7 +43,7 @@ export function ShellLayout() {
         // Палитра подключится вместе с поиском: без обработчика кнопки поиска нет.
         breadcrumbs: { trail: [], current: page ?? DEFAULT_CRUMB },
       }}
-      banners={sessionEnded ? [sessionEndedBanner] : []}
+      banners={ended ? [sessionEndedBanner] : []}
     >
       {DEMO ? <DemoNotice /> : null}
       <Outlet />

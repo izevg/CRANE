@@ -1,7 +1,7 @@
 import type { MessageDescriptor } from "@lingui/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { createRouter, type RouterHistory } from "@tanstack/react-router";
-import { NotFoundPage } from "../states/notFound";
+import { notFoundRoute } from "~/pages/not-found";
 import { PendingMain } from "../states/PendingMain";
 import { RouteError } from "../states/RouteError";
 import { routeTree } from "./tree";
@@ -21,7 +21,7 @@ export function createAppRouter(options: { queryClient: QueryClient; history?: R
     defaultPendingMinMs: PENDING_MIN_MS,
     defaultPendingComponent: PendingMain,
     defaultErrorComponent: RouteError,
-    defaultNotFoundComponent: NotFoundPage,
+    defaultNotFoundComponent: notFoundRoute.component,
     scrollRestoration: true,
   });
 }

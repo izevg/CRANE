@@ -1,7 +1,9 @@
+import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { notFoundRoute } from "~/pages/not-found";
+import { DEMO } from "~/shared/api";
 import { documentTitle, pageTitleOf } from "./title";
 
 /**
@@ -18,8 +20,10 @@ export function usePageTitle(): string | undefined {
 
 /** Обновляет document.title; идёт раньше переноса фокуса, потому что фокус ставится после завершения навигации. */
 export function useDocumentTitle(): void {
+  const { i18n } = useLingui();
   const page = usePageTitle();
+  const demo = DEMO ? i18n._(msg`Демо`) : undefined;
   useEffect(() => {
-    document.title = documentTitle(page);
-  }, [page]);
+    document.title = documentTitle(page, demo);
+  }, [page, demo]);
 }

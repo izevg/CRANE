@@ -31,12 +31,10 @@ const withGlobals: Decorator = (Story, context) => {
 };
 
 /**
- * Подмены API из `parameters.api` (operationId → обработчик): сбрасываются перед каждой историей, клиент запросов
- * свежий на историю (`key` по id). Состояния «загрузка» и «ошибка» задаются подменой, а не моками сети.
+ * Клиент запросов свежий на историю (`key` по id). Подмены API из `parameters.api` (operationId → обработчик)
+ * ставит загрузчик истории (`loaders`), а не рендер: сброс и установка идут один раз перед каждой историей. Состояния «загрузка» и «ошибка» задаются подменой, а не моками сети.
  */
 const withApi: Decorator = (Story, context) => {
-  const { api } = context.parameters;
-  applyOverrides(api);
   return (
     <ApiStory key={context.id}>
       <Story />
@@ -47,6 +45,10 @@ const withApi: Decorator = (Story, context) => {
 const preview: Preview = {
   // Каталог грузится до рендера story; выбор в хранилище витрина не пишет (activateLocale без записи).
   loaders: [
+    ({ parameters }) => {
+      const { api } = parameters;
+      applyOverrides(api);
+    },
     async ({ globals }) => {
       const locale = (globals as { locale?: Locale }).locale ?? "ru";
       await activateLocale(locale);

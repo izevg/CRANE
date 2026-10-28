@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 import * as api from "../../generated/admin.gen";
 import { operations } from "../../generated/operations.gen";
-import { STUBS } from "./table";
+import { STUB_MODULES, STUBS } from "./table";
 
 const entries = Object.entries(STUBS);
 const VERSION = /^v\d+\.\d+\.\d+$/;
-const MARKER = /^crane-stub:\S+$/;
 
 function queryOptionsName(operationId: string): string {
   return `get${operationId.charAt(0).toUpperCase()}${operationId.slice(1)}QueryOptions`;
@@ -23,12 +22,12 @@ describe("таблица заглушек", () => {
     expect(present).toBe(true);
   });
 
-  it.each(entries)("%s — версия замены vX.Y.Z", (_id, entry) => {
+  it.each(entries)("%s — версия замены vX.Y.Z", (_id, version) => {
     // Arrange
-    const version = entry.replacedIn;
+    const value = version;
 
     // Act
-    const valid = VERSION.test(version);
+    const valid = VERSION.test(value);
 
     // Assert
     expect(valid).toBe(true);
@@ -45,25 +44,16 @@ describe("таблица заглушек", () => {
     expect(generated).toBeTypeOf("function");
   });
 
-  it.each(entries)("%s — модуль данных экспортирует обработчик", async (operationId, entry) => {
+  it.each(entries)("%s — какой-то модуль данных экспортирует обработчик", async (operationId) => {
     // Arrange
-    const load = entry.load;
+    const loaded = await Promise.all(Object.values(STUB_MODULES).map((load) => load()));
 
     // Act
-    const stub = await load?.();
+    const handlers = loaded
+      .map((module) => module[operationId])
+      .filter((fn) => typeof fn === "function");
 
     // Assert
-    expect(Reflect.get(stub ?? {}, operationId)).toBeTypeOf("function");
-  });
-
-  it.each(entries)("%s — модуль данных экспортирует маркер", async (_id, entry) => {
-    // Arrange
-    const load = entry.load;
-
-    // Act
-    const stub = await load?.();
-
-    // Assert
-    expect(Reflect.get(stub ?? {}, "STUB_MARKER")).toMatch(MARKER);
+    expect(handlers).toHaveLength(1);
   });
 });

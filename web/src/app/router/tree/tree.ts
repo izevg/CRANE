@@ -3,11 +3,9 @@ import { loginRoute } from "~/pages/login";
 import { notFoundRoute } from "~/pages/not-found";
 import { statusRoute } from "~/pages/status";
 import { getGetMeQueryOptions } from "~/shared/api";
-import { lazyPage } from "../chunk/chunk";
 import { BareLayout } from "../layout/BareLayout";
 import { RootLayout } from "../layout/RootLayout";
 import { ShellLayout } from "../layout/ShellLayout";
-import { NotFoundPage } from "../states/notFound";
 import { ShellError } from "../states/ShellError";
 import type { RouterContext } from "./context";
 
@@ -29,7 +27,6 @@ const login = createRoute({
   getParentRoute: () => bare,
   path: "login",
   ...loginRoute,
-  component: lazyPage(loginRoute.load),
 });
 
 // Порядок решений: GET /me → сопоставление маршрута (404) → данные маршрута. beforeLoad идёт до loader'ов
@@ -43,20 +40,14 @@ const shell = createRoute({
   component: ShellLayout,
   errorComponent: ShellError,
   // loader, бросивший notFound(), попадает на тот же экран, что и адрес без маршрута
-  notFoundComponent: NotFoundPage,
+  notFoundComponent: notFoundRoute.component,
 });
 const status = createRoute({
   getParentRoute: () => shell,
   path: "status",
   ...statusRoute,
-  component: lazyPage(statusRoute.load),
 });
-const notFound = createRoute({
-  getParentRoute: () => shell,
-  path: "$",
-  staticData: notFoundRoute.staticData,
-  component: NotFoundPage,
-});
+const notFound = createRoute({ getParentRoute: () => shell, path: "$", ...notFoundRoute });
 
 export const routeTree = root.addChildren([
   index,

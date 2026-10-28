@@ -2,19 +2,18 @@ import assert from "node:assert/strict";
 import { test as it } from "node:test";
 import {
   budgetViolations,
-  collectMarkers,
   type Manifest,
-  markerViolations,
   startFiles,
+  stubModuleKeys,
+  stubViolations,
 } from "./check-bundle.ts";
 
 const KB = 1024;
 const BUDGET_KB = 250;
 const OVER_BUDGET_BYTES = BUDGET_KB * KB + 1;
 const BUDGET_MESSAGE = /250\.0 КБ gzip при бюджете 250 КБ/;
-const NO_MARKER_MESSAGE = /session\.ts: нет export const STUB_MARKER/;
-const IN_BUNDLE_MESSAGE = /crane-stub:status.*assets\/status-abc\.js/;
-const NOT_FOUND_MESSAGE = /не найден в демо-сборке/;
+const IN_MANIFEST_MESSAGE = /в сборке без демо: src\/shared\/api\/stubs\/data\/status\.ts/;
+const NOT_FOUND_MESSAGE = /нет в демо-сборке/;
 
 const MANIFEST: Manifest = {
   "index.html": {
@@ -96,78 +95,77 @@ it("бюджет: байтом больше 250 КБ — нарушение с �
   assert.match(violations[0] ?? "", BUDGET_MESSAGE);
 });
 
-it("маркеры собираются из модулей данных", () => {
+const STUB_KEY = "src/shared/api/stubs/data/status.ts";
+const WITH_STUBS: Manifest = {
+  ...MANIFEST,
+  [STUB_KEY]: { file: "assets/status-abc.js" },
+  "src/shared/api/stubs/data/me.ts": { file: "assets/me-abc.js" },
+};
+
+it("модули данных заглушек распознаются по префиксу ключа манифеста", () => {
   // Arrange
-  const modules = [
-    { path: "status.ts", content: 'export const STUB_MARKER = "crane-stub:status";' },
-    {
-      path: "me.ts",
-      content: 'export const STUB_MARKER = "crane-stub:me";\nexport function getMe() {}',
-    },
-  ];
+  const manifest = WITH_STUBS;
 
   // Act
-  const result = collectMarkers(modules);
+  const keys = stubModuleKeys(manifest);
 
   // Assert
-  assert.deepEqual(result, { markers: ["crane-stub:status", "crane-stub:me"], violations: [] });
+  assert.deepEqual(keys, [STUB_KEY, "src/shared/api/stubs/data/me.ts"]);
 });
 
-it("модуль данных без маркера — нарушение", () => {
+it("страница модулем данных не считается", () => {
   // Arrange
-  const modules = [{ path: "session.ts", content: "export function getSession() {}" }];
+  const manifest: Manifest = {
+    "src/pages/status/ui/StatusPage.tsx": { file: "assets/StatusPage.js" },
+  };
 
   // Act
-  const result = collectMarkers(modules);
+  const keys = stubModuleKeys(manifest);
 
   // Assert
-  assert.equal(result.violations.length, 1);
-  assert.match(result.violations[0] ?? "", NO_MARKER_MESSAGE);
+  assert.deepEqual(keys, []);
 });
 
-it("без демо: маркер в dist — нарушение с именем файла", () => {
+it("без демо: модуль данных в манифесте — нарушение с его ключами", () => {
   // Arrange
-  const bundle = [
-    { path: "assets/index.js", content: "ничего" },
-    { path: "assets/status-abc.js", content: 'x="crane-stub:status"' },
-  ];
+  const manifest = WITH_STUBS;
 
   // Act
-  const violations = markerViolations(["crane-stub:status"], bundle, false);
+  const violations = stubViolations(manifest, false);
 
   // Assert
   assert.equal(violations.length, 1);
-  assert.match(violations[0] ?? "", IN_BUNDLE_MESSAGE);
+  assert.match(violations[0] ?? "", IN_MANIFEST_MESSAGE);
 });
 
-it("без демо: чистый dist — всё в порядке", () => {
+it("без демо: чистый манифест — всё в порядке", () => {
   // Arrange
-  const bundle = [{ path: "assets/index.js", content: "ничего" }];
+  const manifest = MANIFEST;
 
   // Act
-  const violations = markerViolations(["crane-stub:status"], bundle, false);
+  const violations = stubViolations(manifest, false);
 
   // Assert
   assert.deepEqual(violations, []);
 });
 
-it("демо: маркер найден — всё в порядке", () => {
+it("демо: модули данных есть — всё в порядке", () => {
   // Arrange
-  const bundle = [{ path: "assets/status.js", content: 'x="crane-stub:status"' }];
+  const manifest = WITH_STUBS;
 
   // Act
-  const violations = markerViolations(["crane-stub:status"], bundle, true);
+  const violations = stubViolations(manifest, true);
 
   // Assert
   assert.deepEqual(violations, []);
 });
 
-it("демо: маркера нет — нарушение: флаг не сработал", () => {
+it("демо: модулей данных нет — нарушение: флаг не сработал", () => {
   // Arrange
-  const bundle = [{ path: "assets/index.js", content: "ничего" }];
+  const manifest = MANIFEST;
 
   // Act
-  const violations = markerViolations(["crane-stub:status"], bundle, true);
+  const violations = stubViolations(manifest, true);
 
   // Assert
   assert.equal(violations.length, 1);

@@ -4,6 +4,9 @@ import type { Action } from "~/shared/ui/actions";
 import type { ProblemView, SessionReason } from "~/shared/ui/status";
 import type { ApiProblem } from "../http/problem";
 
+// FIXME(v0.4.0): loginSession — входа в веб-консоль (BFF) нет, экраны называют версию, в которой он появится
+export const SIGN_IN_AVAILABLE_IN = "v0.4.0";
+
 /** Действия строит вызывающий (подписи и обработчики принадлежат экрану); вид только решает, какие из них уместны. */
 export type ProblemActions = {
   retry?: Action;
@@ -93,11 +96,13 @@ export function problemViewOf(problem: ApiProblem, actions: ProblemActions = {})
     case "planned":
       return { kind: "planned", replacedIn: problem.replacedIn ?? "" };
     case "unauthenticated":
-      return {
-        kind: "session",
-        ...(isSessionReason(problem.reason) ? { reason: problem.reason } : {}),
-        ...(actions.signIn ? { signIn: actions.signIn } : {}),
-      };
+      return actions.signIn
+        ? {
+            kind: "session",
+            signIn: actions.signIn,
+            ...(isSessionReason(problem.reason) ? { reason: problem.reason } : {}),
+          }
+        : { kind: "session", availableIn: SIGN_IN_AVAILABLE_IN };
     case "network":
       return offlineOf(problem, actions);
     case "step-up":
