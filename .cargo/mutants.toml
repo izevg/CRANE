@@ -28,4 +28,10 @@ exclude_re = [
   # Запуск слушателей и обработка сигналов ОС (SIGTERM, Ctrl+C) — та же проводка процесса:
   # проверяется e2e-стендом (`task e2e` поднимает и гасит сервер в Compose).
   "entry/server/src/run/mod\\.rs:\\d+:\\d+: replace (serve|serve_async|shutdown_signal|terminate)\\b",
+  # После сдвига на NIBBLE_BITS младшие 4 бита `hi` нулевые, а `lo` ≤ 15: `|` и `^` дают один
+  # результат на любых входах, мутант эквивалентен.
+  "digest/hex\\.rs:\\d+:\\d+: replace \\| with \\^ in parse",
+  # `ACCEPT_SHA1_ONLY` — константа `false`: ветка с sha1 недостижима, пока владелец не включит её
+  # осознанно, а замена охранника на `false` не меняет поведения при текущем значении.
+  "replace match guard ACCEPT_SHA1_ONLY with false in tarball",
 ]
