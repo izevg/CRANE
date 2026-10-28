@@ -22,7 +22,50 @@ fn unreachable_code(code: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+    use std::fmt;
+
+    use sqlx::error::{DatabaseError, ErrorKind};
+
     use super::*;
+
+    /// Ошибка сервера с заданным SQLSTATE: настоящую получить можно только остановкой БД.
+    #[derive(Debug)]
+    struct ServerError(&'static str);
+
+    impl fmt::Display for ServerError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("ошибка сервера")
+        }
+    }
+
+    impl std::error::Error for ServerError {}
+
+    impl DatabaseError for ServerError {
+        fn message(&self) -> &'static str {
+            "ошибка сервера"
+        }
+
+        fn code(&self) -> Option<Cow<'_, str>> {
+            Some(Cow::Borrowed(self.0))
+        }
+
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
+
+        fn kind(&self) -> ErrorKind {
+            ErrorKind::Other
+        }
+    }
 
     #[test]
     fn server_shutdown_and_connection_sqlstates_are_unreachable() {
@@ -60,5 +103,18 @@ mod tests {
 
         // Assert
         assert_eq!(actual, [true, true, true, true, false, false]);
+    }
+
+    #[test]
+    fn server_errors_are_unreachable_only_for_shutdown_and_connection_sqlstates() {
+        // Arrange
+        let codes = ["57P01", "08006", "23505", "42P01"];
+
+        // Act
+        let actual =
+            codes.map(|code| is_unreachable(&sqlx::Error::Database(Box::new(ServerError(code)))));
+
+        // Assert
+        assert_eq!(actual, [true, true, false, false]);
     }
 }
