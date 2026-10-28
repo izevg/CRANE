@@ -8,13 +8,13 @@ use crane_domain::registry::Ecosystem;
 use crate::ecosystem::PYPI;
 
 #[test]
-fn purl_lowercases_the_name_turns_underscores_into_dashes_and_keeps_dots_and_written_version() {
+fn purl_prints_the_catalog_identity_normalized_name_and_canonical_version() {
     // Arrange
     // Первые два кейса — tests/types/pypi-test.json репозитория package-url/purl-spec.
     let cases = [
         ("django", Some("1.11.1")),
         ("Django_package", Some("1.11.1.post1")),
-        ("Foo.Bar", Some("1.0.0")),
+        ("Foo.Bar_baz", Some("1.0.0")),
         ("requests", None),
     ];
 
@@ -31,7 +31,7 @@ fn purl_lowercases_the_name_turns_underscores_into_dashes_and_keeps_dots_and_wri
         [
             "pkg:pypi/django@1.11.1",
             "pkg:pypi/django-package@1.11.1.post1",
-            "pkg:pypi/foo.bar@1.0.0",
+            "pkg:pypi/foo-bar-baz@1",
             "pkg:pypi/requests",
         ]
     );

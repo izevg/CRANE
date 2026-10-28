@@ -53,14 +53,14 @@ impl Ecosystem for PyPi {
         NamespaceShape::Delimited
     }
 
-    // PyPI: purl-spec требует нижний регистр и `_` → `-`; точка остаётся как есть, поэтому
-    // нормализованная форма PEP 503 (она сворачивает и точки) здесь не годится.
+    // purl печатает идентичность каталога: нормализованное имя PEP 503 (`a.b_c` → `a-b-c`)
+    // и каноническую версию, а не написание клиента.
     fn purl(&self, name: &PackageName, version: Option<&Version>) -> Purl {
         Purl::new(
             "pypi",
             None,
-            name.as_written().to_ascii_lowercase().replace('_', "-"),
-            version.map(|version| version.as_written().to_owned()),
+            name.normalized().to_owned(),
+            version.map(|version| version.canonical().to_owned()),
         )
     }
 }

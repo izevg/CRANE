@@ -89,39 +89,30 @@ fn yanked_is_false_true_or_the_reason() {
 }
 
 #[test]
-fn upload_time_is_utc_microseconds_across_leap_days_and_year_ends() {
+fn upload_time_is_utc_microseconds_and_omitted_outside_years_1970_to_9999() {
     // Arrange
-    let seconds = [
-        0,
-        951_782_400,
-        1_709_164_800,
-        1_704_067_199,
-        4_107_456_000,
-        4_107_542_400,
-        13_574_563_200,
-        13_574_649_600,
-    ];
+    let before_epoch = SystemTime::UNIX_EPOCH - Duration::from_secs(1);
+    let last_second = at(253_402_300_799, 7);
+    let year_10000 = at(253_402_300_800, 0);
+    let times = [at(0, 7), last_second, year_10000, before_epoch];
 
     // Act
-    let actual = seconds.map(|s| {
+    let actual = times.map(|time| {
         let mut file = dist(WHEEL);
-        file.upload_time = Some(at(s, 7));
-        json_of(&project(vec![file]))["files"][0]["upload-time"].clone()
+        file.upload_time = Some(time);
+        json_of(&project(vec![file]))["files"][0]
+            .get("upload-time")
+            .cloned()
     });
 
     // Assert
     assert_eq!(
         actual,
         [
-            "1970-01-01T00:00:00.000007Z",
-            "2000-02-29T00:00:00.000007Z",
-            "2024-02-29T00:00:00.000007Z",
-            "2023-12-31T23:59:59.000007Z",
-            "2100-02-28T00:00:00.000007Z",
-            "2100-03-01T00:00:00.000007Z",
-            "2400-02-29T00:00:00.000007Z",
-            "2400-03-01T00:00:00.000007Z",
+            Some(json!("1970-01-01T00:00:00.000007Z")),
+            Some(json!("9999-12-31T23:59:59.000007Z")),
+            None,
+            None,
         ]
-        .map(Value::from)
     );
 }

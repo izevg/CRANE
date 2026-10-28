@@ -7,9 +7,6 @@ use serde_json::{Map, Value, json};
 use super::{DistFile, Project, Yanked};
 
 const API_VERSION: &str = "1.1";
-const SECONDS_PER_DAY: i64 = 86_400;
-const SECONDS_PER_HOUR: i64 = 3_600;
-const SECONDS_PER_MINUTE: i64 = 60;
 
 pub(super) fn render(project: &Project) -> String {
     let files: Vec<Value> = project.files.iter().map(file).collect();
@@ -47,36 +44,11 @@ fn yanked(yanked: &Yanked) -> Value {
     }
 }
 
-/// `yyyy-mm-ddThh:mm:ss.ffffffZ` в UTC. Время до эпохи не представимо: поле опускается.
+/// Первая секунда 10000 года: `humantime` паникует на времени позже 9999-12-31 и раньше эпохи.
+const YEAR_10000: u64 = 253_402_300_800;
+
+/// `yyyy-mm-ddThh:mm:ss.ffffffZ` в UTC. Время вне 1970..9999 не представимо: поле опускается.
 fn upload_time(time: SystemTime) -> Option<String> {
     let since = time.duration_since(UNIX_EPOCH).ok()?;
-    let seconds = i64::try_from(since.as_secs()).ok()?;
-    let (year, month, day) = civil_date(seconds.div_euclid(SECONDS_PER_DAY));
-    let in_day = seconds.rem_euclid(SECONDS_PER_DAY);
-    Some(format!(
-        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{:06}Z",
-        in_day / SECONDS_PER_HOUR,
-        in_day % SECONDS_PER_HOUR / SECONDS_PER_MINUTE,
-        in_day % SECONDS_PER_MINUTE,
-        since.subsec_micros()
-    ))
-}
-
-/// Дата по числу дней от 1970-01-01 (алгоритм `civil_from_days` Говарда Хиннанта): своя функция
-/// дешевле зависимости ради одного формата времени.
-fn civil_date(days: i64) -> (i64, i64, i64) {
-    let shifted = days + 719_468;
-    let era = shifted.div_euclid(146_097);
-    let day_of_era = shifted.rem_euclid(146_097);
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_index = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
-    let month = if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
-    };
-    (year_of_era + era * 400 + i64::from(month <= 2), month, day)
+    (since.as_secs() < YEAR_10000).then(|| humantime::format_rfc3339_micros(time).to_string())
 }
