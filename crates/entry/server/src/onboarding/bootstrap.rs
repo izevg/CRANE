@@ -1,10 +1,12 @@
 //! Выпуск bootstrap-токена: первый старт, перевыпуск истёкшего и печать в `crane::bootstrap`.
 
+use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crane_domain::onboarding::Onboarding;
+use crane_domain::settings::{Stored, StoredValue};
 use crane_ports::settings::{OnboardingError, OnboardingStore};
 use crane_ports::system::Clock;
 
@@ -30,12 +32,14 @@ pub(crate) enum Source {
 }
 
 impl Source {
+    /// `stored_token` - в слое БД есть читаемый `token` (`stored_token_set`).
     pub(crate) fn resolve(
         var: &impl Fn(&str) -> Option<String>,
         read_file: &impl Fn(&Path) -> io::Result<String>,
+        stored_token: bool,
     ) -> Result<Self, ConfigError> {
         // Статический токен сильнее: bootstrap-токен принимается, только пока статического нет.
-        if static_token_set(var) {
+        if stored_token || static_token_set(var) {
             return Ok(Self::Static);
         }
         Ok(
@@ -57,6 +61,18 @@ impl Source {
             }),
         }
     }
+}
+
+/// Ключ статического токена в слое БД.
+const TOKEN_KEY: &str = "token";
+
+/// Мастер записал статический токен в БД. Нечитаемая строка не в счёт: иначе потерянный ключ
+/// навсегда закрыл бы вход в мастер.
+pub(crate) fn stored_token_set(rows: &BTreeMap<String, Stored>) -> bool {
+    matches!(
+        rows.get(TOKEN_KEY).map(|row| &row.value),
+        Some(StoredValue::Secret(_))
+    )
 }
 
 /// Токен и признак «печатать, если процесс победил».

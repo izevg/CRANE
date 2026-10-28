@@ -19,7 +19,7 @@ use crate::config::{Boot, Config, admin_port, http_port};
 use crate::ecosystem::ecosystem;
 use crate::onboarding::{
     Journal, Row, Source, Step, WIZARD_POLL, decide, preconfigure, refresh_token, start_wizard,
-    until_completed,
+    stored_token_set, until_completed,
 };
 use crate::system::{SystemClock, UuidV7Ids};
 
@@ -93,13 +93,13 @@ impl Phases {
             }
             Step::StartWizard => {
                 let store = self.backend.onboarding()?;
-                let source = self.source()?;
+                let source = self.source(&rows)?;
                 start_wizard(store.as_ref(), &SystemClock, &self.journal, source).await?;
                 Ok(Next::Again)
             }
             Step::Wizard => {
                 let store = self.backend.onboarding()?;
-                let source = self.source()?;
+                let source = self.source(&rows)?;
                 refresh_token(
                     store.as_ref(),
                     &SystemClock,
@@ -113,10 +113,10 @@ impl Phases {
         }
     }
 
-    fn source(&self) -> Result<Source, RunError> {
+    fn source(&self, rows: &BTreeMap<String, Stored>) -> Result<Source, RunError> {
         let var = |name: &str| self.boot.var(name);
         let read = |path: &std::path::Path| self.boot.read(path);
-        Ok(Source::resolve(&var, &read)?)
+        Ok(Source::resolve(&var, &read, stored_token_set(rows))?)
     }
 
     /// Публичный слушатель отвечает `503 not-configured` на всё, кроме маршрутов мастера (B4b);

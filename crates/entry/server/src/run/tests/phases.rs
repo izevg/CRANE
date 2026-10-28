@@ -298,3 +298,40 @@ fn memory_install_has_no_wizard_and_decides_by_parsing_alone() {
         (["error", "ready"], 0)
     );
 }
+
+#[test]
+fn token_stored_by_the_wizard_stops_reissuing_an_expired_bootstrap_token() {
+    // Arrange
+    let Some(base) = database_url() else { return };
+    let db = FreshDb::create(&base);
+    let dir = tempfile::tempdir().unwrap();
+    let store = onboarding(&db);
+    let expired = Onboarding::Pending {
+        token: TokenHash::of(b"crb_old"),
+        expires_at: SystemTime::now() - Duration::from_secs(60),
+    };
+    db.runtime.block_on(store.begin(expired)).unwrap();
+    db.put(
+        &db.store(Some(KEY_A)),
+        "token",
+        NewValue::Secret(Secret::new("wizard-token".to_owned())),
+    );
+    let boot = lookup(&db.url, dir.path(), &[("CRANE_SETTINGS_KEY", KEY_A)]);
+    let audit = Arc::new(MemoryAudit::default());
+    let phases = phases(&db, boot, &audit);
+
+    // Act
+    let next = db.runtime.block_on(phases.advance());
+
+    // Assert
+    let state = db.runtime.block_on(store.get()).unwrap().unwrap();
+    db.drop_database();
+    assert_eq!(
+        (
+            kind(&next),
+            state.accepts(b"crb_old", SystemTime::now() - Duration::from_secs(120)),
+            audit.events().len()
+        ),
+        ("wizard", true, 0)
+    );
+}

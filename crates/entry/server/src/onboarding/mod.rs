@@ -15,7 +15,7 @@ use crane_ports::audit::AuditSink;
 use crane_ports::settings::{OnboardingError, OnboardingStore};
 use crane_ports::system::{Clock, IdGen};
 
-pub(crate) use bootstrap::{BOOTSTRAP_TARGET, Source, announce, reissue_expired};
+pub(crate) use bootstrap::{BOOTSTRAP_TARGET, Source, announce, reissue_expired, stored_token_set};
 pub(crate) use roles::{onboarding_reset, onboarding_token};
 use token::RandomError;
 

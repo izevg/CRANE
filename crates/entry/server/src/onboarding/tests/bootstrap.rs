@@ -4,12 +4,12 @@
     reason = "в тестах падение unwrap - это падение теста"
 )]
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use crane_domain::onboarding::TokenHash;
-use crane_domain::settings::Secret;
+use crane_domain::settings::{Secret, Stored, StoredValue, Unreadable, Version};
 use crane_memory::{ManualClock, MemoryOnboarding};
 
 use super::*;
@@ -54,7 +54,7 @@ fn source_prefers_static_token_then_provided_then_generates() {
     ];
 
     // Act
-    let sources = cases.map(|pairs| label(&Source::resolve(&env(&pairs), &no_files)));
+    let sources = cases.map(|pairs| label(&Source::resolve(&env(&pairs), &no_files, false)));
 
     // Assert
     assert_eq!(
@@ -81,7 +81,7 @@ fn provided_token_without_prefix_or_too_short_is_rejected_without_echoing_it() {
     ];
 
     // Act
-    let errors = cases.map(|pairs| label(&Source::resolve(&env(&pairs), &no_files)));
+    let errors = cases.map(|pairs| label(&Source::resolve(&env(&pairs), &no_files, false)));
 
     // Assert
     let expected = "некорректное значение CRANE_BOOTSTRAP_TOKEN: \
@@ -344,5 +344,53 @@ fn utc_formats_rfc_3339_across_leap_days_and_year_ends() {
             "2025-12-31T23:59:59Z",
             "2026-10-27T12:00:00Z",
         ]
+    );
+}
+
+fn row(value: StoredValue) -> Stored {
+    Stored {
+        value,
+        version: Version::FIRST,
+        updated_at: SystemTime::UNIX_EPOCH,
+        updated_by: "admin".to_owned(),
+    }
+}
+
+#[test]
+fn stored_token_counts_as_static_only_when_readable() {
+    // Arrange
+    let secret = row(StoredValue::Secret(Secret::new("t".to_owned())));
+    let unreadable = row(StoredValue::Unreadable(Unreadable::MissingKey));
+    let other = row(StoredValue::Plain("x".to_owned()));
+    let cases = [
+        BTreeMap::from([("token".to_owned(), secret)]),
+        BTreeMap::from([("token".to_owned(), unreadable)]),
+        BTreeMap::from([("token_principal".to_owned(), other)]),
+        BTreeMap::new(),
+    ];
+
+    // Act
+    let set = cases.each_ref().map(stored_token_set);
+
+    // Assert
+    assert_eq!(set, [true, false, false, false]);
+}
+
+#[test]
+fn stored_token_makes_the_source_static_so_expired_bootstrap_is_not_reissued() {
+    // Arrange
+    let clock = clock();
+    let (store, state) = pending_for_a_day(&clock);
+    clock.advance(TOKEN_TTL * 2);
+    let source = Source::resolve(&env(&[]), &no_files, true).unwrap();
+
+    // Act
+    let reissued = run(reissue_expired(&store, clock.as_ref(), &state, source));
+
+    // Assert
+    let stored = run(store.get()).unwrap().unwrap();
+    assert_eq!(
+        (reissued.unwrap().is_some(), stored.accepts(b"crb_old", NOW)),
+        (false, true)
     );
 }
