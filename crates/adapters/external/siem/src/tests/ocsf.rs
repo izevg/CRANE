@@ -10,6 +10,11 @@ use crane_domain::registry::{
 
 use super::*;
 
+#[path = "../../tests/common/mod.rs"]
+mod common;
+
+pub(super) use common::ecosystems;
+
 /// Имя cargo из готовых частей: `siem` не зависит от `formats`.
 fn name_of(raw: &str) -> PackageName {
     PackageName::from_parts(raw.to_ascii_lowercase().replace('-', "_"), raw.to_owned())
@@ -103,7 +108,7 @@ pub(super) fn record(
     outcome: Outcome,
     actor: Option<Principal>,
 ) -> OcsfRecord {
-    ocsf(&event(action, outcome, actor), Uuid::nil(), 7)
+    ocsf(&event(action, outcome, actor), ecosystems, Uuid::nil(), 7)
 }
 
 #[test]
@@ -235,55 +240,28 @@ fn failure_carries_reason_and_success_carries_none() {
 }
 
 #[test]
-fn purl_encodes_plus_in_version_and_keeps_written_name() {
+fn resource_uid_is_the_purl_built_by_the_ecosystem_of_the_format() {
     // Arrange
     let cases = [
         AuditAction::Publish(coord("serde", "1.0.0")),
-        AuditAction::Publish(coord("Foo_Bar", "1.2.3-rc.1+build5")),
         publish_file(),
+        AuditAction::Untag {
+            package: package_ref(),
+            tag: "latest".to_owned(),
+        },
     ];
 
     // Act
-    let actual = cases.map(|action| resource(&action).as_ref().map(purl));
+    let actual = cases.map(|action| record(action, Outcome::Success, None).resource_uid);
 
     // Assert
     assert_eq!(
         actual,
         [
-            Some("pkg:cargo/serde@1.0.0".to_owned()),
-            Some("pkg:cargo/Foo_Bar@1.2.3-rc.1%2Bbuild5".to_owned()),
-            Some("pkg:cargo/serde@1.0.0".to_owned()),
+            Some("pkg:probe/ns/serde@1.0.0".to_owned()),
+            Some("pkg:probe/ns/serde@1.0.0".to_owned()),
+            Some("pkg:probe/ns/serde".to_owned()),
         ]
-    );
-}
-
-#[test]
-fn purl_component_encodes_plus_and_scope_marker() {
-    // Arrange
-    let cases = ["@scope/pkg", "1.0.0+build", "plain"];
-
-    // Act
-    let actual = cases.map(purl_component);
-
-    // Assert
-    assert_eq!(actual, ["%40scope/pkg", "1.0.0%2Bbuild", "plain"]);
-}
-
-#[test]
-fn package_level_action_resource_has_purl_without_version() {
-    // Arrange
-    let action = AuditAction::Untag {
-        package: package_ref(),
-        tag: "latest".to_owned(),
-    };
-
-    // Act
-    let r = ocsf(&event(action, Outcome::Success, None), Uuid::nil(), 0);
-
-    // Assert
-    assert_eq!(
-        (r.resource_uid.as_deref(), r.repository.as_deref()),
-        (Some("pkg:cargo/serde"), Some("internal"))
     );
 }
 
@@ -328,7 +306,7 @@ fn authentication_subject_goes_to_user_and_write_subject_to_actor() {
 
     // Act
     let actual = cases.map(|event| {
-        let r = ocsf(&event, Uuid::nil(), 0);
+        let r = ocsf(&event, ecosystems, Uuid::nil(), 0);
         (r.user.map(|u| u.type_id), r.actor.map(|u| u.type_id))
     });
 
@@ -346,7 +324,7 @@ fn write_event_carries_resource_request_context_and_stamp() {
     );
 
     // Act
-    let r = ocsf(&event, Uuid::from_u128(5), 1234);
+    let r = ocsf(&event, ecosystems, Uuid::from_u128(5), 1234);
 
     // Assert
     assert_eq!(
@@ -367,7 +345,7 @@ fn write_event_carries_resource_request_context_and_stamp() {
             "req-1",
             Some("10.0.4.17"),
             Some("cargo/1.90"),
-            Some("pkg:cargo/serde@1.0.0"),
+            Some("pkg:probe/ns/serde@1.0.0"),
             Some("package"),
             Some("internal"),
             Some("4bf92f3577b34da6a3ce929d0e0e4736"),
@@ -381,7 +359,7 @@ fn authentication_event_has_no_resource() {
     let event = event(AuditAction::Authenticate, failure(), None);
 
     // Act
-    let r = ocsf(&event, Uuid::nil(), 0);
+    let r = ocsf(&event, ecosystems, Uuid::nil(), 0);
 
     // Assert
     assert_eq!(

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crane_domain::audit::AuditEvent;
+use crane_domain::registry::Ecosystems;
 use crane_ports::audit::AuditSink;
 use crane_ports::system::{Clock, IdGen};
 
@@ -19,12 +20,17 @@ use crate::ocsf::{OcsfRecord, ocsf};
 pub struct OcsfLogSink {
     clock: Arc<dyn Clock>,
     ids: Arc<dyn IdGen>,
+    ecosystems: Ecosystems,
 }
 
 impl OcsfLogSink {
     #[must_use]
-    pub fn new(clock: Arc<dyn Clock>, ids: Arc<dyn IdGen>) -> Self {
-        Self { clock, ids }
+    pub fn new(clock: Arc<dyn Clock>, ids: Arc<dyn IdGen>, ecosystems: Ecosystems) -> Self {
+        Self {
+            clock,
+            ids,
+            ecosystems,
+        }
     }
 }
 
@@ -43,7 +49,12 @@ fn epoch_millis(time: SystemTime) -> u64 {
 
 impl AuditSink for OcsfLogSink {
     fn record(&self, event: AuditEvent) {
-        let record = ocsf(&event, self.ids.generate(), epoch_millis(self.clock.now()));
+        let record = ocsf(
+            &event,
+            self.ecosystems,
+            self.ids.generate(),
+            epoch_millis(self.clock.now()),
+        );
         emit(&record);
     }
 }

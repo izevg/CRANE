@@ -4,7 +4,7 @@ mod name;
 mod version;
 
 use crane_domain::registry::{
-    Ecosystem, Format, NameError, NamespaceShape, PackageName, Version, VersionError,
+    Ecosystem, Format, NameError, NamespaceShape, PackageName, Purl, Version, VersionError,
 };
 
 pub(crate) use name::parse_name;
@@ -44,6 +44,16 @@ impl Ecosystem for Cargo {
 
     fn namespace_shape(&self) -> NamespaceShape {
         NamespaceShape::Delimited
+    }
+
+    // Cargo: имя регистрозависимо, namespace запрещён (PURL-TYPES, cargo).
+    fn purl(&self, name: &PackageName, version: Option<&Version>) -> Purl {
+        Purl::new(
+            "cargo",
+            None,
+            name.as_written().to_owned(),
+            version.map(|version| version.as_written().to_owned()),
+        )
     }
 }
 

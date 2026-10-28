@@ -4,7 +4,7 @@ mod name;
 mod version;
 
 use crane_domain::registry::{
-    Ecosystem, Format, NameError, NamespaceShape, PackageName, Version, VersionError,
+    Ecosystem, Format, NameError, NamespaceShape, PackageName, Purl, Version, VersionError,
 };
 
 pub(crate) use name::parse_name;
@@ -47,6 +47,24 @@ impl Ecosystem for Npm {
     // Клиент маршрутизирует реестры только по scope, безscope-имя нечем защитить от подмены.
     fn namespace_shape(&self) -> NamespaceShape {
         NamespaceShape::Scoped
+    }
+
+    // npm: namespace — scope вместе с `@` (при печати он станет `%40`); регистр значим,
+    // старые имена с заглавными буквами не приводятся к нижнему (PURL-TYPES, npm).
+    fn purl(&self, name: &PackageName, version: Option<&Version>) -> Purl {
+        // В валидном имени `/` бывает только после scope.
+        let written = name.as_written();
+        let (namespace, name) = written
+            .split_once('/')
+            .map_or((None, written), |(scope, rest)| {
+                (Some(scope.to_owned()), rest)
+            });
+        Purl::new(
+            "npm",
+            namespace,
+            name.to_owned(),
+            version.map(|version| version.as_written().to_owned()),
+        )
     }
 }
 

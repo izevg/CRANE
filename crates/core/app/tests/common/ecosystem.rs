@@ -3,7 +3,7 @@
 
 use crane_domain::registry::{
     Ecosystem, Format, NameError, NamespacePattern, NamespaceShape, OrderKeyBuilder, PackageName,
-    Version, VersionError,
+    Purl, Version, VersionError,
 };
 
 pub(crate) struct TestCargo;
@@ -35,6 +35,15 @@ impl Ecosystem for TestCargo {
 
     fn namespace_shape(&self) -> NamespaceShape {
         NamespaceShape::Delimited
+    }
+
+    fn purl(&self, name: &PackageName, version: Option<&Version>) -> Purl {
+        Purl::new(
+            "cargo",
+            None,
+            name.as_written().to_owned(),
+            version.map(|version| version.as_written().to_owned()),
+        )
     }
 }
 

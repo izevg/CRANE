@@ -13,7 +13,7 @@ use std::time::SystemTime;
 
 use axum::http::Method;
 use common::capture::capture_logs;
-use common::{Api, REPO, TOKEN, request};
+use common::{Api, REPO, TOKEN, ecosystem, request};
 use crane_memory::{ManualClock, MemoryAudit, SequentialIdGen};
 use crane_siem::OcsfLogSink;
 
@@ -26,6 +26,7 @@ fn real_sink_api() -> Api {
     let sink = Arc::new(OcsfLogSink::new(
         Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH)),
         Arc::new(SequentialIdGen::default()),
+        ecosystem,
     ));
     Api::build("", sink, Arc::new(MemoryAudit::default()))
 }

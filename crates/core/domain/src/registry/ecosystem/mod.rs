@@ -5,7 +5,7 @@
 
 mod order;
 
-use super::{Format, NameError, PackageName, Version, VersionError};
+use super::{Format, NameError, PackageName, Purl, Version, VersionError};
 
 pub use order::{OrderKey, OrderKeyBuilder};
 
@@ -33,6 +33,10 @@ pub trait Ecosystem: Send + Sync {
     /// Форма пространства имён: по ней `NamespacePattern` режет имена на сегменты,
     /// а `hosted_name_allowed` решает, нужен ли scope.
     fn namespace_shape(&self) -> NamespaceShape;
+
+    /// Идентификатор пакета (или его версии) по purl-spec: ключ findings, графа и событий SIEM.
+    /// Тип, разбиение имени на namespace и name и регистр задаёт экосистема, кодирование — `Purl`.
+    fn purl(&self, name: &PackageName, version: Option<&Version>) -> Purl;
 }
 
 /// Форма пространства имён экосистемы. Domain знает только форму, а не форматы.
