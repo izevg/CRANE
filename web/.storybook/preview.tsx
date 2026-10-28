@@ -1,7 +1,9 @@
 import type { Decorator, Preview } from "@storybook/react-vite";
 import "~/shared/styles";
-import "../src/app/index.css";
+import "../src/app/entry/index.css";
+import { applyOverrides } from "~/shared/api/stubs/override/override";
 import { activateLocale, i18n, type Locale } from "~/shared/lib/i18n";
+import { ApiStory } from "./ApiStory";
 import { StoryShell } from "./StoryShell";
 
 type ThemeMode = "light" | "dark";
@@ -28,6 +30,20 @@ const withGlobals: Decorator = (Story, context) => {
   );
 };
 
+/**
+ * Подмены API из `parameters.api` (operationId → обработчик): сбрасываются перед каждой историей, клиент запросов
+ * свежий на историю (`key` по id). Состояния «загрузка» и «ошибка» задаются подменой, а не моками сети.
+ */
+const withApi: Decorator = (Story, context) => {
+  const { api } = context.parameters;
+  applyOverrides(api);
+  return (
+    <ApiStory key={context.id}>
+      <Story />
+    </ApiStory>
+  );
+};
+
 const preview: Preview = {
   // Каталог грузится до рендера story; выбор в хранилище витрина не пишет (activateLocale без записи).
   loaders: [
@@ -42,7 +58,7 @@ const preview: Preview = {
       i18n.load(locale, screens.messages);
     },
   ],
-  decorators: [withGlobals],
+  decorators: [withApi, withGlobals],
   globalTypes: {
     locale: {
       description: "Язык интерфейса",
