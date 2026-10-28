@@ -324,9 +324,28 @@ CREATE TABLE asset (
   store_id text NOT NULL, blob_sha256 bytea NOT NULL,
   PRIMARY KEY (version_id, path),
   FOREIGN KEY (store_id, blob_sha256) REFERENCES blob (store_id, sha256));
+
+-- Миграция 0004: настройки консоли и состояние мастера первого запуска (20.2). Время ставит адаптер из Clock.
+CREATE TABLE setting (
+  key          text PRIMARY KEY CHECK (key ~ '^[a-z][a-z0-9_]*$' AND length(key) <= 96),
+  value_text   text,                 -- несекретное значение
+  value_sealed bytea,                -- секрет: nonce || шифртекст || тег (AES-256-GCM); AAD = key, version, key_id
+  key_id       text,                 -- отпечаток ключа шифрования (16 hex SHA-256)
+  version      bigint NOT NULL CHECK (version >= 1),
+  updated_at   timestamptz NOT NULL, updated_by text NOT NULL,
+  CONSTRAINT setting_value_xor CHECK ((value_text IS NULL) <> (value_sealed IS NULL)),
+  CONSTRAINT setting_sealed_key CHECK ((value_sealed IS NULL) = (key_id IS NULL)));
+
+CREATE TABLE onboarding (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  token_hash bytea CHECK (octet_length(token_hash) = 32), token_expires_at timestamptz,
+  completed_at timestamptz, completed_by text,
+  CONSTRAINT onboarding_state CHECK (
+       (completed_at IS NULL AND token_hash IS NOT NULL AND token_expires_at IS NOT NULL AND completed_by IS NULL)
+    OR (completed_at IS NOT NULL AND token_hash IS NULL AND token_expires_at IS NULL AND completed_by IS NOT NULL)));
 ```
 
-*Рис. 9.3. Срез схемы v0.1.0 плюс миграция 0002 (`deprecated`, `dist_tag`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД. Миграция 0003 `namespace` (expand, только `CREATE TABLE`) добавляет таблицу `namespace` в виде, показанном выше; история заявок на имена в БД не хранится, она живёт только в событиях аудита.
+*Рис. 9.3. Срез схемы v0.1.0 плюс миграции 0002 (`deprecated`, `dist_tag`) и 0004 (`setting`, `onboarding`).* Адаптер читает имена ограничений `package_repository_id_fkey` (нарушение значит «нет репозитория») и `package_version_package_id_version_key` (версия занята). `store_id` адаптер задаёт явно (константа `'main'`), значения по умолчанию в колонке нет. Файлы версии читаются в байтовом порядке `path` (`COLLATE "C"`), чтобы результат не зависел от локали БД. Миграция 0003 `namespace` (expand, только `CREATE TABLE`) добавляет таблицу `namespace` в виде, показанном выше; история заявок на имена в БД не хранится, она живёт только в событиях аудита. Миграция 0004 `settings` (expand, только `CREATE TABLE`) добавляет `setting` и `onboarding`: секрет лежит только в `value_sealed`, откат строки целиком (старые шифртекст и версия вместе) шифр не ловит, это угроза уровня доступа к БД (20.2).
 
 | Отложено | Когда добавляется |
 | --- | --- |

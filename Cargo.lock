@@ -480,6 +480,8 @@ dependencies = [
 name = "crane-pg"
 version = "0.2.0"
 dependencies = [
+ "aws-lc-rs",
+ "base64 0.22.1",
  "crane-domain",
  "crane-ports",
  "sqlx",

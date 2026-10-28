@@ -14,6 +14,11 @@ workspace = true
 crane-domain = { path = "../../../core/domain" }
 crane-ports = { path = "../../../core/ports" }
 # TLS на aws-lc-rs: тот же криптопровайдер, что у object_store[aws]. Без json и макросов, запросы пишутся вручную.
+# Шифрование секретов настроек (AES-256-GCM): тот же криптопровайдер, что у sqlx и object_store (уже в Cargo.lock).
+# Без default-features: ring-io и ring-sig-verify тянут untrusted, а нужен только AEAD и SHA-256.
+aws-lc-rs = { version = "1", default-features = false, features = ["aws-lc-sys", "alloc"] }
+# Ключ шифрования читается из файла как base64 (standard); версия та же, что у crane-http и crane-format-npm.
+base64 = "0.22"
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "migrate", "uuid", "time", "tls-rustls-aws-lc-rs"] }
 thiserror = "2"
 time = "0.3"
