@@ -1,8 +1,6 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use super::Format;
-
 /// Ошибка разбора имени пакета.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum NameError {
@@ -18,8 +16,6 @@ pub enum NameError {
     Reserved(String),
     #[error("некорректная форма scope: ожидается «@scope/name» с непустыми частями")]
     MalformedScope,
-    #[error("формат {0:?} пока не поддержан")]
-    Unsupported(Format),
 }
 
 /// Имя пакета: равенство и хеш считаются по нормализованной форме,
