@@ -4,6 +4,7 @@
 //! `rows`. Схема развивается только вперёд по правилам из `migrations/README.md`.
 
 mod catalog;
+mod db_time;
 mod schema;
 mod settings;
 

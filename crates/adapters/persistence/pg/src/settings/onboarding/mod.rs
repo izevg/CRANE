@@ -11,7 +11,8 @@ use crane_ports::system::Clock;
 use sqlx::PgPool;
 
 use self::rows::{Columns, state_from_row};
-use super::db::{BoxError, driver, to_db_time};
+use crate::db_time::to_db_time;
+use crate::settings::BoxError;
 
 mod rows;
 
@@ -33,14 +34,13 @@ const COMPLETE: &str = "UPDATE onboarding
     SET completed_at = $1, completed_by = $2, token_hash = NULL, token_expires_at = NULL
     WHERE completed_at IS NULL";
 
+const OUT_OF_RANGE: &str = "момент времени вне диапазона timestamptz";
+
 const EXISTS: &str = "SELECT EXISTS (SELECT 1 FROM onboarding)";
 
-fn backend(error: BoxError) -> OnboardingError {
-    OnboardingError::Backend(error)
-}
-
-fn driver_error(error: sqlx::Error) -> OnboardingError {
-    backend(driver(error))
+/// Единственная воронка ошибок адаптера: драйвер или описание рассинхрона схемы.
+fn backend(error: impl Into<BoxError>) -> OnboardingError {
+    OnboardingError::Backend(error.into())
 }
 
 /// Состояние мастера в PostgreSQL. Время завершения берёт из `Clock`.
@@ -71,7 +71,7 @@ impl PgOnboarding {
         {
             Ok(true) => OnboardingError::Completed,
             Ok(false) => OnboardingError::NotStarted,
-            Err(error) => driver_error(error),
+            Err(error) => backend(error),
         }
     }
 
@@ -81,14 +81,14 @@ impl PgOnboarding {
         token: &TokenHash,
         expires_at: SystemTime,
     ) -> Result<u64, OnboardingError> {
-        let expires_at = to_db_time(expires_at).map_err(backend)?;
+        let expires_at = to_db_time(expires_at).ok_or_else(|| backend(OUT_OF_RANGE))?;
         sqlx::query(sql)
             .bind(token.as_bytes().to_vec())
             .bind(expires_at)
             .execute(&self.pool)
             .await
             .map(|done| done.rows_affected())
-            .map_err(driver_error)
+            .map_err(backend)
     }
 }
 
@@ -97,26 +97,24 @@ impl OnboardingStore for PgOnboarding {
         sqlx::query(SELECT)
             .fetch_optional(&self.pool)
             .await
-            .map_err(driver_error)?
+            .map_err(backend)?
             .as_ref()
             .map(state_from_row)
             .transpose()
     }
 
     async fn begin(&self, initial: Onboarding) -> Result<Onboarding, OnboardingError> {
-        let columns = Columns::encode(&initial).map_err(backend)?;
+        let columns = Columns::encode(&initial)?;
         columns
             .bind_to(sqlx::query(INSERT))
             .execute(&self.pool)
             .await
-            .map_err(driver_error)?;
+            .map_err(backend)?;
         // Отдельный запрос, не `WITH ins AS (INSERT ..) SELECT ..`: в READ COMMITTED снимок
         // одного оператора взят до коммита конкурента и строки победителя не увидел бы.
-        self.get().await?.ok_or_else(|| {
-            backend(super::db::inconsistent(
-                "состояние первого запуска не читается после вставки",
-            ))
-        })
+        self.get()
+            .await?
+            .ok_or_else(|| backend("состояние первого запуска не читается после вставки"))
     }
 
     async fn rotate(
@@ -138,13 +136,13 @@ impl OnboardingStore for PgOnboarding {
     }
 
     async fn complete(&self, by: &Principal) -> Result<(), OnboardingError> {
-        let at = to_db_time(self.clock.now()).map_err(backend)?;
+        let at = to_db_time(self.clock.now()).ok_or_else(|| backend(OUT_OF_RANGE))?;
         let affected = sqlx::query(COMPLETE)
             .bind(at)
             .bind(&by.id)
             .execute(&self.pool)
             .await
-            .map_err(driver_error)?
+            .map_err(backend)?
             .rows_affected();
         match affected {
             0 => Err(self.refusal().await),

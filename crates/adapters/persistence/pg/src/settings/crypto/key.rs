@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use aws_lc_rs::aead::{AES_256_GCM, RandomizedNonceKey};
 use aws_lc_rs::digest::{SHA256, digest};
 use base64::Engine;
@@ -64,9 +66,14 @@ impl SettingsKey {
 fn fingerprint(key: &[u8]) -> String {
     digest(&SHA256, key).as_ref()[..FINGERPRINT_BYTES]
         .iter()
-        .flat_map(|byte| [byte >> 4, byte & 0x0f])
-        .filter_map(|nibble| char::from_digit(u32::from(nibble), 16))
-        .collect()
+        .fold(
+            String::with_capacity(FINGERPRINT_BYTES * 2),
+            |mut hex, byte| {
+                // Запись в String не отказывает.
+                let _ = write!(hex, "{byte:02x}");
+                hex
+            },
+        )
 }
 
 #[cfg(test)]

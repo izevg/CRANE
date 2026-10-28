@@ -7,8 +7,8 @@ use sqlx::query::Query;
 use sqlx::{Postgres, Row};
 use time::OffsetDateTime;
 
-use super::{backend, driver_error};
-use crate::settings::db::{BoxError, from_db_time, inconsistent, to_db_time};
+use super::{OUT_OF_RANGE, backend};
+use crate::db_time::{from_db_time, to_db_time};
 
 /// Четыре колонки состояния в порядке `$1..$4` вставки.
 pub(super) struct Columns {
@@ -19,18 +19,20 @@ pub(super) struct Columns {
 }
 
 impl Columns {
-    pub(super) fn encode(state: &Onboarding) -> Result<Self, BoxError> {
+    pub(super) fn encode(state: &Onboarding) -> Result<Self, OnboardingError> {
         Ok(match state {
             Onboarding::Pending { token, expires_at } => Self {
                 token_hash: Some(token.as_bytes().to_vec()),
-                token_expires_at: Some(to_db_time(*expires_at)?),
+                token_expires_at: Some(
+                    to_db_time(*expires_at).ok_or_else(|| backend(OUT_OF_RANGE))?,
+                ),
                 completed_at: None,
                 completed_by: None,
             },
             Onboarding::Completed { at, by } => Self {
                 token_hash: None,
                 token_expires_at: None,
-                completed_at: Some(to_db_time(*at)?),
+                completed_at: Some(to_db_time(*at).ok_or_else(|| backend(OUT_OF_RANGE))?),
                 completed_by: Some(by.clone()),
             },
         })
@@ -51,26 +53,26 @@ impl Columns {
 /// Строка БД -> состояние. CHECK `onboarding_state` допускает только две формы строки;
 /// любая другая значит, что схема разошлась с кодом.
 pub(super) fn state_from_row(row: &PgRow) -> Result<Onboarding, OnboardingError> {
-    let hash: Option<Vec<u8>> = row.try_get("token_hash").map_err(driver_error)?;
-    let expires: Option<OffsetDateTime> = row.try_get("token_expires_at").map_err(driver_error)?;
-    let at: Option<OffsetDateTime> = row.try_get("completed_at").map_err(driver_error)?;
-    let by: Option<String> = row.try_get("completed_by").map_err(driver_error)?;
+    let hash: Option<Vec<u8>> = row.try_get("token_hash").map_err(backend)?;
+    let expires: Option<OffsetDateTime> = row.try_get("token_expires_at").map_err(backend)?;
+    let at: Option<OffsetDateTime> = row.try_get("completed_at").map_err(backend)?;
+    let by: Option<String> = row.try_get("completed_by").map_err(backend)?;
     match (hash, expires, at, by) {
         (Some(hash), Some(expires), None, None) => {
             let bytes: [u8; 32] = hash
                 .try_into()
-                .map_err(|_| backend(inconsistent("хэш токена первого запуска не 32 байта")))?;
+                .map_err(|_| backend("хэш токена первого запуска не 32 байта"))?;
             Ok(Onboarding::Pending {
                 token: TokenHash::from_bytes(bytes),
-                expires_at: from_db_time(expires).map_err(backend)?,
+                expires_at: from_db_time(expires)
+                    .ok_or_else(|| backend("момент времени вне диапазона SystemTime"))?,
             })
         }
         (None, None, Some(at), Some(by)) => Ok(Onboarding::Completed {
-            at: from_db_time(at).map_err(backend)?,
+            at: from_db_time(at)
+                .ok_or_else(|| backend("момент времени вне диапазона SystemTime"))?,
             by,
         }),
-        _ => Err(backend(inconsistent(
-            "строка первого запуска нарушает схему",
-        ))),
+        _ => Err(backend("строка первого запуска нарушает схему")),
     }
 }

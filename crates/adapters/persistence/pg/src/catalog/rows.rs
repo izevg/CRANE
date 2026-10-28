@@ -8,7 +8,7 @@
 //! делает SQL, поэтому собственных реализаций `Type`/`Encode`/`Decode` нет.
 
 use std::fmt::Display;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use crane_domain::registry::{
     Asset, Format, FormatMetadata, Namespace, NamespacePattern, PackageName, PackageVersion,
@@ -16,6 +16,8 @@ use crane_domain::registry::{
     WorkspaceId,
 };
 use crane_ports::registry::CatalogError;
+
+use crate::db_time;
 use sqlx::postgres::PgRow;
 use sqlx::{Decode, Row, Type};
 use time::OffsetDateTime;
@@ -97,26 +99,11 @@ pub(crate) fn state_parse(text: &str) -> Result<VersionState, CatalogError> {
 
 /// `SystemTime` -> `timestamptz` без паник на крайних значениях.
 pub(crate) fn to_db_time(time: SystemTime) -> Result<OffsetDateTime, CatalogError> {
-    let shifted = match time.duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(after) => time::Duration::try_from(after)
-            .ok()
-            .and_then(|d| OffsetDateTime::UNIX_EPOCH.checked_add(d)),
-        Err(before) => time::Duration::try_from(before.duration())
-            .ok()
-            .and_then(|d| OffsetDateTime::UNIX_EPOCH.checked_sub(d)),
-    };
-    shifted.ok_or_else(|| rejected("момент времени вне диапазона timestamptz"))
+    db_time::to_db_time(time).ok_or_else(|| rejected("момент времени вне диапазона timestamptz"))
 }
 
 fn from_db_time(time: OffsetDateTime) -> Result<SystemTime, CatalogError> {
-    let delta = time - OffsetDateTime::UNIX_EPOCH;
-    let magnitude: Duration = delta.unsigned_abs();
-    let shifted = if delta.is_negative() {
-        SystemTime::UNIX_EPOCH.checked_sub(magnitude)
-    } else {
-        SystemTime::UNIX_EPOCH.checked_add(magnitude)
-    };
-    shifted.ok_or_else(|| corrupt("момент времени вне диапазона SystemTime"))
+    db_time::from_db_time(time).ok_or_else(|| corrupt("момент времени вне диапазона SystemTime"))
 }
 
 fn column<'r, T>(row: &'r PgRow, name: &str) -> Result<T, CatalogError>
@@ -205,6 +192,8 @@ fn assets_from_columns(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
@@ -260,22 +249,6 @@ mod tests {
 
         // Assert
         assert_eq!(rejected, [(true, true); 4]);
-    }
-
-    #[test]
-    fn system_time_round_trips_before_and_after_epoch() {
-        // Arrange
-        let moments = [
-            SystemTime::UNIX_EPOCH - Duration::from_hours(24),
-            SystemTime::UNIX_EPOCH,
-            SystemTime::UNIX_EPOCH + Duration::from_micros(1_700_000_000_123_456),
-        ];
-
-        // Act
-        let back = moments.map(|m| to_db_time(m).and_then(from_db_time).ok());
-
-        // Assert
-        assert_eq!(back, moments.map(Some));
     }
 
     #[test]

@@ -3,9 +3,6 @@ use crane_domain::settings::{Secret, Version};
 
 use super::key::SettingsKey;
 
-/// Длина тега аутентификации AES-GCM.
-const TAG_LEN: usize = 16;
-
 /// Почему секрет не запечатан или не открыт. Только имя настройки и отпечатки ключей:
 /// ни байтов, ни значений в сообщениях нет.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -79,10 +76,8 @@ pub(in crate::settings) fn open(
             current_key_id: key.id().to_owned(),
         });
     }
-    if sealed.len() < NONCE_LEN + TAG_LEN {
-        return Err(corrupted());
-    }
-    let (nonce, body) = sealed.split_at(NONCE_LEN);
+    // Хвост короче тега `open_in_place` отвергает сам: длину тега знает только алгоритм.
+    let (nonce, body) = sealed.split_at_checked(NONCE_LEN).ok_or_else(corrupted)?;
     let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| corrupted())?;
     let mut buffer = body.to_vec();
     let plaintext = key
@@ -228,7 +223,7 @@ mod tests {
     #[test]
     fn open_rejects_envelope_shorter_than_nonce_and_tag() {
         // Arrange
-        let short = vec![0_u8; NONCE_LEN + TAG_LEN - 1];
+        let short = vec![0_u8; NONCE_LEN + 15];
 
         // Act
         let result = open(&key(1), SETTING, version(1), key(1).id(), &short);

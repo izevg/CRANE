@@ -12,9 +12,8 @@ use crane_ports::settings::{SettingsError, SettingsStore};
 use crane_ports::system::Clock;
 use sqlx::PgPool;
 
-use self::rows::{Columns, backend, stored_from_row};
+use self::rows::{Columns, backend, db_version, stored_from_row};
 use super::crypto::SettingsKey;
-use super::db::{driver, inconsistent, to_db_time};
 
 const SELECT_ALL: &str =
     "SELECT key, value_text, value_sealed, key_id, version, updated_at, updated_by
@@ -35,11 +34,6 @@ const UPDATE: &str = "UPDATE setting
 const DELETE: &str = "DELETE FROM setting WHERE key = $1 AND version = $2";
 
 /// Версия в `bigint`: выше `i64::MAX` не помещается, это ошибка адаптера, а не паника.
-fn db_version(version: Version) -> Result<i64, SettingsError> {
-    i64::try_from(version.get())
-        .map_err(|_| backend(inconsistent("версия настройки не помещается в bigint")))
-}
-
 /// Настройки в PostgreSQL. Секреты шифруются [`SettingsKey`]; без ключа адаптер
 /// отказывает в записи секрета и не может прочитать запечатанные строки.
 /// Схему создаёт [`crate::migrate`].
@@ -67,7 +61,7 @@ impl PgSettings {
         expected.map_or(Ok(Version::FIRST), |current| {
             current
                 .next()
-                .ok_or_else(|| backend(inconsistent("версия настройки переполнена")))
+                .ok_or_else(|| backend("версия настройки переполнена"))
         })
     }
 }
@@ -77,7 +71,7 @@ impl SettingsStore for PgSettings {
         let rows = sqlx::query(SELECT_ALL)
             .fetch_all(&self.pool)
             .await
-            .map_err(|error| backend(driver(error)))?;
+            .map_err(backend)?;
         rows.iter()
             .map(|row| stored_from_row(row, self.key.as_ref()))
             .collect()
@@ -91,24 +85,22 @@ impl SettingsStore for PgSettings {
         by: &Principal,
     ) -> Result<Version, SettingsError> {
         let version = Self::written_version(expected)?;
-        // Версия ожидаемой строки не больше записываемой, поэтому отдельной проверки не нужно.
-        let written = db_version(version)?;
-        let columns = Columns::encode(key, value, version, self.key.as_ref())?;
-        let at = to_db_time(self.clock.now()).map_err(backend)?;
+        let columns =
+            Columns::encode(key, value, version, self.clock.now(), by, self.key.as_ref())?;
         let (sql, current) = match expected {
             None => (INSERT, None),
+            // Ожидаемая версия меньше записываемой, а та уже поместилась в bigint.
             Some(current) => (UPDATE, Some(db_version(current)?)),
         };
         // У INSERT и UPDATE общие $1..$7; ожидаемая версия ($8) есть только у UPDATE.
-        let mut query =
-            columns.bind_to(sqlx::query(sql), key.to_owned(), written, at, by.id.clone());
+        let mut query = columns.bind_to(sqlx::query(sql));
         if let Some(current) = current {
             query = query.bind(current);
         }
         let affected = query
             .execute(&self.pool)
             .await
-            .map_err(|error| backend(driver(error)))?
+            .map_err(backend)?
             .rows_affected();
         if affected == 0 {
             return Err(SettingsError::Conflict);
@@ -122,7 +114,7 @@ impl SettingsStore for PgSettings {
             .bind(db_version(expected)?)
             .execute(&self.pool)
             .await
-            .map_err(|error| backend(driver(error)))?
+            .map_err(backend)?
             .rows_affected();
         if affected == 0 {
             return Err(SettingsError::Conflict);
