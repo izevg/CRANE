@@ -33,7 +33,12 @@
     "app": ["domain", "ports"],
     "access": ["domain", "ports"],
     "formats": ["domain", "ports"],
-    "adapters": ["domain", "ports"],
-    "entry": ["entry", "domain", "ports", "app", "access", "formats", "adapters"]
+    "wire": ["domain"],
+    "adapters": ["domain", "ports", "wire"],
+    "entry": ["entry", "domain", "ports", "app", "access", "formats", "wire", "adapters"]
+  },
+  "serde": {
+    "crates": ["serde", "serde_*", "serde-*"],
+    "layers": ["formats", "entry", "wire"]
   }
 }

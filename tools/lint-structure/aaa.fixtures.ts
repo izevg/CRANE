@@ -13,6 +13,7 @@ export const rules: Rules = {
   storyFiles: ["*.stories.*"],
   entryFiles: [],
   rustLayers: {},
+  serde: { crates: [], layers: [] },
   aaa: { roots: ["crates", "web"], exemptDirs: ["e2e"] },
   size: { roots: [], exemptDirs: [], extensions: [], maxLines: 400, warnLines: 320 },
 };

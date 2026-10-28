@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkAaaTree } from "./aaa.ts";
-import { cargoMetadata, checkRustLayers, checkStructure, type Rules } from "./checks.ts";
+import {
+  cargoMetadata,
+  checkRustLayers,
+  checkSerde,
+  checkStructure,
+  type Rules,
+} from "./checks.ts";
 import { measure, oversized, sizeReport } from "./size.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -19,9 +25,11 @@ if (process.argv.includes("--report")) {
   process.exit(0);
 }
 
+const metadata = cargoMetadata(root);
 const violations = [
   ...checkStructure(root, rules),
-  ...checkRustLayers(root, rules, cargoMetadata(root)),
+  ...checkRustLayers(root, rules, metadata),
+  ...checkSerde(root, rules, metadata),
   ...oversized(measure(root, rules), rules.size.maxLines),
   ...checkAaaTree(root, rules),
 ];

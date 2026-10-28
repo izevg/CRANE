@@ -16,6 +16,8 @@ export interface Rules {
   storyFiles: string[];
   entryFiles: string[];
   rustLayers: Record<string, string[]>;
+  /** Крейты serde (глобы имён пакетов) разрешены только в перечисленных слоях. */
+  serde: { crates: string[]; layers: string[] };
   aaa: { roots: string[]; exemptDirs: string[] };
   size: {
     roots: string[];
@@ -153,6 +155,24 @@ export function checkRustLayers(root: string, rules: Rules, metadata: CargoMetad
     }
   }
   return violations;
+}
+
+/** serde (и serde_*, serde-*) допустим только в слоях rules.serde.layers; dev-зависимости не проверяются. */
+export function checkSerde(root: string, rules: Rules, metadata: CargoMetadata): string[] {
+  const isSerde = matcher(rules.serde.crates);
+  const allowedIn = rules.serde.layers.join(", ");
+  return metadata.packages.flatMap((pkg) => {
+    const layer = layerOf(pkg.manifest_path, root);
+    if (rules.serde.layers.includes(layer)) {
+      return [];
+    }
+    return pkg.dependencies
+      .filter((dep) => dep.kind !== "dev" && isSerde(dep.name))
+      .map(
+        (dep) =>
+          `${pkg.name} (${layer}) не может зависеть от ${dep.name}: serde разрешён только в ${allowedIn}`,
+      );
+  });
 }
 
 export function cargoMetadata(root: string): CargoMetadata {

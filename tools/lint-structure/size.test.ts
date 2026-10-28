@@ -28,6 +28,7 @@ const rules: Rules = {
   storyFiles: [],
   entryFiles: [],
   rustLayers: {},
+  serde: { crates: [], layers: [] },
   aaa: { roots: [], exemptDirs: [] },
   size: {
     roots: ["crates", "web/src"],

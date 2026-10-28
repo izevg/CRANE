@@ -3,7 +3,13 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test as it } from "node:test";
-import { type CargoMetadata, checkRustLayers, checkStructure, type Rules } from "./checks.ts";
+import {
+  type CargoMetadata,
+  checkRustLayers,
+  checkSerde,
+  checkStructure,
+  type Rules,
+} from "./checks.ts";
 
 const MAX_DIRS = 8;
 
@@ -16,7 +22,15 @@ const rules: Rules = {
   testFiles: ["*.test.*"],
   storyFiles: ["*.stories.*"],
   entryFiles: ["lib.rs", "index.ts"],
-  rustLayers: { domain: [], ports: ["domain"], adapters: ["domain", "ports"] },
+  rustLayers: {
+    domain: [],
+    ports: ["domain"],
+    wire: ["domain"],
+    formats: ["domain", "ports"],
+    adapters: ["domain", "ports", "wire"],
+    entry: ["domain", "ports", "wire", "adapters"],
+  },
+  serde: { crates: ["serde", "serde_*", "serde-*"], layers: ["formats", "entry", "wire"] },
   aaa: { roots: [], exemptDirs: [] },
   size: { roots: [], exemptDirs: [], extensions: [], maxLines: 400, warnLines: 320 },
 };
@@ -126,6 +140,38 @@ const layerCases = [
     ] as [string, string, string[]][],
     expected: 0,
   },
+  {
+    name: "wire может зависеть от domain",
+    pkgs: [
+      ["d", "core/domain", []],
+      ["w", "wire/feeds", ["d"]],
+    ] as [string, string, string[]][],
+    expected: 0,
+  },
+  {
+    name: "wire не может зависеть от ports",
+    pkgs: [
+      ["p", "core/ports", []],
+      ["w", "wire/feeds", ["p"]],
+    ] as [string, string, string[]][],
+    expected: 1,
+  },
+  {
+    name: "adapters может зависеть от wire",
+    pkgs: [
+      ["w", "wire/feeds", []],
+      ["pg", "adapters/persistence/pg", ["w"]],
+    ] as [string, string, string[]][],
+    expected: 0,
+  },
+  {
+    name: "formats не может зависеть от wire",
+    pkgs: [
+      ["w", "wire/feeds", []],
+      ["f", "formats/npm", ["w"]],
+    ] as [string, string, string[]][],
+    expected: 1,
+  },
 ];
 
 for (const c of layerCases) {
@@ -136,6 +182,70 @@ for (const c of layerCases) {
 
     // Act
     const actual = checkRustLayers(root, rules, metadata).length;
+
+    // Assert
+    assert.equal(actual, c.expected);
+  });
+}
+
+const serdeCases = [
+  {
+    name: "adapters → serde",
+    path: "adapters/persistence/pg",
+    dep: "serde",
+    kind: null,
+    expected: 1,
+  },
+  {
+    name: "adapters → serde_json",
+    path: "adapters/persistence/pg",
+    dep: "serde_json",
+    kind: null,
+    expected: 1,
+  },
+  {
+    name: "adapters → serde-xml (build-зависимость)",
+    path: "adapters/persistence/pg",
+    dep: "serde-xml",
+    kind: "build",
+    expected: 1,
+  },
+  { name: "entry → serde", path: "entry/http", dep: "serde", kind: null, expected: 0 },
+  { name: "formats → serde", path: "formats/npm", dep: "serde", kind: null, expected: 0 },
+  { name: "wire → serde", path: "wire/feeds", dep: "serde", kind: null, expected: 0 },
+  {
+    name: "domain → serde как dev-зависимость",
+    path: "core/domain",
+    dep: "serde",
+    kind: "dev",
+    expected: 0,
+  },
+  {
+    name: "app → serdex (не совпадает с шаблоном)",
+    path: "core/app",
+    dep: "serdex",
+    kind: null,
+    expected: 0,
+  },
+];
+
+for (const c of serdeCases) {
+  it(`serde: ${c.name}`, () => {
+    // Arrange
+    const root = "/r";
+    const metadata: CargoMetadata = {
+      packages: [
+        {
+          name: "crate-under-test",
+          version: "0.0.0",
+          manifest_path: join(root, "crates", c.path, "Cargo.toml"),
+          dependencies: [{ name: c.dep, kind: c.kind }],
+        },
+      ],
+    };
+
+    // Act
+    const actual = checkSerde(root, rules, metadata).length;
 
     // Assert
     assert.equal(actual, c.expected);
