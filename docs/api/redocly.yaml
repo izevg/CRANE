@@ -38,8 +38,8 @@ rules:
       type: Operation
       property: x-crane-since
     assertions:
-      enum: [v0.4.0, v0.6.0, v1.1.0, v1.2.0]
-    message: x-crane-since должен быть одним из v0.4.0, v0.6.0, v1.1.0, v1.2.0
+      enum: [v0.3.0, v0.4.0, v0.6.0, v1.1.0, v1.2.0]
+    message: x-crane-since должен быть одним из v0.3.0, v0.4.0, v0.6.0, v1.1.0, v1.2.0
     severity: error
 
   rule/crane-action-format:

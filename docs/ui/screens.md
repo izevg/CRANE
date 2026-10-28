@@ -212,6 +212,7 @@
 | --- | --- | --- | --- | --- | --- |
 | A1 Вход | P0 | K | 25, 27 | `GET /me` → 401 | Один «Войти через SSO»; варианты: сессия завершена (problem `reason`: session_expired · session_revoked · session_elsewhere), нет ролей CRANE |
 | A2 Step-up | P0 | оверлей | 21 | 401 `required_acr` | Сохранение формы |
+| A0 Первый запуск | P0, v0.3.0 | K (мастер на весь экран) | 26, 27 | `GET /onboarding`, `POST /onboarding/session`, `PUT /onboarding/steps/{step}`, `POST /onboarding/steps/{step}/probe`, `POST /onboarding/completion` | Шаги 1–8 (раздел 20.4): ввод bootstrap-токена, отчёт проб (pass · warn · fail) под каждым шагом, шаг «Выполнено окружением» для inherited, возобновление после закрытия вкладки; после завершения экран недоступен (410). Реализация сначала на заглушках `FIXME(settings-api)` |
 
 ### B. Каталог
 | B1 Поиск | P0 | I | 5, 6 | S1 | — |
@@ -255,6 +256,7 @@
 | E13 Интеграции и AI | P1–P3 | B (карточки) + A | 3 | `{role, endpoint, model, timeout_ms, limits, fallback_order, breaker, key{is_set, updated_at}}` | MUST: порядок fallback — кнопки ↑/↓, не только drag (WCAG 2.2 2.5.7) |
 | E14 Команды | P0 | A + Sheet | 8, 16, 21, 27 | `GET /workspaces`, `POST /workspaces`, `PATCH /workspaces/{workspace}`, `POST …/archive`, `POST …/unarchive` | Список всех команд (`GET /workspaces`, только platform-admin): имя, slug, участники, ресурсы, статус; создание (platform-admin). Owner правит `display_name`/`description` на странице своей команды (`GET /workspaces/{workspace}`, ссылка из K4 и D6). Архивация и разархивация — диалог со step-up; при `409` показывается список ресурсов, которыми команда ещё владеет (namespaces, пакеты без namespace, репозитории, активные роботы, trust policies, активные доступы), со ссылками. Архивные команды — отдельный фильтр. Состояния: пусто, загрузка, ошибка, нейтральный 404. В коде `workspace`, в UI «Команда». Визуал — web-uix-lead |
 | E15 Статус системы | P0 | D (упрощённый) | 3 | `GET /status` | Доступен всем ролям |
+| E16 Настройки платформы | P0, v0.3.0 | A + Sheet | 8, 9, 26 | `GET /settings`, `PUT/DELETE /settings/{key}`, `POST /settings/{key}/adoption` | Бейдж источника (env · stored · default), замок и подсказка с именем переменной у `env`, серое «сохранено, но не действует» у затенённых, секреты только `set/unset`, баннер `restart_required`; StickySaveBar только для редактируемых |
 
 ### Команды, владение и след скачиваний
 
