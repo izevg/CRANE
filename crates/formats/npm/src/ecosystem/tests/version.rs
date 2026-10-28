@@ -45,7 +45,7 @@ fn prerelease_is_detected_only_by_pre_part() {
 }
 
 /// Порядок из semver.org и граничные случаи идентификаторов, по возрастанию.
-const SEMVER_CHAIN: [&str; 19] = [
+const SEMVER_CHAIN: [&str; 21] = [
     "0.0.1",
     "0.1.0",
     "1.0.0-0",
@@ -56,6 +56,8 @@ const SEMVER_CHAIN: [&str; 19] = [
     "1.0.0-100000000000000000000",
     "1.0.0-alpha",
     "1.0.0-alpha.1",
+    "1.0.0-alpha.100",
+    "1.0.0-alpha.a1",
     "1.0.0-alpha.beta",
     "1.0.0-beta",
     "1.0.0-beta.2",
