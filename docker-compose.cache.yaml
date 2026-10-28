@@ -1,0 +1,55 @@
+# Valkey-режим (раздел 16.1 docs/product): общий кэш реплик CRANE вместо кэша memory.
+# Это override к docker-compose.yaml, а не профиль: он меняет настройку самого crane (секрет cache_url,
+# сеть, зависимость от valkey), а профиль так не умеет. Подключение, одним из двух способов:
+#   COMPOSE_FILE=docker-compose.yaml:docker-compose.cache.yaml      (строка в .env)
+#   docker compose -f docker-compose.yaml -f docker-compose.cache.yaml up -d
+# Нужны файлы секретов VALKEY_PASSWORD_SECRET и CRANE_CACHE_URL_SECRET (`task secrets:init` создаёт их);
+# Адрес Valkey с паролем лежит только в секрете cache_url; CRANE_CACHE не задаётся.
+# Кэш хранит тела документов и указатели на CAS: Valkey требует аутентификацию (пользователь default выключен)
+# и живёт в сети cache без выхода наружу, в ней только crane и valkey. Пароль лежит только в файлах:
+# в окружении, в URL и в аргументах команд его нет.
+
+services:
+  crane:
+    environment:
+      CRANE_CACHE_FILE: /run/secrets/cache_url
+    secrets: [cache_url]
+    networks: [cache]
+    depends_on:
+      valkey: { condition: service_healthy }
+
+  valkey:
+    image: ${VALKEY_IMAGE:?}
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      # ACL собирается при старте из файла секрета во временном файле (0600) контейнера: пароль не попадает
+      # ни в argv (printf встроен в sh), ни в окружение, ни в образ. Политику (кому что можно) держит compose, а не
+      # файл секрета: secrets-init его не перезаписывает, и правка политики не дошла бы до работающих установок.
+      # Дальше обычная точка входа образа (под tini): она понижает права до valkey и запускает valkey-server.
+      - |
+        set -eu
+        umask 077
+        printf 'user default off\nuser crane on >%s ~* &* +@all -@dangerous\n' "$$(cat /run/secrets/valkey_password)" > /tmp/valkey.acl
+        chown valkey /tmp/valkey.acl
+        exec docker-entrypoint.sh valkey-server --save "" --appendonly no --maxmemory ${VALKEY_MAXMEMORY:?} --maxmemory-policy allkeys-lru --aclfile /tmp/valkey.acl
+    secrets: [valkey_password]
+    networks: [cache]
+    healthcheck:
+      # Пароль читается из секрета внутри контейнера: в argv и в docker inspect его нет.
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$(cat /run/secrets/valkey_password)" valkey-cli --user crane ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  # Только crane и valkey: наружу Valkey не ходит, crane выходит через default и edge.
+  cache:
+    internal: true
+
+secrets:
+  valkey_password:
+    file: ${VALKEY_PASSWORD_SECRET:?задайте VALKEY_PASSWORD_SECRET}
+  cache_url:
+    file: ${CRANE_CACHE_URL_SECRET:?задайте CRANE_CACHE_URL_SECRET}
