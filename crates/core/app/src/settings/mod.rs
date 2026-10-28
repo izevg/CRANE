@@ -22,7 +22,8 @@ pub struct Settings<S> {
     audit: Arc<dyn AuditSink>,
     /// `false` в режиме memory: записывать некуда, консоль только читает.
     persistent: bool,
-    /// Версии строк, с которыми процесс стартовал: сравнением с текущими считается `restart_required`.
+    /// Версии всех строк, с которыми процесс стартовал: сравнением с текущими считается
+    /// `restart_required`. Какие ключи учитываются, решает только `view`.
     started: BTreeMap<String, Version>,
 }
 
@@ -68,17 +69,30 @@ impl<S: SettingsStore> Settings<S> {
                 stored: rows.get(def.key).map(StoredShown::from_row),
             })
             .collect();
-        // Сравниваются только ключи консоли: чужая строка в БД не должна просить перезапуск.
+        // Сравниваются только ключи консоли, не заданные окружением: чужая строка в БД не должна
+        // просить перезапуск, а правка затенённой строки не применится и после него.
+        let effective = |key: &str| {
+            settings
+                .iter()
+                .any(|view| view.def.key == key && view.inherited.is_none())
+        };
         let current: BTreeMap<String, Version> = settings
             .iter()
+            .filter(|view| view.inherited.is_none())
             .filter_map(|view| {
                 view.stored
                     .as_ref()
                     .map(|row| (view.def.key.to_owned(), row.version))
             })
             .collect();
+        let started: BTreeMap<String, Version> = self
+            .started
+            .iter()
+            .filter(|(key, _)| effective(key))
+            .map(|(key, version)| (key.clone(), *version))
+            .collect();
         Ok(SettingsList {
-            restart_required: current != self.started,
+            restart_required: current != started,
             settings,
         })
     }

@@ -17,6 +17,12 @@ fn restart_required_reflects_difference_between_started_and_current_versions() {
         (seeded(&[(LIMIT, "10")]), &[][..]),
         (seeded(&[]), &[(LIMIT, 1)][..]),
         (seeded(&[(LIMIT, "10")]), &[(LIMIT, 2)][..]),
+        // Правка затенённой строки не применится и после перезапуска.
+        (seeded(&[(LOCKED, "x")]), &[][..]),
+        (seeded(&[]), &[(LOCKED, 1)][..]),
+        // Скрытые и неизвестные ключи в снимке и в хранилище перезапуск не просят.
+        (seeded(&[(HIDDEN, "x")]), &[][..]),
+        (seeded(&[]), &[(HIDDEN, 1), ("ghost", 1)][..]),
     ]
     .map(|(store, started)| world(store, true, started).0);
 
@@ -24,7 +30,10 @@ fn restart_required_reflects_difference_between_started_and_current_versions() {
     let actual = worlds.map(|settings| block_on(settings.view()).unwrap().restart_required);
 
     // Assert
-    assert_eq!(actual, [false, false, true, true, true]);
+    assert_eq!(
+        actual,
+        [false, false, true, true, true, false, false, false, false]
+    );
 }
 
 #[test]
