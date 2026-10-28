@@ -32,6 +32,15 @@ const GROUPED: Rules = Rules {
     accepted: &['/'],
 };
 
+impl Rules {
+    fn fold(&self, raw: &str) -> String {
+        match self.shape {
+            NamespaceShape::Delimited => raw.to_ascii_lowercase().replace('_', "-"),
+            NamespaceShape::Scoped | NamespaceShape::Grouped => raw.to_owned(),
+        }
+    }
+}
+
 impl Ecosystem for Rules {
     fn format(&self) -> Format {
         Format::Cargo
@@ -45,7 +54,7 @@ impl Ecosystem for Rules {
                 len: raw.len(),
                 max: MAX_LEN,
             }),
-            Some(_) => Ok(PackageName::from_parts(self.normalize(raw), raw.to_owned())),
+            Some(_) => Ok(PackageName::from_parts(self.fold(raw), raw.to_owned())),
         }
     }
 
@@ -53,11 +62,11 @@ impl Ecosystem for Rules {
         Err(VersionError::Unsupported(Format::Cargo))
     }
 
-    fn normalize(&self, raw: &str) -> String {
-        match self.shape {
-            NamespaceShape::Delimited => raw.to_ascii_lowercase().replace('_', "-"),
-            NamespaceShape::Scoped | NamespaceShape::Grouped => raw.to_owned(),
+    fn prefix_base(&self, raw: &str) -> Result<String, NameError> {
+        if self.shape == NamespaceShape::Grouped && raw.contains(':') {
+            return Err(NameError::InvalidChar(':'));
         }
+        Ok(self.parse_name(raw)?.normalized().to_owned())
     }
 
     fn separator(&self) -> char {
@@ -245,7 +254,7 @@ fn grouped_shape_takes_a_group_base_and_rejects_colon_in_prefix() {
     let raws = [
         "com/acme/*",
         "com/acme:core",
-        "com/acme:*",
+        "com/acme:x/*",
         "com/acme*",
         "/*",
     ];
@@ -259,7 +268,7 @@ fn grouped_shape_takes_a_group_base_and_rejects_colon_in_prefix() {
         [
             Ok("com/acme/*".to_owned()),
             Ok("com/acme:core".to_owned()),
-            Err(PatternError::GroupId),
+            Err(PatternError::Name(NameError::InvalidChar(':'))),
             Err(PatternError::Boundary),
             Err(PatternError::EmptyBase),
         ]

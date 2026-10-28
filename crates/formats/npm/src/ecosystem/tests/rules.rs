@@ -3,13 +3,13 @@ use crane_domain::registry::Ecosystem;
 use crate::ecosystem::NPM;
 
 #[test]
-fn normalize_keeps_case_and_scope() {
+fn prefix_base_keeps_case() {
     // Arrange
-    let raws = ["@Acme/Ui", "JSONStream"];
+    let raws = ["Acme", "JSONStream"];
 
     // Act
-    let actual = raws.map(|raw| NPM.normalize(raw));
+    let actual = raws.map(|raw| NPM.prefix_base(raw));
 
     // Assert
-    assert_eq!(actual, ["@Acme/Ui", "JSONStream"]);
+    assert_eq!(actual, [Ok("Acme".to_owned()), Ok("JSONStream".to_owned())]);
 }

@@ -18,7 +18,7 @@ impl Ecosystem for NuGet {
 
     // FIXME(v0.3.0): грамматика NuGet — поток NuGet; пока имя только нормализуется.
     fn parse_name(&self, raw: &str) -> Result<PackageName, NameError> {
-        Ok(PackageName::from_parts(self.normalize(raw), raw.to_owned()))
+        Ok(PackageName::from_parts(normalize(raw), raw.to_owned()))
     }
 
     // FIXME(v0.3.0): грамматика версий NuGet — поток NuGet.
@@ -26,8 +26,8 @@ impl Ecosystem for NuGet {
         Err(VersionError::Unsupported(Format::NuGet))
     }
 
-    fn normalize(&self, raw: &str) -> String {
-        raw.to_ascii_lowercase()
+    fn prefix_base(&self, raw: &str) -> Result<String, NameError> {
+        Ok(normalize(raw))
     }
 
     fn separator(&self) -> char {
@@ -41,6 +41,10 @@ impl Ecosystem for NuGet {
     fn namespace_shape(&self) -> NamespaceShape {
         NamespaceShape::Delimited
     }
+}
+
+fn normalize(raw: &str) -> String {
+    raw.to_ascii_lowercase()
 }
 
 #[cfg(test)]
@@ -63,14 +67,14 @@ mod tests {
     }
 
     #[test]
-    fn normalize_follows_format_rules() {
+    fn prefix_base_is_lowercased() {
         // Arrange
-        let cases = [("Acme.Pay-Core", "acme.pay-core")];
+        let raw = "Acme.Pay-Core";
 
         // Act
-        let actual = cases.map(|(raw, _)| NUGET.normalize(raw));
+        let actual = NUGET.prefix_base(raw);
 
         // Assert
-        assert_eq!(actual, cases.map(|(_, expected)| expected));
+        assert_eq!(actual, Ok("acme.pay-core".to_owned()));
     }
 }

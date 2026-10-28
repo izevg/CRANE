@@ -30,8 +30,8 @@ impl Ecosystem for Cargo {
         parse_version(raw)
     }
 
-    fn normalize(&self, raw: &str) -> String {
-        name::normalize(raw)
+    fn prefix_base(&self, raw: &str) -> Result<String, NameError> {
+        parse_name(raw).map(|name| name.normalized().to_owned())
     }
 
     fn separator(&self) -> char {

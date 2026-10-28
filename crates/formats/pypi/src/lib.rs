@@ -18,7 +18,7 @@ impl Ecosystem for PyPi {
 
     // FIXME(v0.3.0): грамматика PyPI — поток PyPI; пока имя только нормализуется.
     fn parse_name(&self, raw: &str) -> Result<PackageName, NameError> {
-        Ok(PackageName::from_parts(self.normalize(raw), raw.to_owned()))
+        Ok(PackageName::from_parts(normalize(raw), raw.to_owned()))
     }
 
     // FIXME(v0.3.0): грамматика версий PyPI — поток PyPI.
@@ -26,9 +26,15 @@ impl Ecosystem for PyPi {
         Err(VersionError::Unsupported(Format::PyPi))
     }
 
-    // PEP 503: любая серия `-`, `_`, `.` — один дефис.
-    fn normalize(&self, raw: &str) -> String {
-        collapse_runs(&raw.to_ascii_lowercase(), &['-', '_', '.'], '-')
+    // PEP 503: серия `-`, `_`, `.` — один дефис, в том числе на границе (`acme-_*`): дефис
+    // между базой и `*` добавляет сам паттерн.
+    fn prefix_base(&self, raw: &str) -> Result<String, NameError> {
+        let folded = normalize(raw);
+        let base = folded.trim_end_matches('-');
+        if base.is_empty() {
+            return Err(NameError::Empty);
+        }
+        Ok(base.to_owned())
     }
 
     fn separator(&self) -> char {
@@ -61,6 +67,11 @@ fn collapse_runs(text: &str, run: &[char], replacement: char) -> String {
     out
 }
 
+// PEP 503: любая серия `-`, `_`, `.` — один дефис.
+fn normalize(raw: &str) -> String {
+    collapse_runs(&raw.to_ascii_lowercase(), &['-', '_', '.'], '-')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,17 +89,21 @@ mod tests {
     }
 
     #[test]
-    fn normalize_follows_format_rules() {
+    fn prefix_base_folds_runs_of_separators_and_drops_the_boundary_one() {
         // Arrange
-        let cases = [
-            ("Acme.Pay__-Core", "acme-pay-core"),
-            ("Requests", "requests"),
-        ];
+        let raws = ["Acme.Pay__-Core", "acme-_", "-"];
 
         // Act
-        let actual = cases.map(|(raw, _)| PYPI.normalize(raw));
+        let actual = raws.map(|raw| PYPI.prefix_base(raw));
 
         // Assert
-        assert_eq!(actual, cases.map(|(_, expected)| expected));
+        assert_eq!(
+            actual,
+            [
+                Ok("acme-pay-core".to_owned()),
+                Ok("acme".to_owned()),
+                Err(NameError::Empty)
+            ]
+        );
     }
 }

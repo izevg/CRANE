@@ -19,8 +19,6 @@ pub enum PatternError {
     Boundary,
     #[error("префикс допустим только в виде `@scope/*`")]
     Scope,
-    #[error("префикс задаётся только по базе группы, без `:`")]
-    GroupId,
     #[error("имя в паттерне недопустимо: {0}")]
     Name(#[from] NameError),
 }
@@ -82,26 +80,22 @@ impl NamespacePattern {
         let Some(last) = head.chars().last() else {
             return Err(PatternError::EmptyBase);
         };
-        if eco.namespace_shape() == NamespaceShape::Grouped && head.contains(':') {
-            return Err(PatternError::GroupId);
-        }
         if !eco.accepted_separators().contains(&last) {
             return Err(PatternError::Boundary);
         }
-        let normalized = eco.normalize(head);
-        let sep = eco.separator();
-        let base = normalized.strip_suffix(sep).unwrap_or(&normalized);
-        if base.is_empty() {
+        // Срез по границе последнего символа: он только что взят из `head`.
+        let raw_base = head.get(..head.len() - last.len_utf8()).unwrap_or_default();
+        if raw_base.is_empty() {
             return Err(PatternError::EmptyBase);
         }
+        let base = eco.prefix_base(raw_base)?;
+        let sep = eco.separator();
         // Двойной разделитель делает бессмысленную базу `acme_` и паттерн, которому
         // не соответствует ни одно имя, написанное оператором «на глаз».
         if base.ends_with(sep) {
             return Err(PatternError::Boundary);
         }
-        let raw_base = head.get(..head.len() - last.len_utf8()).unwrap_or_default();
-        eco.parse_name(raw_base)?;
-        Ok(Self(format!("{normalized}{WILDCARD}")))
+        Ok(Self(format!("{base}{sep}{WILDCARD}")))
     }
 
     /// Паттерн, прочитанный из каталога: он хранится нормализованным, а грамматику

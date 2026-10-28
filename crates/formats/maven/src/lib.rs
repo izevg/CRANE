@@ -18,7 +18,7 @@ impl Ecosystem for Maven {
 
     // FIXME(v0.3.0): грамматика Maven — поток Maven; пока имя только нормализуется.
     fn parse_name(&self, raw: &str) -> Result<PackageName, NameError> {
-        Ok(PackageName::from_parts(self.normalize(raw), raw.to_owned()))
+        Ok(PackageName::from_parts(normalize(raw), raw.to_owned()))
     }
 
     // FIXME(v0.3.0): грамматика версий Maven — поток Maven.
@@ -26,9 +26,12 @@ impl Ecosystem for Maven {
         Err(VersionError::Unsupported(Format::Maven))
     }
 
-    // Регистр значим: Maven различает `Foo` и `foo`.
-    fn normalize(&self, raw: &str) -> String {
-        raw.to_owned()
+    // База префикса — groupId; `groupId:artifactId` в префиксе недопустим.
+    fn prefix_base(&self, raw: &str) -> Result<String, NameError> {
+        if raw.contains(':') {
+            return Err(NameError::InvalidChar(':'));
+        }
+        Ok(normalize(raw))
     }
 
     fn separator(&self) -> char {
@@ -42,6 +45,11 @@ impl Ecosystem for Maven {
     fn namespace_shape(&self) -> NamespaceShape {
         NamespaceShape::Grouped
     }
+}
+
+// Регистр значим: Maven различает `Foo` и `foo`.
+fn normalize(raw: &str) -> String {
+    raw.to_owned()
 }
 
 #[cfg(test)]
@@ -64,14 +72,17 @@ mod tests {
     }
 
     #[test]
-    fn normalize_follows_format_rules() {
+    fn prefix_base_is_a_group_id_without_artifact() {
         // Arrange
-        let cases = [("Com.Acme:Core", "Com.Acme:Core")];
+        let raws = ["Com.Acme", "com.acme:core"];
 
         // Act
-        let actual = cases.map(|(raw, _)| MAVEN.normalize(raw));
+        let actual = raws.map(|raw| MAVEN.prefix_base(raw));
 
         // Assert
-        assert_eq!(actual, cases.map(|(_, expected)| expected));
+        assert_eq!(
+            actual,
+            [Ok("Com.Acme".to_owned()), Err(NameError::InvalidChar(':'))]
+        );
     }
 }

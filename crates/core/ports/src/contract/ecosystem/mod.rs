@@ -14,6 +14,8 @@ pub struct Samples {
     pub format: Format,
     /// Допустимые имена в разном написании (регистр, разделители).
     pub names: &'static [&'static str],
+    /// Допустимые базы префикса namespace (то, что стоит перед завершающим разделителем и `*`).
+    pub bases: &'static [&'static str],
     /// Допустимые версии в строго возрастающем порядке старшинства.
     pub versions: &'static [&'static str],
 }
@@ -25,7 +27,7 @@ pub fn ecosystem_contract(eco: &dyn Ecosystem, samples: &Samples) {
     versions_ascend_by_ord_and_precedence_along_the_chain(eco, samples);
     eq_ord_and_hash_agree_on_every_pair_of_versions(eco, samples);
     normalized_name_survives_reparse(eco, samples);
-    normalize_is_idempotent(eco, samples);
+    prefix_base_is_not_empty_and_idempotent(eco, samples);
     separator_is_among_accepted_separators(eco);
 }
 
@@ -148,16 +150,16 @@ fn normalized_name_survives_reparse(eco: &dyn Ecosystem, samples: &Samples) {
     );
 }
 
-fn normalize_is_idempotent(eco: &dyn Ecosystem, samples: &Samples) {
+fn prefix_base_is_not_empty_and_idempotent(eco: &dyn Ecosystem, samples: &Samples) {
     // Arrange
-    let names = samples.names;
+    let bases = samples.bases;
 
     // Act
-    let pairs: Vec<_> = names
+    let pairs: Vec<_> = bases
         .iter()
         .map(|raw| {
-            let once = eco.normalize(raw);
-            let twice = eco.normalize(&once);
+            let once = eco.prefix_base(raw);
+            let twice = once.clone().and_then(|base| eco.prefix_base(&base));
             (once, twice)
         })
         .collect();
@@ -169,7 +171,13 @@ fn normalize_is_idempotent(eco: &dyn Ecosystem, samples: &Samples) {
         .collect();
     assert_eq!(
         pairs, expected,
-        "normalize: повторное применение меняет результат"
+        "prefix_base: повторное применение меняет результат или база отвергнута"
+    );
+    assert!(
+        pairs
+            .iter()
+            .all(|(once, _)| once.as_ref().is_ok_and(|base| !base.is_empty())),
+        "prefix_base: допустимая база не может стать пустой"
     );
 }
 

@@ -9,6 +9,7 @@ fn cargo_satisfies_ecosystem_contract() {
         &CARGO,
         &Samples {
             format: Format::Cargo,
+            bases: &["acme", "Acme-Pay", "acme_pay_core"],
             names: &["serde", "Serde-Json", "tokio_util", "A", "a1-b_2"],
             versions: &[
                 "0.0.1",

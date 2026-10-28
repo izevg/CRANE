@@ -24,6 +24,6 @@ pub(crate) fn parse_name(raw: &str) -> Result<PackageName, NameError> {
 }
 
 /// Как `canon_crate_name` в crates.io: `-` и `_` обозначают одно имя.
-pub(super) fn normalize(raw: &str) -> String {
+fn normalize(raw: &str) -> String {
     raw.to_ascii_lowercase().replace('-', "_")
 }

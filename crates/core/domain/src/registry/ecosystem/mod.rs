@@ -19,8 +19,10 @@ pub trait Ecosystem: Send + Sync {
     /// Проверяет грамматику версии и строит каноническую форму, ключ порядка и признак pre-release.
     fn parse_version(&self, raw: &str) -> Result<Version, VersionError>;
 
-    /// Нормализация базы префикса namespace (база — не всегда имя: groupId Maven).
-    fn normalize(&self, raw: &str) -> String;
+    /// Проверенная и нормализованная база префикса namespace без завершающего разделителя
+    /// (`acme` из `acme-*`). База — не всегда имя пакета: у Maven это `groupId`, у `PyPI` серия
+    /// разделителей сворачивается в один. Пустую базу `NamespacePattern` отсекает до вызова.
+    fn prefix_base(&self, raw: &str) -> Result<String, NameError>;
 
     /// Разделитель нормализованной формы: по нему префикс обрывается на границе сегмента.
     fn separator(&self) -> char;

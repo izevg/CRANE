@@ -30,9 +30,10 @@ impl Ecosystem for Npm {
         parse_version(raw)
     }
 
-    // Регистр значим: npm различает `Foo` и `foo`.
-    fn normalize(&self, raw: &str) -> String {
-        raw.to_owned()
+    // Префикс npm задаётся только scope (`NamespaceShape::Scoped`), базу `NamespacePattern`
+    // не запрашивает; регистр значим: npm различает `Foo` и `foo`.
+    fn prefix_base(&self, raw: &str) -> Result<String, NameError> {
+        Ok(raw.to_owned())
     }
 
     fn separator(&self) -> char {

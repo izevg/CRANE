@@ -9,6 +9,7 @@ fn npm_satisfies_ecosystem_contract() {
         &NPM,
         &Samples {
             format: Format::Npm,
+            bases: &["acme", "Acme"],
             names: &["left-pad", "JSONStream", "@babel/core", "@Scope/Name"],
             versions: &[
                 "0.0.1",

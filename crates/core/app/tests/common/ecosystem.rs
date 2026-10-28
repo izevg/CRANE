@@ -14,15 +14,15 @@ impl Ecosystem for TestCargo {
     }
 
     fn parse_name(&self, raw: &str) -> Result<PackageName, NameError> {
-        Ok(PackageName::from_parts(self.normalize(raw), raw.to_owned()))
+        Ok(PackageName::from_parts(normalize(raw), raw.to_owned()))
     }
 
     fn parse_version(&self, raw: &str) -> Result<Version, VersionError> {
         Ok(version_of(raw))
     }
 
-    fn normalize(&self, raw: &str) -> String {
-        raw.to_ascii_lowercase().replace('-', "_")
+    fn prefix_base(&self, raw: &str) -> Result<String, NameError> {
+        Ok(normalize(raw))
     }
 
     fn separator(&self) -> char {
@@ -39,6 +39,10 @@ impl Ecosystem for TestCargo {
 }
 
 /// Выбор экосистемы для `Registry::new`: во всех сценариях правила cargo.
+fn normalize(raw: &str) -> String {
+    raw.to_ascii_lowercase().replace('-', "_")
+}
+
 pub(crate) fn ecosystems(_format: Format) -> &'static dyn Ecosystem {
     &TestCargo
 }
