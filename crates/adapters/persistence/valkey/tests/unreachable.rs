@@ -28,6 +28,7 @@ fn command_to_an_unreachable_server_fails_without_waiting_for_the_command_timeou
     let key = ProxyKey {
         repository: RepositoryId::new(Uuid::nil()),
         path: UpstreamPath::parse("index/se/rd/serde").expect("путь валиден"),
+        accept: None,
     };
 
     // Act

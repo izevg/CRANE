@@ -18,6 +18,9 @@ use crate::registry::RepositoryId;
 pub struct Origin {
     pub repository: RepositoryId,
     pub base: UpstreamBase,
+    /// Медиатип документа, который просит формат: константа кода формата, от клиента не приходит никогда.
+    /// `None` — без `Accept` (файлы, индекс cargo, packument npm).
+    pub accept: Option<&'static str>,
 }
 
 impl Origin {
@@ -27,6 +30,7 @@ impl Origin {
         ProxyKey {
             repository: self.repository,
             path: path.clone(),
+            accept: self.accept,
         }
     }
 }
@@ -38,18 +42,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn key_binds_path_to_origin_repository() {
+    fn key_carries_origin_repository_and_accept() {
         // Arrange
         let repository = RepositoryId::new(Uuid::from_u128(7));
         let policy = EgressPolicy::new(["index.crates.io"], false);
         let base = policy.admit("https", "index.crates.io", None, "").unwrap();
-        let origin = Origin { repository, base };
+        let accept = Some("application/vnd.pypi.simple.v1+json");
+        let origin = Origin {
+            repository,
+            base,
+            accept,
+        };
         let path = UpstreamPath::parse("se/rd/serde").unwrap();
 
         // Act
         let key = origin.key(&path);
 
         // Assert
-        assert_eq!(key, ProxyKey { repository, path });
+        assert_eq!(
+            key,
+            ProxyKey {
+                repository,
+                path,
+                accept
+            }
+        );
     }
 }

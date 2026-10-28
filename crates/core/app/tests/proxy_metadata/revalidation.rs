@@ -25,6 +25,7 @@ fn revalidation_sends_if_none_match_with_stored_etag() {
         world.upstream.calls()[1],
         Call {
             path: DOC.to_owned(),
+            accept: None,
             if_none_match: Some("e1".to_owned()),
         }
     );

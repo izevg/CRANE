@@ -19,6 +19,8 @@ pub use names::{NoUpstream, Presence, UpstreamNames};
 pub struct UpstreamRequest<'a> {
     pub base: &'a UpstreamBase,
     pub path: &'a UpstreamPath,
+    /// Медиатип для заголовка `Accept`: константа формата; `None` — заголовок не ставится.
+    pub accept: Option<&'static str>,
     pub if_none_match: Option<&'a ETag>,
 }
 

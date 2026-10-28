@@ -153,7 +153,6 @@ where
         let job = Job {
             key,
             base: origin.base.clone(),
-            path: path.clone(),
             target: Target::Document { policy: *policy },
             prev: cached,
         };
@@ -187,7 +186,6 @@ where
         let job = Job {
             key,
             base: origin.base.clone(),
-            path: path.clone(),
             target,
             prev: cached,
         };

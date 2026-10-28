@@ -106,6 +106,7 @@ mod tests {
         let key = ProxyKey {
             repository: RepositoryId::new(Uuid::from_u128(1)),
             path: UpstreamPath::parse("index/se/rd/serde").unwrap(),
+            accept: None,
         };
         let (lease, patience) = (Duration::from_secs(30), Duration::from_secs(1));
         let _held = backend.claim(&key, lease, patience).now_or_never();

@@ -20,20 +20,22 @@ const MAX_EXPIRY_MS: i64 = i64::MAX / 2;
 /// Имя записи кэша. Без фигурных скобок: в Cluster они задают hash tag. UUID фиксированной
 /// длины, поэтому `:` в пути не даёт неоднозначности.
 pub(crate) fn entry_key(key: &ProxyKey) -> String {
-    format!(
-        "px:{}:{}",
-        key.repository.as_uuid().hyphenated(),
-        key.path.as_str()
-    )
+    name("px", key)
 }
 
 /// Имя lease для записи; устроено так же, как [`entry_key`].
 pub(crate) fn lease_key(key: &ProxyKey) -> String {
-    format!(
-        "sf:{}:{}",
-        key.repository.as_uuid().hyphenated(),
-        key.path.as_str()
-    )
+    name("sf", key)
+}
+
+fn name(prefix: &str, key: &ProxyKey) -> String {
+    let (id, path) = (key.repository.as_uuid().hyphenated(), key.path.as_str());
+    match key.accept {
+        None => format!("{prefix}:{id}:{path}"),
+        // `#` в `UpstreamPath` запрещён, поэтому суффикс однозначен; без `Accept` имя прежнее
+        // байт в байт, и записи cargo и npm переживают обновление без миграции.
+        Some(accept) => format!("{prefix}:{id}:{path}#{accept}"),
+    }
 }
 
 /// TTL ключа в миллисекундах с округлением вверх и минимумом 1 (`PX 0` - ошибка Valkey).
@@ -54,7 +56,58 @@ fn expiration(keep_for: Duration) -> Option<Expiration> {
 
 #[cfg(test)]
 mod tests {
+    use crane_domain::proxy::UpstreamPath;
+    use crane_domain::registry::RepositoryId;
+    use uuid::Uuid;
+
     use super::*;
+
+    const ID: &str = "00000000-0000-0000-0000-000000000007";
+    const JSON: &str = "application/vnd.pypi.simple.v1+json";
+
+    fn key(path: &str, accept: Option<&'static str>) -> ProxyKey {
+        ProxyKey {
+            repository: RepositoryId::new(Uuid::from_u128(7)),
+            path: UpstreamPath::parse(path).unwrap(),
+            accept,
+        }
+    }
+
+    #[test]
+    fn names_without_accept_keep_the_format_of_earlier_releases() {
+        // Arrange
+        let key = key("se/rd/serde", None);
+
+        // Act
+        let names = (entry_key(&key), lease_key(&key));
+
+        // Assert
+        assert_eq!(
+            names,
+            (
+                format!("px:{ID}:se/rd/serde"),
+                format!("sf:{ID}:se/rd/serde")
+            )
+        );
+    }
+
+    #[test]
+    fn names_with_accept_carry_media_type_suffix() {
+        // Arrange
+        let key = key("simple/x/", Some(JSON));
+
+        // Act
+        let names = (entry_key(&key), lease_key(&key));
+
+        // Assert
+        assert_eq!(
+            names,
+            (
+                format!("px:{ID}:simple/x/#{JSON}"),
+                format!("sf:{ID}:simple/x/#{JSON}")
+            )
+        );
+    }
 
     #[test]
     fn expiry_rounds_up_to_whole_milliseconds_with_floor_of_one() {

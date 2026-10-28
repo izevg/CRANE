@@ -3,9 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
-use crane_domain::proxy::{
-    Freshness, MetadataPolicy, NegativePolicy, ProxyKey, UpstreamBase, UpstreamPath,
-};
+use crane_domain::proxy::{Freshness, MetadataPolicy, NegativePolicy, ProxyKey, UpstreamBase};
 use crane_domain::registry::Checksum;
 use crane_ports::proxy::{
     Cached, CachedState, Claim, ETag, FetchLeases, Lease, ProxyCache, Upstream, UpstreamError,
@@ -86,7 +84,6 @@ impl Target {
 pub(super) struct Job {
     pub(super) key: ProxyKey,
     pub(super) base: UpstreamBase,
-    pub(super) path: UpstreamPath,
     pub(super) target: Target,
     pub(super) prev: Option<Cached>,
 }
@@ -225,7 +222,8 @@ async fn ask_upstream<U: Upstream>(
     upstream
         .fetch(UpstreamRequest {
             base: &job.base,
-            path: &job.path,
+            path: &job.key.path,
+            accept: job.key.accept,
             if_none_match: validator,
         })
         .await
