@@ -212,3 +212,17 @@ fn zero_publish_limit_is_rejected() {
         }
     ));
 }
+
+#[test]
+fn any_reports_only_repositories_of_the_asked_kind() {
+    // Arrange
+    let hosted = Repos::of(Format::Cargo, RepositoryKind::Hosted, vec!["a".to_owned()]);
+    let proxy = Repos::of(Format::Cargo, RepositoryKind::Proxy, vec!["a".to_owned()]);
+    let none = Repos::of(Format::Cargo, RepositoryKind::Proxy, Vec::new());
+
+    // Act
+    let actual = [&hosted, &proxy, &none].map(|repos| repos.any(RepositoryKind::Proxy));
+
+    // Assert
+    assert_eq!(actual, [false, true, false]);
+}

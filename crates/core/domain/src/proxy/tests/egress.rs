@@ -340,3 +340,26 @@ fn admit_refuses_prefix_that_could_escape_the_base() {
     // Assert
     assert_eq!(refused, bad_prefixes.map(|_| true));
 }
+
+#[test]
+fn admitted_base_exposes_normalized_host() {
+    // Arrange
+    let policy = policy();
+    let spellings = ["INDEX.Crates.IO", "index.crates.io."];
+
+    // Act
+    let hosts = spellings.map(|host| {
+        policy
+            .admit("https", host, None, "")
+            .map(|base| base.host().to_owned())
+    });
+
+    // Assert
+    assert_eq!(
+        hosts,
+        [
+            Ok("index.crates.io".to_owned()),
+            Ok("index.crates.io".to_owned())
+        ]
+    );
+}
