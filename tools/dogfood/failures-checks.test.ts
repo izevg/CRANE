@@ -25,7 +25,12 @@ const access = (status: number, cache?: string, path = "/cargo/r/index/ab/cd/abc
 });
 const egress = (path: string): Egress => ({ path, status: 200, failure: undefined });
 const ndjson = (...entries: object[]): string => entries.map((e) => JSON.stringify(e)).join("\n");
-const WARN = { level: "WARN", message: "Valkey: соединение потеряно, переподключение" };
+const WARN = {
+  level: "WARN",
+  message: "Valkey: команды отказывают сразу до переподключения",
+  valkey: "unavailable",
+};
+const RETRY_WARN = { level: "WARN", message: "Valkey: подключение не удалось, повтор" };
 const INFO = { level: "INFO", message: "ok" };
 
 describe("checkNoServerErrors", () => {
@@ -221,6 +226,17 @@ describe("checkCacheDegraded", () => {
   it("reports a journal without the Valkey warning", () => {
     // Arrange
     const journal = ndjson(INFO);
+
+    // Act
+    const actual = checkCacheDegraded(journal);
+
+    // Assert
+    assert.equal(actual.length, 1);
+  });
+
+  it("reports a Valkey warning without the availability field", () => {
+    // Arrange
+    const journal = ndjson(RETRY_WARN);
 
     // Act
     const actual = checkCacheDegraded(journal);
