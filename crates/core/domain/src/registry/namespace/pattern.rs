@@ -106,6 +106,13 @@ impl NamespacePattern {
         Ok(Self(format!("{normalized}{WILDCARD}")))
     }
 
+    /// Паттерн, прочитанный из каталога: он хранится нормализованным, а грамматику
+    /// экосистемы адаптер хранилища не знает, поэтому здесь ничего не проверяется.
+    #[must_use]
+    pub const fn from_stored(normalized: String) -> Self {
+        Self(normalized)
+    }
+
     /// Точное имя как паттерн.
     #[must_use]
     pub fn exact(name: &PackageName) -> Self {
