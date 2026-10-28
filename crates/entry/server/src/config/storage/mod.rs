@@ -5,17 +5,13 @@ mod blobs;
 mod database;
 mod key;
 
-use std::io;
-use std::path::Path;
-
 use crane_domain::settings::{Kind, SettingDef};
 
 pub(crate) use blobs::Blobs;
 pub(crate) use database::Database;
 pub(crate) use key::settings_key;
 
-use super::source::{secret, setting};
-use super::{ConfigError, MEMORY};
+use super::source::setting;
 
 pub(super) const GROUP: &str = "storage";
 pub(super) const DATABASE_URL: &str = "CRANE_DATABASE_URL";
@@ -50,15 +46,6 @@ pub(super) const SETTINGS: [SettingDef; 3] = [
         ..setting(GROUP, "settings_key", SETTINGS_KEY, Kind::Secret)
     },
 ];
-
-/// Выбран ли постоянный каталог. Для сверки с blob достаточно знать режим, а не разбирать URL:
-/// URL разбирает `Database::from_env` один раз на старте.
-pub(super) fn is_persistent(
-    var: &impl Fn(&str) -> Option<String>,
-    read_file: &impl Fn(&Path) -> io::Result<String>,
-) -> Result<bool, ConfigError> {
-    secret(var, read_file, DATABASE_URL, DATABASE_URL_FILE).map(|url| url.expose() != MEMORY)
-}
 
 #[cfg(test)]
 #[path = "tests/mod.rs"]

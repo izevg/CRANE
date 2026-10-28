@@ -95,7 +95,7 @@ pub(crate) async fn load(var: Lookup, read_file: ReadFile) -> Result<Loaded, Run
         // Значений в журнале нет: только ключ и причина.
         tracing::warn!(key, reason = ?why, "строка настройки в БД не действует");
     }
-    let config = Config::from_layers(&inherited, &layer, &reader)?;
+    let config = Config::from_layers(&inherited, &layer, &reader, database.persistent())?;
     // Только ключи консоли: скрытая или неизвестная строка не должна давать ложный `restart_required`.
     let started = rows
         .iter()

@@ -48,7 +48,7 @@ pub(in crate::config) fn with(
 }
 
 pub(in crate::config) fn parse(pairs: &[(&str, &str)]) -> Result<Config, ConfigError> {
-    Config::from_env(&env(pairs), &no_files)
+    Config::from_env(&env(pairs), &no_files, false)
 }
 
 pub(in crate::config) fn error_of(pairs: &[(&str, &str)]) -> ConfigError {
@@ -113,7 +113,7 @@ fn explicit_values_override_defaults() {
 #[test]
 fn required_variables_report_which_one_is_missing() {
     // Arrange
-    let cases = [DATABASE_URL, BLOBS, PUBLIC_URL];
+    let cases = [BLOBS, PUBLIC_URL];
 
     // Act
     let errors = cases.map(|missing| {
@@ -124,7 +124,7 @@ fn required_variables_report_which_one_is_missing() {
     // Assert
     assert_eq!(
         errors,
-        [DATABASE_URL, BLOBS, PUBLIC_URL].map(|var| ConfigError::Missing { var })
+        [BLOBS, PUBLIC_URL].map(|var| ConfigError::Missing { var })
     );
 }
 
@@ -162,7 +162,7 @@ fn layered_config(
     let inherited = env(inherited);
     let rows = plain_rows(rows);
     let (layer, _) = StoredLayer::new(&inherited, &rows, &[])?;
-    Config::from_layers(&inherited, &layer, &no_files)
+    Config::from_layers(&inherited, &layer, &no_files, false)
 }
 
 #[test]
@@ -217,7 +217,7 @@ fn token_file_in_environment_shadows_stored_token_instead_of_conflicting() {
     let (layer, _) = StoredLayer::new(&inherited, &rows, &[]).unwrap();
 
     // Act
-    let config = Config::from_layers(&inherited, &layer, &read);
+    let config = Config::from_layers(&inherited, &layer, &read, false);
 
     // Assert
     assert_eq!(config.unwrap().token.expose(), "file-token");

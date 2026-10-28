@@ -9,6 +9,10 @@ use super::*;
 use blobs::blobs_url;
 use database::{NO_SCHEME, scheme_of};
 
+use std::io;
+use std::path::Path;
+
+use crate::config::ConfigError;
 use crate::config::tests::{env, error_of, no_files, with};
 use crane_domain::settings::Secret;
 
@@ -57,13 +61,13 @@ fn unparsable_database_url_error_never_contains_the_password() {
 #[test]
 fn unsupported_blobs_scheme_is_named_without_the_rest_of_the_value() {
     // Arrange
-    let pairs = with(&[
-        (DATABASE_URL, "postgres://u:pw@h/db"),
-        (BLOBS, "gcs://SECRETbucket?key=SECRETkey"),
-    ]);
+    let source = env(&[(BLOBS, "gcs://SECRETbucket?key=SECRETkey")]);
 
     // Act
-    let message = error_of(&pairs).to_string();
+    let message = Blobs::from_env(&source, &no_files, true)
+        .err()
+        .unwrap()
+        .to_string();
 
     // Assert
     assert!(message.contains("gcs"), "{message}");

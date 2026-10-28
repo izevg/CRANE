@@ -194,18 +194,22 @@ impl Config {
         inherited: &impl Fn(&str) -> Option<String>,
         stored: &StoredLayer,
         read_file: &impl Fn(&Path) -> io::Result<String>,
+        persistent: bool,
     ) -> Result<Self, ConfigError> {
         Self::from_env(
             &|name: &str| inherited(name).or_else(|| stored.get(name)),
             read_file,
+            persistent,
         )
     }
 
     /// Порядок вычисления полей определяет, какая из неверных переменных будет названа первой:
     /// репозитории, кэш, предел proxy, затем остальное, хранилище последним.
+    /// `persistent` — режим каталога, решённый один раз в `Database`: `Config` его не выводит.
     pub(crate) fn from_env(
         var: &impl Fn(&str) -> Option<String>,
         read_file: &impl Fn(&Path) -> io::Result<String>,
+        persistent: bool,
     ) -> Result<Self, ConfigError> {
         let repos = Repos::from_env(var)?;
         let proxy = Proxy::from_env(var, read_file)?;
@@ -218,7 +222,7 @@ impl Config {
             token: secret(var, read_file, token::TOKEN, token::TOKEN_FILE)?,
             repos,
             max_publish_bytes: repos::max_publish_bytes(var)?,
-            blobs: Blobs::from_env(var, read_file, storage::is_persistent(var, read_file)?)?,
+            blobs: Blobs::from_env(var, read_file, persistent)?,
             proxy,
             namespaces: namespaces::from_env(var)?,
         })
