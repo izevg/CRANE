@@ -357,6 +357,11 @@ async fn terminate() {
 #[cfg(test)]
 #[path = "tests/settings.rs"]
 mod settings_tests;
+
+#[cfg(test)]
+#[path = "tests/hosted.rs"]
+mod hosted_tests;
+
 #[cfg(test)]
 #[path = "tests/stack.rs"]
 mod stack;
