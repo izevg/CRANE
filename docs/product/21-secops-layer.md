@@ -24,11 +24,11 @@
 
 ## 21.2 Идентификатор ресурса: PURL
 
--   **`domain::supply_chain::Purl` — тип по спецификации package-url:** `type`, `namespace`, `name`, `version`, `qualifiers`; разбор и печать по спецификации (кодирование `@`, `+` и прочего). О `Format` он не знает.
--   **Экосистемная часть — в `Ecosystem`:** `purl(&PackageName, Option<&Version>) -> Purl` строит идентификатор (Maven `namespace/name` из `group:artifact`, нормализация PyPI по PEP 503, регистр NuGet); `resolve(&Purl) -> Option<(PackageName, Option<Version>)>` разбирает обратно. Сигнатуры согласуются с be1.
+-   **`crane_domain::registry::Purl` — тип по спецификации package-url (ECMA-427):** `type`, `namespace`, `name`, `version`. Значения хранятся сырыми, печать каноническая: процентное кодирование всего, кроме букв, цифр, `.-_~` и `:`; в namespace пустые сегменты отбрасываются при создании, так что равенство значений совпадает с равенством строк. Квалификаторов и subpath в v0.3.0 нет (потребителя нет), `parse` придёт вместе с `resolve`. О `Format` тип не знает: тип purl задаёт экосистема.
+-   **Экосистемная часть — в `Ecosystem`:** `purl(&PackageName, Option<&Version>) -> Purl` строит идентификатор (Maven `namespace/name` из `group:artifact`; npm: scope `@scope` — namespace, печатается `%40scope`; PyPI по purl-spec: нижний регистр и `_` → `-`, точки сохраняются, это не нормализация PEP 503; регистр Cargo, npm и NuGet сохраняется как написан). Метод `purl` обязателен и реализован для всех пяти экосистем; `resolve(&Purl) -> Option<(PackageName, Option<Version>)>` разбирает обратно. `resolve` — следующий PR.
 -   **Чужая экосистема** — это отсутствие `type` в реестре `Ecosystem` (`pkg:golang`, `pkg:deb` из SBOM приложения), а не отдельный вариант типа. Такой компонент остаётся в графе «не покрытым» и в сопоставление не идёт; `advisory.ecosystem` остаётся `pkg_format`.
 -   **Идентичность версии каталога не меняется:** `(repository, name_norm, version canonical)`. Колонка `package_version.purl` производная, пишется из `Ecosystem::purl`; это таблица каталога, колонка согласуется с be1, миграция — по правилам expand/migrate/contract. Квалификаторы (`type`, `classifier`, `repository_url`) в ключ finding не входят.
--   **SIEM.** Приватная функция `purl()` в `adapters/external/siem/src/ocsf.rs` для Maven и PyPI дала бы неверный идентификатор; она заменяется готовым `Purl`, который событие получает из use case.
+-   **SIEM.** Приватная функция `purl()` в `adapters/external/siem/src/ocsf.rs` для Maven и PyPI давала неверный идентификатор; её нет. `OcsfLogSink::new` получает от `entry` реестр `Ecosystems` и строит `resources.uid` как `ecosystems(format).purl(пакет, версия)`; `AuditEvent` остаётся доменным фактом и purl не несёт, ветвления по `Format` в адаптере нет.
 
 ## 21.3 Где живёт специфика экосистемы
 
@@ -262,7 +262,7 @@ pub enum RuleOrigin { MalwareAdvisory(AdvisoryId), ScanPolicy { scanner: Scanner
 | Шаг | Кто | Что |
 | --- | --- | --- |
 | F1 | be1 (поток форматов) | Трейт `Ecosystem` в `domain/registry/ecosystem.rs` с `format`, `parse_name`, `parse_version`; `Version` с `OrderKey`; реестр в `entry`. Без `purl` |
-| A1 | be2 (SecOps), после F1 | `Purl` по purl-spec, методы `purl`, `resolve`, `layout` в `Ecosystem` с реализациями для Cargo и npm; первые потребители: замена `ocsf.rs::purl`, ключ finding; системный принципал `crane:system`, если его ещё не объявил поток 3 |
+| A1 | be2 (SecOps), после F1 | `Purl` по purl-spec и метод `purl` в `Ecosystem` с реализациями для всех пяти экосистем, замена `ocsf.rs::purl` (v0.3.0); затем `parse`, `resolve`, `layout` для Cargo и npm и ключ finding; системный принципал `crane:system`, если его ещё не объявил поток 3 |
 | F2 | be1 | `NewVersion` для новых форматов |
 | F3 | be1 | Маршруты переезжают в `entry/http/src/formats/<формат>/`; хелпер выдачи остаётся в `entry/http/src/serve/` |
 | B-proxy | be2, после F3 | Порт `ArtifactServed`, вызов из хелпера выдачи и строки в маршрутах, реализация в `app::supply_chain`, `secops.reconcile` |

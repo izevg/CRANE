@@ -15,7 +15,8 @@ pub struct Purl {
 
 impl Purl {
     /// `ty` — тип purl в нижнем регистре (`cargo`, `npm`); namespace из нескольких сегментов
-    /// записывается через `/`.
+    /// записывается через `/`. Пустые сегменты не значимы (purl-spec), поэтому отбрасываются
+    /// здесь: «нет namespace» один, и равенство значений совпадает с равенством печатной формы.
     #[must_use]
     pub fn new(
         ty: &'static str,
@@ -25,11 +26,20 @@ impl Purl {
     ) -> Self {
         Self {
             ty,
-            namespace,
+            namespace: namespace.and_then(|namespace| without_empty_segments(&namespace)),
             name,
             version,
         }
     }
+}
+
+/// Namespace без пустых сегментов; если сегментов нет, namespace отсутствует.
+fn without_empty_segments(namespace: &str) -> Option<String> {
+    let segments: Vec<&str> = namespace
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    (!segments.is_empty()).then(|| segments.join("/"))
 }
 
 /// Печатает компонент по разделу о кодировании символов: кодируется всё, кроме букв, цифр,
@@ -50,12 +60,10 @@ fn write_encoded(f: &mut fmt::Formatter<'_>, component: &str) -> fmt::Result {
 impl fmt::Display for Purl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "pkg:{}/", self.ty)?;
-        // Ведущие, замыкающие и повторные `/` в namespace не значимы (пустых сегментов нет).
         let segments = self
             .namespace
             .iter()
-            .flat_map(|namespace| namespace.split('/'))
-            .filter(|segment| !segment.is_empty());
+            .flat_map(|namespace| namespace.split('/'));
         for segment in segments {
             write_encoded(f, segment)?;
             f.write_char('/')?;
@@ -169,5 +177,25 @@ mod tests {
                 "pkg:x/a%3Fb%23c%3Dd%26e",
             ]
         );
+    }
+
+    #[test]
+    fn namespaces_that_print_alike_are_equal_values() {
+        // Arrange
+        let make = |namespace: Option<&str>| {
+            Purl::new("npm", namespace.map(str::to_owned), "n".to_owned(), None)
+        };
+        let pairs = [
+            (make(Some("/a//b/")), make(Some("a/b"))),
+            (make(Some("")), make(None)),
+            (make(Some("/")), make(None)),
+            (make(Some("a/b")), make(Some("a/c"))),
+        ];
+
+        // Act
+        let actual = pairs.map(|(left, right)| left == right);
+
+        // Assert
+        assert_eq!(actual, [true, true, true, false]);
     }
 }
