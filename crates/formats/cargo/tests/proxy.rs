@@ -113,3 +113,15 @@ fn index_paths_never_share_first_segment_with_archive_paths() {
         .collect();
     assert!(clashes.is_empty(), "{clashes:?}");
 }
+
+#[test]
+fn index_negative_cache_grows_to_one_hour() {
+    // Arrange
+    let misses = 20;
+
+    // Act
+    let ttl = crane_format_cargo::INDEX.negative.ttl_after(misses);
+
+    // Assert
+    assert_eq!(ttl, std::time::Duration::from_hours(1));
+}

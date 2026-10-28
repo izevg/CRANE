@@ -9,7 +9,7 @@ mod common;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use common::pkg;
-use crane_domain::proxy::UpstreamPath;
+use crane_domain::proxy::{Freshness, UpstreamPath};
 use crane_domain::registry::{Checksum, Sha512};
 use crane_format_npm::{Tarball, TarballError, packument_path, tarball};
 use serde_json::{Value, json};
@@ -135,5 +135,23 @@ fn packument_path_is_one_segment_with_escaped_scope_slash() {
             Ok("@scope%2fpkg".to_owned()),
             Ok("JSONStream".to_owned())
         ]
+    );
+}
+
+#[test]
+fn packument_serves_stale_for_five_minutes_after_ttl() {
+    // Arrange
+    let fetched_at = std::time::SystemTime::UNIX_EPOCH;
+    let at = |secs| fetched_at + std::time::Duration::from_secs(secs);
+    let ttl = 5 * 60;
+    let ages = [ttl, ttl + 5 * 60 - 1, ttl + 5 * 60];
+
+    // Act
+    let actual = ages.map(|age| crane_format_npm::PACKUMENT.assess(0, None, fetched_at, at(age)));
+
+    // Assert
+    assert_eq!(
+        actual,
+        [Freshness::Stale, Freshness::Stale, Freshness::Expired]
     );
 }
