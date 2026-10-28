@@ -46,6 +46,15 @@ export const Sizes: Story = {
   ),
 };
 
+export const Pending: Story = {
+  name: "Pending: действие выполняется",
+  args: { pending: true, children: "Повторить" },
+  play: async ({ canvasElement }) => {
+    const button = within(canvasElement).getByRole("button", { name: "Повторить" });
+    await expect(button).toHaveAttribute("aria-busy", "true");
+  },
+};
+
 export const Disabled: Story = {
   args: { disabled: true, children: "Недоступно" },
   play: async ({ canvasElement, args }) => {

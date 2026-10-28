@@ -21,7 +21,8 @@ export type TopbarProps = {
     /** Текущая страница: ссылка у неё невыразима типом. */
     current: string;
   };
-  onOpenPalette: () => void;
+  /** Без обработчика кнопки поиска нет: контрол без действия вводит в заблуждение (WCAG 4.1.2). */
+  onOpenPalette?: () => void;
   workspace?: ReactNode;
   status?: ReactNode;
   notifications?: ReactNode;
@@ -82,7 +83,7 @@ export function Topbar({
         переключатель workspace должен сам стать иконкой с именем.
       */}
       <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-3">
-        <SearchButton onOpen={onOpenPalette} />
+        {onOpenPalette ? <SearchButton onOpen={onOpenPalette} /> : null}
         {workspace}
         {status === undefined ? null : <div className="hidden sm:block">{status}</div>}
         {notifications}

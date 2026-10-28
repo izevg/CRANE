@@ -1,4 +1,4 @@
-import type { HalLinks } from "../generated/admin.gen";
+import type { HalLinks } from "../generated/schemas";
 
 /**
  * `href` ссылки HAL по отношению (`crane:similar-to`, `crane:block`). Это адрес API, а не маршрут SPA: страница

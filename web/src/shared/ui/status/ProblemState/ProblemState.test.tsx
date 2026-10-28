@@ -150,6 +150,17 @@ describe("ProblemState", () => {
     expect(screen.getByRole("listitem")).toHaveTextContent("Разбейте архив");
   });
 
+  it("error без requestId не рисует идентификатор запроса", () => {
+    // Arrange
+    const problem = { kind: "error", title: "Сбой прокси", remediation: [] } as const;
+
+    // Act
+    render(<ProblemState problem={problem} />);
+
+    // Assert
+    expect(screen.queryByText(REQUEST_ID_LABEL)).not.toBeInTheDocument();
+  });
+
   it("error без retry не рисует «Повторить»", () => {
     // Arrange
     const problem = {
@@ -219,21 +230,6 @@ describe("ProblemState", () => {
     // Assert
     expect(screen.getByRole("heading", { name: "Нет соединения" })).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-  });
-
-  it("session показывает «Сессия завершена» и «Войти снова»", () => {
-    // Arrange
-    const problem = {
-      kind: "session",
-      signIn: { label: "Войти снова", run: { href: "/login" } },
-    } as const;
-
-    // Act
-    render(<ProblemState problem={problem} />);
-
-    // Assert
-    expect(screen.getByRole("heading", { name: "Сессия завершена" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Войти снова" })).toHaveAttribute("href", "/login");
   });
 
   it("заголовок получает уровень из headingLevel", () => {

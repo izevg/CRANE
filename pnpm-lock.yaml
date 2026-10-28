@@ -53,6 +53,12 @@ importers:
       '@lingui/react':
         specifier: ^6.10.1
         version: 6.10.1(@babel/core@8.0.9)(react@19.3.1)
+      '@tanstack/react-query':
+        specifier: 5.104.2
+        version: 5.104.2(react@19.3.1)
+      '@tanstack/react-router':
+        specifier: 1.170.44
+        version: 1.170.44(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@tanstack/react-table':
         specifier: 9.3.1
         version: 9.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -149,7 +155,7 @@ importers:
         version: 6.43.0
       orval:
         specifier: ~8.45.0
-        version: 8.45.0(typescript@6.0.3)(zod@3.25.76)
+        version: 8.45.0(@tanstack/react-query@5.104.2(react@19.3.1))(typescript@6.0.3)(zod@3.25.76)
       playwright:
         specifier: ^1.64.1
         version: 1.64.1
@@ -2132,6 +2138,25 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
+  '@tanstack/history@1.162.5':
+    resolution: {integrity: sha512-w1+YvwmTkwt5n8yUqEH3IWZ9DsmorCZW/EQ3KYHnqEgIkOZpH54NvW6/Epq3Dzb8H0ifIeYX8PExvrNLIH5FIA==}
+    engines: {node: '>=20.19'}
+
+  '@tanstack/query-core@5.104.2':
+    resolution: {integrity: sha512-/qbsxJK5c3Ve1aFIULWYNcT2jeRUAiD4HME6Eu2ZdpofHoVgAjpkQhLg5xHuOoBkTPQUJLfP7zOxy0qsBcqROA==}
+
+  '@tanstack/react-query@5.104.2':
+    resolution: {integrity: sha512-xKmzWGhadbE5wGS/ZmXShRITnI9oItox5GO14KvFZco3+vhTAyXS1erYzJWdiY280zapAGJXFUL9nHgwP6SV/g==}
+    peerDependencies:
+      react: ^18 || ^19
+
+  '@tanstack/react-router@1.170.44':
+    resolution: {integrity: sha512-uIIZ3CHU1yWlkMkmbnGFX3WIfZozF+tNrOMMEoM9lo+jzPInCRq80LBqW3DH9ixNHWjB3TM/cNIvr05uGIlP3A==}
+    engines: {node: '>=20.19'}
+    peerDependencies:
+      react: '>=18.0.0 || >=19.0.0'
+      react-dom: '>=18.0.0 || >=19.0.0'
+
   '@tanstack/react-store@0.11.2':
     resolution: {integrity: sha512-oj5O5DmiMWE+ih+SioX2ayC1kbK7d3fpLx0B75fPJr9nY3zU+hoW010yr64qXsY/9fyiLVE2bn5mGNV3owm8RQ==}
     peerDependencies:
@@ -2149,6 +2174,10 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  '@tanstack/router-core@1.171.37':
+    resolution: {integrity: sha512-11Le36++mHNeeFIABz4C3PdTWyJ1ilOmGmANOQOypknZwC1xN674al5BUqWuimKasWane1/XSNcEx8NYNHh0+A==}
+    engines: {node: '>=20.19'}
 
   '@tanstack/store@0.11.2':
     resolution: {integrity: sha512-sJ4mjol8uQsHV0gOJzzjwXfh2Fwm+Sz0+8deqiTm4jGbMdjzNSW+xZCFm0kUa870uhd8yi+DpKnZb5Kc4apa0Q==}
@@ -2643,6 +2672,9 @@ packages:
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
+
+  cookie-es@3.1.1:
+    resolution: {integrity: sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg==}
 
   cosmiconfig@10.0.1:
     resolution: {integrity: sha512-/zvGoYn0y27QTBmK+0B+oPdEPC4fKGUmJsMTQbDjqph00TrkqfVFW/M+C6ya54sYCgHC6QCwK/mI6djt8cEGHQ==}
@@ -3204,6 +3236,10 @@ packages:
   is-wsl@3.1.1:
     resolution: {integrity: sha512-e6rvdUCiQCAuumZslxRJWR/Doq4VpPR82kqclvcS0efgt430SlGIk05vdCN58+VrzgtIcfNODjozVielycD4Sw==}
     engines: {node: '>=16'}
+
+  isbot@5.2.2:
+    resolution: {integrity: sha512-iQcBXcd+Rv/pkubRyGh2utW2j1oPG5hZY6TUhVPpqK4G+o3IbxpJNx04hgksjc/N7GK5pEorUxDeg31cFgEk/w==}
+    engines: {node: '>=18'}
 
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
@@ -3992,6 +4028,16 @@ packages:
     resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
     engines: {node: '>=10'}
     hasBin: true
+
+  seroval-plugins@1.7.3:
+    resolution: {integrity: sha512-gKP1jak0eor3KVHRGAyCAFJ9xKXkf97eWruYK5lcDHimsjr23RJGDuO0B8iOU6rvgYvACHpW+krmn3j2+2vxpQ==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      seroval: ^1.0
+
+  seroval@1.7.3:
+    resolution: {integrity: sha512-fYkZS/GrMJhj1CW+IDoPlILRmYl5/S9L/OYju/sA2K/HQ3G5JBWDZHxaUWVZV/0hfAC2n1+9ysBRDtqMbMXvzA==}
+    engines: {node: '>=20'}
 
   shebang-command@2.0.0:
     resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
@@ -5711,10 +5757,12 @@ snapshots:
       - '@faker-js/faker'
       - '@modelcontextprotocol/server'
 
-  '@orval/query@8.45.0':
+  '@orval/query@8.45.0(@tanstack/react-query@5.104.2(react@19.3.1))':
     dependencies:
       '@orval/core': 8.45.0
       '@orval/fetch': 8.45.0
+    optionalDependencies:
+      '@tanstack/react-query': 5.104.2(react@19.3.1)
     transitivePeerDependencies:
       - '@faker-js/faker'
       - '@modelcontextprotocol/server'
@@ -6350,6 +6398,24 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)
 
+  '@tanstack/history@1.162.5': {}
+
+  '@tanstack/query-core@5.104.2': {}
+
+  '@tanstack/react-query@5.104.2(react@19.3.1)':
+    dependencies:
+      '@tanstack/query-core': 5.104.2
+      react: 19.3.1
+
+  '@tanstack/react-router@1.170.44(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+    dependencies:
+      '@tanstack/history': 1.162.5
+      '@tanstack/react-store': 0.11.2(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@tanstack/router-core': 1.171.37
+      isbot: 5.2.2
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
+
   '@tanstack/react-store@0.11.2(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
       '@tanstack/store': 0.11.2
@@ -6370,6 +6436,13 @@ snapshots:
       '@tanstack/virtual-core': 3.19.6
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
+
+  '@tanstack/router-core@1.171.37':
+    dependencies:
+      '@tanstack/history': 1.162.5
+      cookie-es: 3.1.1
+      seroval: 1.7.3
+      seroval-plugins: 1.7.3(seroval@1.7.3)
 
   '@tanstack/store@0.11.2': {}
 
@@ -6847,6 +6920,8 @@ snapshots:
       argue-cli: 3.2.0
 
   convert-source-map@2.0.0: {}
+
+  cookie-es@3.1.1: {}
 
   cosmiconfig@10.0.1:
     dependencies:
@@ -7387,6 +7462,8 @@ snapshots:
     dependencies:
       is-inside-container: 1.0.0
 
+  isbot@5.2.2: {}
+
   isexe@2.0.0: {}
 
   jest-get-type@29.6.3: {}
@@ -7925,7 +8002,7 @@ snapshots:
       stdin-discarder: 0.3.2
       string-width: 8.3.0
 
-  orval@8.45.0(typescript@6.0.3)(zod@3.25.76):
+  orval@8.45.0(@tanstack/react-query@5.104.2(react@19.3.1))(typescript@6.0.3)(zod@3.25.76):
     dependencies:
       '@commander-js/extra-typings': 15.0.0(commander@15.0.0)
       '@orval/angular': 8.45.0
@@ -7937,7 +8014,7 @@ snapshots:
       '@orval/mcp': 8.45.0(zod@3.25.76)
       '@orval/mock': 8.45.0
       '@orval/pinia-colada': 8.45.0
-      '@orval/query': 8.45.0
+      '@orval/query': 8.45.0(@tanstack/react-query@5.104.2(react@19.3.1))
       '@orval/solid-start': 8.45.0
       '@orval/swr': 8.45.0
       '@orval/zod': 8.45.0(zod@3.25.76)
@@ -8373,6 +8450,12 @@ snapshots:
   semver@6.3.1: {}
 
   semver@7.8.5: {}
+
+  seroval-plugins@1.7.3(seroval@1.7.3):
+    dependencies:
+      seroval: 1.7.3
+
+  seroval@1.7.3: {}
 
   shebang-command@2.0.0:
     dependencies:

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { lingui } from "@lingui/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, searchForWorkspaceRoot } from "vite";
+import { defineConfig, type Plugin, searchForWorkspaceRoot } from "vite";
 
 /**
  * Ближайший каталог `name` вверх от `from`. Stryker копирует web/ в `.stryker-tmp/sandbox-*`, и там `../brand` уже
@@ -38,6 +38,24 @@ export const FS_ALLOW = [
     .map((path) => realpathSync(path)),
 ];
 
+const DEMO_DEFINE = "__CRANE_UI_DEMO__";
+
+/**
+ * Демо-режим интерфейса (заглушки API) — константа сборки: true в `vite` dev, Storybook dev и тестах (команда serve),
+ * а в сборке только при `CRANE_UI_DEMO=1` (его же читает tools/check-bundle.ts; статической витрине флаг задан в
+ * скрипте `build-storybook`). Единственный флаг: окружение сборщика с лишней переменной демо не включит. Плагин, а не функция-конфиг: `vitest*.config.ts` сливают этот конфиг как объект.
+ */
+function demoFlag(): Plugin {
+  return {
+    name: "crane-demo-flag",
+    config(_config, { command }) {
+      const { CRANE_UI_DEMO } = process.env;
+      const demo = command === "serve" || CRANE_UI_DEMO === "1";
+      return { define: { [DEMO_DEFINE]: JSON.stringify(demo) } };
+    },
+  };
+}
+
 // Сборка и Storybook. Тесты — в vitest.config.ts, чтобы story-проект не попадал в production-конфиг.
 export default defineConfig({
   // failOnMissing: сборка падает, если у сообщения нет перевода в каталоге (EN не должен молча показывать русский)
@@ -45,7 +63,10 @@ export default defineConfig({
     react(),
     lingui({ macroTransform: true, failOnMissing: true, failOnCompileError: true }),
     tailwindcss(),
+    demoFlag(),
   ],
+  // manifest нужен шагу после сборки (tools/check-bundle.ts): по нему считается стартовый чанк
+  build: { manifest: true },
   server: { fs: { allow: FS_ALLOW } },
   resolve: {
     alias: {
