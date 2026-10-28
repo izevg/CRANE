@@ -84,6 +84,29 @@ fn secret_is_stored_only_sealed_under_key_fingerprint() {
 }
 
 #[test]
+fn secret_rewritten_with_expected_version_is_readable_under_new_version() {
+    support::run(async |server| {
+        // Arrange
+        let (store, _pool) = server.fresh_settings(Some(settings_key(1))).await;
+        let first = store
+            .put("token", secret("old"), None, &operator())
+            .await
+            .expect("v1");
+
+        // Act
+        let second = store
+            .put("token", secret("new"), Some(first), &operator())
+            .await;
+
+        // Assert
+        let listed = store.list().await.expect("list");
+        let row = listed.get("token").expect("строка секрета");
+        assert_eq!(second.ok(), first.next());
+        assert!(matches!(&row.value, StoredValue::Secret(value) if value.expose() == "new"));
+    });
+}
+
+#[test]
 fn list_rejects_sealed_value_copied_to_another_setting() {
     support::run(async |server| {
         // Arrange
