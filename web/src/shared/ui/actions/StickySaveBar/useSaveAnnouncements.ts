@@ -7,7 +7,7 @@ import { announce } from "~/shared/lib/a11y";
  * Итог сохранения объявляется всегда: от него зависит, что делать дальше.
  */
 export function useSaveAnnouncements(dirty: number, changed: string, summary: string | null): void {
-  const sessionAnnounced = useRef(false);
+  const sessionAnnounced = useRef<boolean>(false);
   useEffect(() => {
     if (dirty === 0) {
       sessionAnnounced.current = false;

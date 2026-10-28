@@ -31,6 +31,7 @@ All work is done in separate git worktrees, not in the main working directory:
 - Worktrees are created with Orca (`orca worktree create`): `orca.yaml` builds the code graphs and links `node_modules` from the main directory, `.worktreeinclude` copies the local `.claude/` setup. Other environments use their own directories; worktree roots are in `.gitignore`.
 - After creating a worktree, run `task install` (every worktree has its own `node_modules` and lefthook hooks).
 - Do not use the shared `git stash` (the stack is shared by all worktrees); set work aside with a WIP commit.
+- Type-aware lint (Biome `types`/`project` domains) gives a false green in a worktree with symlinked `node_modules`: before a web PR, run `task lint` in a worktree with real `node_modules` or in the main directory (read-only, no `pnpm install` there).
 - **Automatic cleanup.** Before starting any task, and again whenever a PR you opened has been merged, remove the worktrees whose branch was merged through a PR into `main` or a `release/*` branch:
   - Determine the PR state through `gh` (`gh pr list --head <branch> --state merged --json number,baseRefName,headRefOid`) or the GitHub MCP, never through `git branch --merged`: a squash merge leaves the branch "unmerged" from git's point of view.
   - Remove a worktree only if its PR is `MERGED` into `main` or `release/*`, the worktree is clean, and its `HEAD` equals the PR's `headRefOid` (no commits after the merge). Never remove the main directory, the current worktree, `main` or `release/*` worktrees, or a detached `HEAD`.
