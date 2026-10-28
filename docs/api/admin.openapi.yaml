@@ -1656,7 +1656,7 @@ paths:
       description: 'Роли: reader, developer, maintainer, owner, appsec, secops, platform-admin.'
       operationId: listVersionEvidence
       x-crane-phase: P2
-      x-crane-since: v1.1.0
+      x-crane-since: v0.3.0
       x-crane-action: evidence:read
       x-crane-step-up: false
       x-crane-audit: null
@@ -1701,7 +1701,7 @@ paths:
         Роли: reader, developer, maintainer, owner, appsec, secops, platform-admin.
       operationId: getEvidenceContent
       x-crane-phase: P2
-      x-crane-since: v1.1.0
+      x-crane-since: v0.3.0
       x-crane-action: evidence:read
       x-crane-step-up: false
       x-crane-audit: null
@@ -1746,7 +1746,7 @@ paths:
       description: 'Роли: reader, developer, maintainer, owner, appsec, secops, platform-admin.'
       operationId: getVersionLicense
       x-crane-phase: P2
-      x-crane-since: v1.1.0
+      x-crane-since: v0.3.0
       x-crane-action: license:read
       x-crane-step-up: false
       x-crane-audit: null
@@ -1788,7 +1788,7 @@ paths:
       description: 'Роли: reader, developer, maintainer, owner, appsec, secops, platform-admin; appsec.'
       operationId: listVersionFindings
       x-crane-phase: P2
-      x-crane-since: v1.1.0
+      x-crane-since: v0.3.0
       x-crane-action: finding:read
       x-crane-step-up: false
       x-crane-audit: null
@@ -4768,7 +4768,7 @@ paths:
         Роли: appsec, secops; maintainer, owner (свои пакеты).
       operationId: listFindings
       x-crane-phase: P2
-      x-crane-since: v1.1.0
+      x-crane-since: v0.3.0
       x-crane-action: finding:list
       x-crane-step-up: false
       x-crane-audit: null
@@ -4866,7 +4866,7 @@ paths:
         Роли: appsec, secops.
       operationId: getFindingsSummary
       x-crane-phase: P2
-      x-crane-since: v1.1.0
+      x-crane-since: v0.3.0
       x-crane-action: finding:list
       x-crane-step-up: false
       x-crane-audit: null
@@ -4907,7 +4907,7 @@ paths:
         Роли: appsec, secops.
       operationId: listFeeds
       x-crane-phase: P2
-      x-crane-since: v1.1.0
+      x-crane-since: v0.3.0
       x-crane-action: feed:list
       x-crane-step-up: false
       x-crane-audit: null
@@ -5477,7 +5477,7 @@ paths:
       description: 'Роли: appsec, secops; maintainer, owner (свои пакеты).'
       operationId: getFinding
       x-crane-phase: P2
-      x-crane-since: v1.1.0
+      x-crane-since: v0.3.0
       x-crane-action: finding:read
       x-crane-step-up: false
       x-crane-audit: null
@@ -5956,7 +5956,7 @@ paths:
       description: 'Роли: appsec, secops.'
       operationId: listAdvisories
       x-crane-phase: P2
-      x-crane-since: v1.1.0
+      x-crane-since: v0.3.0
       x-crane-action: advisory:list
       x-crane-step-up: false
       x-crane-audit: null
@@ -6037,7 +6037,7 @@ paths:
       description: 'Роли: appsec, secops.'
       operationId: getAdvisory
       x-crane-phase: P2
-      x-crane-since: v1.1.0
+      x-crane-since: v0.3.0
       x-crane-action: advisory:read
       x-crane-step-up: false
       x-crane-audit: null
