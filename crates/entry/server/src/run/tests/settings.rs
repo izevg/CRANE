@@ -12,18 +12,24 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use axum::Router;
+use axum::body::Body;
+use axum::http::{Method, Request, StatusCode};
 use crane_domain::access::{Principal, PrincipalKind};
 use crane_domain::settings::{NewValue, Secret, Version};
 use crane_pg::{PgSettings, SettingsKey};
 use crane_ports::settings::{SettingsSchema, SettingsStore};
+use http_body_util::BodyExt;
+use serde_json::{Value, json};
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::{AssertSqlSafe, PgPool};
 use tokio::runtime::Runtime;
+use tower::ServiceExt;
 use url::Url;
 use uuid::Uuid;
 
 use super::stack::{TOKEN, database_of, database_url, lookup, runtime, token_lookup};
-use super::{load, migrate};
+use super::{load, migrate, routers};
 use crate::system::SystemClock;
 
 /// Одна из двух разных ключей шифрования (base64 от 32 байт).
@@ -255,5 +261,108 @@ fn memory_start_has_empty_settings_layer_and_exposes_the_schema() {
             wiring.schema.inherited("token").map(|i| i.var)
         ),
         (false, 0, Some("CRANE_TOKEN".to_owned()))
+    );
+}
+
+/// Запрос к публичному слушателю под Bearer-токеном консоли.
+fn console_call(
+    runtime: &Runtime,
+    api: &Router,
+    method: Method,
+    uri: &str,
+    conditions: &[(&str, &str)],
+    body: &str,
+) -> (StatusCode, Value) {
+    let mut request = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("authorization", format!("Bearer {TOKEN}"));
+    for (name, value) in conditions {
+        request = request.header(*name, *value);
+    }
+    let request = request.body(Body::from(body.to_owned())).unwrap();
+    runtime.block_on(async {
+        let response = api.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    })
+}
+
+#[test]
+fn memory_start_serves_the_console_as_read_only_on_the_public_listener() {
+    // Arrange
+    let runtime = runtime();
+    let dir = tempfile::tempdir().unwrap();
+    let boot = lookup(
+        "memory",
+        dir.path(),
+        &[("CRANE_BLOBS", "memory"), ("CRANE_TOKEN", TOKEN)],
+    );
+    let (api, _admin) = runtime
+        .block_on(async { routers(load(boot).await?).await })
+        .unwrap();
+
+    // Act
+    let (status, body) = console_call(&runtime, &api, Method::GET, "/api/v1/settings", &[], "");
+
+    // Assert
+    assert_eq!(
+        (status, &body["persistent"]),
+        (StatusCode::OK, &json!(false))
+    );
+}
+
+#[test]
+fn console_write_is_stored_in_postgres_and_asks_for_a_restart() {
+    // Arrange
+    let Some(base) = database_url() else { return };
+    let db = FreshDb::create(&base);
+    let dir = tempfile::tempdir().unwrap();
+    let (api, _admin) = db
+        .runtime
+        .block_on(async { routers(load(token_lookup(&db.url, dir.path())).await?).await })
+        .unwrap();
+    let put = |conditions: &[(&str, &str)]| {
+        console_call(
+            &db.runtime,
+            &api,
+            Method::PUT,
+            "/api/v1/settings/token_principal",
+            conditions,
+            r#"{"value": "ci-robot"}"#,
+        )
+    };
+
+    // Act
+    let (status, _) = put(&[("if-none-match", "*")]);
+
+    // Assert
+    let (_, read) = console_call(
+        &db.runtime,
+        &api,
+        Method::GET,
+        "/api/v1/settings/token_principal",
+        &[],
+        "",
+    );
+    let (_, state) = console_call(&db.runtime, &api, Method::GET, "/api/v1/status", &[], "");
+    db.drop_database();
+    assert_eq!(
+        (
+            status,
+            &read["origin"],
+            &read["value"],
+            &state["restart_required"]
+        ),
+        (
+            StatusCode::OK,
+            &json!("stored"),
+            &json!("ci-robot"),
+            &json!(true)
+        )
     );
 }
