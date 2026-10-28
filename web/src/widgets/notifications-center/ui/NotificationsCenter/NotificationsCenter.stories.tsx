@@ -117,6 +117,8 @@ export const MarkRead: Story = {
     row.addEventListener("click", (event) => event.preventDefault());
     await userEvent.click(row);
     await expect(markRead).toHaveBeenCalledWith("n3");
+    // Переход закрывает центр. Ждём конца закрытия: пока окно выходит с анимацией, его фокус-ловушки ещё в DOM, и axe проверил бы переходное состояние.
+    await waitFor(() => expect(body.queryByRole("dialog", { name: "Уведомления" })).toBeNull());
   },
 };
 
