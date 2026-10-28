@@ -25,10 +25,11 @@ const SCOPED: Rules = Rules {
     separator: '/',
     accepted: &['/'],
 };
+// Разделитель группы не `.`, чтобы алгоритм нельзя было спутать с жёстко заданным maven.
 const GROUPED: Rules = Rules {
     shape: NamespaceShape::Grouped,
-    separator: '.',
-    accepted: &['.'],
+    separator: '/',
+    accepted: &['/'],
 };
 
 impl Ecosystem for Rules {
@@ -242,11 +243,11 @@ fn scoped_shape_is_covered_by_its_scope_only() {
 fn grouped_shape_takes_a_group_base_and_rejects_colon_in_prefix() {
     // Arrange
     let raws = [
-        "com.acme.*",
-        "com.acme:core",
-        "com.acme:*",
-        "com.acme*",
-        ".*",
+        "com/acme/*",
+        "com/acme:core",
+        "com/acme:*",
+        "com/acme*",
+        "/*",
     ];
 
     // Act
@@ -256,8 +257,8 @@ fn grouped_shape_takes_a_group_base_and_rejects_colon_in_prefix() {
     assert_eq!(
         actual,
         [
-            Ok("com.acme.*".to_owned()),
-            Ok("com.acme:core".to_owned()),
+            Ok("com/acme/*".to_owned()),
+            Ok("com/acme:core".to_owned()),
             Err(PatternError::GroupId),
             Err(PatternError::Boundary),
             Err(PatternError::EmptyBase),
@@ -268,7 +269,7 @@ fn grouped_shape_takes_a_group_base_and_rejects_colon_in_prefix() {
 #[test]
 fn grouped_shape_is_covered_by_group_prefixes_and_only_exactly_without_a_group() {
     // Arrange
-    let names = ["com.acme.b:c", "com.acmecorp:x", "plain"];
+    let names = ["com/acme/b:c", "com/acmecorp:x", "plain"];
 
     // Act
     let actual = names.map(|name| covering_of_name(&GROUPED, name));
@@ -278,15 +279,15 @@ fn grouped_shape_is_covered_by_group_prefixes_and_only_exactly_without_a_group()
         actual,
         [
             vec![
-                "com.acme.b:c".to_owned(),
-                "com.acme.b.*".to_owned(),
-                "com.acme.*".to_owned(),
-                "com.*".to_owned()
+                "com/acme/b:c".to_owned(),
+                "com/acme/b/*".to_owned(),
+                "com/acme/*".to_owned(),
+                "com/*".to_owned()
             ],
             vec![
-                "com.acmecorp:x".to_owned(),
-                "com.acmecorp.*".to_owned(),
-                "com.*".to_owned()
+                "com/acmecorp:x".to_owned(),
+                "com/acmecorp/*".to_owned(),
+                "com/*".to_owned()
             ],
             vec!["plain".to_owned()],
         ]
@@ -300,7 +301,7 @@ fn only_scoped_shape_requires_a_scope_for_hosted_names() {
         (&DASHED, "left-pad"),
         (&SCOPED, "left-pad"),
         (&SCOPED, "@acme/ui"),
-        (&GROUPED, "com.acme:core"),
+        (&GROUPED, "com/acme:core"),
     ];
 
     // Act
