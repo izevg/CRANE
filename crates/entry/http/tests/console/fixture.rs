@@ -130,7 +130,7 @@ impl SettingsSchema for Schema {
 
 /// Память плюс то, чего память не умеет: нечитаемая строка секрета и «хранилище недоступно».
 struct Store {
-    inner: MemorySettings,
+    inner: Arc<MemorySettings>,
     down: Arc<AtomicBool>,
     unreadable: bool,
 }
@@ -187,6 +187,7 @@ impl SettingsStore for Store {
 
 pub(crate) struct Console {
     runtime: Runtime,
+    store: Arc<MemorySettings>,
     router: Router,
     audit: Arc<MemoryAudit>,
     down: Arc<AtomicBool>,
@@ -206,6 +207,24 @@ impl Console {
         Self::build(true, sections, false)
     }
 
+    /// В хранилище лежит строка ключа, который перекрыт окружением (`ENV_KEY`).
+    pub(crate) fn with_shadowed_row() -> Self {
+        let console = Self::build(true, Vec::new(), false);
+        let by = Principal {
+            id: "admin".to_owned(),
+            kind: PrincipalKind::Human,
+        };
+        console
+            .runtime
+            .block_on(
+                console
+                    .store
+                    .put(ENV_KEY, NewValue::Plain("9090".to_owned()), None, &by),
+            )
+            .unwrap();
+        console
+    }
+
     /// В хранилище лежит секрет, зашифрованный другим ключом.
     pub(crate) fn with_unreadable_secret() -> Self {
         Self::build(true, Vec::new(), true)
@@ -215,8 +234,9 @@ impl Console {
         let audit = Arc::new(MemoryAudit::default());
         let down = Arc::new(AtomicBool::new(false));
         let clock = Arc::new(ManualClock::new(SystemTime::UNIX_EPOCH + ROW_TIME));
+        let memory = Arc::new(MemorySettings::new(clock));
         let store = Store {
-            inner: MemorySettings::new(clock),
+            inner: memory.clone(),
             down: down.clone(),
             unreadable,
         };
@@ -243,6 +263,7 @@ impl Console {
             TrustedProxies::default(),
         );
         Self {
+            store: memory,
             runtime: Builder::new_current_thread().enable_all().build().unwrap(),
             router,
             audit,

@@ -152,3 +152,35 @@ fn an_environment_key_is_locked_and_names_its_variable() {
         )
     );
 }
+
+#[test]
+fn a_stored_row_hidden_by_the_environment_is_shown_with_its_date_and_author() {
+    // Arrange
+    let console = Console::with_shadowed_row();
+
+    // Act
+    let reply = console.get(&format!("/api/v1/settings/{ENV_KEY}"));
+
+    // Assert
+    let body = reply.json();
+    assert_eq!(
+        (&body["origin"], &body["value"], &body["shadowed"]),
+        (
+            &json!("env"),
+            &json!("8080"),
+            &json!({"version": 1, "updated_at": "2023-11-14T22:13:20Z", "updated_by": "admin"})
+        )
+    );
+}
+
+#[test]
+fn a_key_without_a_hidden_row_has_no_shadowed_part() {
+    // Arrange
+    let console = Console::new();
+
+    // Act
+    let reply = console.get(&format!("/api/v1/settings/{ENV_KEY}"));
+
+    // Assert
+    assert_eq!(reply.json()["shadowed"], json!(null));
+}
