@@ -1,5 +1,5 @@
 import type { Tone } from "~/shared/ui/primitives";
-import type { Priority } from "../generated/admin.gen";
+import type { Priority } from "../generated/schemas";
 
 type PriorityEntry = { tone: Tone; strong?: true };
 

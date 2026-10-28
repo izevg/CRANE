@@ -35,6 +35,21 @@ const config: IConfiguration = {
         pathNot: "^src/(pages|widgets|features|entities)/[^/]+/index\\.(ts|tsx)$",
       },
     },
+    {
+      name: "api-internals-are-private",
+      comment:
+        "Снаружи shared/api доступен только src/shared/api/index.ts: транспорт, мутаторы, заглушки и сгенерированный код — внутренности. Заглушки не протекают в экраны.",
+      severity: "error",
+      from: { pathNot: "^src/shared/api/" },
+      to: { path: "^src/shared/api/(?!index\\.ts$)" },
+    },
+    {
+      name: "api-stubs-import-only-api-and-lib",
+      comment: "Модули заглушек зависят только от shared/api и shared/lib",
+      severity: "error",
+      from: { path: "^src/shared/api/stubs/" },
+      to: { path: "^src/", pathNot: "^src/shared/(api|lib)/" },
+    },
     { name: "no-circular", severity: "error", from: {}, to: { circular: true } },
     {
       name: "not-to-unresolvable",
@@ -95,7 +110,7 @@ const config: IConfiguration = {
       from: {
         orphan: true,
         // .d.ts — объявление модулей (*.po), на него никто не импортирует
-        pathNot: ["\\.(test|stories)\\.(ts|tsx)$", "\\.d\\.ts$", "^src/app/main\\.tsx$"],
+        pathNot: ["\\.(test|stories)\\.(ts|tsx)$", "\\.d\\.ts$", "^src/app/entry/main\\.tsx$"],
       },
       to: {},
     },

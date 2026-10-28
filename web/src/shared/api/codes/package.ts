@@ -1,4 +1,4 @@
-import type { Format, RepositoryKind } from "../generated/admin.gen";
+import type { Format, RepositoryKind } from "../generated/schemas";
 
 // i18n-fixture: названия форматов — имена собственные и не переводятся
 export const FORMAT = {

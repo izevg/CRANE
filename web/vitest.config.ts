@@ -28,6 +28,8 @@ const PREBUNDLED = [
   "@base-ui/react/toggle-group",
   "@base-ui/react/tooltip",
   "@base-ui/react/use-render",
+  "@tanstack/react-query",
+  "@tanstack/react-router",
   "@tanstack/react-table",
   "@tanstack/react-virtual",
   "lucide-react",

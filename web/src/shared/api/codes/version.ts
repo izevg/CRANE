@@ -1,6 +1,6 @@
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
-import type { BlockReasonKind, LifecycleState, VersionState } from "../generated/admin.gen";
+import type { BlockReasonKind, LifecycleState, VersionState } from "../generated/schemas";
 
 import type { StatusEntry } from "./entry";
 
