@@ -23,6 +23,7 @@ use crate::error::ClientError;
 use crate::formats;
 
 /// Статический токен: в памяти хранится только его SHA-256 и личность, которой он принадлежит.
+#[derive(Clone)]
 pub struct StaticToken {
     hash: TokenHash,
     principal: Principal,
@@ -57,6 +58,19 @@ pub(crate) struct Auth {
     pub(crate) format: Format,
 }
 
+/// Событие неудачной аутентификации: общее для протоколов и консоли.
+pub(crate) fn record_rejected(audit: &dyn AuditSink, request: RequestContext) {
+    audit.record(AuditEvent {
+        actor: None,
+        request,
+        action: AuditAction::Authenticate,
+        outcome: Outcome::Failure {
+            reason: "токен отвергнут".to_owned(),
+            code: None,
+        },
+    });
+}
+
 /// Заголовок читается как байты: cargo не обязан слать валидный UTF-8. Значение нигде не логируется.
 pub(crate) async fn require_token(
     State(auth): State<Arc<Auth>>,
@@ -80,15 +94,7 @@ pub(crate) async fn require_token(
         auth.token.authenticate(&presented).cloned()
     };
     let Some(principal) = principal else {
-        auth.audit.record(AuditEvent {
-            actor: None,
-            request: context,
-            action: AuditAction::Authenticate,
-            outcome: Outcome::Failure {
-                reason: "токен отвергнут".to_owned(),
-                code: None,
-            },
-        });
+        record_rejected(auth.audit.as_ref(), context);
         return ClientError::new(StatusCode::FORBIDDEN, "токен отвергнут").into_response();
     };
     // Успешный вход не аудируется: 3002 Success — на настоящем событии входа в v0.4.0.

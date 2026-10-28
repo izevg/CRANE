@@ -27,6 +27,8 @@ sha2 = "0.10"
 # time: timeout пробы готовности (зависшее хранилище не держит пробу дольше клиента).
 # rt: `tokio::spawn` для фоновой ревалидации proxy, которую handler обязан запустить сам.
 tokio = { version = "1", default-features = false, features = ["rt", "time"] }
+# Метки времени строк настроек в RFC 3339 (версия та же, что у crane-pg).
+time = { version = "0.3", default-features = false, features = ["std", "formatting"] }
 tracing = "0.1"
 uuid = { version = "1", features = ["v7"] }
 

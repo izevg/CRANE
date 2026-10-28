@@ -1,5 +1,6 @@
 //! Ошибочные ответы и единая таблица `RegistryError` → HTTP. Форма тела — свойство точки монтирования (`Format`).
 
+use std::borrow::Cow;
 use std::error::Error;
 
 use axum::extract::{Request, State};
@@ -7,6 +8,7 @@ use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use crane_domain::registry::Format;
+use serde_json::{Map, Value};
 
 mod kind;
 mod problem;
@@ -15,7 +17,7 @@ mod status;
 pub(crate) use kind::ProblemKind;
 pub(crate) use problem::{Problem, not_found};
 
-const INTERNAL_DETAIL: &str = "внутренняя ошибка сервера";
+pub(crate) const INTERNAL_DETAIL: &str = "внутренняя ошибка сервера";
 /// Единственный текст клиенту при недоступном хранилище: адреса и причины остаются в журнале.
 const UNREACHABLE_DETAIL: &str = "хранилище временно недоступно";
 const NOT_READY_DETAIL: &str = "хранилище не готово";
@@ -28,11 +30,12 @@ const NOT_FOUND_DETAIL: &str = "не найдено";
 pub(crate) enum ErrorBody {
     /// Текст для клиента; оболочку (`{"errors":[…]}`, `{"error":…}` или RFC 9457) выбирает формат (`formats::error_body`).
     Detail { detail: String, kind: ProblemKind },
-    /// RFC 9457.
+    /// RFC 9457; `extensions` — дополнительные члены (`errors`, `var`), стандартные они не затирают.
     Problem {
         title: &'static str,
-        detail: &'static str,
+        detail: Cow<'static, str>,
         kind: ProblemKind,
+        extensions: Map<String, Value>,
     },
 }
 
