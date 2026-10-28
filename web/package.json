@@ -56,6 +56,8 @@
     "@fontsource-variable/onest": "^5.3.1",
     "@lingui/core": "^6.10.1",
     "@lingui/react": "^6.10.1",
+    "@tanstack/react-query": "5.104.2",
+    "@tanstack/react-router": "1.170.44",
     "@tanstack/react-table": "9.3.1",
     "@tanstack/react-virtual": "3.14.21",
     "lucide-react": "^1.62.0",
