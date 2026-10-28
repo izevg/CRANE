@@ -18,7 +18,15 @@ fn key_of(repository: u128, path: &str) -> ProxyKey {
     ProxyKey {
         repository: RepositoryId::new(Uuid::from_u128(repository)),
         path: UpstreamPath::parse(path).expect("путь в тестовых данных валиден"),
+        accept: None,
     }
+}
+
+const JSON: &str = "application/vnd.pypi.simple.v1+json";
+
+fn with_accept(mut key: ProxyKey, accept: &'static str) -> ProxyKey {
+    key.accept = Some(accept);
+    key
 }
 
 fn key() -> ProxyKey {
@@ -48,7 +56,7 @@ pub async fn proxy_cache_contract<C: ProxyCache>(new: impl Fn() -> C) {
     get_of_unknown_key_is_none(&new()).await;
     put_then_get_returns_equal_entry(&new()).await;
     second_put_overwrites_first(&new()).await;
-    keys_differ_by_repository_and_by_path(&new()).await;
+    keys_differ_by_repository_path_and_accept(&new()).await;
     missing_entry_survives_round_trip(&new()).await;
     blob_entry_survives_round_trip(&new()).await;
     document_max_age_survives_round_trip(&new()).await;
@@ -61,6 +69,7 @@ pub async fn fetch_leases_contract<L: FetchLeases>(new: impl Fn() -> L) {
     claim_after_release_leads_again(&new()).await;
     release_takes_effect_without_being_polled(&new()).await;
     different_keys_are_independent(&new()).await;
+    keys_differing_only_by_accept_are_independent(&new()).await;
     consecutive_leaders_get_different_tokens(&new()).await;
 }
 
@@ -115,11 +124,12 @@ async fn second_put_overwrites_first<C: ProxyCache>(cache: &C) {
     );
 }
 
-async fn keys_differ_by_repository_and_by_path<C: ProxyCache>(cache: &C) {
+async fn keys_differ_by_repository_path_and_accept<C: ProxyCache>(cache: &C) {
     // Arrange
     let base = key_of(1, "a/b");
     let other_repository = key_of(2, "a/b");
     let other_path = key_of(1, "a/c");
+    let other_accept = with_accept(base.clone(), JSON);
     cache
         .put(&base, document(b"base", None), KEEP)
         .await
@@ -129,13 +139,14 @@ async fn keys_differ_by_repository_and_by_path<C: ProxyCache>(cache: &C) {
     let found = (
         cache.get(&other_repository).await.expect("get репозитория"),
         cache.get(&other_path).await.expect("get пути"),
+        cache.get(&other_accept).await.expect("get представления"),
     );
 
     // Assert
     assert_eq!(
         found,
-        (None, None),
-        "запись видна только по ключу из того же репозитория и с тем же путём"
+        (None, None, None),
+        "запись видна только по ключу с тем же репозиторием, путём и представлением"
     );
 }
 
@@ -304,6 +315,25 @@ async fn different_keys_are_independent<L: FetchLeases>(leases: &L) {
     assert!(
         matches!(result.expect("claim B"), Claim::Lead(_)),
         "lease на один ключ не мешает другому"
+    );
+}
+
+async fn keys_differing_only_by_accept_are_independent<L: FetchLeases>(leases: &L) {
+    // Arrange
+    let plain = key_of(1, "simple/x/");
+    let json = with_accept(plain.clone(), JSON);
+    let _held = leases
+        .claim(&plain, LEASE, PATIENCE)
+        .await
+        .expect("claim A");
+
+    // Act
+    let result = leases.claim(&json, LEASE, PATIENCE).await;
+
+    // Assert
+    assert!(
+        matches!(result.expect("claim B"), Claim::Lead(_)),
+        "lease на одно представление не мешает другому"
     );
 }
 

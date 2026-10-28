@@ -13,6 +13,7 @@ mod degraded_input;
 mod freshness_zones;
 mod max_age;
 mod negative_cache;
+mod representations;
 mod revalidation;
 mod stale_if_error;
 

@@ -44,6 +44,15 @@ pub(crate) fn origin() -> Origin {
     Origin {
         repository: RepositoryId::new(SequentialIdGen::default().generate()),
         base,
+        accept: None,
+    }
+}
+
+/// Тот же источник, но с запросом конкретного представления документа.
+pub(crate) fn with_accept(origin: &Origin, accept: &'static str) -> Origin {
+    Origin {
+        accept: Some(accept),
+        ..origin.clone()
     }
 }
 
@@ -165,6 +174,15 @@ impl World {
             self.engine
                 .metadata(&self.origin, &path(raw_path), &policy()),
         )
+    }
+
+    /// Документ через другой источник (то же хранилище, другое представление).
+    pub(crate) fn metadata_via(
+        &self,
+        origin: &Origin,
+        raw_path: &str,
+    ) -> Result<Served<Bytes>, crane_app::proxy::ProxyError> {
+        futures_executor::block_on(self.engine.metadata(origin, &path(raw_path), &policy()))
     }
 
     /// Сдвигает часы, берёт устаревший документ и исполняет его фоновую ревалидацию.

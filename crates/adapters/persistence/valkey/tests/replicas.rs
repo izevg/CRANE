@@ -45,6 +45,7 @@ fn key(db: u8) -> ProxyKey {
     ProxyKey {
         repository: RepositoryId::new(Uuid::from_u128(u128::from(db))),
         path: UpstreamPath::parse("index/se/rd/serde").expect("путь в тестовых данных валиден"),
+        accept: None,
     }
 }
 

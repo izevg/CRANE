@@ -71,6 +71,7 @@ pub(in crate::formats) fn presence_origin(
     Ok(Origin {
         repository: source.repository,
         base: source.policy.admit("https", REGISTRY_HOST, None, "")?,
+        accept: None,
     })
 }
 

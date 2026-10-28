@@ -33,6 +33,7 @@ fn origins(source: &ProxySource<'_>) -> Result<CargoProxyOrigins, EgressRefusal>
         Ok(Origin {
             repository: source.repository,
             base: source.policy.admit("https", host, None, "")?,
+            accept: None,
         })
     };
     Ok(CargoProxyOrigins {

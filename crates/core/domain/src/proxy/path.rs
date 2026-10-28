@@ -8,16 +8,23 @@ const PATH_MAX_LEN: usize = 1024;
 /// Нормализованный относительный путь у upstream: склеивается с базой источника и не может сменить хост.
 ///
 /// Регистр не меняется: пути upstream регистрозависимы, а нормализация имён — дело формата.
+/// Ровно один хвостовой «/» значим и сохраняется (PEP 503: `simple/<name>/`, без него pypi.org отвечает 301),
+/// поэтому `a` и `a/` — разные пути и разные ключи; каноничную форму выбирает формат, который строит путь.
 /// `@` разрешён (npm `@scope/name`). Сменить хост он не может: путь не начинается с `/` и не содержит `:`,
 /// а база всегда заканчивается `/` (см. `UpstreamBase`), поэтому `@` попадает в путь, а не в authority.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UpstreamPath(String);
 
-/// Ключ записи proxy-кэша: репозиторий и путь у upstream.
+/// Ключ записи proxy-кэша: репозиторий, путь у upstream и представление документа.
+///
+/// Один путь в двух медиатипах — две записи, два полёта и два валидатора `ETag`: upstream отдаёт
+/// по одному URL разные тела в зависимости от `Accept`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProxyKey {
     pub repository: RepositoryId,
     pub path: UpstreamPath,
+    /// Медиатип, который просим у upstream; `None` — без заголовка `Accept`.
+    pub accept: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -32,7 +39,9 @@ pub enum PathError {
     InvalidByte(u8),
     #[error("в пути недопустим символ «{0}»")]
     ForbiddenChar(char),
-    #[error("пустой сегмент пути (в том числе хвостовой «/»): ключи кэша должны быть каноничны")]
+    #[error(
+        "пустой сегмент пути (допустим только один хвостовой «/»): ключи кэша должны быть каноничны"
+    )]
     EmptySegment,
     #[error("сегмент «.» или «..» (в том числе в виде %2e) недопустим")]
     DotSegment,
@@ -59,7 +68,9 @@ impl UpstreamPath {
         if let Some(forbidden) = raw.chars().find(|c| matches!(c, '\\' | '?' | '#' | ':')) {
             return Err(PathError::ForbiddenChar(forbidden));
         }
-        for segment in raw.split('/') {
+        // Один хвостовой «/» значим (см. тип); остаток проверяется общими правилами, поэтому `a//` — пустой сегмент.
+        let body = raw.strip_suffix('/').unwrap_or(raw);
+        for segment in body.split('/') {
             if segment.is_empty() {
                 return Err(PathError::EmptySegment);
             }
@@ -105,6 +116,10 @@ mod tests {
             "a/.hidden/b",
             "..a",
             "%2e%2ea",
+            "simple/requests/",
+            "a/b/",
+            "@babel%2fcore/",
+            "a%2f",
         ];
 
         // Act
@@ -131,7 +146,19 @@ mod tests {
             ("a#b", PathError::ForbiddenChar('#')),
             ("a\\b", PathError::ForbiddenChar('\\')),
             ("a//b", PathError::EmptySegment),
-            ("a/", PathError::EmptySegment),
+            ("a//", PathError::EmptySegment),
+            ("a/b//", PathError::EmptySegment),
+            ("a//b/", PathError::EmptySegment),
+            ("/", PathError::Absolute),
+            ("//", PathError::Absolute),
+            ("/a/", PathError::Absolute),
+            ("./", PathError::DotSegment),
+            ("../", PathError::DotSegment),
+            ("a/./", PathError::DotSegment),
+            ("a/../", PathError::DotSegment),
+            ("a/%2e%2E/", PathError::DotSegment),
+            ("a/%2E/", PathError::DotSegment),
+            ("a?/", PathError::ForbiddenChar('?')),
             ("a/../b", PathError::DotSegment),
             ("a/./b", PathError::DotSegment),
             ("..", PathError::DotSegment),
@@ -160,6 +187,33 @@ mod tests {
 
         // Assert
         assert_eq!(parsed.unwrap().as_str(), raw);
+    }
+
+    #[test]
+    fn parse_counts_trailing_slash_toward_max_length() {
+        // Arrange
+        let fits = "a".repeat(PATH_MAX_LEN - 1) + "/";
+        let overflows = "a".repeat(PATH_MAX_LEN) + "/";
+        let cases = [fits.as_str(), overflows.as_str()];
+
+        // Act
+        let actual = cases.map(|raw| UpstreamPath::parse(raw).map(|_| ()));
+
+        // Assert
+        assert_eq!(actual, [Ok(()), Err(PathError::TooLong)]);
+    }
+
+    #[test]
+    fn parse_keeps_trailing_slash_distinct_from_bare_path() {
+        // Arrange
+        let cases = ["simple/x", "simple/x/"];
+
+        // Act
+        let actual = cases.map(|raw| UpstreamPath::parse(raw).unwrap());
+
+        // Assert
+        assert_ne!(actual[0], actual[1]);
+        assert_eq!(actual[1].as_str(), "simple/x/");
     }
 
     #[test]

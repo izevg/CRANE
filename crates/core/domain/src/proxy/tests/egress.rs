@@ -255,6 +255,21 @@ fn url_joins_base_and_path_under_host() {
 }
 
 #[test]
+fn url_keeps_trailing_slash_of_path() {
+    // Arrange
+    let base = policy()
+        .admit("https", "index.crates.io", None, "")
+        .unwrap();
+    let path = UpstreamPath::parse("simple/requests/").unwrap();
+
+    // Act
+    let url = base.url(&path);
+
+    // Assert
+    assert_eq!(url, "https://index.crates.io/simple/requests/");
+}
+
+#[test]
 fn url_is_same_for_equivalent_prefix_spellings() {
     // Arrange
     let policy = policy();

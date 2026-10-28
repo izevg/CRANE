@@ -95,6 +95,7 @@ mod tests {
         ProxyKey {
             repository: RepositoryId::new(Uuid::from_u128(n)),
             path: UpstreamPath::parse("index/se/rd/serde").unwrap(),
+            accept: None,
         }
     }
 

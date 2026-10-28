@@ -36,6 +36,7 @@ pub(crate) enum Step {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Call {
     pub(crate) path: String,
+    pub(crate) accept: Option<&'static str>,
     pub(crate) if_none_match: Option<String>,
 }
 
@@ -95,6 +96,7 @@ impl Upstream for FakeUpstream {
     async fn fetch(&self, request: UpstreamRequest<'_>) -> Result<UpstreamResponse, UpstreamError> {
         locked(&self.0.calls).push(Call {
             path: request.path.as_str().to_owned(),
+            accept: request.accept,
             if_none_match: request.if_none_match.map(|etag| etag.as_str().to_owned()),
         });
         let gate = locked(&self.0.gate).take();

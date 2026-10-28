@@ -144,6 +144,7 @@ mod tests {
         ProxyKey {
             repository: RepositoryId::new(Uuid::from_u128(1)),
             path: UpstreamPath::parse("a/b").unwrap(),
+            accept: None,
         }
     }
 

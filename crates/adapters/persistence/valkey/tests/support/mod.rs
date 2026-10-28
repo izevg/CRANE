@@ -85,6 +85,7 @@ async fn await_commands(valkey: &Valkey) {
     let probe = ProxyKey {
         repository: RepositoryId::new(Uuid::nil()),
         path: UpstreamPath::parse("readiness/probe").expect("путь пробы валиден"),
+        accept: None,
     };
     let deadline = tokio::time::Instant::now() + SUBSCRIPTION_DEADLINE;
     while valkey.get(&probe).await.is_err() && tokio::time::Instant::now() < deadline {
