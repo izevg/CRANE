@@ -15,27 +15,31 @@
 gitGraph
   commit id: "chore: initial commit" tag: "v0.0.0"
   branch "release/v0.1.0"
+  checkout "release/v0.1.0"
   branch "feat/cargo-index"
-  branch "feat/cas"
-  checkout "feat/cargo-index"
   commit id: "feat(formats): sparse index"
   commit id: "test(formats): index"
-  checkout "feat/cas"
+  checkout "release/v0.1.0"
+  merge "feat/cargo-index" id: "feat(formats): cargo index (#1)"
+  branch "feat/cas"
   commit id: "feat(adapters): CAS"
   checkout "release/v0.1.0"
-  commit id: "feat(formats): cargo index (#1)"
-  commit id: "feat(adapters): CAS (#2)"
+  merge "feat/cas" id: "feat(adapters): CAS (#2)"
   checkout main
   merge "release/v0.1.0" id: "Merge release/v0.1.0 (#3)"
   commit id: "chore(release): v0.1.0" tag: "v0.1.0"
   branch "release/v0.2.0"
-  commit id: "feat(app): proxy engine (#4)"
+  checkout "release/v0.2.0"
+  branch "feat/proxy"
+  commit id: "feat(app): proxy engine"
+  checkout "release/v0.2.0"
+  merge "feat/proxy" id: "feat(app): proxy engine (#4)"
   checkout main
   merge "release/v0.2.0" id: "Merge release/v0.2.0 (#5)"
   commit id: "chore(release): v0.2.0" tag: "v0.2.0"
 ```
 
-*Рис. G.1. Ветки и релизы. Squash-слияние feature-ветки показано одним коммитом в релизной ветке; feature-ветки после слияния удаляются.*
+*Рис. G.1. Ветки и релизы. Feature-ветка отходит от текущей релизной ветки и сливается в неё squash-ом (коммит с номером PR); релизная ветка сливается в `main` merge commit-ом, после чего на `main` ложится коммит `chore(release)` с тегом. Следующая релизная ветка создаётся от `main` после этого коммита. Feature-ветки после слияния удаляются.*
 
 ## Ветки
 
@@ -43,7 +47,7 @@ gitGraph
 | --- | --- | --- | --- | --- |
 | `main` | — | `main` | PR из `release/*`, merge commit | постоянная, защищённая |
 | `release/vX.Y.Z` | `main` | `release/v` + версия SemVer без суффиксов (проверяет CI, задача `branch-flow`) | PR в `main`, merge commit | до релиза, затем удаляется |
-| feature | `main` | `<тип>/<кратко-через-дефис>`, тип из Conventional Commits: `feat/cargo-index`, `fix/stryker-plugin`, `docs/gitflow` | PR в `release/vX.Y.Z`, squash | до слияния, затем удаляется |
+| feature | текущая `release/vX.Y.Z` (до её создания — `main`) | `<тип>/<кратко-через-дефис>`, тип из Conventional Commits: `feat/cargo-index`, `fix/stryker-plugin`, `docs/gitflow` | PR в `release/vX.Y.Z`, squash | до слияния, затем удаляется |
 
 - Одновременно открыта одна релизная ветка. Новую создают от `main` после слияния предыдущей. Пока предыдущий релиз стабилизируется, работу над следующим ведут в feature-ветках на базе текущей релизной ветки и открывают PR в новую ветку, когда она создана.
 - Feature-ветки можно и иногда нужно перебазировать на релизную (`git rebase origin/release/vX.Y.Z`, пуш только `--force-with-lease`, после ребейза повторить `task gate`). `main` и `release/*` не перебазируются и не форсятся. Релизные ветки в feature-ветки не мержатся.
@@ -110,11 +114,22 @@ PR в `release/*` проходит `task check`, тесты затронутой
 ## Как выпускается версия
 
 1. Владелец выбирает версию по таблице выше и создаёт `release/vX.Y.Z` от `main`.
-2. Feature-ветки (от `main`, при необходимости перебазированные на релизную) сливаются в неё squash-ом через PR с зелёными проверками и таблицей ручных мутантов.
+2. Feature-ветки (от релизной ветки; созданные раньше от `main` перебазируются на неё) сливаются в неё squash-ом через PR с зелёными проверками и таблицей ручных мутантов.
 3. Когда объём вехи готов, на релизной ветке запускается полный `task gate`; когда он и CI зелёные, открывается PR `release/vX.Y.Z` → `main` с заголовком `chore(release): vX.Y.Z`. Владелец одобряет и сливает его merge commit.
 4. Workflow `release` запускается на слиянии: проверяет, что тега ещё нет, запускает `tools/bump-version.ts`, `cargo update --workspace`, `git-cliff --tag vX.Y.Z`, делает коммит `chore(release): vX.Y.Z`, ставит аннотированный тег и пушит их в `main`.
 5. Тег запускает workflow `publish`: GitHub Release с заметками из CHANGELOG.
-6. Релизная и feature-ветки удаляются (GitHub удаляет ветку при слиянии), worktree очищаются.
+6. Актуализация документации (см. ниже) выполняется до PR `release/vX.Y.Z` → `main`, а публикация сайта — после тега.
+7. Релизная и feature-ветки удаляются (GitHub удаляет ветку при слиянии), worktree очищаются (`task worktrees:prune`).
+
+### Актуализация документации при выпуске
+
+Релиз не считается завершённым, пока документация не соответствует выпущенному коду. Шаги выполняют в PR в релизную ветку до `task gate`; изменения после гейта требуют его повторного запуска.
+
+1. `docs/product/`: разделы, затронутые вехой, приведены к реализованному; решения вехи записаны в `19-risks-open-decisions.md`; `task guidebook` собирается без предупреждений (`--strict`).
+2. `ROADMAP.md`: пункты вехи отмечены, перенесённый объём передан в следующую веху отдельным PR, который утверждает владелец.
+3. Публичный сайт (`docs/site`, getcrane.dev): страницы настроек отражают текущее состояние, для новых возможностей добавлены страницы или метки версии (`since`/`changed`), селектор версий знает новый выпуск; сборка RU и EN чистая. Сайт публикуется пушем в `main` его репозитория и отдельным коммитом, который двигает указатель сабмодуля `docs/site`, после тега и с разрешения владельца.
+4. Заметки к выпуску: CHANGELOG собирается из заголовков PR, поэтому ломающие изменения, изменения умолчаний и обязательные действия при обновлении (пересоздание БД или стенда, новые обязательные настройки, удалённые профили и роли) описываются в PR с `!` или `BREAKING CHANGE:` и в разделе обновления документации.
+5. README, `AGENTS.md`, `CONTRIBUTING.md` и этот файл проверены на устаревшие команды и пути; RU и EN-зеркала синхронны.
 
 ### Hotfix
 
