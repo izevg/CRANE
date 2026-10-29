@@ -9,8 +9,14 @@ image:
 imagePullSecrets: []
 
 # Внешние сервисы организации (PostgreSQL, Valkey, S3 не входят в чарт).
-# Секрет с ключами CRANE_DATABASE_URL (обязателен) и CRANE_CACHE, CRANE_BLOBS (по необходимости)
-# создаётся вне чарта: external-secrets, sealed-secrets или вручную.
+# Секрет создаётся вне чарта (external-secrets, sealed-secrets или вручную), его ключи попадают в окружение пода.
+# Обязательны для роли serve (без любого из них под не стартует):
+#   CRANE_DATABASE_URL (или CRANE_DATABASE_URL_FILE) - каталог, `postgres://…` либо `memory`;
+#   CRANE_PUBLIC_URL    - внешний адрес консоли и API (`https://…`, без логина и пароля);
+#   CRANE_TOKEN (или CRANE_TOKEN_FILE) - временный статический токен до v0.4.0;
+#   CRANE_BLOBS         - хранилище blob (`s3://бакет?endpoint=…`, `file:///…`; можно и через config.blobs ниже).
+# Роли migrate нужен только CRANE_DATABASE_URL. По необходимости: CRANE_CACHE (или CRANE_CACHE_FILE), CRANE_SETTINGS_KEY,
+# CRANE_TRUSTED_PROXIES. Ключ вида X и X_FILE одновременно задавать нельзя.
 # Требования к PostgreSQL: 17+, pgvector >= 0.8, pg_trgm. `crane migrate` создаёт расширения сам, если у роли есть права:
 # vector недоверенное (нужен суперпользователь), pg_trgm доверенное (хватает CREATE на базе). Иначе администратор заранее
 # выполняет `CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;`, а migrate без них не стартует.
@@ -23,6 +29,17 @@ existingSecret: ""
 config:
   cache: ""
   blobs: ""
+
+# Bootstrap-токен мастера первого запуска (20.5). Рекомендуемый путь: секрет генерирует развёртывание, чарт
+# монтирует его файлом и задаёт CRANE_BOOTSTRAP_TOKEN_FILE. Без него (и без CRANE_TOKEN) токен печатается в журнал
+# на первом старте, а журнал могут собирать во внешнюю систему. Не задавайте в existingSecret одновременно
+# CRANE_BOOTSTRAP_TOKEN: X и X_FILE взаимоисключающие.
+# Пример: kubectl create secret generic crane-bootstrap --from-literal=token="crb_$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+bootstrapToken:
+  # Имя Secret с токеном; пусто - не монтировать.
+  secretName: ""
+  # Ключ в Secret; файл появится как /run/secrets/bootstrap/<key>.
+  key: token
 
 ports:
   http: 8080

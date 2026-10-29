@@ -46,12 +46,26 @@ containers:
       - name: CRANE_BLOBS
         value: {{ . | quote }}
       {{- end }}
+      {{- if and (eq .role "serve") .root.Values.bootstrapToken.secretName }}
+      - name: CRANE_BOOTSTRAP_TOKEN_FILE
+        value: {{ printf "/run/secrets/bootstrap/%s" .root.Values.bootstrapToken.key | quote }}
+      {{- end }}
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: true
       capabilities: { drop: [ALL] }
     volumeMounts:
       - { name: tmp, mountPath: /tmp }
+      {{- if and (eq .role "serve") .root.Values.bootstrapToken.secretName }}
+      - { name: bootstrap, mountPath: /run/secrets/bootstrap, readOnly: true }
+      {{- end }}
 volumes:
   - { name: tmp, emptyDir: {} }
+  {{- if and (eq .role "serve") .root.Values.bootstrapToken.secretName }}
+  - name: bootstrap
+    secret:
+      secretName: {{ .root.Values.bootstrapToken.secretName | quote }}
+      # 0400 в восьмеричной записи: читает только пользователь пода.
+      defaultMode: 256
+  {{- end }}
 {{- end -}}
