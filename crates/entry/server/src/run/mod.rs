@@ -1,5 +1,6 @@
 //! Роли процесса: запуск HTTP-серверов и миграции.
 
+mod backend;
 mod health;
 mod proxy;
 
@@ -12,9 +13,12 @@ use std::time::Duration;
 
 use axum::Router;
 use crane_app::registry::Registry;
+use crane_app::settings::Settings;
 use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
 use crane_domain::settings::{Stored, Version};
-use crane_http::{FormatSettings, StaticToken, admin_router, api_router};
+use crane_http::{
+    FormatSettings, StaticToken, TrustedProxies, admin_router, api_router, console_router,
+};
 use crane_memory::{MemoryBlobStore, MemoryCatalog, MemorySettings};
 use crane_objstore::ObjectBlobStore;
 use crane_pg::{PgCatalog, PgSettings, SettingsKey};
@@ -35,6 +39,7 @@ use crate::config::{
 use crate::ecosystem::ecosystem;
 use crate::namespaces;
 use crate::system::{SystemClock, UuidV7Ids};
+use backend::SettingsBackend;
 pub(crate) use health::healthcheck;
 
 /// Дольше ждать соединение смысла нет: на старте сервер падает с понятной ошибкой,
@@ -56,19 +61,8 @@ pub(crate) struct Loaded {
     settings: SettingsWiring,
 }
 
-/// Хранилище настроек: каталог в PostgreSQL или пустое в памяти.
-#[expect(dead_code, reason = "потребитель — HTTP настроек в B4a")]
-enum SettingsBackend {
-    Memory(MemorySettings),
-    Postgres(PgSettings),
-}
-
 /// Всё для `crane_app::settings::Settings::new`, кроме аудита (он появляется в `assemble`).
 /// Ключ шифрования читается и потребляется один раз, в `load`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "потребитель — HTTP настроек в B4a")
-)]
 pub(crate) struct SettingsWiring {
     store: SettingsBackend,
     schema: Arc<ConfigSchema>,
@@ -78,10 +72,6 @@ pub(crate) struct SettingsWiring {
 
 impl SettingsWiring {
     /// Записывать есть куда: режим выводится из хранилища, отдельного флага нет.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "потребитель — HTTP настроек в B4a")
-    )]
     fn persistent(&self) -> bool {
         matches!(self.store, SettingsBackend::Postgres(_))
     }
@@ -143,11 +133,18 @@ pub(crate) async fn routers(loaded: Loaded) -> Result<(Router, Router), RunError
     let Loaded {
         mut config,
         pool,
-        // B4a соберёт здесь `crane_app::settings::Settings` и смонтирует HTTP настроек.
-        settings: _wiring,
+        settings,
     } = loaded;
     match pool {
-        None => assemble(MemoryCatalog::default(), MemoryBlobStore::default(), config).await,
+        None => {
+            assemble(
+                MemoryCatalog::default(),
+                MemoryBlobStore::default(),
+                config,
+                settings,
+            )
+            .await
+        }
         Some(pool) => {
             // Пару каталога и blob проверил `Blobs::from_env` по режиму каталога.
             let Blobs::Durable { url, s3_key } = &mut config.blobs else {
@@ -155,7 +152,7 @@ pub(crate) async fn routers(loaded: Loaded) -> Result<(Router, Router), RunError
             };
             let store = ObjectBlobStore::from_url(url, s3_key.take())
                 .map_err(|error| format!("не удалось открыть CRANE_BLOBS: {error}"))?;
-            assemble(PgCatalog::new(pool), store, config).await
+            assemble(PgCatalog::new(pool), store, config, settings).await
         }
     }
 }
@@ -174,6 +171,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     catalog: C,
     blobs: B,
     config: Config,
+    settings: SettingsWiring,
 ) -> Result<(Router, Router), RunError> {
     // Ключ S3 нужен был только для открытия blob-хранилища.
     drop(config.blobs);
@@ -223,6 +221,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
     // Сырой токен живёт только до этой строки: дальше остаётся его хэш.
     let token = StaticToken::new(config.token.expose().as_bytes(), config.principal);
     drop(config.token);
+    let console = console(settings, &audit, &token, &config.trusted_proxies);
     let api = api_router(
         &registry,
         &formats,
@@ -230,7 +229,8 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         config.trusted_proxies,
         audit,
         proxy_repos,
-    );
+    )
+    .merge(console);
     Ok((api, admin))
 }
 
@@ -253,6 +253,31 @@ async fn ensure_hosted_repositories<C: Catalog>(
         }
     }
     Ok(())
+}
+
+/// Консоль на том же слушателе, под тем же токеном и с тем же приёмником аудита.
+fn console(
+    wiring: SettingsWiring,
+    audit: &Arc<OcsfLogSink>,
+    token: &StaticToken,
+    proxies: &TrustedProxies,
+) -> Router {
+    let persistent = wiring.persistent();
+    let settings = Settings::new(
+        wiring.store,
+        wiring.schema,
+        audit.clone(),
+        persistent,
+        wiring.started,
+    );
+    console_router(
+        Arc::new(settings),
+        persistent,
+        Vec::new(),
+        token.clone(),
+        audit.clone(),
+        proxies.clone(),
+    )
 }
 
 async fn serve_async(boot: Boot) -> Result<(), RunError> {

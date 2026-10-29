@@ -14,6 +14,13 @@ info:
 
     Каждая операция несёт `x-crane-phase` и `x-crane-since`: P0 = v0.4.0 (доступ, базовый UI, CLI; часть в v0.5.0); настройки и мастер первого запуска (раздел 20) вытянуты вперёд и помечены `x-crane-since: v0.3.0` при P0, P1 = v0.6.0, P2 = v1.1.0, P3 = v1.2.0.
 
+    ## Кэширование и аутентификация в v0.3.0
+
+    - **Только Bearer.** До v0.4.0 консоль и мастер принимают исключительно `Authorization: Bearer <токен>` (статический `CRANE_TOKEN` или bootstrap-токен `crb_…`). Если заголовок `Authorization` есть, аутентификация идёт только по нему: неверный токен даёт 401, и cookie его не заменяет и не спасает. CORS-заголовков с credentials (`Access-Control-Allow-Credentials`) на `/api/v1` нет.
+    - **Настройки и мастер не кэшируются.** Ответы `/settings*` (включая отказы) и `/onboarding*` несут `Cache-Control: no-store`: в них адреса, версии строк и состояние первого запуска.
+    - **`/me` и `/status`** отдаются с `Cache-Control: private` и `Vary: Authorization, Cookie`: тело зависит от учётных данных (анонимный `/status` короче). `ETag` и 304 по `If-None-Match` сохраняются.
+    - **С v0.4.0** вход идёт cookie-сессией, мутации защищены CSRF-токеном и проверкой Origin, которые привязаны к cookie-сессии. Запрос с Bearer не откатывается на cookie, а запрос с cookie не получает прав Bearer.
+
     ## Расширения операции
 
     | Расширение | Смысл |
@@ -464,7 +471,7 @@ paths:
       description: 'Роли: любой аутентифицированный.'
       operationId: getMe
       x-crane-phase: P0
-      x-crane-since: v0.4.0
+      x-crane-since: v0.3.0
       x-crane-action: me:read
       x-crane-step-up: false
       x-crane-audit: null

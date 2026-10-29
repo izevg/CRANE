@@ -26,6 +26,8 @@ fn setting_and_onboarding_actions_map_to_api_activity_without_resource() {
     let cases = [
         setting_changed(SettingChange::Secret {
             replaced_unreadable: false,
+            old_locator: None,
+            new_locator: None,
         }),
         AuditAction::SettingRejected {
             key: "blobs".to_owned(),
@@ -90,6 +92,8 @@ fn secret_setting_change_carries_no_values() {
     let event = event(
         setting_changed(SettingChange::Secret {
             replaced_unreadable: false,
+            old_locator: None,
+            new_locator: None,
         }),
         Outcome::Success,
         Some(principal(PrincipalKind::Human)),
@@ -119,6 +123,8 @@ fn secret_change_flags_replaced_unreadable_only_when_set() {
     let actual = cases.map(|replaced_unreadable| {
         let change = SettingChange::Secret {
             replaced_unreadable,
+            old_locator: None,
+            new_locator: None,
         };
         let r = record(setting_changed(change), Outcome::Success, None);
         (r.setting.replaced_unreadable, r.setting.old, r.setting.new)
@@ -231,5 +237,34 @@ fn rejection_carries_env_var_only_when_key_is_locked() {
             (Some("blobs".to_owned()), Some("CRANE_BLOBS".to_owned())),
             (Some("blobs".to_owned()), None),
         ]
+    );
+}
+
+#[test]
+fn secret_change_carries_the_addresses_and_no_values() {
+    // Arrange
+    let change = SettingChange::Secret {
+        replaced_unreadable: false,
+        old_locator: Some("valkey://old.internal:6379".to_owned()),
+        new_locator: Some("valkey://[::1]".to_owned()),
+    };
+
+    // Act
+    let r = record(setting_changed(change), Outcome::Success, None);
+
+    // Assert
+    assert_eq!(
+        (
+            r.setting.old_locator,
+            r.setting.new_locator,
+            r.setting.old,
+            r.setting.new
+        ),
+        (
+            Some("valkey://old.internal:6379".to_owned()),
+            Some("valkey://[::1]".to_owned()),
+            None,
+            None
+        )
     );
 }

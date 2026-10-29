@@ -59,6 +59,7 @@ impl SettingsSchema for StubSchema {
         (key == LOCKED).then(|| Inherited {
             var: LOCKED_VAR.to_owned(),
             value: Some("from-env".to_owned()),
+            locator: None,
         })
     }
 

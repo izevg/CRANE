@@ -36,7 +36,7 @@ impl Credential {
 
     /// Секрет, если заголовок есть и схема подошла. Чужая схема или битое значение дают `None`,
     /// а не «токен как есть»: иначе чужую схему приняли бы за секрет.
-    fn extract(self, headers: &HeaderMap) -> Option<Cow<'_, [u8]>> {
+    pub(crate) fn extract(self, headers: &HeaderMap) -> Option<Cow<'_, [u8]>> {
         let value = headers.get(self.header_name())?.as_bytes();
         match self {
             Self::Raw | Self::Header(_) => Some(Cow::Borrowed(value)),

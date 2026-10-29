@@ -21,6 +21,9 @@ pub struct Inherited {
     pub var: String,
     /// `None` у секрета: наружу он не выходит. Это правило держит реализация схемы.
     pub value: Option<String>,
+    /// Адрес секрета-URL без учётных данных (`domain::settings::locator`); `None` у несекрета и у
+    /// секрета, не похожего на URL.
+    pub locator: Option<String>,
 }
 
 /// Инверсия: `app` пишет и аудирует, `entry` знает, что валидно. Реализация одна, в `entry/server`.

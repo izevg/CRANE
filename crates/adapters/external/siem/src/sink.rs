@@ -102,6 +102,8 @@ fn emit(r: &OcsfRecord) {
         unmapped.setting.old = r.setting.old.as_deref(),
         unmapped.setting.new = r.setting.new.as_deref(),
         unmapped.setting.replaced_unreadable = r.setting.replaced_unreadable,
+        unmapped.setting.old_locator = r.setting.old_locator.as_deref(),
+        unmapped.setting.new_locator = r.setting.new_locator.as_deref(),
         "аудит"
     );
 }

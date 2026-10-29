@@ -69,7 +69,34 @@ fn view_never_reveals_secret_value() {
     });
     assert_eq!(
         (shown, format!("{list:?}").contains("TOPSECRET")),
-        (Some(Shown::Secret), false)
+        (Some(Shown::Secret { locator: None }), false)
+    );
+}
+
+#[test]
+fn view_shows_only_the_address_of_a_secret_url() {
+    // Arrange
+    let url = "valkey://user:TOPSECRET@cache.internal:6379/0";
+    let (settings, _) = world(seeded(&[(TOKEN, url)]), true, &[(TOKEN, 1)]);
+
+    // Act
+    let list = block_on(settings.view()).unwrap();
+
+    // Assert
+    let shown = list.settings.iter().find_map(|view| {
+        view.stored
+            .as_ref()
+            .filter(|_| view.def.key == TOKEN)
+            .map(|row| row.value.clone())
+    });
+    assert_eq!(
+        (shown, format!("{list:?}").contains("TOPSECRET")),
+        (
+            Some(Shown::Secret {
+                locator: Some("valkey://cache.internal:6379".to_owned())
+            }),
+            false
+        )
     );
 }
 

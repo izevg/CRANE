@@ -5,7 +5,7 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::Response;
 use crane_domain::access::RequestId;
 use crane_domain::registry::Format;
-use serde_json::json;
+use serde_json::{Map, Value, json};
 
 use crate::error::{ErrorBody, ProblemKind};
 use crate::formats;
@@ -26,13 +26,20 @@ pub(super) fn render_error(mut response: Response, id: &RequestId) -> Response {
             .and_then(|format| formats::error_body(format, &detail, id.as_str()))
             .unwrap_or_else(|| {
                 let title = status.canonical_reason().unwrap_or("Error");
-                (PROBLEM_JSON, problem(status, title, &detail, kind, id))
+                (
+                    PROBLEM_JSON,
+                    problem(status, title, &detail, kind, id, &Map::new()),
+                )
             }),
         ErrorBody::Problem {
             title,
             detail,
             kind,
-        } => (PROBLEM_JSON, problem(status, title, detail, kind, id)),
+            extensions,
+        } => (
+            PROBLEM_JSON,
+            problem(status, title, &detail, kind, id, &extensions),
+        ),
     };
     *response.body_mut() = Body::from(text);
     let headers = response.headers_mut();
@@ -45,21 +52,28 @@ pub(super) fn render_error(mut response: Response, id: &RequestId) -> Response {
 }
 
 /// json!, а не format!: detail и id могут содержать символы, требующие экранирования.
+/// Расширения добавляются последними и стандартные члены не заменяют.
 fn problem(
     status: StatusCode,
     title: &str,
     detail: &str,
     kind: ProblemKind,
     id: &RequestId,
+    extensions: &Map<String, Value>,
 ) -> String {
-    json!({
+    let mut body = json!({
         "type": kind.uri(),
         "title": title,
         "status": status.as_u16(),
         "detail": detail,
         "request_id": id.as_str(),
-    })
-    .to_string()
+    });
+    if let Some(members) = body.as_object_mut() {
+        for (name, value) in extensions {
+            members.entry(name).or_insert_with(|| value.clone());
+        }
+    }
+    body.to_string()
 }
 
 #[cfg(test)]

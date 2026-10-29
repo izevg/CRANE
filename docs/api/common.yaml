@@ -2943,7 +2943,8 @@ components:
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, crane:search, crane:my-tokens, crane:my-actions, crane:favorites, crane:findings,
-            crane:audit-events, crane:platform-overview'
+            crane:audit-events, crane:platform-overview. В v0.3.0 есть только self, crane:status, crane:settings и
+            crane:findings (последняя - если смонтирован раздел SecOps).'
       required:
       - principal
       - roles
@@ -2990,7 +2991,7 @@ components:
     Status:
       title: Status
       type: object
-      description: Статус платформы. Публичная часть (`version`, `mode`) без аутентификации, остальное по правам.
+      description: Статус платформы. Публичная часть (`version`, `mode`, `phase`) без аутентификации, остальное по правам.
       properties:
         version:
           type: string
@@ -3032,6 +3033,15 @@ components:
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, crane:diagnostics'
+        restart_required:
+          type: boolean
+          description: Снимок настроек в БД отличается от того, с которым процесс стартовал; изменения вступят в силу после перезапуска. Только при аутентификации; без токена поля нет.
+        phase:
+          type: string
+          enum:
+          - not_configured
+          - serving
+          description: '`not_configured` - мастер первого запуска ещё не завершён, протоколы отвечают 503; `serving` - рабочая фаза. Публичная часть.'
       required:
       - version
       - mode
@@ -8256,6 +8266,12 @@ components:
           - null
           description: |-
             Только для `kind=secret`. `unreadable` - секрет лежит в БД, но не открывается; причина в поле `unreadable`. Перезаписать (`PUT` с `If-Match`) или удалить (`DELETE`) такую строку можно, ключ шифрования для этого не нужен.
+        locator:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Только для `kind=secret` с секретом-URL: куда он указывает, `scheme://host[:port]`, без учётных данных, пути и запроса. Хост как записан в значении (без DNS и приведения к IP), IPv6 в квадратных скобках, порт только если он задан в значении (умолчание схемы не подставляется). `null`, если секрета нет или он не URL.
         unreadable:
           oneOf:
           - $ref: '#/components/schemas/SettingUnreadable'
@@ -8549,10 +8565,10 @@ components:
         description: |-
           Версия, режим, компоненты, фиды, деградации. Живые данные: опрос с ETag и `Cache-Control: private, max-age=30`.
 
-          Роли: публичная часть (version, mode) без аутентификации; остальное - любой аутентифицированный.
+          Роли: публичная часть (version, mode, phase) без аутентификации; остальное - любой аутентифицированный.
         operationId: getStatus
         x-crane-phase: P0
-        x-crane-since: v0.4.0
+        x-crane-since: v0.3.0
         x-crane-action: platform:read_status
         x-crane-step-up: false
         x-crane-audit: null

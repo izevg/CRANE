@@ -78,15 +78,18 @@ fn inherited_reports_variable_and_value_but_never_a_secret() {
         [
             Some(Inherited {
                 var: "CRANE_TOKEN_PRINCIPAL".to_owned(),
-                value: Some("robot".to_owned())
+                value: Some("robot".to_owned()),
+                locator: None
             }),
             Some(Inherited {
                 var: "CRANE_TOKEN_FILE".to_owned(),
-                value: None
+                value: None,
+                locator: None
             }),
             Some(Inherited {
                 var: "CRANE_CACHE".to_owned(),
-                value: None
+                value: None,
+                locator: Some("valkey://h".to_owned())
             }),
             None,
             None,
@@ -340,4 +343,27 @@ fn secret_file_is_read_through_the_boot_layer() {
 
     // Assert
     assert_eq!(failed_keys(result), None);
+}
+
+#[test]
+fn inherited_secret_from_a_file_exposes_only_its_locator() {
+    // Arrange
+    let boot = Boot::new(
+        |name: &str| (name == "CRANE_CACHE_FILE").then(|| "/run/secrets/cache".to_owned()),
+        |_: &Path| Ok("valkey://u:SECRET@cache.internal:6379\n".to_owned()),
+    );
+    let schema = ConfigSchema::new(boot, false);
+
+    // Act
+    let inherited = schema.inherited("cache");
+
+    // Assert
+    assert_eq!(
+        inherited,
+        Some(Inherited {
+            var: "CRANE_CACHE_FILE".to_owned(),
+            value: None,
+            locator: Some("valkey://cache.internal:6379".to_owned()),
+        })
+    );
 }
