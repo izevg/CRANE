@@ -9,6 +9,10 @@ use crane_domain::registry::Format;
 use crane_ports::audit::AuditSink;
 use crane_ports::registry::{BlobStore, Catalog};
 
+mod wizard;
+
+pub use wizard::wizard_router;
+
 use crate::auth::{Auth, StaticToken, require_token};
 use crate::context::{TrustedProxies, request_context};
 use crate::error::{mark_format, not_found};

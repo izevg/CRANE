@@ -1,23 +1,22 @@
 //! Роли процесса: запуск HTTP-серверов и миграции.
 
 mod health;
+mod phases;
 mod proxy;
 
 use std::collections::BTreeMap;
-use std::future::IntoFuture;
-use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
 use crane_app::registry::Registry;
-use crane_domain::registry::{Format, Repository, RepositoryId, RepositoryKind};
+use crane_domain::registry::{Repository, RepositoryId, RepositoryKind};
 use crane_domain::settings::{Stored, Version};
 use crane_http::{FormatSettings, StaticToken, admin_router, api_router};
 use crane_memory::{MemoryBlobStore, MemoryCatalog, MemorySettings};
 use crane_objstore::ObjectBlobStore;
-use crane_pg::{PgCatalog, PgSettings, SettingsKey};
+use crane_pg::{PgCatalog, PgOnboarding, PgSettings, SettingsKey};
 use crane_ports::proxy::{NoUpstream, UpstreamNames};
 use crane_ports::registry::{BlobStore, Catalog};
 use crane_ports::settings::SettingsStore;
@@ -26,11 +25,10 @@ use crane_siem::OcsfLogSink;
 use futures_util::future::{self, Either};
 use sqlx::PgPool;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
-use tokio::net::TcpListener;
 use tokio::runtime::Builder;
 
 use crate::config::{
-    Blobs, Boot, Config, ConfigSchema, Database, Repos, StoredLayer, settings_key,
+    Blobs, Boot, Config, ConfigError, ConfigSchema, Database, Repos, StoredLayer, settings_key,
 };
 use crate::ecosystem::ecosystem;
 use crate::namespaces;
@@ -45,7 +43,7 @@ pub(crate) type RunError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) fn serve(boot: Boot) -> Result<(), RunError> {
     let runtime = Builder::new_multi_thread().enable_all().build()?;
-    runtime.block_on(serve_async(boot))
+    runtime.block_on(phases::serve_async(boot))
 }
 
 /// Разобранная конфигурация и то, что нужно для остальной сборки.
@@ -57,10 +55,20 @@ pub(crate) struct Loaded {
 }
 
 /// Хранилище настроек: каталог в PostgreSQL или пустое в памяти.
-#[expect(dead_code, reason = "потребитель — HTTP настроек в B4a")]
 enum SettingsBackend {
     Memory(MemorySettings),
     Postgres(PgSettings),
+}
+
+impl SettingsBackend {
+    /// Строки БД; в памяти их нет.
+    async fn list(&self) -> Result<BTreeMap<String, Stored>, RunError> {
+        let rows = match self {
+            Self::Memory(store) => store.list().await,
+            Self::Postgres(store) => store.list().await,
+        };
+        Ok(rows?)
+    }
 }
 
 /// Всё для `crane_app::settings::Settings::new`, кроме аудита (он появляется в `assemble`).
@@ -87,52 +95,106 @@ impl SettingsWiring {
     }
 }
 
-/// Слои конфигурации: env + файл (`boot`), затем строки БД. Приоритет env > файл > БД > умолчание.
-/// Любая ошибка разбора валит старт: нечитаемый секрет не подменяется умолчанием.
-pub(crate) async fn load(boot: Boot) -> Result<Loaded, RunError> {
-    let inherited = |name: &str| boot.var(name);
-    let reader = |path: &Path| boot.read(path);
-    let database = Database::from_env(&inherited, &reader)?;
-    let key = settings_key(&inherited, &reader, database.persistent())?;
-    let (pool, store, rows) = open_settings(&database, key).await?;
-    let (layer, ignored) = StoredLayer::new(&inherited, &rows, &[])?;
-    for (key, why) in &ignored {
-        // Значений в журнале нет: только ключ и причина.
-        tracing::warn!(key, reason = ?why, "строка настройки в БД не действует");
-    }
-    let config = Config::from_layers(&inherited, &layer, &reader, database.persistent())?;
-    let started = rows
-        .iter()
-        .map(|(key, row)| (key.clone(), row.version))
-        .collect();
-    let schema = Arc::new(ConfigSchema::new(boot.clone(), database.persistent()));
-    Ok(Loaded {
-        config,
-        pool,
-        settings: SettingsWiring {
-            store,
-            schema,
-            started,
-        },
-    })
+/// Всё, что открывается один раз за жизнь процесса и переживает смену фаз `serve`.
+pub(crate) struct Backend {
+    pool: Option<PgPool>,
+    settings: SettingsBackend,
+    /// `None` при `memory`: первого запуска там нет, а мастеру нечего сохранять (20.2).
+    onboarding: Option<Arc<PgOnboarding>>,
+    schema: Arc<ConfigSchema>,
+    persistent: bool,
 }
 
-/// Хранилище настроек и его строки; в памяти строк нет, слой БД пуст.
-async fn open_settings(
-    database: &Database,
-    key: Option<SettingsKey>,
-) -> Result<(Option<PgPool>, SettingsBackend, BTreeMap<String, Stored>), RunError> {
-    match database {
-        Database::Memory => {
-            let store = MemorySettings::new(Arc::new(SystemClock));
-            Ok((None, SettingsBackend::Memory(store), BTreeMap::new()))
+impl Backend {
+    /// Подключается к каталогу и открывает хранилища настроек и первого запуска. `Database`
+    /// (с паролем) живёт только до подключения.
+    pub(crate) async fn open(boot: &Boot) -> Result<Self, RunError> {
+        let inherited = |name: &str| boot.var(name);
+        let reader = |path: &Path| boot.read(path);
+        let database = Database::from_env(&inherited, &reader)?;
+        let persistent = database.persistent();
+        let key = settings_key(&inherited, &reader, persistent)?;
+        let opened = open_settings(&database, key).await?;
+        drop(database);
+        Ok(Self {
+            pool: opened.pool,
+            settings: opened.settings,
+            onboarding: opened.onboarding,
+            schema: Arc::new(ConfigSchema::new(boot.clone(), persistent)),
+            persistent,
+        })
+    }
+
+    /// Слои конфигурации: env + файл (`boot`), затем строки БД. Приоритет env > файл > БД > умолчание.
+    /// Нечитаемый секрет не подменяется умолчанием: это такая же ошибка разбора, как неверное значение.
+    fn parse(&self, boot: &Boot, rows: &BTreeMap<String, Stored>) -> Result<Config, ConfigError> {
+        let inherited = |name: &str| boot.var(name);
+        let reader = |path: &Path| boot.read(path);
+        let (layer, ignored) = StoredLayer::new(&inherited, rows, &[])?;
+        for (key, why) in &ignored {
+            // Значений в журнале нет: только ключ и причина.
+            tracing::warn!(key, reason = ?why, "строка настройки в БД не действует");
         }
+        Config::from_layers(&inherited, &layer, &reader, self.persistent)
+    }
+
+    /// Хранилище первого запуска; его нет только при `memory`, где фаза мастера не выбирается.
+    fn onboarding(&self) -> Result<&Arc<PgOnboarding>, RunError> {
+        self.onboarding
+            .as_ref()
+            .ok_or_else(|| "первый запуск недоступен при CRANE_DATABASE_URL=memory".into())
+    }
+
+    fn into_loaded(self, config: Config, rows: &BTreeMap<String, Stored>) -> Loaded {
+        let started = rows
+            .iter()
+            .map(|(key, row)| (key.clone(), row.version))
+            .collect();
+        Loaded {
+            config,
+            pool: self.pool,
+            settings: SettingsWiring {
+                store: self.settings,
+                schema: self.schema,
+                started,
+            },
+        }
+    }
+}
+
+/// Слои и сборка за один вызов: для тестов, которым не нужен цикл фаз.
+#[cfg(test)]
+pub(crate) async fn load(boot: Boot) -> Result<Loaded, RunError> {
+    let backend = Backend::open(&boot).await?;
+    let rows = backend.settings.list().await?;
+    let config = backend.parse(&boot, &rows)?;
+    Ok(backend.into_loaded(config, &rows))
+}
+
+struct Opened {
+    pool: Option<PgPool>,
+    settings: SettingsBackend,
+    onboarding: Option<Arc<PgOnboarding>>,
+}
+
+/// Хранилища настроек и первого запуска; в памяти строк нет, слой БД пуст, мастера нет.
+async fn open_settings(database: &Database, key: Option<SettingsKey>) -> Result<Opened, RunError> {
+    match database {
+        Database::Memory => Ok(Opened {
+            pool: None,
+            settings: SettingsBackend::Memory(MemorySettings::new(Arc::new(SystemClock))),
+            onboarding: None,
+        }),
         Database::Postgres(options) => {
             // Подключаемся сразу: недоступная БД валит старт, а не первый запрос.
             let pool = connect(options).await?;
-            let store = PgSettings::new(pool.clone(), Arc::new(SystemClock), key);
-            let rows = store.list().await?;
-            Ok((Some(pool), SettingsBackend::Postgres(store), rows))
+            let settings = PgSettings::new(pool.clone(), Arc::new(SystemClock), key);
+            let onboarding = PgOnboarding::new(pool.clone(), Arc::new(SystemClock));
+            Ok(Opened {
+                pool: Some(pool),
+                settings: SettingsBackend::Postgres(settings),
+                onboarding: Some(Arc::new(onboarding)),
+            })
         }
     }
 }
@@ -160,7 +222,7 @@ pub(crate) async fn routers(loaded: Loaded) -> Result<(Router, Router), RunError
     }
 }
 
-async fn connect(options: &PgConnectOptions) -> Result<PgPool, RunError> {
+pub(crate) async fn connect(options: &PgConnectOptions) -> Result<PgPool, RunError> {
     PgPoolOptions::new()
         .acquire_timeout(DB_ACQUIRE_TIMEOUT)
         .connect_with(options.clone())
@@ -253,50 +315,6 @@ async fn ensure_hosted_repositories<C: Catalog>(
         }
     }
     Ok(())
-}
-
-async fn serve_async(boot: Boot) -> Result<(), RunError> {
-    let loaded = load(boot).await?;
-    let (http_port, admin_port) = (loaded.config.http_port, loaded.config.admin_port);
-    let names = |format, kind| loaded.config.repos.names(format, kind).to_vec();
-    let repos = names(Format::Cargo, RepositoryKind::Hosted);
-    let proxy_repos = names(Format::Cargo, RepositoryKind::Proxy);
-    let npm_repos = names(Format::Npm, RepositoryKind::Hosted);
-    let npm_proxy_repos = names(Format::Npm, RepositoryKind::Proxy);
-    let (api, admin) = routers(loaded).await?;
-
-    let api_listener = bind(http_port).await?;
-    let admin_listener = bind(admin_port).await?;
-    tracing::info!(
-        http_port,
-        admin_port,
-        repos = ?repos,
-        proxy_repos = ?proxy_repos,
-        npm_repos = ?npm_repos,
-        npm_proxy_repos = ?npm_proxy_repos,
-        "сервер запущен"
-    );
-
-    // Каждый сервер ждёт свою копию сигнала: tokio::signal раздаёт его всем подписчикам.
-    let api_server = axum::serve(
-        api_listener,
-        // Адрес пира нужен слою контекста запроса (доверие к X-Forwarded-For).
-        api.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .into_future();
-    let admin_server = axum::serve(admin_listener, admin)
-        .with_graceful_shutdown(shutdown_signal())
-        .into_future();
-    future::try_join(api_server, admin_server).await?;
-    tracing::info!("сервер остановлен");
-    Ok(())
-}
-
-async fn bind(port: u16) -> Result<TcpListener, RunError> {
-    TcpListener::bind(("0.0.0.0", port))
-        .await
-        .map_err(|error| format!("не удалось занять порт {port}: {error}").into())
 }
 
 pub(crate) fn migrate(database: Database) -> Result<(), RunError> {

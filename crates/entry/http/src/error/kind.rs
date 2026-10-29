@@ -6,6 +6,8 @@
 pub(crate) enum ProblemKind {
     Blank,
     StorageUnreachable,
+    /// Первый запуск не завершён: протоколы пакетов недоступны, пока мастер не закончен (20.2).
+    NotConfigured,
 }
 
 impl ProblemKind {
@@ -13,6 +15,7 @@ impl ProblemKind {
         match self {
             Self::Blank => "about:blank",
             Self::StorageUnreachable => "urn:crane:problem:storage-unreachable",
+            Self::NotConfigured => "urn:crane:problem:not-configured",
         }
     }
 }

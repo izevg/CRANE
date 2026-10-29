@@ -3,7 +3,7 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
-use super::{ErrorBody, NOT_READY_DETAIL, ProblemKind, UNREACHABLE_DETAIL};
+use super::{ErrorBody, NOT_CONFIGURED_DETAIL, NOT_READY_DETAIL, ProblemKind, UNREACHABLE_DETAIL};
 
 #[derive(Debug)]
 pub(crate) struct Problem {
@@ -43,6 +43,17 @@ impl Problem {
     }
 }
 
+impl Problem {
+    /// Фаза мастера: сервер жив, но не настроен. `Retry-After` ставит общий рендер ответов 503.
+    pub(crate) const fn not_configured() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            detail: NOT_CONFIGURED_DETAIL,
+            kind: ProblemKind::NotConfigured,
+        }
+    }
+}
+
 impl IntoResponse for Problem {
     fn into_response(self) -> Response {
         let mut response = self.status.into_response();
@@ -53,6 +64,11 @@ impl IntoResponse for Problem {
         });
         response
     }
+}
+
+/// Fallback фазы мастера: на любой путь и метод.
+pub(crate) async fn not_configured() -> Problem {
+    Problem::not_configured()
 }
 
 /// Fallback для путей вне cargo-маршрутов.

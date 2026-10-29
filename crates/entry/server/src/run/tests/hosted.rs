@@ -5,6 +5,7 @@
 
 use std::future::Future;
 
+use crane_domain::registry::Format;
 use crane_memory::{MemoryCatalog, SequentialIdGen};
 use tokio::runtime::Builder;
 

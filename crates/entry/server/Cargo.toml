@@ -32,6 +32,8 @@ crane-siem = { path = "../../adapters/external/siem" }
 crane-upstream = { path = "../../adapters/external/upstream" }
 # Кэш proxy и lease выборок, общие для реплик (CRANE_CACHE=valkey://…).
 crane-valkey = { path = "../../adapters/persistence/valkey" }
+# Случайные байты bootstrap-токена; тот же провайдер и фичи, что у crane-pg (в lock один aws-lc-rs).
+aws-lc-rs = { version = "1", default-features = false, features = ["aws-lc-sys", "alloc"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 # Пул соединений и разбор параметров подключения: PgCatalog принимает готовый PgPool.
 # Версия и фичи те же, что у crane-pg, чтобы в lock остался один sqlx.
@@ -45,6 +47,8 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 url = "2"
 # Открытый текст сохранённых секретов в слое БД обнуляется при освобождении (версия та же, что в domain).
 zeroize = "1"
+# Срок bootstrap-токена в журнале: RFC 3339 UTC. Уже в дереве (formats/npm), новой версии в lock нет.
+humantime = "2"
 uuid = { version = "1", features = ["v7"] }
 toml = { version = "1.1.8", default-features = false, features = ["parse", "serde", "std"] }
 

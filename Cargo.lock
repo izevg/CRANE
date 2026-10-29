@@ -531,6 +531,7 @@ dependencies = [
 name = "crane-server"
 version = "0.2.0"
 dependencies = [
+ "aws-lc-rs",
  "axum",
  "crane-app",
  "crane-domain",
@@ -549,6 +550,7 @@ dependencies = [
  "crane-valkey",
  "futures-util",
  "http-body-util",
+ "humantime",
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
