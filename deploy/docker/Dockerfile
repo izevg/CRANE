@@ -8,9 +8,14 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
 # Кэш target вне слоя образа, поэтому бинарник копируется в /out внутри того же RUN.
+# Кэш общий для всех веток и worktree на машине, а cargo решает о пересборке по mtime: COPY сохраняет время
+# изменения файла из контекста, и артефакты, собранные позже из другой ветки, выглядят «свежее» исходников.
+# Без touch в образ попадает чужой код (dogfood и e2e проверяют не то, что в ветке). Время исходников
+# workspace поднимается до текущего, поэтому его крейты пересобираются всегда; зависимости из registry остаются в кэше.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
-    cargo build --release --locked -p crane-server \
+    find crates -type f -exec touch {} + \
+    && cargo build --release --locked -p crane-server \
     && mkdir -p /out/data/blobs \
     && cp target/release/crane /out/crane
 
