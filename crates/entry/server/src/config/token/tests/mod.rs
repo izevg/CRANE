@@ -4,6 +4,8 @@
     reason = "в тестах падение unwrap — это падение теста"
 )]
 
+use crane_domain::access::{BOOTSTRAP_PRINCIPAL_ID, SYSTEM_PRINCIPAL_ID};
+
 use super::*;
 
 use crate::config::tests::{error_of, parse, with};
@@ -25,36 +27,68 @@ fn token_principal_defaults_to_crane_robot_and_can_be_overridden() {
 }
 
 #[test]
-fn blank_or_control_character_principal_is_rejected() {
+fn principal_outside_the_grammar_or_reserved_is_rejected() {
     // Arrange
-    let cases = [
-        with(&[(TOKEN_PRINCIPAL, "  ")]),
-        with(&[(TOKEN_PRINCIPAL, "a\nb")]),
+    let long = "a".repeat(65);
+    let names = [
+        SYSTEM_PRINCIPAL_ID,
+        BOOTSTRAP_PRINCIPAL_ID,
+        "cli:root",
+        "crane:anything",
+        "Crane",
+        "-ci",
+        ".ci",
+        "ci bot",
+        "ci\nbot",
+        "ci/bot",
+        "робот",
+        "  ",
+        &long,
     ];
 
     // Act
-    let errors = cases.map(|pairs| error_of(&pairs));
+    let errors = names.map(|name| {
+        let mut pairs: Vec<(&str, &str)> = with(&[]);
+        pairs.push((TOKEN_PRINCIPAL, name));
+        parse(&pairs).err()
+    });
 
     // Assert
-    let invalid = || ConfigError::Invalid {
-        var: TOKEN_PRINCIPAL,
-        reason: "ожидалось непустое имя без управляющих символов",
+    let invalid = || {
+        Some(ConfigError::Invalid {
+            var: TOKEN_PRINCIPAL,
+            reason: "ожидалось имя вида [a-z0-9][a-z0-9._-]{0,63}",
+        })
     };
-    assert_eq!(errors, [invalid(), invalid()]);
+    assert_eq!(errors.to_vec(), vec![invalid(); names.len()]);
 }
 
 #[test]
-fn principal_name_is_limited_to_128_characters() {
+fn principal_inside_the_grammar_is_accepted() {
     // Arrange
-    let names = ["я".repeat(128), "я".repeat(129)];
+    let at_limit = "a".repeat(64);
+    let names = ["crane", "ci-bot", "a.b_c", "7", &at_limit];
 
     // Act
-    let accepted = names.each_ref().map(|name| {
+    let accepted = names.map(|name| {
         let mut pairs: Vec<(&str, &str)> = with(&[]);
         pairs.push((TOKEN_PRINCIPAL, name));
         parse(&pairs).is_ok()
     });
 
     // Assert
-    assert_eq!(accepted, [true, false]);
+    assert_eq!(accepted, [true; 5]);
+}
+
+#[test]
+fn rejected_principal_error_does_not_contain_the_value() {
+    // Arrange
+    let mut pairs: Vec<(&str, &str)> = with(&[]);
+    pairs.push((TOKEN_PRINCIPAL, "Secret-Name"));
+
+    // Act
+    let message = error_of(&pairs).to_string();
+
+    // Assert
+    assert!(!message.contains("Secret-Name"));
 }
