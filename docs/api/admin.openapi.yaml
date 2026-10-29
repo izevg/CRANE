@@ -1833,6 +1833,20 @@ paths:
       x-crane-step-up: false
       x-crane-audit: null
       parameters:
+      - name: workspace
+        in: query
+        description: Slug команды-владельца. Фильтр сервера; клиент не фильтрует курсорную страницу.
+        schema:
+          type: string
+      - name: format
+        in: query
+        description: Формат пакетов (повторяемый параметр). Фильтр сервера; клиент не фильтрует курсорную страницу.
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ./common.yaml#/components/schemas/Format
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
@@ -1857,12 +1871,16 @@ paths:
       tags:
       - access
       summary: Создать пространство имён
-      description: 'Роли: owner.'
+      description: |-
+        Уникальна пара (`format`, `pattern`) (10.3). Шаблон, пересекающийся с namespace другой команды, требует свежего MFA (14.15).
+
+        Роли: owner.
       operationId: createNamespace
       x-crane-phase: P0
       x-crane-since: v0.4.0
       x-crane-action: namespace:create
-      x-crane-step-up: false
+      x-crane-step-up: true
+      x-crane-step-up-when: шаблон пересекается с namespace другой команды (14.15, 10.3)
       x-crane-audit:
         event: namespace.created
         ocsf_class: 6003
@@ -1958,9 +1976,27 @@ paths:
       parameters:
       - name: workspace
         in: query
-        description: Workspace.
+        description: Workspace. Фильтр сервера; клиент не фильтрует курсорную страницу.
         schema:
           type: string
+      - name: format
+        in: query
+        description: Формат пакетов (повторяемый параметр). Фильтр сервера; клиент не фильтрует курсорную страницу.
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ./common.yaml#/components/schemas/Format
+      - name: kind
+        in: query
+        description: Тип репозитория (повторяемый параметр). Фильтр сервера; клиент не фильтрует курсорную страницу.
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ./common.yaml#/components/schemas/RepositoryKind
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
@@ -2248,7 +2284,13 @@ paths:
       x-crane-action: catalog:list_own
       x-crane-step-up: false
       x-crane-audit: null
+      x-crane-open-question: Строка C1 несёт `health` (docs/ui/screens.md), но перечень его значений в docs/product не описан; поле не введено до решения владельца. Там же упомянут необязательный `consumers`, он тоже не введён.
       parameters:
+      - name: workspace
+        in: query
+        description: Slug команды. Фильтр сервера; клиент не фильтрует курсорную страницу.
+        schema:
+          type: string
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       - $ref: ./common.yaml#/components/parameters/Fields
@@ -2261,7 +2303,7 @@ paths:
           content:
             application/hal+json:
               schema:
-                $ref: ./common.yaml#/components/schemas/SearchItemPage
+                $ref: ./common.yaml#/components/schemas/MyPackagePage
         '401':
           $ref: ./common.yaml#/components/responses/Unauthorized
         '403':
@@ -3604,6 +3646,16 @@ paths:
       x-crane-step-up: false
       x-crane-audit: null
       parameters:
+      - name: state
+        in: query
+        description: Состояние команды (по умолчанию `active`). Фильтр сервера; клиент не фильтрует курсорную страницу.
+        schema:
+          type: string
+          enum:
+          - active
+          - archived
+          - all
+          default: active
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
@@ -4094,6 +4146,20 @@ paths:
       x-crane-step-up: false
       x-crane-audit: null
       parameters:
+      - name: workspace
+        in: query
+        description: Slug команды, только маппинги этой команды. Фильтр сервера; клиент не фильтрует курсорную страницу.
+        schema:
+          type: string
+      - name: scope
+        in: query
+        description: 'Область маппинга: `team` - роль команды (`workspace` не `null`), `instance` - роль экземпляра (`workspace`
+          равен `null`). С `workspace` допустим только `team`, иначе 400. Фильтр сервера; клиент не фильтрует курсорную страницу.'
+        schema:
+          type: string
+          enum:
+          - team
+          - instance
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
@@ -4509,7 +4575,7 @@ paths:
       - platform
       summary: Использование скачиваний
       description: |-
-        Суточный агрегат (хранится 400 дней), только аддитивные меры `downloads` и `bytes`. Личностей, токенов и IP нет. Owner видит только свою команду (Cedar по атрибуту ресурса), platform-admin и secops - все. CSV и NDJSON отдаёт только `POST /audit/exports` (`stream: usage`). Команда `null` - скачивания, не распределённые по командам.
+        Суточный агрегат (хранится 400 дней), только аддитивные меры `downloads` и `bytes`. Личностей, токенов и IP нет. Owner видит только свою команду (Cedar по атрибуту ресурса), platform-admin и secops - все. CSV и NDJSON отдаёт только `POST /audit/exports` (`stream: usage`), ссылка на него - `_links.crane:create-audit-export` страницы. Команда `null` - скачивания, не распределённые по командам. При `group_by=workspace` эта строка («не распределено») есть всегда, в том числе с нулями: она приходит отдельным полем страницы `unattributed`, а не в `_embedded`, поэтому не зависит от `sort` и курсора, и клиент показывает её последней. Чужая или несуществующая команда в `workspace` даёт 404, а не 403: ответ не раскрывает существование slug (как у остальных командных ресурсов). 403 - если у вызывающего нет права читать агрегат вообще.
 
         Роли: owner (только своя команда); platform-admin; secops.
       operationId: getDownloadUsage
@@ -4575,6 +4641,14 @@ paths:
           type: array
           items:
             $ref: ./common.yaml#/components/schemas/UsageGroupBy
+      - name: sort
+        in: query
+        description: Порядок строк страницы по убыванию меры (`-downloads` или `-bytes`). Строка `unattributed` в сортировку не входит.
+        schema:
+          type: string
+          enum:
+          - -downloads
+          - -bytes
       - $ref: ./common.yaml#/components/parameters/Cursor
       - $ref: ./common.yaml#/components/parameters/Limit
       responses:
@@ -4593,6 +4667,8 @@ paths:
           $ref: ./common.yaml#/components/responses/Unauthorized
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
         '429':
           $ref: ./common.yaml#/components/responses/TooManyRequests
         '500':
@@ -7612,6 +7688,94 @@ paths:
           $ref: ./common.yaml#/components/responses/InternalError
         '503':
           $ref: ./common.yaml#/components/responses/ServiceUnavailable
+  /principals:
+    get:
+      tags:
+      - access
+      summary: Поиск принципалов
+      description: |-
+        Поиск принципала для диалога «Добавить участника» (D6): по подстроке имени, с фильтром по виду. Это перечисление ПДн (раздел 14): пустой запрос и выдача всего каталога запрещены; лимит страницы - общий Limit (≤ 200). Курсорная пагинация без offset и total.
+
+        Роли: owner команды, platform-admin.
+      operationId: searchPrincipals
+      x-crane-phase: P0
+      x-crane-since: v0.4.0
+      x-crane-action: principal:search
+      x-crane-step-up: false
+      x-crane-audit: null
+      x-crane-open-question: Журналировать ли поиск принципалов (перечисление ПДн). Событие чтения `audit.viewed` относится к журналу и скачиваниям и сюда не подходит; отдельного события для чтения каталога нет.
+      parameters:
+      - name: q
+        in: query
+        description: Подстрока отображаемого имени принципала (обязательна, не короче 2 символов).
+        required: true
+        schema:
+          type: string
+          minLength: 2
+      - name: kind
+        in: query
+        description: Вид принципала (повторяемый параметр).
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            $ref: ./common.yaml#/components/schemas/PrincipalKind
+      - $ref: ./common.yaml#/components/parameters/Cursor
+      - $ref: ./common.yaml#/components/parameters/Limit
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/PrincipalRefPage
+        '400':
+          $ref: ./common.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
+  /me/packages/summary:
+    get:
+      tags:
+      - me
+      summary: Сводка моих пакетов
+      description: |-
+        Точные агрегаты для плиток экрана «Мои пакеты» (C1): пакеты, версии, deprecated, с открытыми находками. Считаются по тем же пакетам, что и `GET /me/packages`.
+
+        Роли: maintainer, owner.
+      operationId: getMyPackagesSummary
+      x-crane-phase: P1
+      x-crane-since: v0.6.0
+      x-crane-action: catalog:list_own
+      x-crane-step-up: false
+      x-crane-audit: null
+      responses:
+        '200':
+          description: Успешно.
+          headers:
+            X-Request-Id:
+              $ref: ./common.yaml#/components/headers/XRequestId
+          content:
+            application/hal+json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/MyPackagesSummary
+        '401':
+          $ref: ./common.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ./common.yaml#/components/responses/Forbidden
+        '429':
+          $ref: ./common.yaml#/components/responses/TooManyRequests
+        '500':
+          $ref: ./common.yaml#/components/responses/InternalError
 components:
   securitySchemes:
     session:
@@ -7632,6 +7796,7 @@ x-crane-link-rels:
   - crane:favorites
   - crane:finding
   - crane:findings
+  - crane:group-mappings
   - crane:history
   - crane:impact
   - crane:install
@@ -7643,7 +7808,9 @@ x-crane-link-rels:
   - crane:members
   - crane:metadata
   - crane:my-actions
+  - crane:my-packages
   - crane:my-tokens
+  - crane:namespaces
   - crane:onboarding
   - crane:overview
   - crane:package
@@ -7651,6 +7818,7 @@ x-crane-link-rels:
   - crane:priority-history
   - crane:promotion
   - crane:readme
+  - crane:repositories
   - crane:robot
   - crane:same-request
   - crane:search
@@ -7662,3 +7830,4 @@ x-crane-link-rels:
   - crane:usage
   - crane:version
   - crane:versions
+  - crane:workspaces

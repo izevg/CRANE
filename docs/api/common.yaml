@@ -2896,6 +2896,9 @@ components:
         workspace:
           type: string
           description: Slug команды.
+        display:
+          type: string
+          description: Отображаемое имя команды для переключателя (экран K4); slug в интерфейсе не показывается.
         roles:
           type: array
           items:
@@ -2903,6 +2906,7 @@ components:
           minItems: 1
       required:
       - workspace
+      - display
       - roles
     SodMode:
       title: SodMode
@@ -2943,7 +2947,9 @@ components:
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, crane:search, crane:my-tokens, crane:my-actions, crane:favorites, crane:findings,
-            crane:audit-events, crane:platform-overview'
+            crane:audit-events, crane:platform-overview; разделы навигации SPA: crane:repositories, crane:namespaces,
+            crane:workspaces, crane:group-mappings, crane:my-packages, crane:usage, crane:settings, crane:status.
+            Ссылка есть, только если раздел разрешён вызывающему; нет ссылки - нет пункта меню.'
       required:
       - principal
       - roles
@@ -5224,6 +5230,9 @@ components:
           type: string
         pattern:
           type: string
+        format:
+          $ref: '#/components/schemas/Format'
+          description: Формат пакетов, к которому относится шаблон. Уникальна пара (`format`, `pattern`) (10.3).
         workspace:
           type: string
           description: Команда-владелец (workspace)
@@ -5236,6 +5245,7 @@ components:
       required:
       - id
       - pattern
+      - format
       - workspace
       - created_at
       - _links
@@ -5265,11 +5275,15 @@ components:
       properties:
         pattern:
           type: string
+        format:
+          $ref: '#/components/schemas/Format'
+          description: Формат пакетов, к которому относится шаблон. Уникальна пара (`format`, `pattern`) (10.3).
         workspace:
           type: string
           description: Команда-владелец (workspace)
       required:
       - pattern
+      - format
       - workspace
     RobotRotation:
       title: RobotRotation
@@ -6265,6 +6279,16 @@ components:
           - 'null'
           format: date-time
           description: Момент архивации; `null` - команда активна.
+        members_count:
+          type: integer
+          minimum: 0
+          description: Число различных участников с открытыми строками ролей; для колонки «Участники» списка команд (E14).
+        owners_count:
+          type: integer
+          minimum: 0
+          description: Число участников с эффективной ролью owner; 0 - «без владельца», действует platform-admin (D6, E14).
+        resources:
+          $ref: '#/components/schemas/WorkspaceResources'
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, crane:overview, crane:members, crane:update-workspace, crane:archive-workspace
@@ -6276,6 +6300,9 @@ components:
       - description
       - created_at
       - archived_at
+      - members_count
+      - owners_count
+      - resources
       - _links
     WorkspacePage:
       title: WorkspacePage
@@ -7675,6 +7702,9 @@ components:
       type: object
       description: Строки ролей команды, курсорная пагинация (текущий состав или история за окно `from`..`to`).
       properties:
+        local_membership:
+          $ref: '#/components/schemas/LocalMembership'
+          description: Сигнал настройки `access.local_membership` для экрана D6, при `denied` кнопок добавления и снятия локальной роли нет. Только в `GET …/members`; в истории не приходит.
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, next, prev; в `GET …/members` ещё crane:add-member (шаблон `{principal_id}`, `{role}`; только owner
@@ -8158,7 +8188,15 @@ components:
       properties:
         _links:
           $ref: '#/components/schemas/HalLinks'
-          description: 'Ссылки HAL: self, next, prev, crane:downloads (сырой след, если разрешён)'
+          description: 'Ссылки HAL: self, next, prev, crane:downloads (сырой след, если разрешён), crane:create-audit-export (экспорт
+            этого агрегата: тело `AuditExportCreate` со `stream: usage`; только если вызывающему разрешён экспорт)'
+        unattributed:
+          oneOf:
+          - $ref: '#/components/schemas/UsageTotals'
+          - type: 'null'
+          description: Строка «не распределено» (`workspace` = `null`) при `group_by=workspace`. Присутствует всегда, в том числе с нулями,
+            и лежит только здесь, а не в `_embedded`, она вне сортировки и курсора, клиент показывает её последней строкой.
+            Суммы за весь период с учётом остальных фильтров. `null`, если `group_by` без `workspace` или задан фильтр `workspace`.
         _embedded:
           type: object
           properties:
@@ -8540,6 +8578,161 @@ components:
       required:
       - values
       - versions
+    WorkspaceResources:
+      title: WorkspaceResources
+      type: object
+      description: Сколько ресурсов принадлежит команде; для колонки «Ресурсы» списка команд (E14).
+      properties:
+        namespaces:
+          type: integer
+          minimum: 0
+        packages:
+          type: integer
+          minimum: 0
+          description: Пакеты без namespace.
+        repositories:
+          type: integer
+          minimum: 0
+        robots:
+          type: integer
+          minimum: 0
+          description: Активные роботы.
+      required:
+      - namespaces
+      - packages
+      - repositories
+      - robots
+    LocalMembership:
+      title: LocalMembership
+      type: string
+      enum:
+      - allowed
+      - denied
+      description: Значение настройки `access.local_membership`, разрешены ли локальные роли (источник `local`) в командах.
+    UsageTotals:
+      title: UsageTotals
+      type: object
+      description: Аддитивные меры агрегата скачиваний без измерений.
+      properties:
+        downloads:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - downloads
+      - bytes
+    MyPackageRisk:
+      title: MyPackageRisk
+      type: object
+      description: Риски своего пакета для строки C1 (P2), к `SearchRisk` добавлены разбивка по приоритетам и ближайший срок SLA.
+      allOf:
+      - $ref: '#/components/schemas/SearchRisk'
+      - type: object
+        properties:
+          by_priority:
+            $ref: '#/components/schemas/ByPriority'
+          nearest_sla_due_at:
+            type:
+            - string
+            - 'null'
+            format: date-time
+        required:
+        - by_priority
+        - nearest_sla_due_at
+    MyPackage:
+      title: MyPackage
+      type: object
+      description: Свой пакет в `GET /me/packages` (C1), `SearchItem` плюс число версий и риски с разбивкой.
+      allOf:
+      - $ref: '#/components/schemas/SearchItem'
+      - type: object
+        properties:
+          versions_count:
+            type: integer
+            minimum: 0
+            description: Число версий пакета; для колонки «Версии» (C1).
+          risk:
+            oneOf:
+            - $ref: '#/components/schemas/MyPackageRisk'
+            - type: 'null'
+            description: P2.
+        required:
+        - versions_count
+    MyPackagePage:
+      title: MyPackagePage
+      type: object
+      description: Страница ресурса MyPackage.
+      properties:
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self, next, prev'
+        _embedded:
+          type: object
+          properties:
+            crane:packages:
+              type: array
+              items:
+                $ref: '#/components/schemas/MyPackage'
+          required:
+          - crane:packages
+      required:
+      - _links
+      - _embedded
+    MyPackagesSummary:
+      title: MyPackagesSummary
+      type: object
+      description: Точные агрегаты для плиток C1 «Мои пакеты»; каждая плитка - вход в фильтр списка. Считаются по тем же
+        пакетам, что и `GET /me/packages`.
+      properties:
+        packages:
+          type: integer
+          minimum: 0
+        versions:
+          type: integer
+          minimum: 0
+        deprecated:
+          type: integer
+          minimum: 0
+          description: Пакеты со статусом deprecated.
+        with_open_findings:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          description: Пакеты с открытыми находками (P2); `null` - данных о находках нет.
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self'
+      required:
+      - packages
+      - versions
+      - deprecated
+      - with_open_findings
+      - _links
+    PrincipalRefPage:
+      title: PrincipalRefPage
+      type: object
+      description: Страница результатов поиска принципалов (`GET /principals`).
+      properties:
+        _links:
+          $ref: '#/components/schemas/HalLinks'
+          description: 'Ссылки HAL: self, next, prev'
+        _embedded:
+          type: object
+          properties:
+            crane:principals:
+              type: array
+              items:
+                $ref: '#/components/schemas/PrincipalRef'
+          required:
+          - crane:principals
+      required:
+      - _links
+      - _embedded
   pathItems:
     Status:
       get:
