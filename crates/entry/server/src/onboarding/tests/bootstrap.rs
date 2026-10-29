@@ -332,7 +332,7 @@ fn utc_formats_rfc_3339_across_leap_days_and_year_ends() {
     let seconds = [0, 951_782_400, 1_709_164_800, 1_767_225_599, 1_793_102_400];
 
     // Act
-    let formatted = seconds.map(|s| utc(UNIX_EPOCH + Duration::from_secs(s)));
+    let formatted = seconds.map(|s| utc(SystemTime::UNIX_EPOCH + Duration::from_secs(s)));
 
     // Assert
     assert_eq!(

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 use crane_domain::onboarding::Onboarding;
 use crane_domain::settings::{Stored, StoredValue};
@@ -167,29 +167,10 @@ pub(crate) fn announce(issued: &Issued) {
     );
 }
 
-const SECONDS_PER_DAY: u64 = 86_400;
-
-/// RFC 3339 в UTC с точностью до секунды. Календарь по алгоритму `civil_from_days`
-/// (Howard Hinnant): ради одной строки лога зависимость от `time` не нужна.
+/// RFC 3339 в UTC с точностью до секунды. Готовый форматтер вместо своей календарной арифметики:
+/// граница суток и 29 февраля - его забота, а не наша.
 fn utc(time: SystemTime) -> String {
-    let seconds = time.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    let (days, rest) = (seconds / SECONDS_PER_DAY, seconds % SECONDS_PER_DAY);
-    let shifted = days + 719_468;
-    let era = shifted / 146_097;
-    let day_of_era = shifted % 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_index = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
-    let month = if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
-    };
-    let year = year_of_era + era * 400 + u64::from(month <= 2);
-    let (hour, minute, second) = (rest / 3_600, rest % 3_600 / 60, rest % 60);
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
+    humantime::format_rfc3339_seconds(time).to_string()
 }
 
 #[cfg(test)]

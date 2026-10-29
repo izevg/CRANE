@@ -47,6 +47,8 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 url = "2"
 # Открытый текст сохранённых секретов в слое БД обнуляется при освобождении (версия та же, что в domain).
 zeroize = "1"
+# Срок bootstrap-токена в журнале: RFC 3339 UTC. Уже в дереве (formats/npm), новой версии в lock нет.
+humantime = "2"
 uuid = { version = "1", features = ["v7"] }
 toml = { version = "1.1.8", default-features = false, features = ["parse", "serde", "std"] }
 
