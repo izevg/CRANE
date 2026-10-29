@@ -5,7 +5,7 @@
 # Значения только из .env; пропущенная переменная останавливает запуск.
 # Секреты (токен, пароль PostgreSQL, URL каталога) лежат в файлах и монтируются в /run/secrets:
 # ни в переменных окружения, ни в этом файле их нет.
-# Профиль: scan (analyzer + trivy). Остальные режимы описаны override-файлами, а не профилями:
+# Режимы описаны override-файлами, а не профилями (профиля scan нет: роли analyze в сервере ещё нет):
 # они меняют настройку самого crane (ключи, сети, зависимости). Подключаются через COMPOSE_FILE (строка в .env)
 # или несколькими -f:
 #   deploy/compose/docker-compose.s3.yaml     S3 (SeaweedFS) вместо локального тома blobs
@@ -83,25 +83,6 @@ services:
       timeout: 3s
       retries: 6
 
-  analyzer:
-    <<: *crane
-    profiles: [scan]
-    command: ["analyze"]
-    environment:
-      <<: *crane-env
-      CRANE_TRIVY_URL: ${CRANE_TRIVY_URL:?}
-    # Изолированная сеть: только trivy, наружу выхода нет.
-    networks: [scan]
-    depends_on: [trivy]
-
-  trivy:
-    profiles: [scan]
-    image: ${TRIVY_IMAGE:?}
-    restart: unless-stopped
-    command: ["server", "--listen", "0.0.0.0:4954"]
-    networks: [scan, default]
-    volumes: [trivy:/root/.cache/trivy]
-
   postgres:
     image: ${POSTGRES_IMAGE:?}
     restart: unless-stopped
@@ -119,8 +100,6 @@ services:
 
 
 networks:
-  scan:
-    internal: true
   # Только caddy и crane: подсеть фиксирована, потому что это же значение CRANE_TRUSTED_PROXIES.
   edge:
     ipam:
@@ -137,5 +116,4 @@ secrets:
 volumes:
   pg:
   blobs:
-  trivy:
   caddy-data:

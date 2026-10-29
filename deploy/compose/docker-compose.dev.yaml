@@ -73,14 +73,6 @@ services:
     ports: ["${DEV_BIND:?}:${SEAWEEDFS_S3_PORT:?}:8333"]
     volumes: [blobs:/data]
 
-  # Сервер Trivy для analyzer.
-  trivy:
-    profiles: [scan]
-    image: ${TRIVY_IMAGE:?}
-    command: ["server", "--listen", "0.0.0.0:4954"]
-    ports: ["${DEV_BIND:?}:${TRIVY_PORT:?}:4954"]
-    volumes: [trivy:/root/.cache/trivy]
-
 secrets:
   postgres_password:
     file: ${POSTGRES_PASSWORD_SECRET:?задайте POSTGRES_PASSWORD_SECRET}
@@ -94,4 +86,3 @@ secrets:
 volumes:
   pg:
   blobs:
-  trivy:
