@@ -25,6 +25,8 @@ const DIR_MODE = 0o700;
 const FILE_MODE = 0o644;
 const FILE_COUNT = 5;
 const NAMES_VARIABLE = /POSTGRES_USER/;
+const BOOTSTRAP_FORMAT = /^crb_[A-Za-z0-9_-]{43}$/;
+const BOOTSTRAP_ENV = { ...ENV, CRANE_BOOTSTRAP_TOKEN_SECRET: "./secrets/bootstrap_token" };
 
 let counter = 0;
 const sequence = (): string => {
@@ -154,5 +156,42 @@ describe("initSecrets", () => {
 
     // Assert
     assert.equal(created.length, FILE_COUNT);
+  });
+
+  it("creates the bootstrap token as crb_ plus 43 base64url characters with mode 0644", () => {
+    // Arrange
+    const root = workdir();
+
+    // Act
+    initSecrets(BOOTSTRAP_ENV, root, sequence);
+
+    // Assert
+    assert.match(read(root, "bootstrap_token"), BOOTSTRAP_FORMAT);
+    assert.equal(statSync(join(root, "secrets", "bootstrap_token")).mode & MODE_MASK, FILE_MODE);
+  });
+
+  it("creates no bootstrap token unless its variable is set", () => {
+    // Arrange
+    const root = workdir();
+
+    // Act
+    const created = initSecrets(ENV, root, sequence);
+
+    // Assert
+    assert.equal(created.includes("./secrets/bootstrap_token"), false);
+  });
+
+  it("keeps an existing bootstrap token", () => {
+    // Arrange
+    const root = workdir();
+    initSecrets(BOOTSTRAP_ENV, root, sequence);
+    const before = read(root, "bootstrap_token");
+
+    // Act
+    const created = initSecrets(BOOTSTRAP_ENV, root, sequence);
+
+    // Assert
+    assert.deepEqual(created, []);
+    assert.equal(read(root, "bootstrap_token"), before);
   });
 });
