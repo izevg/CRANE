@@ -114,13 +114,14 @@ fn context(peer: Option<IpAddr>, headers: &HeaderMap, proxies: &TrustedProxies) 
     let forwarded_id = peer_trusted
         .then(|| text(headers, REQUEST_ID.as_str()).and_then(RequestId::parse))
         .flatten();
-    // Несколько строк X-Forwarded-For равнозначны одной, склеенной запятой.
+    // Несколько строк X-Forwarded-For равнозначны одной, склеенной запятой. Строки берутся байтами:
+    // значение с obs-text не `to_str()`, и клиент не должен этим выбивать записи прокси из той же строки.
     let forwarded_for = headers
         .get_all(FORWARDED_FOR)
         .iter()
-        .filter_map(|value| value.to_str().ok())
+        .map(HeaderValue::as_bytes)
         .collect::<Vec<_>>()
-        .join(",");
+        .join(&b',');
     RequestContext {
         request_id: forwarded_id.unwrap_or_else(|| RequestId::from(Uuid::now_v7())),
         trace_id: text(headers, TRACEPARENT).and_then(trace::trace_id),
