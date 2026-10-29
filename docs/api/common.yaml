@@ -2782,7 +2782,7 @@ components:
           type: string
         workspace:
           type: string
-          description: 'Команда для атрибуции скачиваний (slug). Для человека: должна быть среди его команд, иначе 422;
+          description: 'Команда для атрибуции скачиваний (slug). Для человека: должна быть среди его команд, иначе 404 (чужая и несуществующая неразличимы);
             без поля при одной команде берётся она, при нескольких токен «не распределён» (`workspace: null`). Для
             robot и workload поле игнорируется: берётся команда принципала. Фиксируется при выпуске и не меняется
             до перевыпуска.'
@@ -6284,12 +6284,10 @@ components:
           minimum: 0
           description: Число различных участников с открытыми строками ролей; для колонки «Участники» списка команд (E14).
         owners_count:
-          type:
-          - integer
-          - 'null'
+          type: integer
           minimum: 0
-          description: Число участников с эффективной ролью owner; 0 - «без владельца», действует platform-admin (D6, E14). Только
-            для platform-admin, для остальных `null`.
+          description: Число участников с эффективной ролью owner; 0 - «без владельца», действует platform-admin (D6, E14). Видно
+            и членам команды (бейдж на D6), состав и так доступен им через `GET …/members?role=owner`.
         resources:
           oneOf:
           - $ref: '#/components/schemas/WorkspaceResources'
@@ -8724,10 +8722,13 @@ components:
     PrincipalCandidate:
       title: PrincipalCandidate
       type: object
-      description: Кандидат в участники команды (`GET /principals`). Только человек и только поля, нужные для выбора; служебные поля принципала не отдаются.
+      description: Кандидат в участники команды (`GET /principals`). Только человек и только поля, нужные для выбора; email и служебные поля принципала не возвращаются.
       properties:
         id:
           type: string
+        login:
+          type: string
+          description: Логин из IdP; нужен, чтобы различить тёзок.
         display:
           type: string
         kind:
@@ -8736,6 +8737,7 @@ components:
           - human
       required:
       - id
+      - login
       - display
       - kind
     PrincipalCandidatePage:
@@ -8873,7 +8875,7 @@ components:
         - access
         summary: Выпустить токен
         description: |-
-          Выпуск `session` (≤ 12 ч и не дольше сессии IdP) или `personal` (≤ 90 дней по политике). Секрет только в этом ответе (`Cache-Control: no-store`). 403 `interactive-login-required` - вызов не из интерактивной сессии IdP человека; 403 `scope-exceeds-principal` - scopes шире прав вызывающего. Правила и причины: 13 «Правила выпуска».
+          Выпуск `session` (≤ 12 ч и не дольше сессии IdP) или `personal` (≤ 90 дней по политике). Секрет только в этом ответе (`Cache-Control: no-store`). 403 `interactive-login-required` - вызов не из интерактивной сессии IdP человека; 403 `scope-exceeds-principal` - scopes шире прав вызывающего. Правила и причины: 13 «Правила выпуска». Чужая или несуществующая команда в `workspace` тела - 404.
 
           Роли: любой аутентифицированный человек.
         operationId: createToken
@@ -8917,6 +8919,8 @@ components:
             $ref: '#/components/responses/StepUpRequired'
           '403':
             $ref: '#/components/responses/Forbidden'
+          '404':
+            $ref: '#/components/responses/NotFound'
           '409':
             $ref: '#/components/responses/Conflict'
           '422':
@@ -9555,7 +9559,10 @@ components:
         tags:
         - access
         summary: Создать робота
-        description: 'Роли: owner.'
+        description: |-
+          Чужая или несуществующая команда в `workspace` тела - 404.
+
+          Роли: owner.
         operationId: createRobot
         x-crane-phase: P0
         x-crane-since: v0.4.0
@@ -9594,6 +9601,8 @@ components:
             $ref: '#/components/responses/StepUpRequired'
           '403':
             $ref: '#/components/responses/Forbidden'
+          '404':
+            $ref: '#/components/responses/NotFound'
           '409':
             $ref: '#/components/responses/Conflict'
           '422':
