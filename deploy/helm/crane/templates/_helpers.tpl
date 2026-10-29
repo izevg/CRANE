@@ -28,6 +28,10 @@ imagePullSecrets: {{ toYaml . | nindent 2 }}
 {{- end }}
 securityContext:
   runAsNonRoot: true
+  runAsUser: {{ .root.Values.uid }}
+  runAsGroup: {{ .root.Values.uid }}
+  # Файлы смонтированных Secret получают эту группу: без fsGroup они остались бы root:root и процесс не прочитал бы токен.
+  fsGroup: {{ .root.Values.uid }}
   seccompProfile: { type: RuntimeDefault }
 containers:
   - name: {{ .component }}
@@ -65,7 +69,7 @@ volumes:
   - name: bootstrap
     secret:
       secretName: {{ .root.Values.bootstrapToken.secretName | quote }}
-      # 0400 в восьмеричной записи: читает только пользователь пода.
-      defaultMode: 256
+      # 0440 в восьмеричной записи: читают владелец и группа (fsGroup) пода, остальные нет.
+      defaultMode: 288
   {{- end }}
 {{- end -}}
