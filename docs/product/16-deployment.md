@@ -80,7 +80,7 @@ services:
 | `CRANE_HTTP_PORT` | `8080` | порт API |
 | `CRANE_ADMIN_PORT` | `9464` | порт проб `/healthz/live` и `/healthz/ready`; мастер первого запуска на нём не живёт, он обслуживается на публичном порту (20.2) |
 | `CRANE_SETTINGS_KEY_FILE` | — | файл с ключом шифрования секретов настроек в БД: base64 от 32 байт, права 0400 (20.2). Без него секреты из консоли не хранятся |
-| `CRANE_BOOTSTRAP_TOKEN`, `CRANE_BOOTSTRAP_TOKEN_FILE` | — | токен `crb_…` входа в мастер первого запуска (20.5). Без них и без `CRANE_TOKEN` сервер выпускает токен сам и печатает его в цель `crane::bootstrap` |
+| `CRANE_BOOTSTRAP_TOKEN`, `CRANE_BOOTSTRAP_TOKEN_FILE` | — | токен `crb_…` входа в мастер первого запуска (20.5). Без них и без `CRANE_TOKEN` сервер выпускает токен сам и печатает его в цель `crane::bootstrap`. Рекомендуемый путь: секрет генерирует развёртывание; в Helm - `bootstrapToken.secretName` (монтируется файлом), в compose - override `docker-compose.bootstrap.yaml` |
 | `CRANE_CARGO_REPOS` | `internal` | hosted cargo-репозитории через запятую |
 | `CRANE_CARGO_PROXY_REPOS` | пусто | proxy-репозитории crates.io через запятую (например `crates-io`): `/cargo/<имя>/`, индекс и архивы через кэш; имя не должно совпадать с hosted. Пустое значение выключает proxy |
 | `CRANE_NPM_REPOS` | пусто | hosted npm-репозитории через запятую (например `web`): `/npm/<имя>/`; те же правила имён, что у cargo |
@@ -186,7 +186,7 @@ CRANE отдаёт телеметрию только в открытых фор�
 | `GET /metrics` | служебный (9464) | Метрики OpenMetrics с exemplars (`trace_id`) | Только из сети мониторинга; в Helm есть ServiceMonitor и PodMonitor |
 | `GET /healthz/live` | служебный | Процесс жив и event loop не завис | Kubelet |
 | `GET /healthz/ready` | служебный | Готов принимать трафик: PostgreSQL и хранилище доступны; Valkey и upstream на готовность не влияют | Kubelet, балансировщик |
-| `GET /healthz/startup` | служебный | Миграции применены, кэши прогреты | Kubelet |
+| `GET /healthz/startup` | служебный | Миграции применены, кэши прогреты. В v0.3.0 не реализован: `startupProbe` чарта использует `/healthz/live` | Kubelet |
 | `GET /api/v1/status` | основной | Версия, режим (normal, read-only, degraded), состояние компонентов и фидов, отставание экспорта в SIEM | Пользователи, CLI `cctl diag`, внешние статус-страницы |
 | OTLP export | исходящий | Трассы, журналы и, по желанию, метрики в OpenTelemetry Collector (gRPC или HTTP) | Настраивается endpoint и заголовки |
 

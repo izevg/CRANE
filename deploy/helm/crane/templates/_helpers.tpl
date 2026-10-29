@@ -28,6 +28,10 @@ imagePullSecrets: {{ toYaml . | nindent 2 }}
 {{- end }}
 securityContext:
   runAsNonRoot: true
+  runAsUser: {{ .root.Values.uid }}
+  runAsGroup: {{ .root.Values.uid }}
+  # Файлы смонтированных Secret получают эту группу: без fsGroup они остались бы root:root и процесс не прочитал бы токен.
+  fsGroup: {{ .root.Values.uid }}
   seccompProfile: { type: RuntimeDefault }
 containers:
   - name: {{ .component }}
@@ -38,11 +42,17 @@ containers:
       - secretRef:
           name: {{ required "existingSecret обязателен" .root.Values.existingSecret }}
     env:
+      {{- with .root.Values.config.cache }}
       - name: CRANE_CACHE
-        value: {{ .root.Values.config.cache | quote }}
+        value: {{ . | quote }}
+      {{- end }}
       {{- with .root.Values.config.blobs }}
       - name: CRANE_BLOBS
         value: {{ . | quote }}
+      {{- end }}
+      {{- if and (eq .role "serve") .root.Values.bootstrapToken.secretName }}
+      - name: CRANE_BOOTSTRAP_TOKEN_FILE
+        value: {{ printf "/run/secrets/bootstrap/%s" .root.Values.bootstrapToken.key | quote }}
       {{- end }}
     securityContext:
       allowPrivilegeEscalation: false
@@ -50,6 +60,16 @@ containers:
       capabilities: { drop: [ALL] }
     volumeMounts:
       - { name: tmp, mountPath: /tmp }
+      {{- if and (eq .role "serve") .root.Values.bootstrapToken.secretName }}
+      - { name: bootstrap, mountPath: /run/secrets/bootstrap, readOnly: true }
+      {{- end }}
 volumes:
   - { name: tmp, emptyDir: {} }
+  {{- if and (eq .role "serve") .root.Values.bootstrapToken.secretName }}
+  - name: bootstrap
+    secret:
+      secretName: {{ .root.Values.bootstrapToken.secretName | quote }}
+      # 0440 в восьмеричной записи: читают владелец и группа (fsGroup) пода, остальные нет.
+      defaultMode: 288
+  {{- end }}
 {{- end -}}
