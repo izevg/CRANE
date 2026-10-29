@@ -16,8 +16,12 @@ imagePullSecrets: []
 # выполняет `CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;`, а migrate без них не стартует.
 # Требования к внешнему Valkey: `maxmemory` и `maxmemory-policy allkeys-lru` (ключи артефактов живут без TTL).
 existingSecret: ""
+# Несекретные значения для окружения пода; пусто — переменная не задаётся. Значение здесь видно в манифесте и в
+# `helm get values`, поэтому URL с паролем сюда нельзя: адрес Valkey с паролем — только в Secret
+# (ключ CRANE_CACHE или CRANE_CACHE_FILE). Переменная пода перекрывает Secret, так что непустой `config.cache`
+# отменил бы адрес из Secret. Без CRANE_CACHE кэш `memory` (отдельный у каждой реплики).
 config:
-  cache: memory
+  cache: ""
   blobs: ""
 
 ports:

@@ -38,8 +38,10 @@ containers:
       - secretRef:
           name: {{ required "existingSecret обязателен" .root.Values.existingSecret }}
     env:
+      {{- with .root.Values.config.cache }}
       - name: CRANE_CACHE
-        value: {{ .root.Values.config.cache | quote }}
+        value: {{ . | quote }}
+      {{- end }}
       {{- with .root.Values.config.blobs }}
       - name: CRANE_BLOBS
         value: {{ . | quote }}
