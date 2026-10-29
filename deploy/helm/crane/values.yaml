@@ -30,12 +30,6 @@ api:
     requests: { cpu: 500m, memory: 512Mi }
     limits: { memory: 1Gi }
 
-worker:
-  replicas: 2
-  resources:
-    requests: { cpu: 500m, memory: 512Mi }
-    limits: { memory: 1Gi }
-
 # Миграции: Job в pre-install/pre-upgrade hook
 migrate:
   enabled: true
