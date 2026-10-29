@@ -1,5 +1,7 @@
 use crane_domain::registry::{NameError, PackageName};
 
+/// PEP 508 длины не задаёт; предел защищает URL, ключи каталога и журнал от мегабайтных имён.
+const MAX_LEN: usize = 255;
 /// Знаки, которые PEP 503 сворачивает в один дефис.
 const SEPARATORS: [char; 3] = ['-', '_', '.'];
 
@@ -9,6 +11,12 @@ pub(crate) fn parse_name(raw: &str) -> Result<PackageName, NameError> {
     let (Some(first), Some(last)) = (raw.chars().next(), raw.chars().next_back()) else {
         return Err(NameError::Empty);
     };
+    if raw.len() > MAX_LEN {
+        return Err(NameError::TooLong {
+            len: raw.len(),
+            max: MAX_LEN,
+        });
+    }
     if let Some(bad) = raw
         .chars()
         .find(|c| !(c.is_ascii_alphanumeric() || SEPARATORS.contains(c)))

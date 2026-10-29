@@ -13,6 +13,8 @@ const CARGO_REPOS: &str = "CRANE_CARGO_REPOS";
 const CARGO_PROXY_REPOS: &str = "CRANE_CARGO_PROXY_REPOS";
 const NPM_REPOS: &str = "CRANE_NPM_REPOS";
 const NPM_PROXY_REPOS: &str = "CRANE_NPM_PROXY_REPOS";
+const PYPI_REPOS: &str = "CRANE_PYPI_REPOS";
+const PYPI_PROXY_REPOS: &str = "CRANE_PYPI_PROXY_REPOS";
 pub(super) const MAX_PUBLISH_BYTES: &str = "CRANE_MAX_PUBLISH_BYTES";
 const DEFAULT_REPOS: &str = "internal";
 const DEFAULT_MAX_PUBLISH_BYTES: usize = 10 * 1024 * 1024;
@@ -67,7 +69,7 @@ struct RepoVars {
     hosted_default: Option<&'static str>,
 }
 
-const REPO_VARS: [RepoVars; 2] = [
+const REPO_VARS: [RepoVars; 3] = [
     RepoVars {
         format: Format::Cargo,
         hosted: CARGO_REPOS,
@@ -78,6 +80,12 @@ const REPO_VARS: [RepoVars; 2] = [
         format: Format::Npm,
         hosted: NPM_REPOS,
         proxy: NPM_PROXY_REPOS,
+        hosted_default: None,
+    },
+    RepoVars {
+        format: Format::PyPi,
+        hosted: PYPI_REPOS,
+        proxy: PYPI_PROXY_REPOS,
         hosted_default: None,
     },
 ];

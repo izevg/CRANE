@@ -196,6 +196,7 @@ async fn assemble<C: Catalog + 'static, B: BlobStore + 'static>(
         config.proxy,
     )
     .await?;
+    proxy::warn_unchecked_names(&config.repos, proxies.as_ref());
     let upstream: Arc<dyn UpstreamNames> = proxies
         .as_ref()
         .map_or_else(|| Arc::new(NoUpstream), proxy::Prepared::upstream_names);

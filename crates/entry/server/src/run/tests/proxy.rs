@@ -245,3 +245,21 @@ fn mount_refuses_a_format_without_proxy_support() {
         Some("proxy формата pypi не поддерживается")
     );
 }
+
+#[test]
+fn hosted_formats_without_a_name_source_are_reported() {
+    // Arrange
+    let hosted = |format| Repos::of(format, RepositoryKind::Hosted, vec!["internal".to_owned()]);
+    let proxy_only = Repos::of(Format::Cargo, RepositoryKind::Proxy, vec![NAME.to_owned()]);
+    let checked = BTreeSet::from([Format::Npm]);
+
+    // Act
+    let actual = [
+        formats_without_name_check(&hosted(Format::Cargo), &checked),
+        formats_without_name_check(&hosted(Format::Npm), &checked),
+        formats_without_name_check(&proxy_only, &checked),
+    ];
+
+    // Assert
+    assert_eq!(actual, [vec![Format::Cargo], vec![], vec![]]);
+}

@@ -80,3 +80,18 @@ fn names_outside_the_pep_508_grammar_are_rejected_with_the_reason() {
         ]
     );
 }
+
+#[test]
+fn name_is_limited_to_255_bytes() {
+    // Arrange
+    let (at_limit, over_limit) = ("a".repeat(255), "a".repeat(256));
+
+    // Act
+    let actual = (
+        parse_name(&at_limit).is_ok(),
+        parse_name(&over_limit).unwrap_err(),
+    );
+
+    // Assert
+    assert_eq!(actual, (true, NameError::TooLong { len: 256, max: 255 }));
+}

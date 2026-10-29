@@ -30,6 +30,7 @@ use crane_domain::audit::AuditEvent;
 use crane_domain::registry::{Ecosystem, Format, Repository, RepositoryId, RepositoryKind};
 use crane_format_cargo::CARGO;
 use crane_format_npm::NPM;
+use crane_format_pypi::PYPI;
 use crane_http::{FormatSettings, StaticToken, TrustedProxies, admin_router, api_router};
 use crane_memory::{ManualClock, MemoryAudit, MemoryBlobStore, MemoryCatalog, SequentialIdGen};
 use crane_ports::audit::AuditSink;
@@ -45,6 +46,7 @@ use tower::ServiceExt;
 pub(crate) fn ecosystem(format: Format) -> &'static dyn Ecosystem {
     match format {
         Format::Npm => &NPM,
+        Format::PyPi => &PYPI,
         _ => &CARGO,
     }
 }
@@ -64,6 +66,8 @@ pub(crate) const PRINCIPAL: &str = "crane";
 const PROXY_REPO: &str = "mirror";
 /// Hosted-репозиторий npm.
 pub(crate) const NPM_REPO: &str = "web";
+/// Hosted-репозиторий `PyPI`.
+pub(crate) const PYPI_REPO: &str = "py";
 /// Имя proxy-репозитория npm в каталоге; routers монтируются снаружи.
 pub(crate) const NPM_PROXY_REPO: &str = "npmjs";
 const WAIT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -104,6 +108,7 @@ fn seeded_catalog(runtime: &Runtime, ids: &SequentialIdGen) -> MemoryCatalog {
         (Format::Cargo, PROXY_REPO, RepositoryKind::Proxy),
         (Format::Npm, NPM_REPO, RepositoryKind::Hosted),
         (Format::Npm, NPM_PROXY_REPO, RepositoryKind::Proxy),
+        (Format::PyPi, PYPI_REPO, RepositoryKind::Hosted),
     ] {
         runtime
             .block_on(catalog.ensure_repository(Repository {
