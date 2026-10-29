@@ -1,0 +1,16 @@
+# Bootstrap-токен мастера первого запуска (20.5 docs/product) из файла секрета.
+# Override к docker-compose.yaml, подключается как docker-compose.cache.yaml:
+#   COMPOSE_FILE=deploy/compose/docker-compose.yaml:deploy/compose/docker-compose.bootstrap.yaml   (строка в .env)
+# Нужен файл по CRANE_BOOTSTRAP_TOKEN_SECRET (формат `crb_…`, 43 символа base64url после префикса).
+# Рекомендуемый путь: секрет генерирует развёртывание. Без override сервер выпускает токен сам и печатает его
+# в журнал на первом старте. CRANE_BOOTSTRAP_TOKEN рядом с CRANE_BOOTSTRAP_TOKEN_FILE задавать нельзя.
+
+services:
+  crane:
+    environment:
+      CRANE_BOOTSTRAP_TOKEN_FILE: /run/secrets/bootstrap_token
+    secrets: [bootstrap_token]
+
+secrets:
+  bootstrap_token:
+    file: ${CRANE_BOOTSTRAP_TOKEN_SECRET:?задайте CRANE_BOOTSTRAP_TOKEN_SECRET}

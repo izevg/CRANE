@@ -10,6 +10,7 @@
 # или несколькими -f:
 #   deploy/compose/docker-compose.s3.yaml     S3 (SeaweedFS) вместо локального тома blobs
 #   deploy/compose/docker-compose.cache.yaml  Valkey с обязательной аутентификацией в изолированной сети cache
+#   deploy/compose/docker-compose.bootstrap.yaml  bootstrap-токен мастера первого запуска из файла секрета
 #   COMPOSE_FILE=deploy/compose/docker-compose.yaml:deploy/compose/docker-compose.s3.yaml:deploy/compose/docker-compose.cache.yaml
 # По умолчанию single-node работает с кэшем memory (CRANE_CACHE не задан) и локальным томом, секретов Valkey и S3 не требует.
 name: crane

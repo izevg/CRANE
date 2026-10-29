@@ -122,7 +122,7 @@ tasks:
   deploy:check:
     desc: Compose-файлы и Helm-чарт (docker compose config, helm lint, helm template)
     cmds:
-      - docker compose --project-directory . --env-file .env.dist -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.s3.yaml -f deploy/compose/docker-compose.cache.yaml config -q
+      - docker compose --project-directory . --env-file .env.dist -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.s3.yaml -f deploy/compose/docker-compose.cache.yaml -f deploy/compose/docker-compose.bootstrap.yaml config -q
       - docker compose --project-directory . --env-file .env.dist -f deploy/compose/docker-compose.dev.yaml --profile s3 config -q
       - helm lint deploy/helm/crane --set existingSecret=crane-env
       - helm template crane deploy/helm/crane --set existingSecret=crane-env --set ingress.enabled=true >/dev/null
