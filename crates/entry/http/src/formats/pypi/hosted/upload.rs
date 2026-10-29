@@ -40,6 +40,11 @@ impl TextBudget {
         self.bytes = self.bytes.saturating_add(len);
         self.fields <= TEXT_FIELD_COUNT && self.bytes <= TEXT_TOTAL_LIMIT
     }
+
+    /// Поле считается вместе с именем: длинное имя тоже занимает память.
+    fn take_field(&mut self, name: &str, text: &str) -> bool {
+        self.take(name.len() + text.len())
+    }
 }
 
 pub(super) async fn upload<C: Catalog + 'static, B: BlobStore + 'static>(
@@ -77,7 +82,7 @@ pub(super) async fn upload<C: Catalog + 'static, B: BlobStore + 'static>(
             continue;
         };
         let text = field.text().await.map_err(|e| form_error(&e))?;
-        if !budget.take(name.len() + text.len()) {
+        if !budget.take_field(&name, &text) {
             return Err(too_large());
         }
         fields.push((name, text));

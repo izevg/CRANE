@@ -10,6 +10,7 @@ mod auth;
 #[path = "../common/mod.rs"]
 mod common;
 mod fixtures;
+mod limits;
 mod namespaces;
 mod read;
 mod upload;
