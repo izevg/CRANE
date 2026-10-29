@@ -1,7 +1,7 @@
 //! Доверенные прокси и выбор адреса клиента.
 
 use std::fmt;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// Список доверенных прокси (`CRANE_TRUSTED_PROXIES`): IP или CIDR, IPv4 и IPv6.
 /// По умолчанию пуст: тогда заголовкам `X-Forwarded-For` и `X-Request-Id` не верит никто.
@@ -106,26 +106,52 @@ impl TrustedProxies {
     /// Адрес клиента. Пир вне списка — сам клиент, `X-Forwarded-For` ему не верим.
     /// Пир из списка: идём по заголовку справа налево мимо своих прокси; первый чужой
     /// адрес и есть клиент (левые записи подделывает кто угодно). Если все записи свои, берём
-    /// самую правую разобранную: её дописал ближайший доверенный прокси, а левые вписал клиент
-    /// (при широкой подсети клиент внутри неё подделал бы адрес). Если разобрать нечего — пир.
+    /// самую правую: её дописал ближайший доверенный прокси, а левые вписал клиент.
+    /// Запись, которая не разбирается, обрывает разбор: справа от неё доверенные записи, слева —
+    /// чужие. Если не разобралась самая правая запись, возвращается пир, а не адрес из середины цепочки.
+    /// Заголовок приходит байтами: obs-text в одной записи клиента не должен ронять остальные.
     #[must_use]
-    pub(super) fn client_ip(&self, peer: IpAddr, forwarded_for: &str) -> IpAddr {
+    pub(super) fn client_ip(&self, peer: IpAddr, forwarded_for: &[u8]) -> IpAddr {
         let peer = peer.to_canonical();
         if !self.contains(peer) {
             return peer;
         }
-        let hops: Vec<IpAddr> = forwarded_for
-            .split(',')
-            .filter_map(|entry| entry.trim().parse::<IpAddr>().ok())
-            .map(|hop| hop.to_canonical())
-            .collect();
-        hops.iter()
-            .rev()
-            .find(|hop| !self.contains(**hop))
-            .or_else(|| hops.last())
-            .copied()
-            .unwrap_or(peer)
+        let mut rightmost = None;
+        for entry in forwarded_for.rsplit(|byte| *byte == b',') {
+            let Some(hop) = parse_hop(entry) else { break };
+            if !self.contains(hop) {
+                return hop;
+            }
+            rightmost.get_or_insert(hop);
+        }
+        rightmost.unwrap_or(peer)
     }
+}
+
+/// Запись `X-Forwarded-For`: `ip`, `ip:port`, `[v6]`, `[v6]:port`; зона IPv6 (`%eth0`) отбрасывается.
+fn parse_hop(entry: &[u8]) -> Option<IpAddr> {
+    let text = std::str::from_utf8(entry).ok()?.trim();
+    let hop = if let Some(rest) = text.strip_prefix('[') {
+        let (addr, tail) = rest.split_once(']')?;
+        if !tail.is_empty() {
+            tail.strip_prefix(':')?.parse::<u16>().ok()?;
+        }
+        addr.split('%')
+            .next()?
+            .parse::<Ipv6Addr>()
+            .ok()
+            .map(IpAddr::V6)
+    } else if let Ok(ip) = text.parse::<IpAddr>() {
+        Some(ip)
+    } else if let Some((addr, zone)) = text.split_once('%') {
+        // Зона нужна только link-local адресу: сам адрес от неё не зависит.
+        (!zone.is_empty()).then(|| addr.parse::<Ipv6Addr>().ok().map(IpAddr::V6))?
+    } else {
+        let (addr, port) = text.split_once(':')?;
+        port.parse::<u16>().ok()?;
+        addr.parse::<Ipv4Addr>().ok().map(IpAddr::V4)
+    };
+    hop.map(|hop| hop.to_canonical())
 }
 
 #[cfg(test)]
@@ -252,23 +278,26 @@ mod tests {
             ("203.0.113.5", "198.51.100.1", "203.0.113.5"),
             // Два доверенных прокси: первый чужой справа — клиент, подделка слева не важна.
             ("10.0.0.1", "6.6.6.6, 203.0.113.9, 10.0.0.2", "203.0.113.9"),
-            // Мусор пропускается.
-            ("10.0.0.1", "garbage, 203.0.113.9, nope", "203.0.113.9"),
+            // Мусор слева от чужого адреса не мешает: разбор останавливается на чужом.
+            ("10.0.0.1", "garbage, 203.0.113.9", "203.0.113.9"),
+            // Не разобралась самая правая запись: пир, а не адрес из середины цепочки.
+            ("10.0.0.1", "203.0.113.9, nope", "10.0.0.1"),
             // Все записи свои: самая правая разобранная, левую мог вписать клиент.
             ("10.0.0.1", "10.0.0.5, 10.0.0.6", "10.0.0.6"),
             ("10.0.0.1", "10.9.9.9, 10.5.5.5", "10.5.5.5"),
-            ("10.0.0.1", "10.9.9.9, garbage, 10.5.5.5, nope", "10.5.5.5"),
+            // Нечитаемая запись слева от своих обрывает разбор: берётся самая правая своя.
+            ("10.0.0.1", "garbage, 10.9.9.9, 10.5.5.5", "10.5.5.5"),
             // Ничего не разобралось или заголовка нет: пир.
             ("10.0.0.1", "garbage", "10.0.0.1"),
             ("10.0.0.1", "", "10.0.0.1"),
-            // Адрес с портом не разбирается и пропускается.
-            ("10.0.0.1", "203.0.113.9:4000", "10.0.0.1"),
+            // Адрес с портом разбирается.
+            ("10.0.0.1", "203.0.113.9:4000", "203.0.113.9"),
             // Пир в mapped-форме остаётся доверенным.
             ("::ffff:10.0.0.1", "203.0.113.9", "203.0.113.9"),
         ];
 
         // Act
-        let actual = cases.map(|(peer, xff, _)| trusted.client_ip(ip(peer), xff));
+        let actual = cases.map(|(peer, xff, _)| trusted.client_ip(ip(peer), xff.as_bytes()));
 
         // Assert
         assert_eq!(actual, cases.map(|(_, _, expected)| ip(expected)));
@@ -282,11 +311,70 @@ mod tests {
         let xff = "6.6.6.6, 10.5.5.5";
 
         // Act
-        let chosen = [&wide, &exact].map(|trusted| trusted.client_ip(ip("10.0.0.1"), xff));
+        let chosen =
+            [&wide, &exact].map(|trusted| trusted.client_ip(ip("10.0.0.1"), xff.as_bytes()));
 
         // Assert
         // Широкая подсеть считает «своим» и реального клиента 10.5.5.5, и идёт дальше влево,
         // к подделке; точный адрес прокси останавливается на клиенте.
         assert_eq!(chosen, [ip("6.6.6.6"), ip("10.5.5.5")]);
+    }
+
+    #[test]
+    fn entries_with_port_zone_or_brackets_are_parsed() {
+        // Arrange
+        let trusted = proxies("10.0.0.0/8");
+        let cases = [
+            ("1.2.3.4:5678", "1.2.3.4"),
+            ("[2001:db8::1]:443", "2001:db8::1"),
+            ("[2001:db8::1]", "2001:db8::1"),
+            ("fe80::1%eth0", "fe80::1"),
+            ("[fe80::1%eth0]:443", "fe80::1"),
+            ("::ffff:1.2.3.4", "1.2.3.4"),
+            ("  1.2.3.4  ", "1.2.3.4"),
+        ];
+
+        // Act
+        let actual = cases.map(|(xff, _)| trusted.client_ip(ip("10.0.0.1"), xff.as_bytes()));
+
+        // Assert
+        assert_eq!(actual, cases.map(|(_, expected)| ip(expected)));
+    }
+
+    #[test]
+    fn unreadable_rightmost_entry_gives_the_peer() {
+        // Arrange
+        let trusted = proxies("10.0.0.0/8");
+        let cases: [&[u8]; 7] = [
+            b"203.0.113.9, \xff",
+            b"203.0.113.9, 1.2.3.4:notaport",
+            b"203.0.113.9, 1.2.3.4:99999",
+            b"203.0.113.9, [1.2.3.4]",
+            b"203.0.113.9, 1.2.3.4:",
+            b"203.0.113.9,",
+            b"203.0.113.9, %eth0",
+        ];
+
+        // Act
+        let actual = cases.map(|xff| trusted.client_ip(ip("10.0.0.1"), xff));
+
+        // Assert
+        assert_eq!(actual, [ip("10.0.0.1"); 7]);
+    }
+
+    #[test]
+    fn a_non_utf8_byte_in_an_attacker_entry_does_not_hide_the_proxy_entries() {
+        // Arrange
+        let trusted = proxies("10.0.0.0/8");
+        let cases: [&[u8]; 2] = [
+            b"6.6.6.\xff, 203.0.113.9",
+            b"\xff\xfe, 203.0.113.9, 10.0.0.2",
+        ];
+
+        // Act
+        let actual = cases.map(|xff| trusted.client_ip(ip("10.0.0.1"), xff));
+
+        // Assert
+        assert_eq!(actual, [ip("203.0.113.9"); 2]);
     }
 }
