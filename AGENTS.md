@@ -136,15 +136,16 @@ Splitting a file that is too long:
 
 The full description (branch diagram, versioning, tag rules, release procedure) is in [GITFLOW.md](GITFLOW.md); below is the short version.
 
-- `main` is the primary (production) branch. `release/vX.Y.Z` and feature branches are created from it.
-- A feature branch from `main` → PR to `release/vX.Y.Z`, merged with **squash**. The PR title is a Conventional Commit (it becomes the squash message). The PR description contains the manual mutants table; `task gate` output (`Gate: passed`, `Gate-SHA`) goes into the release PR to `main`.
-- **Rebasing feature branches onto release branches is allowed, and sometimes required.** A feature branch is created from `main`, but its PR targets a release branch, so rebase it onto `origin/release/vX.Y.Z` (`git rebase origin/release/vX.Y.Z`):
+- `main` is the primary (production) branch. `release/vX.Y.Z` is created from it; feature branches are created from the current release branch.
+- A feature branch from the current `release/vX.Y.Z` → PR to `release/vX.Y.Z`, merged with **squash**. The PR title is a Conventional Commit (it becomes the squash message). The PR description contains the manual mutants table; `task gate` output (`Gate: passed`, `Gate-SHA`) goes into the release PR to `main`.
+- **Rebasing feature branches onto release branches is allowed, and sometimes required.** A feature branch may have been created from `main` (before the release branch existed), while its PR targets a release branch, so rebase it onto `origin/release/vX.Y.Z` (`git rebase origin/release/vX.Y.Z`):
   - when the release branch received changes your work depends on (for example a fix your checks need), or that conflict with it;
   - before opening the PR and whenever the release branch moves ahead, so that the PR diff contains only your own changes.
 
   Rules: rebase only your own feature branches and push them with `git push --force-with-lease` (never plain `--force`); never rebase or force-push `main` or `release/*`; the rebase changes commit SHAs, so rerun your checks. Do not merge release branches into feature branches; use rebase.
 - The owner approves the release → PR `release/vX.Y.Z` → `main`, merged with a **merge commit** (not squash: the commit history is needed for the CHANGELOG).
 - After the merge into `main`, the `release` workflow bumps the versions (`Cargo.toml`, `package.json`, `Chart.yaml`), rebuilds `CHANGELOG.md` from commits (window "previous tag..HEAD", `git-cliff`), makes the `chore(release): vX.Y.Z` commit and creates the `vX.Y.Z` tag. The tag triggers the `publish` workflow: a GitHub Release with notes from the CHANGELOG. Images are not built for ghcr yet.
+- **Release documentation step.** Before `task gate` the release PR includes updated `docs/product/`, `ROADMAP.md`, the public site (`docs/site`, version selector) and upgrade notes; the checklist is in [GITFLOW.md](GITFLOW.md) ("Актуализация документации при выпуске").
 - Commit types: `feat fix perf refactor docs test build ci chore revert style`; the scope is kebab-case, the header is ≤ 100 characters.
 
 ## Documentation
