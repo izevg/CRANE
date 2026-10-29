@@ -5,7 +5,7 @@ export function getMe(): Me {
   return {
     principal: { id: "usr_demo", kind: "human", display: "Иванова А." },
     roles: ["developer"],
-    workspaces: [{ workspace: "billing", roles: ["maintainer"] }],
+    workspaces: [{ workspace: "billing", display: "Биллинг", roles: ["maintainer"] }],
     sod: { mode: "warn", conflict: false },
     _links: {
       self: { href: "/me" },
