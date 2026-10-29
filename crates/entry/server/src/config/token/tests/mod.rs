@@ -60,7 +60,7 @@ fn principal_outside_the_grammar_or_reserved_is_rejected() {
             reason: "ожидалось имя вида [a-z0-9][a-z0-9._-]{0,63}",
         })
     };
-    assert_eq!(errors.to_vec(), vec![invalid(); names.len()]);
+    assert_eq!(errors, names.map(|_| invalid()));
 }
 
 #[test]
