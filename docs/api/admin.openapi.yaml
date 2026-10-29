@@ -1835,7 +1835,7 @@ paths:
       parameters:
       - name: workspace
         in: query
-        description: Slug команды-владельца. Фильтр сервера; клиент не фильтрует курсорную страницу.
+        description: Slug команды-владельца. Фильтр сервера; клиент не фильтрует курсорную страницу. Чужая или несуществующая команда - 200 с пустой страницей (одинаково, slug не раскрывается).
         schema:
           type: string
       - name: format
@@ -1872,15 +1872,17 @@ paths:
       - access
       summary: Создать пространство имён
       description: |-
-        Уникальна пара (`format`, `pattern`) (10.3). Шаблон, пересекающийся с namespace другой команды, требует свежего MFA (14.15).
+        Уникальна пара (`format`, `pattern`) (10.3). Owner резервирует только точное имя, неизвестное upstream. Префикс или scope, публичное (известное upstream) имя и пересечение с namespace другой команды для owner - 403; такие namespaces создаёт только platform-admin со step-up (решение 42). Вложенные шаблоны в пределах одной команды создаются свободно. Инвариант: namespaces разных команд не пересекаются, кроме созданных platform-admin; проверка пересечения и вставка атомарны (сериализация по формату).
 
-        Роли: owner.
+        Ответы: 403 с причиной `…/problems/namespace-owned` (пересечение с namespace другой команды), `…/problems/public-name` (имя известно upstream) или `…/problems/prefix-requires-admin` (префикс или scope); 503 `…/problems/upstream-unavailable` - проверка «известно upstream» невозможна, это отказ, а не пропуск проверки. Чужая или несуществующая команда в `workspace` тела - 404.
+
+        Роли: owner (точное имя, неизвестное upstream); platform-admin (остальное, со step-up).
       operationId: createNamespace
       x-crane-phase: P0
       x-crane-since: v0.4.0
       x-crane-action: namespace:create
       x-crane-step-up: true
-      x-crane-step-up-when: шаблон пересекается с namespace другой команды (14.15, 10.3)
+      x-crane-step-up-when: вызывающий platform-admin, и шаблон - префикс или scope, публичное имя или пересекается с namespace другой команды
       x-crane-audit:
         event: namespace.created
         ocsf_class: 6003
@@ -1909,6 +1911,8 @@ paths:
           $ref: ./common.yaml#/components/responses/Unauthorized
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
         '409':
           $ref: ./common.yaml#/components/responses/Conflict
         '422':
@@ -2022,7 +2026,7 @@ paths:
       - platform
       summary: Создать репозиторий
       description: |-
-        Защитные настройки создаются по умолчанию (`mutable: false`, `dev_skip_quarantine: false`); меняет их только `PUT …/protection`.
+        Защитные настройки создаются по умолчанию (`mutable: false`, `dev_skip_quarantine: false`); меняет их только `PUT …/protection`. Чужая или несуществующая команда в `workspace` тела - 404.
 
         Роли: owner, platform-admin.
       operationId: createRepository
@@ -2058,6 +2062,8 @@ paths:
           $ref: ./common.yaml#/components/responses/Unauthorized
         '403':
           $ref: ./common.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ./common.yaml#/components/responses/NotFound
         '409':
           $ref: ./common.yaml#/components/responses/Conflict
         '422':
@@ -2288,7 +2294,7 @@ paths:
       parameters:
       - name: workspace
         in: query
-        description: Slug команды. Фильтр сервера; клиент не фильтрует курсорную страницу.
+        description: Slug команды. Фильтр сервера; клиент не фильтрует курсорную страницу. Чужая или несуществующая команда - 200 с пустой страницей (одинаково, slug не раскрывается).
         schema:
           type: string
       - $ref: ./common.yaml#/components/parameters/Cursor
@@ -3636,7 +3642,7 @@ paths:
       - platform
       summary: Команды (workspaces)
       description: |-
-        Свои команды остальные роли берут из `GET /me` (`workspaces`).
+        Свои команды остальные роли берут из `GET /me` (`workspaces`). Поля `resources` и `owners_count` отдаются только platform-admin, для остальных они `null`.
 
         Роли: platform-admin.
       operationId: listWorkspaces
@@ -3732,7 +3738,10 @@ paths:
       tags:
       - platform
       summary: Команда
-      description: 'Роли: члены команды, platform-admin, secops, auditor.'
+      description: |-
+        Поля `resources` и `owners_count` отдаются только platform-admin, для остальных они `null`.
+
+        Роли: члены команды, platform-admin, secops, auditor.
       operationId: getWorkspace
       x-crane-phase: P0
       x-crane-since: v0.4.0
@@ -4575,7 +4584,7 @@ paths:
       - platform
       summary: Использование скачиваний
       description: |-
-        Суточный агрегат (хранится 400 дней), только аддитивные меры `downloads` и `bytes`. Личностей, токенов и IP нет. Owner видит только свою команду (Cedar по атрибуту ресурса), platform-admin и secops - все. CSV и NDJSON отдаёт только `POST /audit/exports` (`stream: usage`), ссылка на него - `_links.crane:create-audit-export` страницы. Команда `null` - скачивания, не распределённые по командам. При `group_by=workspace` эта строка («не распределено») есть всегда, в том числе с нулями: она приходит отдельным полем страницы `unattributed`, а не в `_embedded`, поэтому не зависит от `sort` и курсора, и клиент показывает её последней. Чужая или несуществующая команда в `workspace` даёт 404, а не 403: ответ не раскрывает существование slug (как у остальных командных ресурсов). 403 - если у вызывающего нет права читать агрегат вообще.
+        Суточный агрегат (хранится 400 дней), только аддитивные меры `downloads` и `bytes`. Личностей, токенов и IP нет. Owner видит только свою команду (Cedar по атрибуту ресурса), platform-admin и secops - все. CSV и NDJSON отдаёт только `POST /audit/exports` (`stream: usage`), ссылка на него - `_links.crane:create-audit-export` страницы. Команда `null` - скачивания, не распределённые по командам. При `group_by=workspace` эта строка («не распределено») есть всегда, в том числе с нулями (для platform-admin и secops; у owner `unattributed` равен `null`, суммы по всему экземпляру ему не показываются): она приходит отдельным полем страницы `unattributed`, а не в `_embedded`, поэтому не зависит от `sort` и курсора, и клиент показывает её последней. Чужая или несуществующая команда в `workspace` даёт 404, а не 403: ответ не раскрывает существование slug (как у остальных командных ресурсов). 403 - если у вызывающего нет права читать агрегат вообще.
 
         Роли: owner (только своя команда); platform-admin; secops.
       operationId: getDownloadUsage
@@ -7694,35 +7703,35 @@ paths:
       - access
       summary: Поиск принципалов
       description: |-
-        Поиск принципала для диалога «Добавить участника» (D6): по подстроке имени, с фильтром по виду. Это перечисление ПДн (раздел 14): пустой запрос и выдача всего каталога запрещены; лимит страницы - общий Limit (≤ 200). Курсорная пагинация без offset и total.
+        Поиск человека для диалога «Добавить участника» (D6): по подстроке имени. В результатах только `human` (роли команды выдаются только людям, 14.15); display роботов и workload раскрывал бы CI-проекты чужих команд, поэтому они не отдаются. В ответе только `id`, `display` и `kind`. Это перечисление ПДн (раздел 14): пустой запрос и выдача всего каталога запрещены; запрос из одних wildcard или пробелов - 400. Размер страницы - свой параметр `limit` (по умолчанию и максимум 20). Курсорная пагинация без offset и total. Лимит частоты на актора: при превышении 429 с `Retry-After`. Ответ не раскрывает принципалов вне организационной области актора (owner - только своей организации или команд, где он owner; platform-admin - все). Каждый вызов пишет `principal.searched` в журнал ИБ с полями: актор, длина запроса, текст запроса (усечённый до 64 символов), число результатов.
 
-        Роли: owner команды, platform-admin.
+        Роли: только роли с правом управления участниками (owner команды, platform-admin); проверка Cedar с v0.4.0.
       operationId: searchPrincipals
       x-crane-phase: P0
       x-crane-since: v0.4.0
       x-crane-action: principal:search
       x-crane-step-up: false
-      x-crane-audit: null
-      x-crane-open-question: Журналировать ли поиск принципалов (перечисление ПДн). Событие чтения `audit.viewed` относится к журналу и скачиваниям и сюда не подходит; отдельного события для чтения каталога нет.
+      x-crane-audit:
+        event: principal.searched
+        ocsf_class: 6003
       parameters:
       - name: q
         in: query
-        description: Подстрока отображаемого имени принципала (обязательна, не короче 2 символов).
+        description: Подстрока отображаемого имени принципала (обязательна, не короче 2 символов). Запрос из одних wildcard (`*`, `%`, `_`, `?`) или пробелов - 400.
         required: true
         schema:
           type: string
           minLength: 2
-      - name: kind
-        in: query
-        description: Вид принципала (повторяемый параметр).
-        style: form
-        explode: true
-        schema:
-          type: array
-          items:
-            $ref: ./common.yaml#/components/schemas/PrincipalKind
+          pattern: '.*[^\s*%_?].*'
       - $ref: ./common.yaml#/components/parameters/Cursor
-      - $ref: ./common.yaml#/components/parameters/Limit
+      - name: limit
+        in: query
+        description: Размер страницы (по умолчанию и максимум 20; не общий Limit).
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 20
       responses:
         '200':
           description: Успешно.
@@ -7732,7 +7741,7 @@ paths:
           content:
             application/hal+json:
               schema:
-                $ref: ./common.yaml#/components/schemas/PrincipalRefPage
+                $ref: ./common.yaml#/components/schemas/PrincipalCandidatePage
         '400':
           $ref: ./common.yaml#/components/responses/BadRequest
         '401':

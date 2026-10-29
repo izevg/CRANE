@@ -6284,11 +6284,17 @@ components:
           minimum: 0
           description: Число различных участников с открытыми строками ролей; для колонки «Участники» списка команд (E14).
         owners_count:
-          type: integer
+          type:
+          - integer
+          - 'null'
           minimum: 0
-          description: Число участников с эффективной ролью owner; 0 - «без владельца», действует platform-admin (D6, E14).
+          description: Число участников с эффективной ролью owner; 0 - «без владельца», действует platform-admin (D6, E14). Только
+            для platform-admin, для остальных `null`.
         resources:
-          $ref: '#/components/schemas/WorkspaceResources'
+          oneOf:
+          - $ref: '#/components/schemas/WorkspaceResources'
+          - type: 'null'
+          description: Сколько ресурсов у команды (E14). Только для platform-admin, для остальных `null`.
         _links:
           $ref: '#/components/schemas/HalLinks'
           description: 'Ссылки HAL: self, crane:overview, crane:members, crane:update-workspace, crane:archive-workspace
@@ -8196,7 +8202,9 @@ components:
           - type: 'null'
           description: Строка «не распределено» (`workspace` = `null`) при `group_by=workspace`. Присутствует всегда, в том числе с нулями,
             и лежит только здесь, а не в `_embedded`, она вне сортировки и курсора, клиент показывает её последней строкой.
-            Суммы за весь период с учётом остальных фильтров. `null`, если `group_by` без `workspace` или задан фильтр `workspace`.
+            Суммы за весь период с учётом остальных фильтров. `null`, если `group_by` без `workspace`, задан фильтр `workspace` или
+            вызывающий не platform-admin и не secops (owner не видит сумм по всему экземпляру), иначе вместе с `purl` они
+            стали бы оракулом чужих приватных пакетов.
         _embedded:
           type: object
           properties:
@@ -8713,10 +8721,27 @@ components:
       - deprecated
       - with_open_findings
       - _links
-    PrincipalRefPage:
-      title: PrincipalRefPage
+    PrincipalCandidate:
+      title: PrincipalCandidate
       type: object
-      description: Страница результатов поиска принципалов (`GET /principals`).
+      description: Кандидат в участники команды (`GET /principals`). Только человек и только поля, нужные для выбора; служебные поля принципала не отдаются.
+      properties:
+        id:
+          type: string
+        display:
+          type: string
+        kind:
+          type: string
+          enum:
+          - human
+      required:
+      - id
+      - display
+      - kind
+    PrincipalCandidatePage:
+      title: PrincipalCandidatePage
+      type: object
+      description: Страница результатов поиска людей (`GET /principals`).
       properties:
         _links:
           $ref: '#/components/schemas/HalLinks'
@@ -8727,7 +8752,7 @@ components:
             crane:principals:
               type: array
               items:
-                $ref: '#/components/schemas/PrincipalRef'
+                $ref: '#/components/schemas/PrincipalCandidate'
           required:
           - crane:principals
       required:
